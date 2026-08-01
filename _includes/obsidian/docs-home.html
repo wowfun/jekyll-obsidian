@@ -1,0 +1,14 @@
+{% assign docs_sections = page.obsidian.theme_data.docs_tree %}
+{% if docs_sections and docs_sections.size > 0 %}
+  <section class="docs-home-browse" aria-labelledby="docs-home-browse-title">
+    <header>
+      <p>Manual index</p>
+      <h2 id="docs-home-browse-title">Browse the handbook</h2>
+    </header>
+    <ul>
+      {% for section in docs_sections %}
+        <li>{% if section.url %}<a href="{{ section.url | escape }}">{{ section.title | escape }}</a>{% else %}<span>{{ section.title | escape }}</span>{% endif %}</li>
+      {% endfor %}
+    </ul>
+  </section>
+{% endif %}

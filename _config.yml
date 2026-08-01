@@ -1,0 +1,61 @@
+title: Jekyll Obsidian
+description: A configurable blog, documentation site, or digital garden built from Obsidian
+lang: en
+url: ""
+baseurl: ""
+
+obsidian:
+  source: vault
+  syntax_profile: ofm@1
+  theme: digital-garden
+  repository: ""
+  edit_branch: main
+  content:
+    default_type: page
+    directories:
+      post:
+        - blog
+      doc:
+        - docs
+  features: {}
+
+strict_front_matter: true
+safe: false
+incremental: false
+permalink: pretty
+encoding: UTF-8
+markdown: kramdown
+highlighter: none
+liquid:
+  error_mode: strict
+  strict_filters: true
+  strict_variables: false
+
+exclude:
+  - vault
+  - .bundle
+  - .jekyll-obsidian-cache
+  - .github
+  - .gitignore
+  - .nvmrc
+  - .ruby-version
+  - AGENTS.md
+  - Gemfile
+  - Gemfile.lock
+  - LICENSE
+  - README.md
+  - Rakefile
+  - bin
+  - docs
+  - lib
+  - node_modules
+  - package.json
+  - package-lock.json
+  - playwright.config.ts
+  - scripts
+  - src
+  - test
+  - tests
+  - tsconfig.json
+  - vendor
+  - vitest.config.ts

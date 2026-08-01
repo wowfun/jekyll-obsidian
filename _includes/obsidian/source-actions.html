@@ -1,0 +1,8 @@
+{% if page.obsidian.source_links and page.obsidian.source_links.size > 0 %}
+  <nav class="source-actions" aria-label="Contribute to this page">
+    <a href="{{ page.obsidian.source_links.edit | escape }}">Edit</a>
+    <a href="{{ page.obsidian.source_links.history | escape }}">History</a>
+    <a href="{{ page.obsidian.source_links.source | escape }}">View source</a>
+    <a href="{{ page.obsidian.source_links.issue | escape }}">Report issue</a>
+  </nav>
+{% endif %}

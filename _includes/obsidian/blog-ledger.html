@@ -1,0 +1,11 @@
+{% if include.posts and include.posts.size > 0 %}
+  <section class="blog-ledger"{% if include.compact %} aria-label="Dated posts"{% else %} aria-labelledby="dispatches-title"{% endif %}>
+    {% unless include.compact %}<header class="section-heading"><p>Chronology</p><h2 id="dispatches-title">Field dispatches</h2></header>{% endunless %}
+    <ol>
+      {% for post in include.posts %}
+        <li><time datetime="{{ post.published_at | escape }}">{{ post.published_at | date: "%Y · %m · %d" }}</time><a href="{{ post.url | escape }}"><strong>{{ post.title | escape }}</strong>{% if post.tags and post.tags.size > 0 %}<span>{{ post.tags | join: " · " | escape }}</span>{% endif %}</a></li>
+      {% endfor %}
+    </ol>
+    {% unless include.compact %}<a class="ledger-archive-link" href="{{ '/archive/' | relative_url }}">Browse the archive <span aria-hidden="true">→</span></a>{% endunless %}
+  </section>
+{% endif %}

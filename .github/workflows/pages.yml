@@ -1,0 +1,141 @@
+name: Verify and deploy Pages
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: >-
+    ${{ (github.event_name == 'pull_request' && format('verify-{0}', github.event.pull_request.number)) ||
+        (github.event_name == 'push' && github.ref != format('refs/heads/{0}', github.event.repository.default_branch) && format('ignored-{0}', github.run_id)) ||
+        'pages' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  RUBY_VERSION: 4.0.6
+  NODE_VERSION: 26.3.1
+
+jobs:
+  verify:
+    if: >-
+      github.event_name != 'push' ||
+      github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Check out the complete history
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@95ef2b042f9d7a56d8268cba8559e2842e2ad01b
+        with:
+          ruby-version: ${{ env.RUBY_VERSION }}
+          bundler-cache: true
+
+      - name: Set up Node.js
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Install Node dependencies
+        run: npm ci
+
+      - name: Install the Chromium test browser
+        run: npx playwright install --with-deps chromium
+
+      - name: Run Ruby, TypeScript, accessibility, and visual tests
+        env:
+          RUN_BROWSER_TESTS: "1"
+        run: bin/test
+
+      - name: Build every theme at root and project paths
+        env:
+          JEKYLL_ENV: production
+        run: |
+          for theme in blog docs digital-garden; do
+            bin/build \
+              --theme "$theme" \
+              --url https://example.invalid \
+              --baseurl "" \
+              --destination "_site-$theme-root"
+            bin/build \
+              --theme "$theme" \
+              --url https://example.invalid \
+              --baseurl /jekyll-obsidian \
+              --destination "_site-$theme-project"
+          done
+
+  build_pages:
+    if: >-
+      github.event_name != 'pull_request' &&
+      github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+    needs: verify
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: read
+    steps:
+      - name: Check out the complete history
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@95ef2b042f9d7a56d8268cba8559e2842e2ad01b
+        with:
+          ruby-version: ${{ env.RUBY_VERSION }}
+          bundler-cache: true
+
+      - name: Set up Node.js
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Install Node dependencies
+        run: npm ci
+
+      - name: Read Pages metadata
+        id: pages
+        uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d
+
+      - name: Build the production site
+        env:
+          JEKYLL_ENV: production
+          PAGES_ORIGIN: ${{ steps.pages.outputs.origin }}
+          PAGES_BASE_PATH: ${{ steps.pages.outputs.base_path }}
+        run: >-
+          bin/build
+          --url "$PAGES_ORIGIN"
+          --baseurl "$PAGES_BASE_PATH"
+          --destination _site
+
+      - name: Audit the Pages artifact
+        run: scripts/audit-site.sh _site
+
+      - name: Upload the Pages artifact
+        uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9
+        with:
+          path: _site
+
+  deploy:
+    needs: build_pages
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@cd2ce8fcbc39b97be8ca5fce6e763baed58fa128

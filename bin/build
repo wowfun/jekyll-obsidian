@@ -1,0 +1,161 @@
+#!/usr/bin/env sh
+set -eu
+
+SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+PROJECT_DIR=$(CDPATH= cd -- "$SCRIPT_DIR/.." && pwd)
+
+origin=${PAGES_ORIGIN:-${JEKYLL_URL:-}}
+base_path=""
+base_path_is_set=0
+destination=_site
+build_assets=1
+theme=""
+
+if [ "${PAGES_BASE_PATH+x}" = x ]; then
+  base_path=$PAGES_BASE_PATH
+  base_path_is_set=1
+elif [ "${JEKYLL_BASEURL+x}" = x ]; then
+  base_path=$JEKYLL_BASEURL
+  base_path_is_set=1
+fi
+
+usage() {
+  printf '%s\n' "Usage: bin/build [--url ORIGIN] [--baseurl PATH] [--theme blog|docs|digital-garden] [--destination _site[-NAME]] [--skip-assets]"
+}
+
+fail() {
+  printf '%s\n' "$1" >&2
+  exit 1
+}
+
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --url)
+      [ "$#" -ge 2 ] || fail "--url requires a value."
+      origin=$2
+      shift 2
+      ;;
+    --baseurl|--base-path)
+      [ "$#" -ge 2 ] || fail "$1 requires a value."
+      base_path=$2
+      base_path_is_set=1
+      shift 2
+      ;;
+    --destination)
+      [ "$#" -ge 2 ] || fail "--destination requires a value."
+      destination=$2
+      shift 2
+      ;;
+    --theme)
+      [ "$#" -ge 2 ] || fail "--theme requires a value."
+      case "$2" in
+        blog|docs|digital-garden) theme=$2 ;;
+        *) fail "--theme must be one of: blog, docs, digital-garden." ;;
+      esac
+      shift 2
+      ;;
+    --skip-assets)
+      build_assets=0
+      shift
+      ;;
+    --help|-h)
+      usage
+      exit 0
+      ;;
+    *)
+      usage >&2
+      fail "Unknown option: $1"
+      ;;
+  esac
+done
+
+if [ -n "${GITHUB_REPOSITORY:-}" ]; then
+  case "$GITHUB_REPOSITORY" in
+    */*) ;;
+    *) fail "GITHUB_REPOSITORY must have the form owner/repository." ;;
+  esac
+  owner=${GITHUB_REPOSITORY%%/*}
+  repository=${GITHUB_REPOSITORY#*/}
+  case "$owner/$repository" in
+    /*|*/|*/*/*) fail "GITHUB_REPOSITORY must have the form owner/repository." ;;
+  esac
+
+  if [ -z "$origin" ]; then
+    origin="https://$owner.github.io"
+  fi
+
+  if [ "$base_path_is_set" -eq 0 ]; then
+    if [ "$repository" = "$owner.github.io" ]; then
+      base_path=""
+    else
+      base_path="/$repository"
+    fi
+    base_path_is_set=1
+  fi
+fi
+
+origin=${origin%/}
+if [ -n "$origin" ]; then
+  printf '%s' "$origin" | LC_ALL=C grep -Eq '^https?://([A-Za-z0-9][A-Za-z0-9.-]*|\[[0-9A-Fa-f:]+\])(:[0-9]+)?$' ||
+    fail "--url must be an HTTP or HTTPS origin without a path, query, or fragment."
+fi
+
+if [ -n "$base_path" ]; then
+  case "$base_path" in
+    /*) ;;
+    *) fail "--baseurl must be empty or start with /." ;;
+  esac
+  case "$base_path" in
+    */) base_path=${base_path%/} ;;
+  esac
+  case "$base_path/" in
+    *'/../'*|*'/./'*|*'//'*) fail "--baseurl must be a normalized site path." ;;
+  esac
+  printf '%s' "$base_path" | LC_ALL=C grep -Eq '^(/[A-Za-z0-9._~!$&()*+,;=:@%-]+)+$' ||
+    fail "--baseurl contains unsupported characters."
+fi
+
+ruby "$PROJECT_DIR/scripts/validate-build-destination.rb" "$PROJECT_DIR" "$destination"
+
+overlay_dir=$(mktemp -d "${TMPDIR:-/tmp}/jekyll-obsidian.XXXXXX")
+overlay=$overlay_dir/config.yml
+cleanup() {
+  rm -f -- "$overlay"
+  rmdir -- "$overlay_dir"
+}
+trap cleanup EXIT
+trap 'exit 129' HUP
+trap 'exit 130' INT
+trap 'exit 143' TERM
+
+yaml_string() {
+  escaped=$(printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g')
+  printf '"%s"' "$escaped"
+}
+
+{
+  printf 'url: '
+  yaml_string "$origin"
+  printf '\nbaseurl: '
+  yaml_string "$base_path"
+  printf '\ndestination: '
+  yaml_string "$destination"
+  if [ -n "$theme" ]; then
+    printf '\nobsidian:\n  theme: '
+    yaml_string "$theme"
+  fi
+  printf '\n'
+} > "$overlay"
+
+cd "$PROJECT_DIR"
+if [ "$build_assets" -eq 1 ]; then
+  npm run build
+fi
+
+build_environment=${JEKYLL_ENV:-production}
+JEKYLL_ENV=$build_environment bundle exec jekyll build --trace --config "$PROJECT_DIR/_config.yml,$overlay"
+
+if [ "$build_environment" = production ]; then
+  "$PROJECT_DIR/scripts/audit-site.sh" "$PROJECT_DIR/$destination"
+  bundle exec ruby "$PROJECT_DIR/scripts/verify-site-urls.rb" "$PROJECT_DIR/$destination" "$origin" "$base_path"
+fi

@@ -1,0 +1,118 @@
+<!doctype html>
+<html class="no-js" lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="obsidian:catalog" content="/data/catalog.v1.json">
+    <meta name="obsidian:search" content="/data/search.v1.json">
+    <meta name="obsidian:graph" content="/data/graph.v1.json">
+    <meta name="obsidian:preview" content="/data/catalog.v1.json">
+    <link rel="alternate" type="application/atom+xml" title="Field Notes feed" href="/feed.xml">
+    <title>Attention as a garden</title>
+    <link rel="stylesheet" href="__THEME_CSS__">
+    <script type="module" src="__THEME_JS__"></script>
+  </head>
+  <body class="theme-digital-garden">
+    <a class="skip-link" href="#main">Skip to note</a>
+    <header class="site-header">
+      <div class="site-header__inner">
+        <a class="site-mark" href="/">
+          <span class="site-mark__glyph" aria-hidden="true">g</span>
+          <span class="site-mark__name">Field Notes</span>
+        </a>
+        <nav class="site-navigation" aria-label="Primary">
+          <a href="/notes/">Notes</a>
+          <a href="/tags/">Tags</a>
+          <a href="/graph/">Graph</a>
+          <a href="/feed.xml">Feed</a>
+        </nav>
+        <div class="site-actions">
+          <button class="site-action" type="button" data-color-scheme-toggle>
+            <span data-color-scheme-label>Dark</span>
+          </button>
+          <button class="site-action" type="button" data-dialog-open="search" data-search-open aria-label="Search">
+            <span class="site-action__label">Search</span><kbd>⌘ K</kbd>
+          </button>
+        </div>
+      </div>
+    </header>
+
+    <div class="garden-shell">
+      <main class="garden-main" id="main">
+        <article class="note-folio">
+          <header class="note-header">
+            <p class="note-kicker">Working note · concepts</p>
+            <h1 class="note-title">Attention as a garden</h1>
+            <p class="note-description">A working model for keeping observations and relations close together.</p>
+            <p class="note-meta"><span>Updated 31 Jul 2026</span><span>6 min read</span></p>
+          </header>
+          <div class="note-content">
+            <p>Attention becomes legible when observations and relations stay close together. A note is not a card in a database; it is a page with a visible history and a set of paths onward.</p>
+            <h2 id="observations">Observations before categories</h2>
+            <p>Record the thing itself first. Classification can follow after the language has settled. This keeps a <a class="obsidian-link" data-note-id="notes/中文搜索.md" href="/notes/zh/">knowledge garden</a> open to revision.</p>
+            <aside class="callout" data-callout="tip" role="note">
+              <p class="callout__title">Field practice</p>
+              <div class="callout__content"><p>Keep the source and the interpretation in neighboring paragraphs.</p></div>
+            </aside>
+            <h2 id="relations">Relations carry context</h2>
+            <p>The margin records direct links, backlinks, embedded sources, and the local outline. It behaves like an editor’s proof rail: quiet until a reader needs context.</p>
+            <section class="obsidian-embed" aria-label="Embedded from Daily review">
+              <a class="obsidian-embed__source" href="/notes/review/">From Daily review</a>
+              <div class="obsidian-embed__content"><p>Patterns are easier to recognize when each source keeps its own name.</p></div>
+            </section>
+            <h3 id="return-paths">Return paths</h3>
+            <p>Backlinks are not endorsements. They are return paths into the notebook’s evolving argument.</p>
+          </div>
+        </article>
+      </main>
+
+      <aside class="relation-rail" aria-label="Note context">
+        <section class="relation-section">
+          <h2 class="relation-section__title">On this page</h2>
+          <ol class="outline-list">
+            <li><a data-outline-link href="#observations">Observations before categories</a></li>
+            <li><a data-outline-link href="#relations">Relations carry context</a></li>
+            <li><a data-outline-link href="#return-paths">Return paths</a></li>
+          </ol>
+        </section>
+        <section class="relation-section">
+          <h2 class="relation-section__title">Links</h2>
+          <ul class="relation-list"><li><a href="/notes/zh/">中文搜索</a></li></ul>
+        </section>
+        <section class="relation-section">
+          <h2 class="relation-section__title">Backlinks</h2>
+          <ul class="relation-list"><li><a href="/notes/indexing/">Indexing field notes</a></li></ul>
+        </section>
+        <section class="relation-section">
+          <h2 class="relation-section__title">Embedded by</h2>
+          <p class="relation-empty">No notes yet.</p>
+        </section>
+      </aside>
+    </div>
+
+    <footer class="site-footer"><div class="site-footer__inner"><span>Field Notes</span><span>Built from an Obsidian vault</span></div></footer>
+
+    <nav class="mobile-toolbar" aria-label="Note tools">
+      <button type="button" data-dialog-open="browse">Browse</button>
+      <button type="button" data-search-open>Search</button>
+      <button type="button" data-dialog-open="context">Context</button>
+    </nav>
+
+    <template data-dialog-template="browse">
+      <nav aria-label="Browse notes"><ul class="relation-list"><li><a href="/notes/">All notes</a></li><li><a href="/tags/">Tags</a></li><li><a href="/graph/">Graph</a></li><li><a href="/feed.xml">Feed</a></li></ul></nav>
+    </template>
+    <template data-dialog-template="context">
+      <section class="relation-section"><h2 class="relation-section__title">On this page</h2><ol class="outline-list"><li><a href="#observations">Observations before categories</a></li><li><a href="#relations">Relations carry context</a></li></ol></section>
+      <section class="relation-section"><h2 class="relation-section__title">Backlinks</h2><ul class="relation-list"><li><a href="/notes/indexing/">Indexing field notes</a></li></ul></section>
+    </template>
+
+    <dialog class="obsidian-dialog" data-dialog="search" aria-labelledby="search-title">
+      <div class="obsidian-dialog__sheet">
+        <header class="obsidian-dialog__header"><h2 class="obsidian-dialog__title" id="search-title">Search notebook</h2><button class="obsidian-dialog__close" type="button" data-dialog-close aria-label="Close search">×</button></header>
+        <div class="obsidian-dialog__body"><label class="search-box"><span aria-hidden="true">⌕</span><input data-search-input type="search" placeholder="Search titles, tags, and text" autocomplete="off"><kbd>Esc</kbd></label><p class="search-status" data-search-status aria-live="polite"></p><ol class="search-results" data-search-results></ol></div>
+      </div>
+    </dialog>
+    <dialog class="obsidian-dialog" data-dialog="browse" aria-labelledby="browse-title"><div class="obsidian-dialog__sheet"><header class="obsidian-dialog__header"><h2 class="obsidian-dialog__title" id="browse-title">Browse</h2><button class="obsidian-dialog__close" type="button" data-dialog-close aria-label="Close browse">×</button></header><div class="obsidian-dialog__body" data-dialog-content></div></div></dialog>
+    <dialog class="obsidian-dialog" data-dialog="context" aria-labelledby="context-title"><div class="obsidian-dialog__sheet"><header class="obsidian-dialog__header"><h2 class="obsidian-dialog__title" id="context-title">Note context</h2><button class="obsidian-dialog__close" type="button" data-dialog-close aria-label="Close context">×</button></header><div class="obsidian-dialog__body" data-dialog-content></div></div></dialog>
+  </body>
+</html>

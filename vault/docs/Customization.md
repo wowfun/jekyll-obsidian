@@ -1,0 +1,77 @@
+---
+publish: true
+title: Customization
+nav_order: 30
+tags:
+  - guide/customization
+description: Adjust site identity, visual tokens, navigation, and repository links.
+created: 2026-07-31
+updated: 2026-07-31
+---
+
+# Customization
+
+Start with `_config.yml`. The public configuration stays small enough to review in one place:
+
+```yaml
+title: My Site
+description: Built from an Obsidian vault
+lang: en
+url: ""
+baseurl: ""
+
+obsidian:
+  source: vault
+  syntax_profile: ofm@1
+  theme: digital-garden
+  repository: owner/repository
+  edit_branch: main
+  content:
+    default_type: page
+    directories:
+      post: [blog]
+      doc: [docs]
+  features: {}
+```
+
+## Site identity
+
+`title`, `description`, and `lang` feed the shell, metadata, Atom, and accessibility labels. Set `obsidian.repository` to an `owner/repository` pair to show Edit, History, View source, and Report issue links. If it is blank, the build checks `GITHUB_REPOSITORY` and the local `origin` remote. The links stay hidden when no repository can be identified.
+
+## Site themes
+
+Each build selects one complete presentation preset. `blog` adds chronology and archive, `docs` adds a hierarchical handbook navigator, and `digital-garden` adds relation context and graph exploration. A command-line override is useful for comparing the same content without editing configuration:
+
+```sh
+bin/dev --theme docs
+bin/build --theme blog --url https://example.test --baseurl "" --destination _site
+```
+
+Feature keys omitted from `obsidian.features` inherit the theme defaults. Explicit YAML booleans can override `search`, `tags`, `feed`, `graph`, `relations`, `previews`, and `outline`.
+
+## Color and type
+
+The themes share a narrow set of CSS custom properties. Light mode begins with Frost and white surfaces; dark mode uses a deep blue-black background. Violet marks links and focus, while teal marks relationships and secondary annotations.
+
+The article face is the self-hosted Literata variable font. Recursive handles controls and code, with its MONO axis enabled for code. CJK text falls back to installed Noto or Source Han families, then the platform serif or sans stack. The template stays small while CJK remains a first-class authoring path.
+
+Override tokens in your own stylesheet rather than editing hashed build output. Keep text and focus contrast above WCAG AA in both color schemes.
+
+## Page properties
+
+The compiler accepts this fixed set of note properties:
+
+- `publish`, `title`, `aliases`, `tags`, and `description`
+- `permalink`, `image`, and `cssclasses`
+- `created` and `updated`
+- `content_type`, `date`, `nav_order`, and `nav_exclude`
+
+Unknown keys never flow into Liquid or generated data. `aliases`, `tags`, and `cssclasses` are string arrays. Dates use ISO 8601. A note title comes from `title`, its first level-one heading, or its filename, in that order.
+
+## Content and navigation
+
+An explicit `content_type: post | doc | page` wins over directory defaults. Post publication dates use `date`, then `created`, then the first Git commit. A production build rejects a post with no deterministic date.
+
+Docs navigation follows vault directories. `nav_order` sorts sibling documents and `nav_exclude: true` removes only that note link; children remain reachable. The complete graph has its own accessible list fallback when enabled, and search loads on first use rather than increasing every page bundle.
+
+See [[Architecture]] before changing compiler or adapter boundaries.

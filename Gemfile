@@ -1,0 +1,14 @@
+source "https://rubygems.org"
+
+ruby "4.0.6"
+
+gem "commonmarker", "2.9.0"
+gem "cgi", "~> 0.5"
+gem "jekyll", "4.4.1"
+gem "nokogiri", "~> 1.18"
+gem "rake", "~> 13.2"
+gem "webrick", "~> 1.9"
+
+group :test do
+  gem "minitest", "~> 5.25"
+end

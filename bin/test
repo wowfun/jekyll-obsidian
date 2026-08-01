@@ -1,0 +1,15 @@
+#!/usr/bin/env sh
+set -eu
+
+SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+PROJECT_DIR=$(CDPATH= cd -- "$SCRIPT_DIR/.." && pwd)
+
+cd "$PROJECT_DIR"
+bundle exec rake test
+npm test
+
+if [ "${RUN_BROWSER_TESTS:-0}" = 1 ]; then
+  npm run test:e2e
+else
+  printf '%s\n' "Browser tests skipped. Set RUN_BROWSER_TESTS=1 after installing Playwright browsers."
+fi

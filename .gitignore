@@ -1,0 +1,52 @@
+# Local reference material and task notes
+/.local/
+/.references/
+
+# Ruby and Jekyll build state
+/.bundle/
+/.jekyll-cache/
+/.jekyll-metadata
+/.ruby-lsp/
+/.sass-cache/
+/vendor/
+/_site/
+/_site-*/
+
+# Node dependencies and generated frontend assets
+/node_modules/
+/.jekyll-obsidian-cache/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Test and coverage output
+/coverage/
+/playwright-report/
+/blob-report/
+/test-results/
+/.vitest/
+/.nyc_output/
+
+# Local environment and temporary files
+/.env
+/.env.*
+!/.env.example
+/tmp/
+/log/
+*.swp
+*.swo
+*~
+
+# Editors and operating systems
+/.idea/
+/.vscode/
+.DS_Store
+Thumbs.db
+
+# Obsidian per-device state; stable vault settings remain tracked
+/vault/.obsidian/workspace.json
+/vault/.obsidian/workspace-mobile.json
+/vault/.obsidian/cache/
+/vault/.obsidian/plugins/
+/vault/.trash/

@@ -1,0 +1,17 @@
+{% if page.obsidian.kind == 'note' %}
+  <header class="note-header">
+    <p class="note-kicker">
+      {% if page.obsidian.content_type == 'post' %}Dispatch{% elsif page.obsidian.content_type == 'doc' %}Manual{% else %}Note{% endif %}
+      <span aria-hidden="true">·</span> {{ page.obsidian.id | escape }}
+    </p>
+    {% unless page.obsidian.has_h1 %}<h1 class="note-title">{{ page.title | escape }}</h1>{% endunless %}
+    {% if page.description %}<p class="note-description">{{ page.description | escape }}</p>{% endif %}
+    <div class="note-meta">
+      {% if page.obsidian.content_type == 'post' and page.obsidian.published_at %}<time datetime="{{ page.obsidian.published_at | escape }}">Published {{ page.obsidian.published_at | date: "%d %b %Y" }}</time>{% endif %}
+      {% if page.obsidian.updated %}<time datetime="{{ page.obsidian.updated | escape }}">Updated {{ page.obsidian.updated | date: "%d %b %Y" }}</time>{% endif %}
+      {% if page.obsidian.features.tags %}
+        {% for tag in page.obsidian.tag_links %}<a class="tag-chip" href="{{ '/tags/' | relative_url }}#{{ tag.anchor | escape }}">#{{ tag.name | escape }}</a>{% endfor %}
+      {% endif %}
+    </div>
+  </header>
+{% endif %}

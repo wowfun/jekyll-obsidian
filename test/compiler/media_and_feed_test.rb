@@ -1,0 +1,165 @@
+# frozen_string_literal: true
+
+require "test_helper"
+
+class MediaAndFeedTest < Minitest::Test
+  def test_only_reachable_media_is_projected
+    result = compile(
+      note("index.md", "---\npublish: true\nimage: media/cover.png\nupdated: 2026-07-30\n---\n# Home\n![[media/song.mp3]]\n[[files/board.canvas]]"),
+      attachment("media/cover.png", "png", media_type: "image/png"),
+      attachment("media/song.mp3", "mp3", media_type: "audio/mpeg"),
+      attachment("files/board.canvas", "{\"nodes\":[]}", media_type: "application/json"),
+      attachment("media/private.png", "secret", media_type: "image/png")
+    )
+
+    assert result.success?, result.diagnostics.map(&:message).join("\n")
+    routes = result.copied_assets.map(&:route)
+    assert_equal [
+      "/assets/vault/files/board.canvas",
+      "/assets/vault/media/cover.png",
+      "/assets/vault/media/song.mp3"
+    ], routes
+    refute routes.any? { |route| route.include?("private") }
+    assert_includes page(result, "/").content, "obsidian-download-card"
+    assert_includes page(result, "/").content, "<audio"
+  end
+
+  def test_media_options_and_dangerous_schemes
+    result = compile(note("index.md", <<~MARKDOWN))
+      ---
+      publish: true
+      updated: 2026-07-30
+      ---
+      # Home
+      ![[photo.png|320x180]]
+      ![[paper.pdf#page=3&height=480]]
+      [bad](javascript:alert(1))
+    MARKDOWN
+
+    refute result.success?
+    assert result.diagnostics.any? { |item| item.code == "unsafe_url" }
+  end
+
+  def test_markdown_image_alt_dimensions_and_ambiguous_media_use_their_mime_type
+    result = compile(
+      note("index.md", <<~MARKDOWN),
+        ---
+        publish: true
+        updated: 2026-07-30
+        ---
+        # Home
+        ![Field sketch|320x180](media/sketch.png)
+        ![[media/interview.webm]]
+        ![[media/walkthrough.webm]]
+        ![[media/voice.3gp]]
+        ![[media/clip.3gp]]
+      MARKDOWN
+      attachment("media/sketch.png", "png", media_type: "image/png"),
+      attachment("media/interview.webm", "audio", media_type: "audio/webm"),
+      attachment("media/walkthrough.webm", "video", media_type: "video/webm"),
+      attachment("media/voice.3gp", "audio", media_type: "audio/3gpp"),
+      attachment("media/clip.3gp", "video", media_type: "video/3gpp")
+    )
+
+    assert result.success?, result.diagnostics.map(&:message).join("\n")
+    document = Nokogiri::HTML5.fragment(page(result, "/").content)
+    image = document.at_css('img[alt="Field sketch"]')
+    assert_equal "320", image["width"]
+    assert_equal "180", image["height"]
+    assert_equal 2, document.css("audio").length
+    assert_equal 2, document.css("video").length
+    assert_equal %w[audio/3gpp audio/webm], document.css("audio source").map { |node| node["type"] }.sort
+    assert_equal %w[video/3gpp video/webm], document.css("video source").map { |node| node["type"] }.sort
+  end
+
+  def test_only_explicitly_supported_attachment_types_are_published
+    result = compile(
+      note("index.md", "---\npublish: true\nupdated: 2026-07-30\n---\n# Home\n![[archive.bin]]\n![[database.base]]"),
+      attachment("archive.bin", "unknown", media_type: "application/octet-stream"),
+      attachment("database.base", "{}", media_type: "application/json")
+    )
+
+    refute result.success?
+    assert result.diagnostics.any? { |item| item.code == "unsupported_attachment" }
+    assert_equal ["/assets/vault/database.base"], result.copied_assets.map(&:route)
+    assert_includes page(result, "/").content, "database.base"
+    refute_includes page(result, "/").content, "assets/vault/archive.bin"
+  end
+
+  def test_feed_is_skipped_if_any_public_note_has_no_deterministic_time
+    result = compile(
+      note("index.md", "---\npublish: true\nupdated: 2026-07-30\n---\n# Home"),
+      note("timeless.md", "---\npublish: true\n---\n# Timeless")
+    )
+
+    assert result.success?
+    refute result.generated_files.any? { |item| item.route == "/feed.xml" }
+    assert result.diagnostics.any? { |item| item.code == "feed_skipped_missing_time" }
+  end
+
+  def test_git_time_enables_feed_without_using_the_clock
+    result = compile(
+      note(
+        "index.md",
+        "---\npublish: true\n---\n# Home",
+        first_committed_at: "2026-07-01T01:02:03Z",
+        last_committed_at: "2026-07-30T04:05:06Z"
+      )
+    )
+
+    feed = result.generated_files.find { |item| item.route == "/feed.xml" }
+    refute_nil feed
+    assert_includes feed.content, "2026-07-30T04:05:06Z"
+    refute_includes feed.content, "#{Time.now.year + 1}"
+  end
+
+  def test_yaml_date_is_rfc3339_utc_midnight_and_datetime_keeps_its_offset
+    result = compile(
+      note("index.md", "---\npublish: true\nupdated: 2026-07-30\n---\n# Home"),
+      note("timed.md", "---\npublish: true\nupdated: '2026-07-30T04:05:06+08:00'\n---\n# Timed")
+    )
+
+    assert result.success?, result.diagnostics.map(&:message).join("\n")
+    feed = result.generated_files.find { |item| item.route == "/feed.xml" }
+    refute_nil feed
+    assert_includes feed.content, "<updated>2026-07-30T00:00:00Z</updated>"
+    assert_includes feed.content, "<updated>2026-07-30T04:05:06+08:00</updated>"
+  end
+
+  def test_public_text_rejects_xml_forbidden_control_characters_before_feed_generation
+    body_result = compile(
+      note("index.md", "---\npublish: true\nupdated: 2026-07-30\n---\n# Home\nbad\u0001text")
+    )
+
+    refute body_result.success?
+    assert body_result.diagnostics.any? { |item| item.code == "invalid_character" }
+    refute body_result.generated_files.any? { |item| item.route == "/feed.xml" }
+
+    property_result = compile(
+      note("index.md", <<~'MARKDOWN')
+        ---
+        publish: true
+        title: "bad\x01title"
+        aliases: ["bad\x01alias"]
+        description: "bad\x01description"
+        updated: 2026-07-30
+        ---
+        # Safe fallback
+      MARKDOWN
+    )
+
+    refute property_result.success?
+    invalid_properties = property_result.diagnostics.select { |item| item.code == "invalid_property" }
+    assert_operator invalid_properties.length, :>=, 3
+
+    config_result = compile(
+      note("index.md", "---\npublish: true\nupdated: 2026-07-30\n---\n# Home"),
+      title: "Bad\u0001Title"
+    )
+    refute config_result.success?
+    assert config_result.diagnostics.any? { |item| item.code == "invalid_config_character" }
+    feed = config_result.generated_files.find { |item| item.route == "/feed.xml" }
+    refute_includes feed.content, "\u0001"
+    Nokogiri::XML(feed.content) { |config| config.strict.nonet }
+  end
+end

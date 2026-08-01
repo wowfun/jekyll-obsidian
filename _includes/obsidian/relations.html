@@ -1,0 +1,12 @@
+<section class="relation-section" aria-labelledby="links-title-{{ include.location }}">
+  <h2 class="relation-section__title" id="links-title-{{ include.location }}">Direct links</h2>
+  {% if page.obsidian.links and page.obsidian.links.size > 0 %}<ul class="relation-list">{% for relation in page.obsidian.links %}<li><a href="{{ relation.url | escape }}">{{ relation.title | escape }}</a></li>{% endfor %}</ul>{% else %}<p class="relation-empty">No outgoing note links.</p>{% endif %}
+</section>
+<section class="relation-section" aria-labelledby="backlinks-title-{{ include.location }}">
+  <h2 class="relation-section__title" id="backlinks-title-{{ include.location }}">Backlinks</h2>
+  {% if page.obsidian.backlinks and page.obsidian.backlinks.size > 0 %}<ul class="relation-list">{% for relation in page.obsidian.backlinks %}<li><a href="{{ relation.url | escape }}">{{ relation.title | escape }}</a></li>{% endfor %}</ul>{% else %}<p class="relation-empty">No notes link here yet.</p>{% endif %}
+</section>
+<section class="relation-section" aria-labelledby="embedded-title-{{ include.location }}">
+  <h2 class="relation-section__title" id="embedded-title-{{ include.location }}">Embedded by</h2>
+  {% if page.obsidian.embedded_by and page.obsidian.embedded_by.size > 0 %}<ul class="relation-list">{% for relation in page.obsidian.embedded_by %}<li><a href="{{ relation.url | escape }}">{{ relation.title | escape }}</a></li>{% endfor %}</ul>{% else %}<p class="relation-empty">Not embedded elsewhere.</p>{% endif %}
+</section>
