@@ -22,6 +22,7 @@ describe("color scheme controls", () => {
     expect(requestedKey).toBe(COLOR_SCHEME_STORAGE_KEY);
     expect(COLOR_SCHEME_STORAGE_KEY).toBe("jekyll-obsidian:color-scheme");
     expect(preferredColorScheme({ getItem: () => null }, { matches: true })).toBe("dark");
+    expect(preferredColorScheme({ getItem: () => { throw new Error("blocked"); } }, { matches: false })).toBe("light");
   });
 
   it("updates the document and accessible toggle label", () => {

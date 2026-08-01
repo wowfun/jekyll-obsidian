@@ -4,7 +4,7 @@ title: Architecture
 nav_order: 40
 tags:
   - guide/architecture
-description: How the pure vault compiler and the small Jekyll adapter divide responsibility.
+description: How the pure vault compiler and the filesystem-facing Jekyll adapter divide responsibility.
 created: 2026-07-31
 updated: 2026-07-31
 ---

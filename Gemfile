@@ -1,6 +1,6 @@
 source "https://rubygems.org"
 
-ruby "4.0.6"
+ruby ">= 4.0", "< 4.1"
 
 gem "commonmarker", "2.9.0"
 gem "cgi", "~> 0.5"

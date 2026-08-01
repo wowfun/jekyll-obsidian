@@ -72,6 +72,6 @@ Unknown keys never flow into Liquid or generated data. `aliases`, `tags`, and `c
 
 An explicit `content_type: post | doc | page` wins over directory defaults. Post publication dates use `date`, then `created`, then the first Git commit. A production build rejects a post with no deterministic date.
 
-Docs navigation follows vault directories. `nav_order` sorts sibling documents and `nav_exclude: true` removes only that note link; children remain reachable. The complete graph has its own accessible list fallback when enabled, and search loads on first use rather than increasing every page bundle.
+Docs navigation follows vault directories. `nav_order` sorts sibling documents and `nav_exclude: true` removes only that note link; children remain reachable. Each non-root page initially renders its current branch, then loads the shared full navigation when JavaScript is available. Search builds its index in a Web Worker. Graphs above 250 notes or 1,000 aggregated edges use the accessible note directory instead of a global force simulation.
 
 See [[Architecture]] before changing compiler or adapter boundaries.

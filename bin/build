@@ -69,6 +69,21 @@ while [ "$#" -gt 0 ]; do
   esac
 done
 
+case "$destination" in
+  _site|_site-[A-Za-z0-9]* ) ;;
+  *) fail "--destination must be _site or a top-level _site-NAME directory." ;;
+esac
+case "$destination" in
+  *[!A-Za-z0-9._-]*) fail "--destination contains unsupported characters." ;;
+esac
+target_destination=$PROJECT_DIR/$destination
+if [ -L "$target_destination" ]; then
+  fail "--destination must not be a symbolic link."
+fi
+if [ -e "$target_destination" ] && [ ! -d "$target_destination" ]; then
+  fail "--destination must be a directory when it already exists."
+fi
+
 if [ -n "${GITHUB_REPOSITORY:-}" ]; then
   case "$GITHUB_REPOSITORY" in
     */*) ;;
@@ -115,11 +130,19 @@ if [ -n "$base_path" ]; then
     fail "--baseurl contains unsupported characters."
 fi
 
-ruby "$PROJECT_DIR/scripts/validate-build-destination.rb" "$PROJECT_DIR" "$destination"
+build_environment=${JEKYLL_ENV:-production}
+if [ "$build_environment" = production ] && [ -z "$origin" ]; then
+  fail "production builds require --url or PAGES_ORIGIN."
+fi
 
 overlay_dir=$(mktemp -d "${TMPDIR:-/tmp}/jekyll-obsidian.XXXXXX")
 overlay=$overlay_dir/config.yml
+mkdir -p "$PROJECT_DIR/.jekyll-obsidian-cache"
+staging_destination=$(mktemp -d "$PROJECT_DIR/.jekyll-obsidian-cache/site-build.XXXXXX")
 cleanup() {
+  if [ -n "${staging_destination:-}" ] && [ -d "$staging_destination" ]; then
+    rm -rf -- "$staging_destination"
+  fi
   rm -f -- "$overlay"
   rmdir -- "$overlay_dir"
 }
@@ -139,7 +162,7 @@ yaml_string() {
   printf '\nbaseurl: '
   yaml_string "$base_path"
   printf '\ndestination: '
-  yaml_string "$destination"
+  yaml_string "$staging_destination"
   if [ -n "$theme" ]; then
     printf '\nobsidian:\n  theme: '
     yaml_string "$theme"
@@ -152,10 +175,28 @@ if [ "$build_assets" -eq 1 ]; then
   npm run build
 fi
 
-build_environment=${JEKYLL_ENV:-production}
 JEKYLL_ENV=$build_environment bundle exec jekyll build --trace --config "$PROJECT_DIR/_config.yml,$overlay"
 
 if [ "$build_environment" = production ]; then
-  "$PROJECT_DIR/scripts/audit-site.sh" "$PROJECT_DIR/$destination"
-  bundle exec ruby "$PROJECT_DIR/scripts/verify-site-urls.rb" "$PROJECT_DIR/$destination" "$origin" "$base_path"
+  "$PROJECT_DIR/scripts/audit-site.sh" "$staging_destination"
+  bundle exec ruby "$PROJECT_DIR/scripts/verify-site-urls.rb" "$staging_destination" "$origin" "$base_path"
+fi
+
+backup_destination=$PROJECT_DIR/.jekyll-obsidian-cache/site-backup-$$
+[ ! -e "$backup_destination" ] || fail "stale site backup exists: $backup_destination"
+had_previous=0
+if [ -d "$target_destination" ]; then
+  mv -- "$target_destination" "$backup_destination"
+  had_previous=1
+fi
+if mv -- "$staging_destination" "$target_destination"; then
+  staging_destination=""
+  if [ "$had_previous" -eq 1 ]; then
+    rm -rf -- "$backup_destination"
+  fi
+else
+  if [ "$had_previous" -eq 1 ] && [ ! -e "$target_destination" ]; then
+    mv -- "$backup_destination" "$target_destination"
+  fi
+  fail "could not publish the staged site."
 fi

@@ -156,7 +156,12 @@ export async function renderGraph(container: HTMLElement): Promise<void> {
 
     if (reducedMotion()) {
       simulation.stop();
-      for (let index = 0; index < 180; index += 1) simulation.tick();
+      const radius = Math.max(80, Math.min(width, height) * 0.36);
+      nodes.forEach((node, index) => {
+        const angle = (index / Math.max(nodes.length, 1)) * Math.PI * 2 - Math.PI / 2;
+        node.x = width / 2 + Math.cos(angle) * radius;
+        node.y = height / 2 + Math.sin(angle) * radius;
+      });
       position();
     } else {
       simulation.on("tick", position);

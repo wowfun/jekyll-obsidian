@@ -2,6 +2,7 @@
 
 require_relative "jekyll_obsidian/value_objects"
 require_relative "jekyll_obsidian/url_builder"
+require_relative "jekyll_obsidian/media_policy"
 require_relative "jekyll_obsidian/front_matter"
 require_relative "jekyll_obsidian/ofm_scanner"
 require_relative "jekyll_obsidian/built_in_themes"

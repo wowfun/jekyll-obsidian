@@ -51,4 +51,23 @@ describe("note previews", () => {
     expect(preview.textContent).toContain("<script>not markup</script>");
     expect(preview.querySelector("img, script")).toBeNull();
   });
+
+  it("does not hide when the pointer moves between children of the same link", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({
+      schema_version: 1,
+      notes: [{ id: "safe.md", title: "Safe", url: "/safe/", aliases: [], tags: [], description: null, preview: "Preview", updated: null, content_type: "page", published_at: null }]
+    }), { status: 200 })));
+    const anchor = document.createElement("a");
+    anchor.className = "obsidian-link";
+    anchor.dataset.noteId = "safe.md";
+    const child = document.createElement("span");
+    anchor.append(child);
+    document.body.append(anchor);
+    initialisePreviews();
+    anchor.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
+    await vi.waitFor(() => expect(document.querySelector("[data-note-preview]")).not.toBeNull());
+    child.dispatchEvent(new PointerEvent("pointerout", { bubbles: true, relatedTarget: anchor }));
+    await new Promise((resolve) => setTimeout(resolve, 110));
+    expect(document.querySelector("[data-note-preview]")).not.toBeNull();
+  });
 });

@@ -5,7 +5,7 @@
 {% endif %}
 
 <template data-dialog-template="browse">
-  {% if include.theme == 'docs' %}<nav class="docs-tree" aria-label="Documentation">{% include obsidian/docs-tree.html nodes=page.obsidian.theme_data.docs_tree %}</nav><nav aria-label="More ways to browse"><ul class="relation-list">{% if page.obsidian.features.tags %}<li><a href="{{ '/tags/' | relative_url }}">Tags</a></li>{% endif %}{% if page.obsidian.features.graph %}<li><a href="{{ '/graph/' | relative_url }}">Graph</a></li>{% endif %}{% if page.obsidian.features.feed and site.data.obsidian_feed_available %}<li><a href="{{ '/feed.xml' | relative_url }}">Feed</a></li>{% endif %}</ul></nav>{% else %}
+  {% if include.theme == 'docs' %}<nav aria-label="More ways to browse"><ul class="relation-list">{% if page.obsidian.features.tags %}<li><a href="{{ '/tags/' | relative_url }}">Tags</a></li>{% endif %}{% if page.obsidian.features.graph %}<li><a href="{{ '/graph/' | relative_url }}">Graph</a></li>{% endif %}{% if page.obsidian.features.feed and site.data.obsidian_feed_available %}<li><a href="{{ '/feed.xml' | relative_url }}">Feed</a></li>{% endif %}</ul></nav>{% else %}
     <nav aria-label="Browse"><ul class="relation-list"><li><a href="{{ '/' | relative_url }}">Home</a></li>{% if include.theme == 'blog' %}<li><a href="{{ '/archive/' | relative_url }}">Archive</a></li>{% else %}<li><a href="{{ '/notes/' | relative_url }}">All notes</a></li>{% endif %}{% if page.obsidian.features.tags %}<li><a href="{{ '/tags/' | relative_url }}">Tags</a></li>{% endif %}{% if page.obsidian.features.graph %}<li><a href="{{ '/graph/' | relative_url }}">Graph</a></li>{% endif %}{% if page.obsidian.features.feed and site.data.obsidian_feed_available %}<li><a href="{{ '/feed.xml' | relative_url }}">Feed</a></li>{% endif %}</ul></nav>
   {% endif %}
 </template>
@@ -13,7 +13,6 @@
 
 {% if page.obsidian.kind == 'note' %}
   {% if page.obsidian.features.outline or page.obsidian.features.relations %}
-    <template data-dialog-template="context">{% include obsidian/context.html location='dialog' %}</template>
     <dialog class="obsidian-dialog" data-dialog="context" aria-labelledby="context-dialog-title"><div class="obsidian-dialog__sheet"><header class="obsidian-dialog__header"><h2 class="obsidian-dialog__title" id="context-dialog-title">{% if page.obsidian.features.outline and page.obsidian.features.relations == false %}On this page{% else %}Context{% endif %}</h2><button class="obsidian-dialog__close" type="button" data-dialog-close aria-label="Close page context">&times;</button></header><div class="obsidian-dialog__body" data-dialog-content></div></div></dialog>
   {% endif %}
 {% endif %}

@@ -18,7 +18,7 @@ class LinkSecurityTest < Minitest::Test
     escapes = result.diagnostics.select { |item| item.code == "path_escape" }
     assert_equal 2, escapes.length
     assert escapes.all? { |item| item.severity == :error }
-    assert_equal 2, page(result, "/").content.scan("obsidian-link--unresolved").length
+    assert_instance_of JekyllObsidian::BuildFailure, result
     refute result.diagnostics.any? { |item| item.code == "unresolved_link" }
   end
 

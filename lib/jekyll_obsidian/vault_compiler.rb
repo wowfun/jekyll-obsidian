@@ -20,7 +20,8 @@ module JekyllObsidian
         unsafe: true,
         hardbreaks: true,
         tasklist_classes: true,
-        escaped_char_spans: true
+        escaped_char_spans: true,
+        sourcepos: true
       },
       extension: {
         strikethrough: true,
@@ -40,10 +41,6 @@ module JekyllObsidian
     DANGEROUS_SCHEMES = %w[data file javascript vbscript].freeze
     EXTERNAL_SCHEMES = %w[http https mailto tel].freeze
     NOTE_EXTENSION = ".md"
-    CANVAS_BASE_EXTENSIONS = %w[.canvas .base].freeze
-    IMAGE_EXTENSIONS = %w[.avif .bmp .gif .jpeg .jpg .png .svg .webp].freeze
-    AUDIO_EXTENSIONS = %w[.flac .m4a .mp3 .ogg .wav .webm .3gp].freeze
-    VIDEO_EXTENSIONS = %w[.mkv .mov .mp4 .ogv .webm].freeze
     THEMES = BuiltInThemes::IDS
     FEATURE_KEYS = %w[search tags feed graph relations previews outline].freeze
     THEME_FEATURE_DEFAULTS = {
@@ -99,7 +96,6 @@ module JekyllObsidian
       :syntax,
       :source_span,
       :scanner_token,
-      :wiki_index,
       :resolved_type,
       :target_id,
       :target_path,
@@ -111,27 +107,13 @@ module JekyllObsidian
     )
 
     Anchor = Struct.new(:kind, :id, :label, :level, :chain, keyword_init: true)
+    TransclusionContext = Struct.new(:host_id, :sequence, :instances, :bytes, keyword_init: true)
+    MAX_TRANSCLUSION_DEPTH = 16
+    MAX_TRANSCLUSION_INSTANCES = 256
+    MAX_TRANSCLUSION_BYTES = 2 * 1024 * 1024
 
     def self.compile(request)
       new(request).compile
-    rescue StandardError => exception
-      diagnostic = Diagnostic.new(
-        severity: :error,
-        code: "compiler_failure",
-        message: "compiler failed safely: #{exception.class}: #{exception.message}",
-        path: nil,
-        span: nil
-      )
-      BuildResult.new(
-        pages: [],
-        generated_files: [],
-        copied_assets: [],
-        diagnostics: [diagnostic],
-        relations: [],
-        notes: [],
-        theme: "digital-garden",
-        features: THEME_FEATURE_DEFAULTS.fetch("digital-garden")
-      )
     end
 
     def initialize(request)
@@ -141,9 +123,11 @@ module JekyllObsidian
       @notes = {}
       @all_note_paths = Set.new
       @attachments = {}
+      @attachment_basename_index = Hash.new { |hash, key| hash[key] = [] }
+      @image_paths = {}
       @relations = []
       @copied_asset_paths = Set.new
-      @render_sequence = 0
+      @transclusion_selection_cache = {}
       @url_builder = nil
       @theme = "digital-garden"
       @features = THEME_FEATURE_DEFAULTS.fetch(@theme)
@@ -171,22 +155,26 @@ module JekyllObsidian
       )
       theme_output = BuiltInThemes.resolve(@theme).render(model: published_site, config: theme_config)
       pages = theme_output.pages
-      generated_files = build_generated_files(pages, published_site, theme_output)
+      generated_files = theme_output.shared_files + build_generated_files(pages, published_site, theme_output)
       copied_assets = build_copied_assets
       preflight_routes(pages, generated_files, copied_assets, theme_output.reserved_namespaces)
 
       note_outputs = published_site.notes.map do |note|
         NoteOutput.new(id: note.id, title: note.title, route: note.route, properties: note.properties)
       end
-      BuildResult.new(
+      diagnostics = sorted_diagnostics
+      return BuildFailure.new(diagnostics: diagnostics) if diagnostics.any? { |item| item.severity == :error }
+
+      BuildSuccess.new(
         pages: pages.sort_by(&:route),
         generated_files: generated_files.sort_by(&:route),
         copied_assets: copied_assets.sort_by(&:route),
-        diagnostics: sorted_diagnostics,
+        diagnostics: diagnostics,
         relations: published_site.relations,
         notes: note_outputs,
         theme: @theme,
-        features: @features
+        features: @features,
+        site_data: theme_output.site_data
       )
     end
 
@@ -198,7 +186,7 @@ module JekyllObsidian
         return
       end
 
-      @config.each_pair do |name, value|
+      @config.to_h.each do |name, value|
         next if FrontMatter.valid_output_text?(value.to_s)
 
         error("invalid_config_character", "#{name} contains a character forbidden by XML 1.0")
@@ -209,6 +197,7 @@ module JekyllObsidian
       resolve_theme_config
       resolve_content_config
       @url_builder = UrlBuilder.new(origin: @config.url, baseurl: @config.baseurl)
+      error("missing_origin", "production builds require a non-empty url origin") if production? && @url_builder.origin.empty?
     rescue ArgumentError => exception
       error("invalid_url_config", exception.message)
       @url_builder = UrlBuilder.new(origin: "", baseurl: "")
@@ -367,6 +356,8 @@ module JekyllObsidian
           )
         when :attachment
           @attachments[path] = entry
+          basename = File.basename(path).unicode_normalize(:nfc).downcase(:fold)
+          @attachment_basename_index[basename] << path
         when :symlink
           error("symlink_rejected", "symlinks are not accepted in a vault snapshot", path)
         else
@@ -376,8 +367,6 @@ module JekyllObsidian
     end
 
     def parse_public_notes
-      # Frontmatter parsing intentionally happens before Markdown parsing. This
-      # method is a named pipeline checkpoint for profiling and conformance.
       unless @notes.key?("index.md")
         error("missing_index", "a public root vault/index.md is required", "index.md")
       end
@@ -456,8 +445,7 @@ module JekyllObsidian
         note.title = note.properties["title"] || first_h1(note.document) || filename_title(note.id)
         build_anchor_registry(note)
         annotate_occurrences(note)
-      rescue StandardError => exception
-        error("markdown_parse_error", "could not parse Markdown: #{exception.message}", note.id)
+        annotate_code_markers(note)
       end
     end
 
@@ -504,8 +492,6 @@ module JekyllObsidian
     end
 
     def annotate_occurrences(note)
-      prepared_lines = note.scanner.markdown.lines
-
       note.scanner.embeds.each do |embed|
         note.occurrences << Occurrence.new(
           index: note.occurrences.length,
@@ -519,25 +505,21 @@ module JekyllObsidian
         )
       end
 
-      wiki_index = 0
+      note.scanner.wikilinks.each do |link|
+        note.occurrences << Occurrence.new(
+          index: note.occurrences.length,
+          source_id: note.id,
+          raw_target: link.target,
+          display: link.display,
+          kind: :link,
+          syntax: :wikilink,
+          source_span: link.source_span,
+          scanner_token: link.token
+        )
+      end
+
       note.document.walk do |node|
         case node.type
-        when :wikilink
-          source = source_slice(prepared_lines, node.source_position)
-          inner = source.sub(/\A\[\[/, "").sub(/\]\]\z/, "")
-          target, display = inner.split("|", 2)
-          occurrence = Occurrence.new(
-            index: note.occurrences.length,
-            source_id: note.id,
-            raw_target: target.to_s,
-            display: display,
-            kind: :link,
-            syntax: :wikilink,
-            source_span: source_span(node.source_position),
-            wiki_index: wiki_index
-          )
-          note.occurrences << occurrence
-          wiki_index += 1
         when :link, :image
           raw_url = node.url.to_s
           next if raw_url.empty?
@@ -585,9 +567,12 @@ module JekyllObsidian
         image = note.properties["image"]
         next unless image
 
-        resolved = resolve_attachment_path(note.id, image)
-        if resolved && attachment_kind(resolved, @attachments.fetch(resolved).media_type) == :image
+        resolved, ambiguous = resolve_attachment_path(note.id, image)
+        if ambiguous
+          error_or_warning("ambiguous_attachment", "image property matches more than one attachment", note.id, nil, fatal: production?)
+        elsif resolved && MediaPolicy.kind(resolved) == :image
           @copied_asset_paths << resolved
+          @image_paths[note.id] = resolved
         else
           error_or_warning("missing_image_property", "image property does not resolve to an attachment", note.id, nil, fatal: production?)
         end
@@ -637,9 +622,21 @@ module JekyllObsidian
         return
       end
 
-      attachment_target = resolve_attachment_path(note.id, target_text)
+      attachment_target, ambiguous_attachment = resolve_attachment_path(note.id, target_text)
+      if ambiguous_attachment
+        occurrence.unresolved = true
+        error_or_warning(
+          "ambiguous_attachment",
+          "attachment target is ambiguous",
+          note.id,
+          occurrence.source_span,
+          fatal: production?
+        )
+        return
+      end
+
       if attachment_target
-        unless attachment_kind(attachment_target, @attachments.fetch(attachment_target).media_type)
+        unless MediaPolicy.kind(attachment_target)
           occurrence.unresolved = true
           error(
             "unsupported_attachment",
@@ -767,9 +764,8 @@ module JekyllObsidian
     end
 
     def bind_occurrence_nodes(note, fragment)
-      wiki_nodes = fragment.css("a[data-wikilink='true']")
-      note.occurrences.select { |occurrence| occurrence.syntax == :wikilink }.sort_by(&:wiki_index).each_with_index do |occurrence, index|
-        node = wiki_nodes[index]
+      note.occurrences.select { |occurrence| occurrence.syntax == :wikilink }.each do |occurrence|
+        node = fragment.at_css("a[data-obsidian-wikilink-token='#{occurrence.scanner_token}']")
         node["data-obsidian-occurrence"] = occurrence.index.to_s if node
       end
 
@@ -866,15 +862,16 @@ module JekyllObsidian
       route = @url_builder.attachment_route(occurrence.target_path)
       href = @url_builder.href(route)
 
-      kind = attachment_kind(occurrence.target_path, entry.media_type)
+      kind = MediaPolicy.kind(occurrence.target_path)
+      media_type = MediaPolicy.media_type(occurrence.target_path, fallback: entry.media_type)
       replacement = if occurrence.kind == :link || kind == :download
-        download_card(node.document, occurrence.target_path, href, entry.media_type)
+        download_card(node.document, occurrence.target_path, href, media_type)
       elsif kind == :image
         image_node(node.document, occurrence, href)
       elsif kind == :audio
-        media_node(node.document, "audio", href, entry.media_type)
+        media_node(node.document, "audio", href, media_type)
       elsif kind == :video
-        media_node(node.document, "video", href, entry.media_type)
+        media_node(node.document, "video", href, media_type)
       elsif kind == :pdf
         pdf_node(node.document, occurrence, href)
       else
@@ -896,13 +893,15 @@ module JekyllObsidian
 
         link["rel"] = "noopener noreferrer"
       end
+      fragment.css("[data-sourcepos]").remove_attr("data-sourcepos")
     end
 
     def assign_heading_ids(note, fragment)
       headings = note.anchors.select { |anchor| anchor.kind == :heading }
-      fragment.css("h1, h2, h3, h4, h5, h6").each_with_index do |heading, index|
-        anchor = headings[index]
-        next unless anchor
+      source_headings = note.document.select { |node| node.type == :heading }
+      headings.zip(source_headings).each do |anchor, source|
+        heading = fragment.at_css("h#{anchor.level}[data-sourcepos='#{sourcepos_value(source.source_position)}']")
+        next unless heading
 
         heading["id"] = anchor.id
         heading.css("a.anchor").each do |permalink|
@@ -946,14 +945,18 @@ module JekyllObsidian
     end
 
     def annotate_task_states(note, fragment)
-      inputs = fragment.css("li.task-list-item input.task-list-item-checkbox")
-      note.scanner.tasks.each_with_index do |task, index|
-        input = inputs[index]
-        next unless input
+      lines = note.scanner.markdown.lines
+      fragment.css("li.task-list-item[data-sourcepos]").each do |item|
+        position = parse_sourcepos_value(item["data-sourcepos"])
+        line = lines.fetch(position.fetch(:start_line) - 1, "")
+        source = line[(position.fetch(:start_column) - 1)..].to_s
+        match = source.match(/\A(?:[-+*]|\d+[.)])\s+\[([^\]\r\n])\](?=\s|$)/)
+        next unless match
 
-        state = task.state
-        item = input.ancestors("li.task-list-item").first
-        item["data-task"] = state if item
+        state = match[1]
+        input = item.at_css("input.task-list-item-checkbox")
+        next unless input
+        item["data-task"] = state
         input["data-task"] = state
         input["aria-label"] = "Task state: #{task_state_label(state)}"
         input.remove_attribute("checked") unless state.match?(/\A[xX]\z/)
@@ -972,7 +975,7 @@ module JekyllObsidian
     end
 
     def transform_callouts(fragment)
-      fragment.css("blockquote").to_a.reverse_each do |blockquote|
+      fragment.css("blockquote[data-sourcepos]").to_a.reverse_each do |blockquote|
         first = blockquote.at_css("p")
         next unless first
 
@@ -1009,10 +1012,11 @@ module JekyllObsidian
     end
 
     def annotate_code_blocks(note, fragment)
-      source_blocks = note.document.select { |node| node.type == :code_block }
-      fragment.css("pre").each_with_index do |pre, index|
-        source = source_blocks[index]
-        next unless source
+      note.document.select { |node| node.type == :code_block }.each_with_index do |source, index|
+        marker = code_marker(index)
+        pre = fragment.css("pre").find { |candidate| candidate.at_css("code")&.text&.start_with?(marker) }
+        next unless pre
+        remove_text_prefix(pre.at_css("code"), "#{marker}\n")
         language = source.fence_info.to_s.split.first.to_s.downcase.gsub(/[^a-z0-9_+-]/, "")
         next if language.empty?
 
@@ -1021,6 +1025,30 @@ module JekyllObsidian
         pre["lang"] = language
         pre["data-obsidian-mermaid"] = "true" if language == "mermaid"
       end
+    end
+
+    def remove_text_prefix(node, prefix)
+      remaining = prefix
+      node.xpath(".//text()").each do |text|
+        break if remaining.empty?
+
+        length = [text.text.length, remaining.length].min
+        return false unless text.text[0, length] == remaining[0, length]
+
+        text.content = text.text[length..].to_s
+        remaining = remaining[length..].to_s
+      end
+      remaining.empty?
+    end
+
+    def annotate_code_markers(note)
+      note.document.select { |node| node.type == :code_block }.each_with_index do |source, index|
+        source.string_content = "#{code_marker(index)}\n#{source.string_content}"
+      end
+    end
+
+    def code_marker(index)
+      "JEKYLL_OBSIDIAN_CODE_#{index}_START"
     end
 
     def build_published_site_model
@@ -1032,7 +1060,8 @@ module JekyllObsidian
       direct = @relations.group_by(&:source_id)
 
       notes = @notes.values.sort_by(&:id).map do |note|
-        content = render_with_transclusions(note.id, [], note.id)
+        context = TransclusionContext.new(host_id: note.id, sequence: 0, instances: 0, bytes: 0)
+        content = render_with_transclusions(note.id, [], context, depth: 0).to_html
         assert_block_anchors_rendered(note, content)
         PublishedNote.new(
           id: note.id,
@@ -1051,7 +1080,8 @@ module JekyllObsidian
           nav_exclude: note.nav_exclude,
           has_h1: note.has_h1,
           feature_flags: note.feature_flags,
-          base_data: published_note_base_data(note),
+          image_url: published_image_url(note),
+          source_links: repository_links(note.id),
           links: relation_cards(direct.fetch(note.id, []).select { |item| item.kind == :link }),
           backlinks: relation_cards(backlinks.fetch(note.id, []), source: true),
           embedded_by: relation_cards(embedded_by.fetch(note.id, []), source: true)
@@ -1065,10 +1095,13 @@ module JekyllObsidian
       )
     end
 
-    def render_with_transclusions(note_id, stack, host_id)
-      note = @notes.fetch(note_id)
-      fragment = note.base_fragment.dup
-      fragment.css("obsidian-embed").each do |placeholder|
+    def render_with_transclusions(note_id, stack, context, depth:, raw_fragment: nil, resolved_anchor_id: nil)
+      fragment = cached_transclusion_selection(note_id, raw_fragment, resolved_anchor_id)
+      unless consume_transclusion_bytes(context, fragment.to_html.bytesize, note_id)
+        return transclusion_limit_fragment(fragment.document, "expanded HTML exceeds #{MAX_TRANSCLUSION_BYTES} bytes")
+      end
+
+      fragment.css("obsidian-embed").to_a.each do |placeholder|
         target_id = placeholder["data-source-id"]
         if stack.include?(target_id) || target_id == note_id
           replacement = Nokogiri::XML::Node.new("span", fragment.document)
@@ -1079,15 +1112,21 @@ module JekyllObsidian
           next
         end
 
-        target_html = render_with_transclusions(target_id, stack + [note_id], host_id)
-        target_fragment = Nokogiri::HTML5.fragment(target_html)
-        selected = select_transclusion_fragment(
-          target_fragment,
-          placeholder["data-fragment"],
-          placeholder["data-anchor-id"]
+        unless consume_transclusion_instance(context, depth + 1, note_id)
+          placeholder.replace(transclusion_limit_node(fragment.document, "embed expansion limit reached"))
+          next
+        end
+
+        selected = render_with_transclusions(
+          target_id,
+          stack + [note_id],
+          context,
+          depth: depth + 1,
+          raw_fragment: placeholder["data-fragment"],
+          resolved_anchor_id: placeholder["data-anchor-id"]
         )
-        @render_sequence += 1
-        prefix = "embed-#{@url_builder.slug(host_id)}-#{@render_sequence}-"
+        context.sequence += 1
+        prefix = "embed-#{@url_builder.slug(context.host_id)}-#{context.sequence}-"
         rewrite_fragment_ids(selected, prefix)
 
         wrapper = Nokogiri::XML::Node.new("section", fragment.document)
@@ -1105,7 +1144,53 @@ module JekyllObsidian
         wrapper.add_child(embedded_content)
         placeholder.replace(wrapper)
       end
-      fragment.to_html
+      fragment
+    end
+
+    def cached_transclusion_selection(note_id, raw_fragment, resolved_anchor_id)
+      key = [note_id, raw_fragment.to_s, resolved_anchor_id.to_s]
+      cached = @transclusion_selection_cache[key]
+      return Nokogiri::HTML5.fragment(cached) if cached
+
+      fragment = @notes.fetch(note_id).base_fragment.dup
+      selected = select_transclusion_fragment(fragment, raw_fragment, resolved_anchor_id)
+      serialized = selected.to_html.freeze
+      @transclusion_selection_cache[key] = serialized
+      Nokogiri::HTML5.fragment(serialized)
+    end
+
+    def consume_transclusion_instance(context, depth, path)
+      return transclusion_limit(context, "embed depth exceeds #{MAX_TRANSCLUSION_DEPTH}", path) if depth > MAX_TRANSCLUSION_DEPTH
+      return transclusion_limit(context, "embed instances exceed #{MAX_TRANSCLUSION_INSTANCES}", path) if context.instances >= MAX_TRANSCLUSION_INSTANCES
+
+      context.instances += 1
+      true
+    end
+
+    def consume_transclusion_bytes(context, amount, path)
+      return transclusion_limit(context, "expanded HTML exceeds #{MAX_TRANSCLUSION_BYTES} bytes", path) if context.bytes + amount > MAX_TRANSCLUSION_BYTES
+
+      context.bytes += amount
+      true
+    end
+
+    def transclusion_limit(_context, message, path)
+      error_or_warning("embed_budget_exceeded", message, path, nil, fatal: production?)
+      false
+    end
+
+    def transclusion_limit_fragment(document, message)
+      fragment = Nokogiri::HTML5.fragment("")
+      fragment.add_child(transclusion_limit_node(document, message))
+      fragment
+    end
+
+    def transclusion_limit_node(document, message)
+      node = Nokogiri::XML::Node.new("span", document)
+      node["class"] = "obsidian-embed obsidian-embed--limited"
+      node["role"] = "status"
+      node.content = message
+      node
     end
 
     def transfer_replacement_identity(source, replacement)
@@ -1183,36 +1268,42 @@ module JekyllObsidian
         mapping[old] = "#{prefix}#{old}"
         node["id"] = mapping[old]
       end
-      fragment.css("a[href^='#']").each do |link|
-        old = link["href"].delete_prefix("#")
-        link["href"] = "##{mapping.fetch(old, "#{prefix}#{old}")}"
+      fragment.css("*").select { |node| node["href"] || node["xlink:href"] }.each do |node|
+        %w[href xlink:href].each do |attribute|
+          next unless node[attribute]&.start_with?("#")
+
+          old = node[attribute].delete_prefix("#")
+          node[attribute] = "##{mapping.fetch(old, "#{prefix}#{old}")}"
+        end
+      end
+      %w[for list form aria-activedescendant aria-details aria-errormessage].each do |attribute|
+        fragment.css("[#{attribute}]").each do |node|
+          old = node[attribute]
+          node[attribute] = mapping.fetch(old, "#{prefix}#{old}")
+        end
+      end
+      %w[aria-labelledby aria-describedby aria-controls aria-owns headers itemref].each do |attribute|
+        fragment.css("[#{attribute}]").each do |node|
+          node[attribute] = node[attribute].split.map { |old| mapping.fetch(old, "#{prefix}#{old}") }.join(" ")
+        end
+      end
+      %w[style clip-path fill filter mask marker-start marker-mid marker-end stroke].each do |attribute|
+        fragment.css("[#{attribute}]").each do |node|
+          node[attribute] = node[attribute].gsub(/url\(\s*(['"]?)#([^)'"\s]+)\1\s*\)/) do
+            quote = Regexp.last_match(1)
+            old = Regexp.last_match(2)
+            "url(#{quote}##{mapping.fetch(old, "#{prefix}#{old}")}#{quote})"
+          end
+        end
       end
     end
 
-    def published_note_base_data(note)
-      properties = note.properties
-      obsidian = {
-        "kind" => "note",
-        "id" => note.id,
-        "content_type" => note.content_type,
-        "published_at" => note.published_at,
-        "route" => note.route,
-        "href" => @url_builder.href(note.route),
-        "absolute_url" => @url_builder.absolute_url(note.route),
-        "aliases" => Array(properties["aliases"]),
-        "tags" => Array(properties["tags"]),
-        "cssclasses" => Array(properties["cssclasses"]),
-        "created" => note.created,
-        "updated" => note.updated,
-        "has_h1" => note.has_h1,
-        "source_links" => repository_links(note.id)
-      }
-      {
-        "title" => note.title,
-        "description" => properties["description"] || note.preview,
-        "image" => properties["image"],
-        "obsidian" => obsidian
-      }.compact
+    def published_image_url(note)
+      path = @image_paths[note.id]
+      return nil unless path
+
+      route = @url_builder.attachment_route(path)
+      @url_builder.absolute_url(route) || @url_builder.href(route)
     end
 
     def repository_links(path)
@@ -1323,9 +1414,11 @@ module JekyllObsidian
 
       missing = candidates.select { |note| feed_timestamp(note).nil? }
       unless missing.empty?
-        warning("feed_skipped_missing_time", "feed skipped because a public note has no property or Git update time")
-        return nil
+        warning("feed_omitted_missing_time", "feed omitted #{missing.length} public note(s) without property or Git update time")
       end
+
+      candidates -= missing
+      return nil if candidates.empty?
 
       notes = candidates.sort_by { |note| [chronology_key(feed_timestamp(note)), note.id] }.reverse
       updated = feed_timestamp(notes.first)
@@ -1369,7 +1462,10 @@ module JekyllObsidian
           source_path: path,
           route: @url_builder.attachment_route(path),
           media_type: entry.media_type,
-          size: entry.size
+          size: entry.size,
+          device: entry.device,
+          inode: entry.inode,
+          mtime_ns: entry.mtime_ns
         )
       end
     end
@@ -1417,6 +1513,12 @@ module JekyllObsidian
         return [nil, false]
       end
 
+      relative = clean_relative(File.dirname(source_id), decoded)
+      if relative
+        candidate = ensure_md(relative)
+        return [candidate, false] if @notes.key?(candidate)
+      end
+
       basename = File.basename(rooted, NOTE_EXTENSION).unicode_normalize(:nfc).downcase(:fold)
       candidates = @basename_index.fetch(basename, [])
       return [candidates.first, false] if candidates.one?
@@ -1427,21 +1529,21 @@ module JekyllObsidian
 
     def resolve_attachment_path(source_id, raw_target)
       decoded = safe_decode(raw_target).unicode_normalize(:nfc).tr("\\", "/").delete_prefix("/")
-      return nil if decoded.empty?
+      return [nil, false] if decoded.empty?
 
       candidates = []
       candidates << decoded
       relative = clean_relative(File.dirname(source_id), decoded)
       candidates << relative if relative && relative != decoded
-      candidates.each { |candidate| return candidate if @attachments.key?(candidate) }
+      candidates.each { |candidate| return [candidate, false] if @attachments.key?(candidate) }
 
-      return nil if decoded.include?("/")
+      return [nil, false] if decoded.include?("/")
 
       folded = File.basename(decoded).unicode_normalize(:nfc).downcase(:fold)
-      matches = @attachments.keys.select do |path|
-        File.basename(path).unicode_normalize(:nfc).downcase(:fold) == folded
-      end
-      matches.one? ? matches.first : nil
+      matches = @attachment_basename_index.fetch(folded, [])
+      return [matches.first, false] if matches.one?
+
+      [nil, matches.length > 1]
     end
 
     def split_target(raw, kind)
@@ -1483,25 +1585,6 @@ module JekyllObsidian
       !extension.empty? && extension != NOTE_EXTENSION
     end
 
-    def attachment_kind(path, media_type)
-      extension = File.extname(path).downcase
-      type = media_type.to_s.downcase
-      return :download if CANVAS_BASE_EXTENSIONS.include?(extension)
-      return :image if IMAGE_EXTENSIONS.include?(extension)
-      return :pdf if extension == ".pdf"
-
-      if %w[.webm .3gp].include?(extension)
-        return :audio if type.start_with?("audio/")
-        return :video if type.start_with?("video/")
-        return nil
-      end
-
-      return :audio if AUDIO_EXTENSIONS.include?(extension)
-      return :video if VIDEO_EXTENSIONS.include?(extension)
-
-      nil
-    end
-
     def deterministic_updated(note)
       note.properties["updated"] || note.entry.last_committed_at
     end
@@ -1528,12 +1611,6 @@ module JekyllObsidian
       "https://obsidian.invalid/ref/#{index}"
     end
 
-    def source_slice(lines, position)
-      return "" unless position
-      line = lines.fetch(position.fetch(:start_line) - 1, "")
-      line[(position.fetch(:start_column) - 1)...position.fetch(:end_column)].to_s
-    end
-
     def source_span(position)
       return nil unless position
       SourceSpan.new(
@@ -1542,6 +1619,22 @@ module JekyllObsidian
         end_line: position[:end_line],
         end_column: position[:end_column]
       )
+    end
+
+    def sourcepos_value(position)
+      "#{position.fetch(:start_line)}:#{position.fetch(:start_column)}-#{position.fetch(:end_line)}:#{position.fetch(:end_column)}"
+    end
+
+    def parse_sourcepos_value(value)
+      match = value.to_s.match(/\A(\d+):(\d+)-(\d+):(\d+)\z/)
+      return { start_line: 0, start_column: 0, end_line: 0, end_column: 0 } unless match
+
+      {
+        start_line: match[1].to_i,
+        start_column: match[2].to_i,
+        end_line: match[3].to_i,
+        end_column: match[4].to_i
+      }
     end
 
     def span_key(span)
@@ -1629,18 +1722,6 @@ module JekyllObsidian
       node.add_child(title)
       node.add_child(meta)
       node
-    end
-
-    def unresolved_attachment_node(document, path)
-      node = Nokogiri::XML::Node.new("span", document)
-      node["class"] = "obsidian-embed obsidian-embed--unresolved obsidian-unresolved"
-      node["role"] = "status"
-      node.content = path
-      node
-    end
-
-    def css_escape(value)
-      value.to_s.gsub(/([^a-zA-Z0-9_-])/) { |char| "\\#{char.ord.to_s(16)} " }
     end
 
     def clean_relative(base, target)

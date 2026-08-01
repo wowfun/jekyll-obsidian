@@ -1097,8 +1097,6 @@
   }
 
   .site-navigation,
-  .site-actions [data-obsidian-dialog-open="browse"],
-  .site-actions [data-obsidian-dialog-open="context"],
   .site-actions [data-dialog-open="browse"],
   .site-actions [data-dialog-open="context"] {
     display: none;
@@ -1196,6 +1194,16 @@
 
   .obsidian-dialog__sheet {
     grid-template-rows: auto auto minmax(0, 1fr);
+  }
+
+  .js .obsidian-dialog [data-dialog-movable] {
+    position: static;
+    display: block;
+    max-block-size: none;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    overflow: visible;
   }
 
   .site-footer__inner {

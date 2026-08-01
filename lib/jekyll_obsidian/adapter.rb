@@ -1,52 +1,18 @@
 # frozen_string_literal: true
 
 require "find"
+require "fileutils"
 require "json"
 require "open3"
 require "pathname"
+require "tmpdir"
 require "jekyll"
 require_relative "../jekyll_obsidian"
 
 module JekyllObsidian
   module Adapter
-    THEMES = %w[blog docs digital-garden].freeze
-    CONTENT_TYPES = %w[page post doc].freeze
-    DIRECTORY_CONTENT_TYPES = %w[post doc].freeze
-    FEATURE_IDS = %w[search tags feed graph relations previews outline].freeze
-    DEFAULT_CONTENT = {
-      "default_type" => "page",
-      "directories" => { "post" => ["blog"], "doc" => ["docs"] }
-    }.freeze
-    BUNDLED_FEATURE_IDS = %w[search graph previews preview math mermaid].freeze
-    MANIFEST_FEATURE_ALIASES = { "previews" => "preview" }.freeze
+    BUNDLED_FEATURE_IDS = %w[search graph previews math mermaid].freeze
     CONFIG_KEYS = %w[source syntax_profile theme repository edit_branch content features].freeze
-    CONTENT_KEYS = %w[default_type directories].freeze
-    MIME_TYPES = {
-      ".avif" => "image/avif",
-      ".bmp" => "image/bmp",
-      ".base" => "application/json",
-      ".canvas" => "application/json",
-      ".3gp" => "audio/3gpp",
-      ".flac" => "audio/flac",
-      ".gif" => "image/gif",
-      ".jpeg" => "image/jpeg",
-      ".jpg" => "image/jpeg",
-      ".m4a" => "audio/mp4",
-      ".md" => "text/markdown",
-      ".mkv" => "video/x-matroska",
-      ".mov" => "video/quicktime",
-      ".mp3" => "audio/mpeg",
-      ".mp4" => "video/mp4",
-      ".ogg" => "audio/ogg",
-      ".ogv" => "video/ogg",
-      ".pdf" => "application/pdf",
-      ".png" => "image/png",
-      ".svg" => "image/svg+xml",
-      ".wav" => "audio/wav",
-      ".webm" => "video/webm",
-      ".webp" => "image/webp"
-    }.freeze
-
     class GeneratedPage < Jekyll::PageWithoutAFile
       attr_reader :obsidian_route
 
@@ -55,7 +21,7 @@ module JekyllObsidian
         directory, filename = self.class.route_parts(output.route)
         super(site, site.source, directory, filename)
         self.content = output.content
-        self.data = generated ? {} : deep_copy(output.data)
+        self.data = generated ? {} : output.data.dup
         data["layout"] = nil if generated
         data["permalink"] = output.route
         data["render_with_liquid"] = false
@@ -73,12 +39,6 @@ module JekyllObsidian
           directory = "" if directory == "."
           [directory, File.basename(clean)]
         end
-      end
-
-      private
-
-      def deep_copy(value)
-        Marshal.load(Marshal.dump(value))
       end
     end
 
@@ -113,10 +73,10 @@ module JekyllObsidian
       end
     end
 
-    module_function
+    class << self
 
     def prepare_site(site)
-      obsidian = validate_obsidian_configuration(site)
+      obsidian = normalize_obsidian_configuration(site)
       source = obsidian.fetch("source")
       assert_safe_destination(site, source)
       site.exclude = Array(site.exclude).dup
@@ -125,7 +85,37 @@ module JekyllObsidian
       site.config["obsidian"] = obsidian
     end
 
-    def validate_obsidian_configuration(site)
+    def generate(site)
+      source = site.config.fetch("obsidian").fetch("source")
+      assert_vault_was_not_read(site, source)
+      result = compile(site, source)
+      log_diagnostics(result)
+      unless result.success?
+        summary = result.diagnostics.select { |item| item.severity == :error }
+          .map { |item| "#{[item.path, item.code].compact.join(":")} (#{item.message})" }
+          .join(", ")
+        fatal("obsidian compilation failed: #{summary}")
+      end
+
+      staging_root = stage_vault_assets(site, source, result)
+      begin
+        site.data["obsidian_feed_available"] = result.generated_files.any? { |output| output.route == "/feed.xml" }
+        site.data.merge!(result.site_data)
+        pages, vault_assets = generated_objects(site, result, staging_root)
+        app_assets = app_asset_objects(site, theme: result.theme, features: result.features)
+        preflight_collisions(site, pages, vault_assets + app_assets)
+        site.pages.concat(pages)
+        site.static_files.concat(vault_assets).concat(app_assets)
+      rescue StandardError
+        site.data.delete("jekyll_obsidian_staging_root")
+        FileUtils.remove_entry(staging_root) if File.exist?(staging_root)
+        raise
+      end
+    end
+
+    private
+
+    def normalize_obsidian_configuration(site)
       raw = site.config["obsidian"]
       fatal("obsidian must be a mapping") unless raw.nil? || raw.is_a?(Hash)
       configured = raw || {}
@@ -133,26 +123,14 @@ module JekyllObsidian
       fatal("obsidian contains unsupported key: #{unknown.sort.first}") unless unknown.empty?
 
       source = validate_source_configuration(site, configured.fetch("source", "vault"))
-      theme = configured.fetch("theme", "digital-garden")
-      unless theme.is_a?(String) && THEMES.include?(theme)
-        fatal("obsidian.theme must be one of: #{THEMES.join(", ")}")
-      end
-
-      syntax_profile = configured.fetch("syntax_profile", "ofm@1")
-      fatal("obsidian.syntax_profile must be a string") unless syntax_profile.is_a?(String)
-      repository = configured.fetch("repository", "")
-      fatal("obsidian.repository must be a string") unless repository.is_a?(String)
-      edit_branch = configured.fetch("edit_branch", "main")
-      fatal("obsidian.edit_branch must be a non-empty string") unless edit_branch.is_a?(String) && !edit_branch.empty?
-
       {
         "source" => source,
-        "syntax_profile" => syntax_profile,
-        "theme" => theme,
-        "repository" => repository,
-        "edit_branch" => edit_branch,
-        "content" => validate_content_configuration(site, source, configured["content"]),
-        "features" => validate_feature_configuration(configured["features"])
+        "syntax_profile" => configured.fetch("syntax_profile", "ofm@1"),
+        "theme" => configured.fetch("theme", "digital-garden"),
+        "repository" => configured.fetch("repository", ""),
+        "edit_branch" => configured.fetch("edit_branch", "main"),
+        "content" => configured["content"],
+        "features" => configured["features"]
       }
     end
 
@@ -189,82 +167,6 @@ module JekyllObsidian
       source
     rescue ArgumentError, SystemCallError => exception
       fatal("invalid obsidian.source: #{exception.message}")
-    end
-
-    def validate_content_configuration(site, source, raw)
-      fatal("obsidian.content must be a mapping") unless raw.nil? || raw.is_a?(Hash)
-      content = raw || DEFAULT_CONTENT
-      unknown = content.keys.map(&:to_s) - CONTENT_KEYS
-      fatal("obsidian.content contains unsupported key: #{unknown.sort.first}") unless unknown.empty?
-      default_type = content.fetch("default_type", "page")
-      unless default_type.is_a?(String) && CONTENT_TYPES.include?(default_type)
-        fatal("obsidian.content.default_type must be one of: #{CONTENT_TYPES.join(", ")}")
-      end
-
-      raw_directories = content.fetch("directories", DEFAULT_CONTENT.fetch("directories"))
-      fatal("obsidian.content.directories must be a mapping") unless raw_directories.is_a?(Hash)
-      unknown = raw_directories.keys.map(&:to_s) - DIRECTORY_CONTENT_TYPES
-      fatal("obsidian.content.directories contains unsupported type: #{unknown.sort.first}") unless unknown.empty?
-
-      directories = DIRECTORY_CONTENT_TYPES.to_h do |type|
-        values = raw_directories.fetch(type, [])
-        fatal("obsidian.content.directories.#{type} must be an array of paths") unless values.is_a?(Array)
-        normalized = values.map do |value|
-          normalize_content_directory(site, source, type, value)
-        end
-        fatal("obsidian.content.directories.#{type} contains duplicate paths") unless normalized.uniq.length == normalized.length
-        [type, normalized.sort]
-      end
-
-      assignments = directories.flat_map { |type, paths| paths.map { |path| [type, path] } }
-      assignments.combination(2) do |(left_type, left), (right_type, right)|
-        next if left_type == right_type
-        next unless path_overlap?(left, right)
-
-        fatal("obsidian.content.directories overlap across #{left_type} and #{right_type}: #{left}, #{right}")
-      end
-
-      { "default_type" => default_type, "directories" => directories }
-    end
-
-    def normalize_content_directory(site, source, type, raw)
-      fatal("obsidian.content.directories.#{type} entries must be strings") unless raw.is_a?(String)
-      normalized = raw.unicode_normalize(:nfc).tr("\\", "/")
-      path = Pathname.new(normalized)
-      if normalized.empty? || normalized == "." || path.absolute? || path.cleanpath.to_s != normalized || normalized.split("/").any? { |part| part.empty? || part == ".." }
-        fatal("obsidian.content.directories.#{type} contains an unsafe path: #{raw.inspect}")
-      end
-
-      root = site.in_source_dir(source)
-      cursor = root
-      normalized.split("/").each do |part|
-        cursor = File.join(cursor, part)
-        stat = File.lstat(cursor)
-        fatal("obsidian.content.directories.#{type} cannot contain symlink path components") if stat.symlink?
-      rescue Errno::ENOENT
-        break
-      end
-      if File.exist?(cursor) && !File.directory?(cursor)
-        fatal("obsidian.content.directories.#{type} must refer to directories")
-      end
-      normalized
-    rescue ArgumentError, SystemCallError => exception
-      fatal("invalid obsidian.content.directories.#{type}: #{exception.message}")
-    end
-
-    def validate_feature_configuration(raw)
-      fatal("obsidian.features must be a mapping") unless raw.nil? || raw.is_a?(Hash)
-      features = raw || {}
-      unknown = features.keys.map(&:to_s) - FEATURE_IDS
-      fatal("obsidian.features contains unsupported feature: #{unknown.sort.first}") unless unknown.empty?
-
-      features.keys.sort.to_h do |feature|
-        value = features.fetch(feature)
-        unless value == true || value == false
-          fatal("obsidian.features.#{feature} must be a YAML boolean")
-        end
-        [feature, value]
-      end
     end
 
     def assert_regular_directory_chain(root, target)
@@ -326,12 +228,7 @@ module JekyllObsidian
       end
 
       assert_no_destination_symlink_components(destination_root)
-      return unless File.exist?(destination_root)
-      fatal("destination must be a directory: #{destination_root}") unless File.directory?(destination_root)
-
-      Find.find(destination_root) do |entry|
-        fatal("destination tree contains a symlink: #{entry}") if File.lstat(entry).symlink?
-      end
+      fatal("destination must be a directory: #{destination_root}") if File.exist?(destination_root) && !File.directory?(destination_root)
     rescue SystemCallError => exception
       fatal("cannot validate destination #{site.dest}: #{exception.message}")
     end
@@ -368,15 +265,23 @@ module JekyllObsidian
         normalized = relative.tr(File::SEPARATOR, "/")
         kind = File.extname(normalized).downcase == ".md" ? :note : :attachment
         times = git_times.fetch(normalized, {})
-        entries << SnapshotEntry.new(
-          path: normalized,
-          bytes: kind == :note ? File.binread(absolute) : nil,
-          kind: kind,
-          media_type: MIME_TYPES.fetch(File.extname(normalized).downcase, "application/octet-stream"),
-          size: stat.size,
-          first_committed_at: times[:first],
-          last_committed_at: times[:last]
-        )
+        flags = File::RDONLY | (File.const_defined?(:NOFOLLOW) ? File::NOFOLLOW : 0)
+        File.open(absolute, flags) do |file|
+          pinned = file.stat
+          fatal("vault file changed during snapshot: #{relative}") unless pinned.file? && pinned.dev == stat.dev && pinned.ino == stat.ino
+          entries << SnapshotEntry.new(
+            path: normalized,
+            bytes: kind == :note ? file.read : nil,
+            kind: kind,
+            media_type: kind == :note ? "text/markdown" : MediaPolicy.media_type(normalized),
+            size: pinned.size,
+            device: pinned.dev,
+            inode: pinned.ino,
+            mtime_ns: pinned.mtime.to_i * 1_000_000_000 + pinned.mtime.nsec,
+            first_committed_at: times[:first],
+            last_committed_at: times[:last]
+          )
+        end
       end
       Snapshot.new(entries: entries.sort_by(&:path))
     rescue Errno::ENOENT => exception
@@ -384,6 +289,20 @@ module JekyllObsidian
     end
 
     def git_time_map(site, source)
+      head, _head_error, head_status = Open3.capture3("git", "-C", site.source, "rev-parse", "HEAD")
+      return {} unless head_status.success?
+
+      head = head.strip
+      cache_path = site.in_source_dir(".jekyll-cache", "jekyll-obsidian-git-times.json")
+      if File.file?(cache_path)
+        cached = JSON.parse(File.read(cache_path, encoding: "UTF-8"))
+        if cached["head"] == head && cached["source"] == source && cached["times"].is_a?(Hash)
+          return cached.fetch("times").transform_values do |times|
+            { first: times["first"], last: times["last"] }
+          end
+        end
+      end
+
       command = [
         "git", "-C", site.source, "-c", "core.quotePath=false",
         "log", "--format=%x1e%aI", "--name-only", "--", source
@@ -409,9 +328,15 @@ module JekyllObsidian
         item = (result[relative] ||= { first: current_time, last: current_time })
         item[:first] = current_time
       end
+      FileUtils.mkdir_p(File.dirname(cache_path))
+      temporary = "#{cache_path}.#{Process.pid}.tmp"
+      File.write(temporary, JSON.generate("head" => head, "source" => source, "times" => result))
+      File.rename(temporary, cache_path)
       result
-    rescue SystemCallError
+    rescue JSON::ParserError, SystemCallError
       {}
+    ensure
+      FileUtils.rm_f(temporary) if defined?(temporary) && temporary
     end
 
     def repository_identity(site)
@@ -454,26 +379,45 @@ module JekyllObsidian
       VaultCompiler.compile(request)
     end
 
-    def generated_objects(site, result, source)
+    def stage_vault_assets(site, source, result)
+      staging_root = Dir.mktmpdir("jekyll-obsidian-vault-")
+      vault_root = site.in_source_dir(source)
+      result.copied_assets.each do |output|
+        source_path = File.join(vault_root, output.source_path)
+        destination = File.join(staging_root, output.source_path)
+        FileUtils.mkdir_p(File.dirname(destination))
+        flags = File::RDONLY | (File.const_defined?(:NOFOLLOW) ? File::NOFOLLOW : 0)
+        File.open(source_path, flags) do |file|
+          stat = file.stat
+          actual_mtime_ns = stat.mtime.to_i * 1_000_000_000 + stat.mtime.nsec
+          expected = [output.device, output.inode, output.size, output.mtime_ns]
+          actual = [stat.dev, stat.ino, stat.size, actual_mtime_ns]
+          fatal("vault asset changed after compilation: #{output.source_path}") unless stat.file? && actual == expected
+          File.open(destination, File::WRONLY | File::CREAT | File::EXCL, 0o644) { |target| IO.copy_stream(file, target) }
+        end
+      end
+      site.data["jekyll_obsidian_staging_root"] = staging_root
+      staging_root
+    rescue StandardError
+      FileUtils.remove_entry(staging_root) if staging_root && File.exist?(staging_root)
+      raise
+    end
+
+    def generated_objects(site, result, staging_root)
       pages = result.pages.map { |output| GeneratedPage.new(site, output) }
       generated = result.generated_files.map do |output|
         page_output = PageOutput.new(route: output.route, content: output.content, data: {})
         GeneratedPage.new(site, page_output, generated: true)
       end
-      vault_root = site.in_source_dir(source)
       assets = result.copied_assets.map do |output|
-        source_path = site.in_source_dir(source, output.source_path)
-        stat = File.lstat(source_path)
-        fatal("projected vault asset became a symlink: #{output.source_path}") if stat.symlink?
-        fatal("projected vault asset is no longer regular: #{output.source_path}") unless stat.file?
-        ProjectedStaticFile.new(site, vault_root, output.source_path, output.route)
+        ProjectedStaticFile.new(site, staging_root, output.source_path, output.route)
       end
       [pages + generated, assets]
     end
 
     def app_asset_objects(site, theme:, features:)
       root = site.in_source_dir(".jekyll-obsidian-cache", "assets")
-      real_site_root, real_cache_root = validate_application_asset_root!(site, root)
+      validate_application_asset_root!(site, root)
       manifest_path = File.join(root, "manifest.json")
       unless File.file?(manifest_path)
         fatal("application asset manifest is missing: #{manifest_path}") unless Jekyll.env == "development"
@@ -484,8 +428,6 @@ module JekyllObsidian
       validate_application_asset_file!(
         manifest_path,
         cache_root: root,
-        real_cache_root: real_cache_root,
-        real_site_root: real_site_root,
         label: "application asset manifest"
       )
 
@@ -493,30 +435,19 @@ module JekyllObsidian
       fatal("asset manifest schema is unsupported") unless manifest["schema_version"] == 1
       entries = manifest["entries"]
       fatal("asset manifest entries must be a mapping") unless entries.is_a?(Hash)
-      missing_themes = THEMES - entries.keys
-      fatal("asset manifest is missing theme entry: #{missing_themes.first}") unless missing_themes.empty?
-      unknown_themes = entries.keys - THEMES
-      fatal("asset manifest contains an unsupported theme entry: #{unknown_themes.first}") unless unknown_themes.empty?
-
-      entries.each do |entry_theme, entry|
-        validate_manifest_entry!(entry, "entries.#{entry_theme}")
-      end
       active_entry = entries[theme]
       fatal("asset manifest has no entry for active theme: #{theme}") unless active_entry.is_a?(Hash)
+      validate_manifest_entry!(active_entry, "entries.#{theme}")
 
       manifest_features = manifest.fetch("features", {})
       fatal("asset manifest features must be a mapping") unless manifest_features.is_a?(Hash)
-      manifest_features.each do |feature, entry|
-        validate_manifest_file_list!(entry, "features.#{feature}")
-      end
-
       files = active_entry.fetch("files").dup
       features.each do |feature, enabled|
         next unless enabled && BUNDLED_FEATURE_IDS.include?(feature)
 
-        manifest_feature = MANIFEST_FEATURE_ALIASES.fetch(feature, feature)
-        entry = manifest_features[manifest_feature]
-        fatal("asset manifest is missing enabled bundle feature: features.#{manifest_feature}") unless entry
+        entry = manifest_features[feature]
+        fatal("asset manifest is missing enabled bundle feature: features.#{feature}") unless entry
+        validate_manifest_file_list!(entry, "features.#{feature}")
         files.concat(entry.fetch("files"))
       end
       files = files.uniq.sort
@@ -535,8 +466,6 @@ module JekyllObsidian
         validate_application_asset_file!(
           absolute,
           cache_root: root,
-          real_cache_root: real_cache_root,
-          real_site_root: real_site_root,
           label: "application asset #{relative}"
         )
         ProjectedStaticFile.new(site, root, relative, "/assets/obsidian/#{relative}")
@@ -554,56 +483,23 @@ module JekyllObsidian
         fatal("application asset cache escapes the site source")
       end
 
-      assert_no_symlink_components!(site_root, expanded_root, "application asset cache")
-      real_site_root = File.realpath(site_root)
-      return [real_site_root, nil] unless File.exist?(expanded_root)
+      return unless File.exist?(expanded_root)
 
       stat = File.lstat(expanded_root)
-      fatal("application asset cache must be a directory") unless stat.directory? && !stat.symlink?
-      real_cache_root = File.realpath(expanded_root)
-      unless path_descendant?(real_cache_root, real_site_root) && real_cache_root != real_site_root
-        fatal("application asset cache resolves outside the site source")
-      end
-      [real_site_root, real_cache_root]
+      fatal("application asset cache must be a non-symlink directory") unless stat.directory? && !stat.symlink?
     rescue SystemCallError => exception
       fatal("cannot validate application asset cache: #{exception.message}")
     end
 
-    def validate_application_asset_file!(path, cache_root:, real_cache_root:, real_site_root:, label:)
-      fatal("#{label} has no validated cache root") unless real_cache_root
+    def validate_application_asset_file!(path, cache_root:, label:)
       expanded = File.expand_path(path)
       expanded_cache_root = File.expand_path(cache_root)
       unless path_descendant?(expanded, expanded_cache_root) && expanded != expanded_cache_root
         fatal("#{label} escapes the application asset cache")
       end
 
-      assert_no_symlink_components!(expanded_cache_root, expanded, label)
       stat = File.lstat(expanded)
       fatal("#{label} is not a regular file") unless stat.file? && !stat.symlink?
-      real_path = File.realpath(expanded)
-      unless path_descendant?(real_path, real_cache_root) && path_descendant?(real_path, real_site_root)
-        fatal("#{label} resolves outside the application asset cache or site source")
-      end
-    end
-
-    def assert_no_symlink_components!(root, target, label)
-      expanded_root = File.expand_path(root)
-      expanded_target = File.expand_path(target)
-      relative = Pathname.new(expanded_target).relative_path_from(Pathname.new(expanded_root))
-      components = relative.each_filename.to_a
-      cursor = expanded_root
-      components.each_with_index do |component, index|
-        cursor = File.join(cursor, component)
-        stat = File.lstat(cursor)
-        fatal("#{label} contains a symlink path component: #{cursor}") if stat.symlink?
-        if index < components.length - 1 && !stat.directory?
-          fatal("#{label} contains a non-directory path component: #{cursor}")
-        end
-      rescue Errno::ENOENT
-        break
-      end
-    rescue ArgumentError => exception
-      fatal("cannot validate #{label}: #{exception.message}")
     end
 
     def validate_manifest_entry!(entry, location)
@@ -698,30 +594,14 @@ module JekyllObsidian
     def fatal(message)
       raise Jekyll::Errors::FatalException, message
     end
+    end
 
     class Generator < Jekyll::Generator
       safe false
       priority :highest
 
       def generate(site)
-        source = site.config.fetch("obsidian").fetch("source")
-        Adapter.assert_safe_destination(site, source)
-        Adapter.assert_vault_was_not_read(site, source)
-        result = Adapter.compile(site, source)
-        Adapter.log_diagnostics(result)
-        unless result.success?
-          summary = result.diagnostics.select { |item| item.severity == :error }
-            .map { |item| [item.path, item.code].compact.join(":") }
-            .join(", ")
-          Adapter.fatal("obsidian compilation failed: #{summary}")
-        end
-
-        site.data["obsidian_feed_available"] = result.generated_files.any? { |output| output.route == "/feed.xml" }
-        pages, vault_assets = Adapter.generated_objects(site, result, source)
-        app_assets = Adapter.app_asset_objects(site, theme: result.theme, features: result.features)
-        Adapter.preflight_collisions(site, pages, vault_assets + app_assets)
-        site.pages.concat(pages)
-        site.static_files.concat(vault_assets).concat(app_assets)
+        Adapter.generate(site)
       end
     end
   end
@@ -729,4 +609,9 @@ end
 
 Jekyll::Hooks.register :site, :after_init do |site|
   JekyllObsidian::Adapter.prepare_site(site)
+end
+
+Jekyll::Hooks.register :site, :post_write do |site|
+  staging_root = site.data.delete("jekyll_obsidian_staging_root")
+  FileUtils.remove_entry(staging_root) if staging_root && File.exist?(staging_root)
 end

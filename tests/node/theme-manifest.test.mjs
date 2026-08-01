@@ -1,10 +1,15 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import { readFile, stat } from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
 
 const root = path.resolve(import.meta.dirname, "../..");
 const assets = path.join(root, ".jekyll-obsidian-cache", "assets");
+
+async function closureBytes(files) {
+  const sizes = await Promise.all(files.map(async (file) => (await stat(path.join(assets, file))).size));
+  return sizes.reduce((total, size) => total + size, 0);
+}
 
 test("publishes independent theme and feature asset closures", async () => {
   const manifest = JSON.parse(
@@ -21,7 +26,7 @@ test("publishes independent theme and feature asset closures", async () => {
     "graph",
     "math",
     "mermaid",
-    "preview",
+    "previews",
     "search"
   ]);
 
@@ -31,12 +36,23 @@ test("publishes independent theme and feature asset closures", async () => {
     assert.ok(entry.files.includes(entry.js), `${theme} closure includes its script`);
     assert.ok(entry.files.includes(entry.css), `${theme} closure includes its stylesheet`);
     assert.deepEqual(entry.files, [...entry.files].sort());
+    assert.ok(await closureBytes(entry.files) < 1_000_000, `${theme} core stays below 1 MB`);
   }
+
+  const docsNavigation = manifest.files.find((file) => /(?:^|\/)docs-navigation-[A-Z0-9]+\.js$/.test(file));
+  assert.ok(docsNavigation, "docs navigation has a generated chunk");
+  assert.ok(manifest.entries.docs.files.includes(docsNavigation), "docs owns its navigation chunk");
 
   for (const [feature, descriptor] of Object.entries(manifest.features)) {
     assert.ok(descriptor.files.length > 0, `${feature} has a publishable closure`);
     assert.deepEqual(descriptor.files, [...descriptor.files].sort());
   }
+  assert.match(manifest.features.search.worker, /^search-worker-[A-Z0-9]+\.js$/);
+  assert.ok(manifest.features.search.files.includes(manifest.features.search.worker));
+  assert.ok(await closureBytes(manifest.features.search.files) < 50_000, "search stays below 50 KB");
+  assert.ok(await closureBytes(manifest.features.graph.files) < 200_000, "graph stays below 200 KB");
+  assert.ok(await closureBytes(manifest.features.math.files) < 2_000_000, "math stays below 2 MB");
+  assert.ok(await closureBytes(manifest.features.mermaid.files) < 4_000_000, "mermaid stays below 4 MB");
 
   const coreFiles = new Set(
     Object.values(manifest.entries).flatMap((entry) => entry.files)

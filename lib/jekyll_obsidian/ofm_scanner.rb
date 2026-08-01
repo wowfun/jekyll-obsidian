@@ -1,10 +1,12 @@
 # frozen_string_literal: true
 
+require "cgi/escape"
+
 module JekyllObsidian
   class OfmScanner
     Embed = Struct.new(:target, :source_span, :token, keyword_init: true)
-    Task = Struct.new(:state, :line, keyword_init: true)
-    Result = Struct.new(:markdown, :block_ids, :embeds, :tags, :tasks, keyword_init: true)
+    Wikilink = Struct.new(:target, :display, :source_span, :token, keyword_init: true)
+    Result = Struct.new(:markdown, :block_ids, :embeds, :wikilinks, :tags, keyword_init: true)
 
     VOID_HTML_TAGS = %w[
       area base basefont bgsound br col command embed frame hr img input keygen
@@ -27,8 +29,8 @@ module JekyllObsidian
       @list_indents = []
       @block_ids = []
       @embeds = []
+      @wikilinks = []
       @tags = []
-      @tasks = []
     end
 
     def prepare
@@ -37,8 +39,8 @@ module JekyllObsidian
         markdown: output,
         block_ids: @block_ids,
         embeds: @embeds,
-        tags: @tags.uniq,
-        tasks: @tasks
+        wikilinks: @wikilinks,
+        tags: @tags.uniq
       )
     end
 
@@ -72,7 +74,6 @@ module JekyllObsidian
         return line if indented_code_line?(context.fetch(:content))
       end
 
-      record_task(line, line_number) if plain_markdown_state?
       scan_line(line, line_number)
     end
 
@@ -118,6 +119,8 @@ module JekyllObsidian
           cursor += 1
         elsif line[cursor, 3] == "![["
           cursor = scan_embed(line, cursor, line_number, output)
+        elsif line[cursor, 2] == "[["
+          cursor = scan_wikilink(line, cursor, line_number, output)
         elsif line[cursor] == "#"
           cursor = scan_tag(line, cursor, output)
         elsif line[cursor] == "^" && block_id_boundary?(line, cursor) && (match = line[cursor..].match(/\A\^([\p{L}\p{N}_-]+)[ \t]*(\r?\n)?\z/u))
@@ -187,6 +190,32 @@ module JekyllObsidian
       ending + 2
     end
 
+    def scan_wikilink(line, cursor, line_number, output)
+      ending = line.index("]]", cursor + 2)
+      unless ending
+        output << line[cursor]
+        return cursor + 1
+      end
+
+      inner = line[(cursor + 2)...ending]
+      target, display = inner.split("|", 2)
+      token = @wikilinks.length
+      @wikilinks << Wikilink.new(
+        target: target.to_s,
+        display: display,
+        source_span: SourceSpan.new(
+          start_line: line_number,
+          start_column: cursor + 1,
+          end_line: line_number,
+          end_column: ending + 2
+        ),
+        token: token
+      )
+      label = display || target
+      output << %(<a data-obsidian-wikilink-token="#{token}">#{CGI.escapeHTML(label.to_s)}</a>)
+      ending + 2
+    end
+
     def scan_tag(line, cursor, output)
       match = tag_boundary?(line, cursor) && line[cursor..].match(/\A#([\p{L}\p{N}_-]+(?:\/[\p{L}\p{N}_-]+)*)/u)
       if match && !match[1].match?(/\A\d+\z/)
@@ -197,11 +226,6 @@ module JekyllObsidian
         output << line[cursor]
         cursor + 1
       end
-    end
-
-    def record_task(line, line_number)
-      match = line.match(/^\s{0,3}(?:[-+*]|\d+[.)])\s+\[([^\]\r\n])\](?=\s|$)/)
-      @tasks << Task.new(state: match[1], line: line_number) if match
     end
 
     def fence_opener(content)

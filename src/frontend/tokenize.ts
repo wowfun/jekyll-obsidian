@@ -7,8 +7,8 @@ function isCjk(value: string): boolean {
 
 /**
  * Stable tokenizer used for both indexing and queries. CJK runs always emit
- * individual code points and adjacent bigrams. Intl.Segmenter may improve the
- * ranking elsewhere, but never changes this baseline index.
+ * individual code points and adjacent bigrams, so indexing and queries use the
+ * same terms in every browser.
  */
 export function obsidianTokenizer(input: string): string[] {
   const normalized = input.normalize("NFKC").toLocaleLowerCase("und");
@@ -46,12 +46,4 @@ export function obsidianTokenizer(input: string): string[] {
   }
 
   return [...new Set(output)];
-}
-
-export function cjkSegmentBoost(input: string): string[] {
-  if (!("Segmenter" in Intl)) return [];
-  const segmenter = new Intl.Segmenter(undefined, { granularity: "word" });
-  return Array.from(segmenter.segment(input.normalize("NFKC")))
-    .filter((segment) => segment.isWordLike)
-    .map((segment) => segment.segment.toLocaleLowerCase("und"));
 }

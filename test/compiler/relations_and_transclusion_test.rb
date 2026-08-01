@@ -56,6 +56,23 @@ class RelationsAndTransclusionTest < Minitest::Test
     assert result.diagnostics.any? { |item| item.code == "ambiguous_target" }
   end
 
+  def test_ambiguous_attachment_basename_has_a_distinct_diagnostic
+    entries = [
+      note("index.md", "---\npublish: true\n---\n# Home\n![[photo.png]]"),
+      attachment("a/photo.png", "a", media_type: "image/png"),
+      attachment("b/photo.png", "b", media_type: "image/png")
+    ]
+
+    production = compile(*entries)
+    refute production.success?
+    assert production.diagnostics.any? { |item| item.code == "ambiguous_attachment" }
+
+    development = compile(*entries, environment: "development")
+    assert development.success?
+    assert_includes page(development, "/").content, "obsidian-embed--unresolved"
+    assert_empty development.copied_assets
+  end
+
   def test_missing_embed_is_placeholder_in_development_and_error_in_production
     source = note("index.md", "---\npublish: true\n---\n# Home\n![[missing]]")
 
@@ -306,5 +323,67 @@ class RelationsAndTransclusionTest < Minitest::Test
     refute_nil list
     assert_equal ["First"], list.xpath("./li").map { |item| item.text.strip }
     refute_includes content.text, "Second"
+  end
+
+  def test_transclusion_limits_are_errors_in_production_and_placeholders_in_development
+    entries = Array.new(18) do |index|
+      target = index < 17 ? "\n![[note-#{index + 1}]]" : ""
+      path = index.zero? ? "index.md" : "note-#{index}.md"
+      note(path, "---\npublish: true\nupdated: 2026-07-30\n---\n# Note #{index}#{target}")
+    end
+
+    production = compile(*entries)
+    refute production.success?
+    assert production.diagnostics.any? { |item| item.code == "embed_budget_exceeded" && item.message.include?("depth") }
+
+    development = compile(*entries, environment: "development")
+    assert development.success?, development.diagnostics.map(&:message).join("\n")
+    assert_includes page(development, "/").content, "obsidian-embed--limited"
+  end
+
+  def test_transclusion_instance_budget_bounds_wide_fan_out
+    embeds = Array.new(257, "![[leaf]]").join("\n")
+    entries = [
+      note("index.md", "---\npublish: true\nupdated: 2026-07-30\n---\n# Home\n#{embeds}"),
+      note("leaf.md", "---\npublish: true\nupdated: 2026-07-30\n---\n# Leaf\nSmall body.")
+    ]
+
+    production = compile(*entries)
+    refute production.success?
+    assert production.diagnostics.any? { |item| item.code == "embed_budget_exceeded" && item.message.include?("instances") }
+
+    development = compile(*entries, environment: "development")
+    assert development.success?, development.diagnostics.map(&:message).join("\n")
+    html = page(development, "/").content
+    assert_equal 256, html.scan("obsidian-transclusion obsidian-embed").length
+    assert_includes html, "obsidian-embed--limited"
+  end
+
+  def test_transclusion_rewrites_html_aria_svg_and_css_id_references
+    result = compile(
+      note("index.md", "---\npublish: true\nupdated: 2026-07-30\n---\n# Home\n![[target]]"),
+      note("target.md", <<~MARKDOWN)
+        ---
+        publish: true
+        updated: 2026-07-30
+        ---
+        # Target
+        <label for="field" aria-controls="panel">Field</label>
+        <input id="field" aria-describedby="help">
+        <p id="help">Help</p>
+        <div id="panel" style="filter: url(#filter)"></div>
+        <svg><filter id="filter"></filter><use href="#panel"></use></svg>
+      MARKDOWN
+    )
+
+    assert result.success?, result.diagnostics.map(&:message).join("\n")
+    embedded = Nokogiri::HTML5.fragment(page(result, "/").content).at_css(".obsidian-transclusion__content")
+    field = embedded.at_css("input")
+    prefix = field["id"].delete_suffix("field")
+    assert_equal "#{prefix}field", embedded.at_css("label")["for"]
+    assert_equal "#{prefix}panel", embedded.at_css("label")["aria-controls"]
+    assert_equal "#{prefix}help", field["aria-describedby"]
+    assert_includes embedded.at_css("div")["style"], "##{prefix}filter"
+    assert_equal "##{prefix}panel", embedded.at_css("use")["href"]
   end
 end

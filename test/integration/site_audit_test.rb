@@ -27,6 +27,17 @@ class SiteAuditTest < Minitest::Test
     end
   end
 
+  def test_rejects_files_outside_the_explicit_publication_types
+    Dir.mktmpdir("garden-site-audit") do |site|
+      File.write(File.join(site, "index.html"), "<!doctype html><title>Garden</title>")
+      File.write(File.join(site, "credentials.pem"), "PRIVATE KEY")
+
+      _stdout, stderr, status = audit(site)
+      refute status.success?
+      assert_includes stderr, "output is not on the extension allowlist"
+    end
+  end
+
   private
 
   def audit(site)

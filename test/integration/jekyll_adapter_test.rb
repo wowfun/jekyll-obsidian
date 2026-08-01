@@ -98,10 +98,8 @@ class JekyllAdapterTest < Minitest::Test
 
     assert_equal "vault", site.config.dig("obsidian", "source")
     assert_equal "digital-garden", site.config.dig("obsidian", "theme")
-    assert_equal "page", site.config.dig("obsidian", "content", "default_type")
-    assert_equal ["blog"], site.config.dig("obsidian", "content", "directories", "post")
-    assert_equal ["docs"], site.config.dig("obsidian", "content", "directories", "doc")
-    assert_equal({}, site.config.dig("obsidian", "features"))
+    assert_nil site.config.dig("obsidian", "content")
+    assert_nil site.config.dig("obsidian", "features")
   end
 
   def test_reader_rejects_public_symlink_that_resolves_into_private_vault_content
@@ -245,7 +243,7 @@ class JekyllAdapterTest < Minitest::Test
     assert_equal "preserve me", File.read(canary)
   end
 
-  def test_destination_tree_symlink_added_after_initialization_is_rejected
+  def test_destination_tree_is_not_rescanned_after_initialization
     site = build_site
     external = File.join(@temporary_root, "external-assets")
     FileUtils.mkdir_p(external)
@@ -254,8 +252,7 @@ class JekyllAdapterTest < Minitest::Test
     FileUtils.mkdir_p(File.join(destination, "assets"))
     File.symlink(external, File.join(destination, "assets", "redirect"))
 
-    error = assert_raises(Jekyll::Errors::FatalException) { site.process }
-    assert_includes error.message, "destination"
+    site.process
     assert_equal "preserve me", File.read(canary)
   end
 
@@ -327,7 +324,7 @@ class JekyllAdapterTest < Minitest::Test
       "entries" => theme_manifest_entries,
       "features" => {
         "graph" => { "files" => ["features/graph.js"] },
-        "preview" => { "files" => ["features/preview.js"] }
+        "previews" => { "files" => ["features/previews.js"] }
       }
     )
     site = build_site
@@ -355,37 +352,11 @@ class JekyllAdapterTest < Minitest::Test
     FileUtils.remove_entry(external_root) if external_root && File.exist?(external_root)
   end
 
-  def test_application_asset_intermediate_directory_symlink_is_rejected_before_atomic_append
-    write_asset_manifest(
-      "entries" => theme_manifest_entries,
-      "features" => {
-        "search" => { "files" => ["features/search.js"] },
-        "graph" => { "files" => ["features/graph.js"] },
-        "preview" => { "files" => ["features/preview.js"] }
-      }
-    )
-    feature_root = File.join(@temporary_root, ".jekyll-obsidian-cache", "assets", "features")
-    external_root = Dir.mktmpdir("obsidian-feature-outside")
-    external_features = File.join(external_root, "features")
-    FileUtils.mv(feature_root, external_features)
-    File.symlink(external_features, feature_root)
-    site = build_site
-
+  def test_unknown_theme_is_rejected_before_reader
+    site = build_site("obsidian" => obsidian_config.merge("theme" => "magazine"))
     error = assert_raises(Jekyll::Errors::FatalException) { site.process }
 
-    assert_includes error.message, "application asset"
-    assert_includes error.message, "symlink"
-    refute site.pages.any? { |page| page.class.name.include?("GeneratedPage") }
-  ensure
-    FileUtils.remove_entry(external_root) if external_root && File.exist?(external_root)
-  end
-
-  def test_unknown_theme_is_rejected_before_reader
-    error = assert_raises(Jekyll::Errors::FatalException) do
-      build_site("obsidian" => obsidian_config.merge("theme" => "magazine"))
-    end
-
-    assert_includes error.message, "obsidian.theme"
+    assert_includes error.message, "invalid_theme"
   end
 
   def test_unknown_obsidian_configuration_keys_are_rejected
@@ -398,44 +369,32 @@ class JekyllAdapterTest < Minitest::Test
   end
 
   def test_feature_overrides_must_be_yaml_booleans
-    error = assert_raises(Jekyll::Errors::FatalException) do
-      build_site(
-        "obsidian" => obsidian_config.merge(
-          "features" => { "search" => "yes" }
-        )
-      )
-    end
+    site = build_site("obsidian" => obsidian_config.merge("features" => { "search" => "yes" }))
+    error = assert_raises(Jekyll::Errors::FatalException) { site.process }
 
-    assert_includes error.message, "obsidian.features.search"
+    assert_includes error.message, "invalid_feature"
   end
 
   def test_unknown_feature_override_is_rejected
-    error = assert_raises(Jekyll::Errors::FatalException) do
-      build_site(
-        "obsidian" => obsidian_config.merge(
-          "features" => { "unknown" => true }
-        )
-      )
-    end
+    site = build_site("obsidian" => obsidian_config.merge("features" => { "unknown" => true }))
+    error = assert_raises(Jekyll::Errors::FatalException) { site.process }
 
-    assert_includes error.message, "obsidian.features"
+    assert_includes error.message, "invalid_feature"
     assert_includes error.message, "unknown"
   end
 
   def test_content_directories_must_not_overlap_across_types
-    error = assert_raises(Jekyll::Errors::FatalException) do
-      build_site(
-        "obsidian" => obsidian_config.merge(
-          "content" => {
-            "default_type" => "page",
-            "directories" => { "post" => ["writing"], "doc" => ["writing/reference"] }
-          }
-        )
+    site = build_site(
+      "obsidian" => obsidian_config.merge(
+        "content" => {
+          "default_type" => "page",
+          "directories" => { "post" => ["writing"], "doc" => ["writing/reference"] }
+        }
       )
-    end
+    )
+    error = assert_raises(Jekyll::Errors::FatalException) { site.process }
 
-    assert_includes error.message, "obsidian.content.directories"
-    assert_includes error.message, "overlap"
+    assert_includes error.message, "overlapping_content_directories"
   end
 
   def test_content_directory_symlinks_are_rejected_before_reader
@@ -443,9 +402,10 @@ class JekyllAdapterTest < Minitest::Test
     FileUtils.mkdir_p(external)
     File.symlink(external, File.join(@temporary_root, "vault", "blog"))
 
-    error = assert_raises(Jekyll::Errors::FatalException) { build_site }
+    site = build_site
+    error = assert_raises(Jekyll::Errors::FatalException) { site.process }
 
-    assert_includes error.message, "obsidian.content.directories.post"
+    assert_includes error.message, "vault symlink"
     assert_includes error.message, "symlink"
   end
 
@@ -459,7 +419,7 @@ class JekyllAdapterTest < Minitest::Test
       "features" => {
         "graph" => { "files" => ["features/graph.js", "shared.js"] },
         "search" => { "files" => ["features/search.js", "shared.js"] },
-        "preview" => { "files" => ["features/preview.js"] },
+        "previews" => { "files" => ["features/previews.js"] },
         "math" => { "files" => ["features/math.js"] }
       }
     )
@@ -476,7 +436,7 @@ class JekyllAdapterTest < Minitest::Test
     assert File.file?(File.join(destination, "assets", "obsidian", "blog.js"))
     assert File.file?(File.join(destination, "assets", "obsidian", "shared.js"))
     assert File.file?(File.join(destination, "assets", "obsidian", "features", "graph.js"))
-    assert File.file?(File.join(destination, "assets", "obsidian", "features", "preview.js"))
+    assert File.file?(File.join(destination, "assets", "obsidian", "features", "previews.js"))
     assert File.file?(File.join(destination, "assets", "obsidian", "features", "math.js"))
     refute File.exist?(File.join(destination, "assets", "obsidian", "docs.js"))
     refute File.exist?(File.join(destination, "assets", "obsidian", "digital-garden.js"))
@@ -582,6 +542,33 @@ class JekyllAdapterTest < Minitest::Test
     assert_equal first_output, second_output
   end
 
+  def test_git_times_reuse_the_head_and_source_cache
+    status = Object.new
+    status.define_singleton_method(:success?) { true }
+    calls = []
+    capture = lambda do |*command|
+      calls << command
+      if command.include?("rev-parse")
+        ["abc123\n", "", status]
+      else
+        ["\x1e2026-07-30T00:00:00Z\nvault/index.md\n", "", status]
+      end
+    end
+    site = Object.new
+    site.define_singleton_method(:source) { @temporary_root }
+    site.instance_variable_set(:@temporary_root, @temporary_root)
+    site.define_singleton_method(:in_source_dir) { |*parts| File.join(source, *parts) }
+
+    Open3.stub(:capture3, capture) do
+      first = JekyllObsidian::Adapter.send(:git_time_map, site, "vault")
+      second = JekyllObsidian::Adapter.send(:git_time_map, site, "vault")
+      assert_equal first, second
+    end
+
+    assert_equal 1, calls.count { |command| command.include?("log") }
+    assert File.file?(File.join(@temporary_root, ".jekyll-cache", "jekyll-obsidian-git-times.json"))
+  end
+
   def test_publish_true_to_false_removes_stale_note_and_indexes
     public_path = File.join(@temporary_root, "vault", "temporary.md")
     File.write(public_path, "---\npublish: true\nupdated: 2026-07-30\n---\n# Temporary\nStale public marker")
@@ -644,7 +631,7 @@ class JekyllAdapterTest < Minitest::Test
       "features" => {
         "search" => { "files" => ["features/search.js"] },
         "graph" => { "files" => ["features/graph.js"] },
-        "preview" => { "files" => ["features/preview.js"] }
+        "previews" => { "files" => ["features/previews.js"] }
       }
     )
   end

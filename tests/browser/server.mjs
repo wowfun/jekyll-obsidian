@@ -5,27 +5,13 @@ import { fileURLToPath } from "node:url";
 
 const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 const assetsRoot = path.join(projectRoot, ".jekyll-obsidian-cache", "assets");
-const siteRoot = path.join(projectRoot, "_site-browser");
-const manifest = JSON.parse(await readFile(path.join(assetsRoot, "manifest.json"), "utf8"));
-const fixtureFiles = {
-  blog: "blog-fixture.html",
-  docs: "docs-fixture.html",
-  "digital-garden": "fixture.html"
-};
-const fixturePages = Object.fromEntries(
-  await Promise.all(
-    Object.entries(fixtureFiles).map(async ([theme, filename]) => {
-      const fixture = await readFile(path.join(projectRoot, "tests", "browser", filename), "utf8");
-      const entry = manifest.entries[theme];
-      return [
-        theme,
-        fixture
-          .replace("__THEME_CSS__", `/assets/obsidian/${entry.css}`)
-          .replace("__THEME_JS__", `/assets/obsidian/${entry.js}`)
-      ];
-    })
-  )
+const siteRoots = Object.fromEntries(
+  ["blog", "docs", "digital-garden"].map((theme) => [
+    theme,
+    path.join(projectRoot, `_site-browser-${theme}`)
+  ])
 );
+const manifest = JSON.parse(await readFile(path.join(assetsRoot, "manifest.json"), "utf8"));
 
 function contextSections(feature, location) {
   const outline = feature === "outline"
@@ -72,18 +58,6 @@ function featureFixture(theme, feature) {
     : "";
 
   return `<!doctype html><html class="no-js" lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Feature overrides</title>${feedDiscovery}<link rel="stylesheet" href="/assets/obsidian/${entry.css}"><script type="module" src="/assets/obsidian/${entry.js}"></script></head><body class="theme-${theme}"><header class="site-header"><div class="site-header__inner"><a class="site-mark" href="/">Obsidian</a><nav class="site-navigation" aria-label="Primary navigation"><a href="/">Home</a>${featureLinks}</nav></div></header>${shell}${contextUi}${navigationUi}</body></html>`;
-}
-
-function homeFixture(theme) {
-  const entry = manifest.entries[theme];
-  const authored = `<article class="${theme === "docs" ? "docs-article" : "note-folio"}"><header class="note-header"><p class="note-kicker">Home · index.md</p><h1 class="note-title">A connected notebook</h1></header><div class="note-content"><p>This authored introduction remains first on the page.</p></div></article>`;
-  const aggregation = theme === "docs"
-    ? `<section class="docs-home-browse" aria-labelledby="docs-home-browse-title"><header><p>Manual index</p><h2 id="docs-home-browse-title">Browse the handbook</h2></header><ul><li><a href="/docs/">Getting started</a></li><li><a href="/docs/syntax/">Syntax reference</a></li></ul></section>`
-    : `<section class="garden-home-overview" aria-labelledby="garden-home-overview-title"><header><p>Notebook index</p><h2 id="garden-home-overview-title">Explore the garden</h2></header><nav aria-label="Garden overview"><a href="/notes/">Notes</a><a href="/tags/">Tags</a><a href="/graph/">Graph</a></nav></section>`;
-  const shell = theme === "docs"
-    ? `<div class="docs-shell"><aside class="docs-sidebar"><nav aria-label="Documentation"><a href="/docs/">Documentation</a></nav></aside><main class="docs-main" id="main">${authored}${aggregation}</main></div>`
-    : `<div class="garden-shell"><main class="garden-main" id="main">${authored}${aggregation}</main></div>`;
-  return `<!doctype html><html class="no-js" lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Theme home</title><link rel="stylesheet" href="/assets/obsidian/${entry.css}"><script type="module" src="/assets/obsidian/${entry.js}"></script></head><body class="theme-${theme}"><header class="site-header"><div class="site-header__inner"><a class="site-mark" href="/">Obsidian</a></div></header>${shell}</body></html>`;
 }
 
 const json = {
@@ -184,10 +158,25 @@ async function serveFile(response, root, relative) {
 
 const server = createServer(async (request, response) => {
   const pathname = new URL(request.url ?? "/", "http://127.0.0.1").pathname;
-  const fixtureMatch = pathname.match(/^\/__fixture__\/(blog|docs|digital-garden)\/$/);
-  if (fixtureMatch) {
-    response.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
-    response.end(fixturePages[fixtureMatch[1]]);
+  const siteMatch = pathname.match(/^\/__site__\/(blog|docs|digital-garden)(\/.*)?$/);
+  if (siteMatch) {
+    const root = siteRoots[siteMatch[1]];
+    const sitePath = siteMatch[2] || "/";
+    try {
+      const decoded = decodeURIComponent(sitePath);
+      const relative = decoded === "/"
+        ? "index.html"
+        : decoded.endsWith("/")
+          ? `${decoded.slice(1)}index.html`
+          : decoded.slice(1);
+      if (await serveFile(response, root, relative)) return;
+    } catch {
+      response.writeHead(400, { "Content-Type": "text/plain; charset=utf-8" });
+      response.end("Bad request");
+      return;
+    }
+    response.writeHead(404, { "Content-Type": "text/plain; charset=utf-8" });
+    response.end("Not found");
     return;
   }
   const featureMatch = pathname.match(
@@ -198,12 +187,6 @@ const server = createServer(async (request, response) => {
     response.end(featureFixture(featureMatch[1], featureMatch[2]));
     return;
   }
-  const homeMatch = pathname.match(/^\/__fixture__\/home\/(docs|digital-garden)\/$/);
-  if (homeMatch) {
-    response.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
-    response.end(homeFixture(homeMatch[1]));
-    return;
-  }
   if (pathname in json) {
     response.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
     response.end(JSON.stringify(json[pathname]));
@@ -212,22 +195,7 @@ const server = createServer(async (request, response) => {
   if (pathname.startsWith("/assets/obsidian/")) {
     const relative = decodeURIComponent(pathname.slice("/assets/obsidian/".length));
     if (await serveFile(response, assetsRoot, relative)) return;
-    if (!(await serveFile(response, siteRoot, path.join("assets", "obsidian", relative)))) {
-      response.writeHead(404).end();
-    }
-    return;
-  }
-  try {
-    const decoded = decodeURIComponent(pathname);
-    const relative = decoded === "/"
-      ? "index.html"
-      : decoded.endsWith("/")
-        ? `${decoded.slice(1)}index.html`
-        : decoded.slice(1);
-    if (await serveFile(response, siteRoot, relative)) return;
-  } catch {
-    response.writeHead(400, { "Content-Type": "text/plain; charset=utf-8" });
-    response.end("Bad request");
+    response.writeHead(404).end();
     return;
   }
   response.writeHead(404, { "Content-Type": "text/plain; charset=utf-8" });

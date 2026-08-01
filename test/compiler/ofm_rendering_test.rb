@@ -32,7 +32,7 @@ class OfmRenderingTest < Minitest::Test
         still hidden -->
         `![[target]]` and `%% visible code %%`
 
-        ```md
+        ```sh
         ![[target]]
         %% visible fenced code %%
         ```
@@ -54,8 +54,11 @@ class OfmRenderingTest < Minitest::Test
     refute_includes html, "multiline html secret"
     refute_includes html, "still hidden"
     assert_includes html, "visible code"
+    refute_includes html, "JEKYLL_OBSIDIAN_CODE_"
     assert_includes html, "![[target]] remains authored raw HTML text."
     assert_equal 1, html.scan("Embedded once.").length
+    search = generated_json(result, "/assets/obsidian/search.v1.json")
+    refute_includes search.fetch("documents").first.fetch("text"), "JEKYLL_OBSIDIAN_CODE_"
   end
 
   def test_inline_tags_join_frontmatter_but_code_comments_and_html_do_not
@@ -83,11 +86,12 @@ class OfmRenderingTest < Minitest::Test
     catalog = generated_json(result, "/assets/obsidian/catalog.v1.json")
     tags = catalog.fetch("notes").first.fetch("tags")
     assert_equal ["field-notes", "frontmatter", "guide/syntax"], tags
-    tag_page = page(result, "/tags/").content
-    assert_includes tag_page, "field-notes"
-    refute_includes tag_page, "inline-code"
-    refute_includes tag_page, "comment-tag"
-    refute_includes tag_page, "raw-html-tag"
+    tag_names = page(result, "/tags/").data.dig("obsidian", "theme_data", "tag_groups")
+      .map { |group| group.fetch("name") }
+    assert_includes tag_names, "field-notes"
+    refute_includes tag_names, "inline-code"
+    refute_includes tag_names, "comment-tag"
+    refute_includes tag_names, "raw-html-tag"
   end
 
   def test_block_ids_folded_custom_callouts_math_and_mermaid_survive
@@ -141,6 +145,63 @@ class OfmRenderingTest < Minitest::Test
     assert_equal "Task state: question", custom["aria-label"]
     refute custom.key?("checked")
     assert document.at_css('li[data-task="x"] input').key?("checked")
+  end
+
+  def test_raw_html_never_shifts_markdown_owned_transforms
+    result = compile(
+      note("index.md", <<~MARKDOWN),
+        ---
+        publish: true
+        updated: 2026-07-30
+        ---
+        # Markdown heading
+        <h2>Raw heading</h2>
+
+        ## Markdown section
+
+        <blockquote><p>[!warning] Raw quote</p></blockquote>
+
+        > [!tip] Markdown callout
+        > Body.
+
+        <ul><li class="task-list-item"><input class="task-list-item-checkbox">Raw task</li></ul>
+
+        > - [?] Quoted task
+
+        <pre><code>raw code</code></pre>
+
+        ```mermaid
+        graph LR
+        ```
+
+        <a data-wikilink="true" href="/raw/">Raw link</a>
+        [[target|Markdown link]]
+      MARKDOWN
+      note("target.md", "---\npublish: true\nupdated: 2026-07-30\n---\n# Target")
+    )
+
+    assert result.success?, result.diagnostics.map(&:message).join("\n")
+    document = Nokogiri::HTML5.fragment(page(result, "/").content)
+    raw_heading = document.css("h2").find { |node| node.text == "Raw heading" }
+    markdown_heading = document.css("h2").find { |node| node.text.include?("Markdown section") }
+    refute_nil raw_heading
+    refute_nil markdown_heading
+    assert_nil raw_heading["id"]
+    assert_equal "markdown-section", markdown_heading["id"]
+    raw_quote = document.css("blockquote").find { |node| node.text.include?("Raw quote") }
+    refute_nil raw_quote
+    assert_equal "blockquote", raw_quote.name
+    assert_equal "aside", document.at_css("aside[data-callout='tip']").name
+    raw_task = document.css("li").find { |node| node.text.include?("Raw task") }
+    quoted_task = document.css("li").find { |node| node.text.include?("Quoted task") }
+    raw_code = document.css("pre").find { |node| node.text.include?("raw code") }
+    assert_nil raw_task["data-task"]
+    assert_equal "?", quoted_task["data-task"]
+    assert_nil raw_code["lang"]
+    assert_equal "mermaid", document.at_css("pre[data-obsidian-mermaid]")["lang"]
+    assert_equal "/raw/", document.css("a").find { |node| node.text == "Raw link" }["href"]
+    assert_equal "/target/", document.css("a").find { |node| node.text == "Markdown link" }["href"]
+    assert_empty document.css("[data-sourcepos]")
   end
 
   def test_indented_code_does_not_publish_embeds_or_index_tags

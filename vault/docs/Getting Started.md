@@ -17,14 +17,14 @@ The template keeps the writing workflow inside `vault/` and the publishing workf
 
 ## Install the toolchain
 
-Install Ruby 4.0.6, Node.js 26.3.1, and Git. Then run these commands from the repository root:
+Install Ruby 4.0.x, Node.js 26.x, and Git. CI pins the exact patch versions used by the repository. Then run these commands from the repository root:
 
 ```sh
 bin/setup
 bin/dev
 ```
 
-`bin/setup` installs the locked Ruby and Node dependencies. `bin/dev` builds frontend assets, watches the vault and site sources, and serves the resulting `_site` directory.
+`bin/setup` installs the locked Ruby and Node dependencies. `bin/dev` uses filesystem events to watch the vault and site sources, rebuilds frontend assets only when their inputs change, and serves the resulting `_site` directory.
 
 ## Publish one note
 
@@ -51,7 +51,7 @@ Read [[Architecture#Compiler boundary]].
 ![[assets/research-folio.svg|640]]
 ```
 
-Only attachments reached from public notes, their `image` property, or their transclusion closure are copied. Files found only in private notes are ignored.
+Only attachments reached from public notes, their `image` property, or their transclusion closure are copied. An `image` property also supplies the page's public `og:image` URL. Files found only in private notes are ignored.
 
 ## Check before a push
 

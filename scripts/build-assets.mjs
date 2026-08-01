@@ -2,12 +2,13 @@ import { writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import * as esbuild from "esbuild";
-import { resetGeneratedCache } from "./cache-boundary.mjs";
+import { stageGeneratedAssets } from "./cache-boundary.mjs";
 
 const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const outputDirectory = path.join(projectRoot, ".jekyll-obsidian-cache", "assets");
+const staged = await stageGeneratedAssets(projectRoot, outputDirectory);
 
-await resetGeneratedCache(projectRoot, outputDirectory);
+try {
 
 const result = await esbuild.build({
   absWorkingDir: projectRoot,
@@ -15,13 +16,15 @@ const result = await esbuild.build({
     blog: "src/frontend/entries/blog.ts",
     docs: "src/frontend/entries/docs.ts",
     "digital-garden": "src/frontend/entries/digital-garden.ts",
+    "docs-navigation": "src/frontend/docs-navigation.ts",
     search: "src/frontend/search.ts",
+    "search-worker": "src/frontend/search-worker.ts",
     graph: "src/frontend/graph.ts",
-    preview: "src/frontend/preview.ts",
+    previews: "src/frontend/preview.ts",
     math: "src/frontend/math.ts",
     mermaid: "src/frontend/mermaid.ts"
   },
-  outdir: outputDirectory,
+  outdir: staged.stagingDirectory,
   bundle: true,
   splitting: true,
   format: "esm",
@@ -49,7 +52,7 @@ const outputs = Object.entries(result.metafile.outputs)
   .sort((left, right) => left.outputPath.localeCompare(right.outputPath));
 
 const files = outputs
-  .map(({ outputPath }) => path.relative(outputDirectory, outputPath).split(path.sep).join("/"))
+  .map(({ outputPath }) => path.relative(staged.stagingDirectory, outputPath).split(path.sep).join("/"))
   .filter((outputPath) => outputPath !== "manifest.json")
   .sort();
 
@@ -80,35 +83,35 @@ function assetClosure(initialOutputs, { includeDynamicImports }) {
     }
   }
   return [...seen]
-    .map((outputPath) => path.relative(outputDirectory, outputPath).split(path.sep).join("/"))
+    .map((outputPath) => path.relative(staged.stagingDirectory, outputPath).split(path.sep).join("/"))
     .sort();
 }
 
 const themeSources = {
-  blog: "src/frontend/entries/blog.ts",
-  docs: "src/frontend/entries/docs.ts",
-  "digital-garden": "src/frontend/entries/digital-garden.ts"
+  blog: ["src/frontend/entries/blog.ts"],
+  docs: ["src/frontend/entries/docs.ts", "src/frontend/docs-navigation.ts"],
+  "digital-garden": ["src/frontend/entries/digital-garden.ts"]
 };
 const featureSources = {
   search: "src/frontend/search.ts",
   graph: "src/frontend/graph.ts",
-  preview: "src/frontend/preview.ts",
+  previews: "src/frontend/preview.ts",
   math: "src/frontend/math.ts",
   mermaid: "src/frontend/mermaid.ts"
 };
 
 const entries = Object.fromEntries(
-  Object.entries(themeSources).map(([theme, source]) => {
-    const entry = outputForEntryPoint(source);
+  Object.entries(themeSources).map(([theme, sources]) => {
+    const [entry, ...ownedEntries] = sources.map(outputForEntryPoint);
     const css = entry.metadata.cssBundle
-      ? path.relative(outputDirectory, path.resolve(projectRoot, entry.metadata.cssBundle)).split(path.sep).join("/")
+      ? path.relative(staged.stagingDirectory, path.resolve(projectRoot, entry.metadata.cssBundle)).split(path.sep).join("/")
       : undefined;
     return [
       theme,
       {
-        js: path.relative(outputDirectory, entry.outputPath).split(path.sep).join("/"),
+        js: path.relative(staged.stagingDirectory, entry.outputPath).split(path.sep).join("/"),
         ...(css ? { css } : {}),
-        files: assetClosure([entry], { includeDynamicImports: false })
+        files: assetClosure([entry, ...ownedEntries], { includeDynamicImports: false })
       }
     ];
   })
@@ -117,6 +120,13 @@ const entries = Object.fromEntries(
 const features = Object.fromEntries(
   Object.entries(featureSources).map(([feature, source]) => {
     const entry = outputForEntryPoint(source);
+    if (feature === "search") {
+      const worker = outputForEntryPoint("src/frontend/search-worker.ts");
+      return [feature, {
+        files: assetClosure([entry, worker], { includeDynamicImports: true }),
+        worker: path.relative(staged.stagingDirectory, worker.outputPath).split(path.sep).join("/")
+      }];
+    }
     return [feature, { files: assetClosure([entry], { includeDynamicImports: true }) }];
   })
 );
@@ -129,7 +139,12 @@ const manifest = {
 };
 
 await writeFile(
-  path.join(outputDirectory, "manifest.json"),
+  path.join(staged.stagingDirectory, "manifest.json"),
   `${JSON.stringify(manifest, null, 2)}\n`,
   "utf8"
 );
+await staged.commit();
+} catch (error) {
+  await staged.discard();
+  throw error;
+}

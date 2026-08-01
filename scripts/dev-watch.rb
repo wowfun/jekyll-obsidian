@@ -1,13 +1,13 @@
 #!/usr/bin/env ruby
 # frozen_string_literal: true
 
-require "digest"
-require "find"
+require "listen"
 require "open3"
 require "optparse"
 require "yaml"
 
 Options = Struct.new(:host, :port, :baseurl, :theme, keyword_init: true)
+WATCH_IGNORE_PATTERN = %r{\A(?:\.git|\.bundle|\.jekyll-cache|\.jekyll-obsidian-cache|node_modules|vendor|_site(?:-[^/]+)?)(?:/|\z)}
 
 options = Options.new(host: "127.0.0.1", port: 4000, baseurl: "", theme: nil)
 OptionParser.new do |parser|
@@ -27,13 +27,21 @@ base_watch_entries = %w[
   _includes
   _data
   src
-  assets
   _config.yml
   Gemfile
   Gemfile.lock
   package.json
   package-lock.json
   scripts/build-assets.mjs
+  scripts/cache-boundary.mjs
+  tsconfig.json
+].freeze
+asset_watch_entries = %w[
+  src
+  package.json
+  package-lock.json
+  scripts/build-assets.mjs
+  scripts/cache-boundary.mjs
   tsconfig.json
 ].freeze
 
@@ -47,35 +55,19 @@ rescue Psych::Exception, SystemCallError
   "vault"
 end
 
-def watch_entries(project_dir, base_entries)
-  (base_entries + [configured_source(project_dir)]).uniq
+def relative_path(project_dir, path)
+  absolute = File.expand_path(path)
+  prefix = "#{project_dir}/"
+  return nil unless absolute.start_with?(prefix)
+
+  absolute.delete_prefix(prefix)
 end
 
-def snapshot(project_dir, entries)
-  digest = Digest::SHA256.new
-
-  entries.sort.each do |entry|
-    path = File.join(project_dir, entry)
-    unless File.exist?(path) || File.symlink?(path)
-      digest << "missing\0#{entry}\0"
-      next
-    end
-
-    paths = File.directory?(path) && !File.symlink?(path) ? Find.find(path).to_a.sort : [path]
-    paths.each do |candidate|
-      stat = File.lstat(candidate)
-      relative = candidate.delete_prefix("#{project_dir}/")
-      digest << relative << "\0"
-      digest << stat.mode.to_s << "\0"
-      digest << stat.size.to_s << "\0"
-      digest << stat.mtime.to_r.to_s << "\0"
-    end
-  end
-
-  digest.hexdigest
+def under_entry?(path, entry)
+  path == entry || path.start_with?("#{entry}/")
 end
 
-def run_build(project_dir, options, destination)
+def run_build(project_dir, options, destination, build_assets:)
   command = [
     File.join(project_dir, "bin/build"),
     "--url", "http://#{options.host}:#{options.port}",
@@ -83,6 +75,7 @@ def run_build(project_dir, options, destination)
     "--destination", destination
   ]
   command.concat(["--theme", options.theme]) if options.theme
+  command << "--skip-assets" unless build_assets
 
   success = false
   Open3.popen2e({ "JEKYLL_ENV" => "development" }, *command, chdir: project_dir) do |stdin, output, wait|
@@ -93,7 +86,7 @@ def run_build(project_dir, options, destination)
   success
 end
 
-unless run_build(project_dir, options, destination)
+unless run_build(project_dir, options, destination, build_assets: true)
   warn "Initial build failed. The watcher will stay active so you can repair the source."
 end
 
@@ -126,40 +119,51 @@ at_exit { stop.call }
 
 puts "Watching vault and site sources. Serving http://#{options.host}:#{options.port}#{options.baseurl}/"
 
-known_snapshot = snapshot(project_dir, watch_entries(project_dir, base_watch_entries))
-pending_since = nil
-debounce_seconds = 0.25
-poll_seconds = 0.20
-
-until stopping
-  sleep poll_seconds
-
-  exited_server = Process.waitpid(server_pid, Process::WNOHANG)
-  if exited_server
-    warn "Jekyll server exited. Stop the watcher and inspect the server output."
-    stopping = true
-    next
+changes = Queue.new
+listener = Listen.to(
+  project_dir,
+  ignore: WATCH_IGNORE_PATTERN
+) do |modified, added, removed|
+  watched_entries = (base_watch_entries + [configured_source(project_dir)]).uniq
+  (modified + added + removed).each do |path|
+    relative = relative_path(project_dir, path)
+    changes << relative if relative && watched_entries.any? { |entry| under_entry?(relative, entry) }
   end
+end
+listener.start
 
-  current_snapshot = snapshot(project_dir, watch_entries(project_dir, base_watch_entries))
-  if current_snapshot != known_snapshot
-    known_snapshot = current_snapshot
-    pending_since = Process.clock_gettime(Process::CLOCK_MONOTONIC)
-    next
+begin
+  until stopping
+    changed = changes.pop(timeout: 0.25)
+
+    exited_server = Process.waitpid(server_pid, Process::WNOHANG)
+    if exited_server
+      warn "Jekyll server exited. Stop the watcher and inspect the server output."
+      stopping = true
+      next
+    end
+
+    next unless changed
+
+    batch = [changed]
+    loop do
+      pending = changes.pop(timeout: 0.25)
+      break unless pending
+
+      batch << pending
+    end
+    until changes.empty?
+      batch << changes.pop(true)
+    end
+
+    build_assets = batch.any? do |path|
+      asset_watch_entries.any? { |entry| under_entry?(path, entry) }
+    end
+    puts "Source changed. Rebuilding#{build_assets ? " assets and site" : " site"}..."
+    run_build(project_dir, options, destination, build_assets: build_assets)
   end
-
-  next unless pending_since
-  next if Process.clock_gettime(Process::CLOCK_MONOTONIC) - pending_since < debounce_seconds
-
-  pending_since = nil
-  puts "Source changed. Rebuilding..."
-  run_build(project_dir, options, destination)
-
-  after_build = snapshot(project_dir, watch_entries(project_dir, base_watch_entries))
-  if after_build != known_snapshot
-    known_snapshot = after_build
-    pending_since = Process.clock_gettime(Process::CLOCK_MONOTONIC)
-  end
+ensure
+  listener.stop
 end
 
 Process.wait(server_pid) unless exited_server

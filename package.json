@@ -5,15 +5,18 @@
   "type": "module",
   "description": "Frontend assets and browser checks for the configurable Jekyll Obsidian template.",
   "engines": {
-    "node": "26.3.1"
+    "node": ">=26 <27"
   },
   "packageManager": "npm@11.16.0",
   "scripts": {
     "build": "node scripts/build-assets.mjs",
     "typecheck": "tsc --noEmit",
-    "test": "npm run build && npm run typecheck && vitest run && node --test tests/node/**/*.test.mjs",
+    "test": "npm run build && npm run test:prepared",
+    "test:prepared": "npm run typecheck && vitest run && node --test tests/node/**/*.test.mjs",
     "test:watch": "vitest",
-    "test:browser": "npm run build && GITHUB_REPOSITORY=example/jekyll-obsidian JEKYLL_ENV=production bin/build --url http://127.0.0.1:4173 --baseurl \"\" --destination _site-browser --skip-assets && playwright test",
+    "build:browser-sites": "for theme in blog docs digital-garden; do GITHUB_REPOSITORY=example/jekyll-obsidian JEKYLL_ENV=production bin/build --theme \"$theme\" --url http://127.0.0.1:4173 --baseurl \"/__site__/$theme\" --destination \"_site-browser-$theme\" --skip-assets || exit; done",
+    "test:browser": "npm run build && npm run test:browser:prepared",
+    "test:browser:prepared": "npm run build:browser-sites && playwright test",
     "test:e2e": "npm run test:browser"
   },
   "dependencies": {

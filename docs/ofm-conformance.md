@@ -17,7 +17,7 @@ Each feature has one of three outcomes:
 | Wikilinks | render | Resolution checks a vault-relative path, then a source-relative path, then a unique basename. |
 | Wikilink display text | render | `[[note|label]]` uses `label`. Frontmatter aliases do not become implicit link targets. |
 | Heading and block links | render | Heading chains resolve by their terminal heading within the stated chain; duplicate headings receive stable suffixed IDs, and `^block-id` fragments resolve within a public target. Missing fragments keep links unresolved, while missing embed fragments follow the production/development error policy below. |
-| Note, heading, and block embeds | render | Each embed gets a semantic wrapper, source link, and instance-scoped DOM IDs. |
+| Note, heading, and block embeds | render | Each embed gets a semantic wrapper, source link, and instance-scoped DOM IDs. One host page may expand at most 16 levels, 256 instances, and 2 MiB of embedded HTML. Development shows a deterministic placeholder at the limit; production fails. |
 | Highlights | render | `==highlighted text==` produces semantic highlight markup. |
 | Footnotes | render | Commonmarker footnotes are enabled. |
 | Math | render | Inline and display math retain readable source and load MathJax only on pages that need it. |
@@ -25,7 +25,7 @@ Each feature has one of three outcomes:
 | CJK emphasis | render | Commonmarker CJK emphasis is enabled. Search adds deterministic CJK unigrams and bigrams. |
 | Standard and relaxed task states | render | Standard and custom task markers keep their original state in `data-task`; each disabled checkbox has an accessible state label. |
 | Tags and nested tags | render | Inline and frontmatter tags join one tag index. Nested tags use stable anchors on that page. |
-| Properties in the supported allowlist | render | `publish`, `title`, `aliases`, `tags`, `description`, `permalink`, `image`, `cssclasses`, `created`, and `updated` are accepted with strict types. |
+| Properties in the supported allowlist | render | `publish`, `title`, `aliases`, `tags`, `description`, `permalink`, `image`, `cssclasses`, `created`, `updated`, `content_type`, `date`, `nav_order`, and `nav_exclude` are accepted with strict types. `image` must resolve to a local published image and supplies the public `og:image` URL. |
 | Unknown properties and Jekyll control keys | unsupported | They are excluded from page data, HTML, JSON, and XML. |
 
 ## Callouts and comments
@@ -47,8 +47,8 @@ Each feature has one of three outcomes:
 | External HTTP and HTTPS links | render | Preserved with context-safe escaping. |
 | `javascript:`, `data:`, `file:`, and `vbscript:` Markdown URLs | unsupported | Rejected. |
 | Images: AVIF, BMP, GIF, JPEG, PNG, SVG, WebP | render | Local files publish only when reached from public authored content or its transclusion closure. Wikilink dimensions and Markdown alt suffixes such as `alt|320x180` are supported. |
-| Audio: FLAC, M4A, MP3, OGG, WAV, WebM, 3GP | render | Rendered with native controls when local and reachable. Ambiguous WebM and 3GP extensions require an `audio/*` media type. |
-| Video: MKV, MOV, MP4, OGV, WebM, 3GP | render | Rendered with native controls when local and reachable. Ambiguous WebM and 3GP extensions require a `video/*` media type; browser codec support still applies. |
+| Audio: 3GP, FLAC, M4A, MP3, OGG, WAV | render | Rendered with native controls when local and reachable. In v1, `.3gp` is always audio. |
+| Video: MKV, MOV, MP4, OGV, WebM | render | Rendered with native controls when local and reachable. In v1, `.webm` is always video; browser codec support still applies. |
 | PDF embeds | render | Native PDF objects support page and height options. Only local published attachments are embedded. |
 | Canvas `.canvas` links and embeds | download | Published as a download card. Canvas data is not rendered. |
 | Bases `.base` links and embeds | download | Published as a download card. Bases queries are not executed. |
@@ -68,7 +68,7 @@ Each feature has one of three outcomes:
 
 ## Error policy
 
-Development builds show a placeholder for missing, private, or ambiguous embeds so the author can repair the source. Production and CI builds stop on those embed errors, transclusion cycles, path escapes, symlinks, and route or asset collisions.
+Development builds show a placeholder for missing, private, ambiguous, or over-budget embeds so the author can repair the source. Production and CI builds stop on those embed errors, transclusion cycles, path escapes, symlinks, and route or asset collisions. Ambiguous note and attachment basenames have separate diagnostics.
 
 A missing or private ordinary link produces a warning and an unresolved link state in every environment. It does not publish the target.
 

@@ -1,12 +1,18 @@
 export type ColorScheme = "light" | "dark";
 
 export const COLOR_SCHEME_STORAGE_KEY = "jekyll-obsidian:color-scheme";
+export const COLOR_SCHEME_EVENT = "jekyll-obsidian:color-scheme-changed";
 
 export function preferredColorScheme(
   storage: Pick<Storage, "getItem"> = localStorage,
   media: Pick<MediaQueryList, "matches"> = matchMedia("(prefers-color-scheme: dark)")
 ): ColorScheme {
-  const saved = storage.getItem(COLOR_SCHEME_STORAGE_KEY);
+  let saved: string | null = null;
+  try {
+    saved = storage.getItem(COLOR_SCHEME_STORAGE_KEY);
+  } catch {
+    saved = null;
+  }
   if (saved === "light" || saved === "dark") return saved;
   return media.matches ? "dark" : "light";
 }
@@ -24,6 +30,7 @@ export function applyColorScheme(
     const label = button.querySelector<HTMLElement>("[data-color-scheme-label]");
     if (label) label.textContent = next === "dark" ? "Dark" : "Light";
   }
+  document.dispatchEvent(new CustomEvent(COLOR_SCHEME_EVENT, { detail: { scheme } }));
 }
 
 export function initialiseColorScheme(): () => void {
@@ -32,7 +39,11 @@ export function initialiseColorScheme(): () => void {
 
   const toggle = () => {
     scheme = scheme === "dark" ? "light" : "dark";
-    localStorage.setItem(COLOR_SCHEME_STORAGE_KEY, scheme);
+    try {
+      localStorage.setItem(COLOR_SCHEME_STORAGE_KEY, scheme);
+    } catch {
+      // A blocked storage backend must not disable the visible theme control.
+    }
     applyColorScheme(scheme);
   };
 

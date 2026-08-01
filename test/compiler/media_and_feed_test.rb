@@ -22,6 +22,21 @@ class MediaAndFeedTest < Minitest::Test
     refute routes.any? { |route| route.include?("private") }
     assert_includes page(result, "/").content, "obsidian-download-card"
     assert_includes page(result, "/").content, "<audio"
+    assert_equal "https://example.test/assets/vault/media/cover.png", page(result, "/").data.fetch("image")
+  end
+
+  def test_production_requires_an_origin_but_development_omits_absolute_metadata
+    production = compile(note("index.md", "---\npublish: true\nupdated: 2026-07-30\n---\n# Home"), url: "")
+    refute production.success?
+    assert production.diagnostics.any? { |item| item.code == "missing_origin" }
+
+    development = compile(
+      note("index.md", "---\npublish: true\n---\n# Home"),
+      url: "",
+      environment: "development"
+    )
+    assert development.success?, development.diagnostics.map(&:message).join("\n")
+    assert_nil page(development, "/").data.dig("obsidian", "absolute_url")
   end
 
   def test_media_options_and_dangerous_schemes
@@ -40,7 +55,7 @@ class MediaAndFeedTest < Minitest::Test
     assert result.diagnostics.any? { |item| item.code == "unsafe_url" }
   end
 
-  def test_markdown_image_alt_dimensions_and_ambiguous_media_use_their_mime_type
+  def test_markdown_image_dimensions_and_media_extensions_have_one_canonical_kind
     result = compile(
       note("index.md", <<~MARKDOWN),
         ---
@@ -68,8 +83,8 @@ class MediaAndFeedTest < Minitest::Test
     assert_equal "180", image["height"]
     assert_equal 2, document.css("audio").length
     assert_equal 2, document.css("video").length
-    assert_equal %w[audio/3gpp audio/webm], document.css("audio source").map { |node| node["type"] }.sort
-    assert_equal %w[video/3gpp video/webm], document.css("video source").map { |node| node["type"] }.sort
+    assert_equal %w[audio/3gpp audio/3gpp], document.css("audio source").map { |node| node["type"] }.sort
+    assert_equal %w[video/webm video/webm], document.css("video source").map { |node| node["type"] }.sort
   end
 
   def test_only_explicitly_supported_attachment_types_are_published
@@ -81,20 +96,21 @@ class MediaAndFeedTest < Minitest::Test
 
     refute result.success?
     assert result.diagnostics.any? { |item| item.code == "unsupported_attachment" }
-    assert_equal ["/assets/vault/database.base"], result.copied_assets.map(&:route)
-    assert_includes page(result, "/").content, "database.base"
-    refute_includes page(result, "/").content, "assets/vault/archive.bin"
+    assert_instance_of JekyllObsidian::BuildFailure, result
   end
 
-  def test_feed_is_skipped_if_any_public_note_has_no_deterministic_time
+  def test_feed_omits_only_notes_without_a_deterministic_time
     result = compile(
       note("index.md", "---\npublish: true\nupdated: 2026-07-30\n---\n# Home"),
       note("timeless.md", "---\npublish: true\n---\n# Timeless")
     )
 
     assert result.success?
-    refute result.generated_files.any? { |item| item.route == "/feed.xml" }
-    assert result.diagnostics.any? { |item| item.code == "feed_skipped_missing_time" }
+    feed = result.generated_files.find { |item| item.route == "/feed.xml" }
+    refute_nil feed
+    assert_includes feed.content, "Home"
+    refute_includes feed.content, "Timeless"
+    assert result.diagnostics.any? { |item| item.code == "feed_omitted_missing_time" }
   end
 
   def test_git_time_enables_feed_without_using_the_clock
@@ -133,7 +149,7 @@ class MediaAndFeedTest < Minitest::Test
 
     refute body_result.success?
     assert body_result.diagnostics.any? { |item| item.code == "invalid_character" }
-    refute body_result.generated_files.any? { |item| item.route == "/feed.xml" }
+    assert_instance_of JekyllObsidian::BuildFailure, body_result
 
     property_result = compile(
       note("index.md", <<~'MARKDOWN')
@@ -158,8 +174,6 @@ class MediaAndFeedTest < Minitest::Test
     )
     refute config_result.success?
     assert config_result.diagnostics.any? { |item| item.code == "invalid_config_character" }
-    feed = config_result.generated_files.find { |item| item.route == "/feed.xml" }
-    refute_includes feed.content, "\u0001"
-    Nokogiri::XML(feed.content) { |config| config.strict.nonet }
+    assert_instance_of JekyllObsidian::BuildFailure, config_result
   end
 end

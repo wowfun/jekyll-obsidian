@@ -1,4 +1,7 @@
 import mermaid from "mermaid";
+import { COLOR_SCHEME_EVENT } from "./color-scheme";
+
+let watchesColorScheme = false;
 
 function cssToken(name: string, fallback: string): string {
   return getComputedStyle(document.documentElement).getPropertyValue(name).trim() || fallback;
@@ -13,6 +16,23 @@ function sourceElements(): HTMLElement[] {
 }
 
 export async function renderMermaid(): Promise<void> {
+  if (!watchesColorScheme) {
+    watchesColorScheme = true;
+    document.addEventListener(COLOR_SCHEME_EVENT, () => {
+      for (const figure of document.querySelectorAll<HTMLElement>("[data-mermaid-rendered]")) {
+        const source = figure.querySelector<HTMLTemplateElement>("template[data-mermaid-source]")?.content.textContent;
+        if (!source) continue;
+        const pre = document.createElement("pre");
+        pre.dataset.obsidianMermaid = "true";
+        const code = document.createElement("code");
+        code.className = "language-mermaid";
+        code.textContent = source;
+        pre.append(code);
+        figure.replaceWith(pre);
+      }
+      void renderMermaid();
+    });
+  }
   const sources = sourceElements();
   if (sources.length === 0) return;
 
@@ -52,7 +72,10 @@ export async function renderMermaid(): Promise<void> {
         const svg = document.importNode(parsed.documentElement, true);
         svg.setAttribute("role", "img");
         svg.setAttribute("aria-label", source.dataset.diagramLabel || "Diagram");
-        figure.append(svg);
+        const sourceTemplate = document.createElement("template");
+        sourceTemplate.dataset.mermaidSource = "";
+        sourceTemplate.content.textContent = code;
+        figure.append(svg, sourceTemplate);
         source.replaceWith(figure);
         rendered.bindFunctions?.(figure);
       } catch {

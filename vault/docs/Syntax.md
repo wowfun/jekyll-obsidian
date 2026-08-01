@@ -81,7 +81,7 @@ An image embed can include its width or width and height:
 ![[paper.pdf#height=560]]
 ```
 
-Local audio, video, and PDF files use native browser controls. PDF embeds accept page and height options. Canvas and Bases files become download cards because v1 does not execute their data models.
+Local audio, video, and PDF files use native browser controls. In v1, `.3gp` is audio and `.webm` is video. PDF embeds accept page and height options. Canvas and Bases files become download cards because v1 does not execute their data models.
 
 ## Tags and comments
 

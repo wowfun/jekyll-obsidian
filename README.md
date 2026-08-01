@@ -18,8 +18,8 @@ Canvas and Bases files become downloads when a public note links to them. They c
 
 ## Requirements
 
-- Ruby 4.0.6
-- Node.js 26.3.1
+- Ruby 4.0.x
+- Node.js 26.x
 - Git
 - macOS, Linux, or WSL
 
@@ -77,7 +77,7 @@ obsidian:
 
 `obsidian.source` must be a normalized relative directory inside the repository. The compiler rejects symlinks, path traversal, Jekyll collection overlap, and routes that normalize to the same destination.
 
-`content_type: post | doc | page` overrides directory classification. Blog post dates resolve from `date`, then `created`, then the first Git commit. Docs navigation uses `nav_order` and `nav_exclude`. Theme feature defaults can be overridden with strict booleans for `search`, `tags`, `feed`, `graph`, `relations`, `previews`, and `outline`.
+`content_type: post | doc | page` overrides directory classification. Blog post dates resolve from `date`, then `created`, then the first Git commit. Docs navigation uses `nav_order` and `nav_exclude`. An `image` property resolves to a published image URL and supplies `og:image`. Theme feature defaults can be overridden with strict booleans for `search`, `tags`, `feed`, `graph`, `relations`, `previews`, and `outline`.
 
 The root `vault/index.md` remains the authored homepage. Each theme appends its own useful overview to that content.
 
@@ -89,7 +89,7 @@ npx playwright install chromium
 RUN_BROWSER_TESTS=1 bin/test
 ```
 
-The included GitHub Actions workflow verifies all three themes at both domain-root and project-path deployments, then publishes the configured theme from trusted default-branch builds. See [the deployment guide](vault/docs/Deployment.md) for Pages permissions, custom domains, and artifact checks.
+The included GitHub Actions workflow builds frontend assets once, verifies all three themes at the domain root plus one project-path deployment, then publishes the configured theme from trusted default-branch builds. See [the deployment guide](vault/docs/Deployment.md) for Pages permissions, custom domains, and artifact checks.
 
 ## Security model
 

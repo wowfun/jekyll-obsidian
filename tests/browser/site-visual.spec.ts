@@ -2,11 +2,11 @@ import { test, expect } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
 
 const pages = [
-  { name: "home", route: "/" },
-  { name: "note", route: "/docs/Getting%20Started/" },
-  { name: "syntax", route: "/docs/Syntax/" },
-  { name: "graph", route: "/graph/" },
-  { name: "404", route: "/404.html" }
+  { name: "home", route: "/__site__/digital-garden/" },
+  { name: "note", route: "/__site__/digital-garden/docs/Getting%20Started/" },
+  { name: "syntax", route: "/__site__/digital-garden/docs/Syntax/" },
+  { name: "graph", route: "/__site__/digital-garden/graph/" },
+  { name: "404", route: "/__site__/digital-garden/404.html" }
 ] as const;
 
 test.beforeEach(async ({ page }) => {
@@ -37,7 +37,7 @@ for (const pageUnderTest of pages) {
 }
 
 test("the production home has no detectable accessibility violations", async ({ page }) => {
-  await page.goto("/");
+  await page.goto("/__site__/digital-garden/");
   await page.evaluate(() => document.fonts.ready);
   const results = await new AxeBuilder({ page }).analyze();
   expect(results.violations).toEqual([]);
@@ -47,10 +47,10 @@ test.describe("production site without JavaScript", () => {
   test.use({ javaScriptEnabled: false });
 
   test("keeps the graph fallback and mobile note context available", async ({ page }, testInfo) => {
-    await page.goto("/graph/");
+    await page.goto("/__site__/digital-garden/graph/");
     await expect(page.locator(".graph-fallback")).toBeVisible();
 
-    await page.goto("/docs/Syntax/");
+    await page.goto("/__site__/digital-garden/docs/Syntax/");
     await expect(page.locator("pre[lang='mermaid']")).toBeVisible();
     if (testInfo.project.name === "mobile-chromium") {
       await expect(page.getByRole("complementary", { name: "Note context" })).toBeVisible();

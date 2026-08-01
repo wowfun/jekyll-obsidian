@@ -50,6 +50,8 @@ module JekyllObsidian
     end
 
     def absolute_url(route)
+      return nil if origin.empty?
+
       "#{origin}#{href(route)}"
     end
 
@@ -97,7 +99,8 @@ module JekyllObsidian
       raise ArgumentError, "url must be an http(s) origin" unless %w[http https].include?(uri.scheme) && uri.host
       raise ArgumentError, "url must not include a path, query, or fragment" unless [nil, "", "/"].include?(uri.path) && uri.query.nil? && uri.fragment.nil?
 
-      "#{uri.scheme}://#{uri.host}#{uri.port && ![80, 443].include?(uri.port) ? ":#{uri.port}" : ""}"
+      default_port = (uri.scheme == "http" && uri.port == 80) || (uri.scheme == "https" && uri.port == 443)
+      "#{uri.scheme}://#{uri.host}#{default_port ? "" : ":#{uri.port}"}"
     end
 
     def normalize_baseurl(value)

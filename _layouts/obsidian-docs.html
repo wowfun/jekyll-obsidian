@@ -5,14 +5,14 @@
     <a class="skip-link" href="#main-content">Skip to content</a>
     {% include obsidian/header.html theme='docs' %}
     <div class="docs-shell">
-      <aside class="docs-sidebar"><p class="docs-sidebar__label">Contents</p><nav class="docs-tree" aria-label="Documentation">{% include obsidian/docs-tree.html nodes=page.obsidian.theme_data.docs_tree %}</nav></aside>
+      <aside class="docs-sidebar"><p class="docs-sidebar__label">Contents</p><nav class="docs-tree" aria-label="Documentation" data-docs-navigation data-docs-navigation-url="{{ page.obsidian.theme_data.docs_tree_url | escape }}" data-dialog-movable="browse">{% include obsidian/docs-tree.html nodes=page.obsidian.theme_data.docs_tree %}</nav><p><a href="{{ page.obsidian.theme_data.docs_index_url | escape }}">View full documentation index</a></p></aside>
       <main class="docs-main" id="main-content">
         {% if page.obsidian.theme_data.breadcrumbs and page.obsidian.theme_data.breadcrumbs.size > 0 %}<nav class="breadcrumbs" aria-label="Breadcrumb"><ol>{% for crumb in page.obsidian.theme_data.breadcrumbs %}<li>{% if forloop.last %}<span aria-current="page">{{ crumb.title | escape }}</span>{% elsif crumb.url %}<a href="{{ crumb.url | escape }}">{{ crumb.title | escape }}</a>{% else %}<span>{{ crumb.title | escape }}</span>{% endif %}</li>{% endfor %}</ol></nav>{% endif %}
-        <article class="docs-article{% if page.obsidian.cssclasses %} {{ page.obsidian.cssclasses | join: ' ' }}{% endif %}">{% include obsidian/note-header.html %}<div class="note-content">{{ content }}</div>{% include obsidian/source-actions.html %}</article>
+        <article class="docs-article{% if page.obsidian.cssclasses %} {{ page.obsidian.cssclasses | join: ' ' }}{% endif %}">{% include obsidian/note-header.html %}<div class="note-content">{% if page.obsidian.kind == 'note' %}{{ content }}{% else %}{% include obsidian/system-page.html %}{% endif %}</div>{% include obsidian/source-actions.html %}</article>
         {% if page.obsidian.route == '/' %}{% include obsidian/docs-home.html %}{% endif %}
         {% include obsidian/docs-navigation.html %}
       </main>
-      {% if page.obsidian.kind == 'note' %}{% if page.obsidian.features.outline or page.obsidian.features.relations %}<aside class="docs-context" data-context-panel aria-label="Page context">{% include obsidian/context.html location='rail' %}</aside>{% endif %}{% endif %}
+      {% if page.obsidian.kind == 'note' %}{% if page.obsidian.features.outline or page.obsidian.features.relations %}<aside class="docs-context" data-context-panel data-dialog-movable="context" aria-label="Page context">{% include obsidian/context.html location='rail' %}</aside>{% endif %}{% endif %}
     </div>
     {% include obsidian/footer.html %}
     <nav class="mobile-toolbar" aria-label="Mobile actions"><button type="button" data-dialog-open="browse">Browse</button>{% if page.obsidian.features.search %}<button type="button" data-search-open>Search</button>{% endif %}{% if page.obsidian.kind == 'note' %}{% if page.obsidian.features.outline or page.obsidian.features.relations %}<button type="button" data-dialog-open="context">{% if page.obsidian.features.outline and page.obsidian.features.relations == false %}On this page{% else %}Context{% endif %}</button>{% endif %}{% endif %}</nav>

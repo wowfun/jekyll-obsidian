@@ -30,4 +30,17 @@ describe("mobile context dialogs", () => {
     closeObsidianDialog("context");
     expect(dialog.close).toHaveBeenCalledOnce();
   });
+
+  it("moves one live context node into the dialog and restores it on close", () => {
+    document.body.insertAdjacentHTML(
+      "afterbegin",
+      '<aside data-dialog-movable="context"><a href="#heading">Live outline</a></aside>'
+    );
+    const dialog = document.querySelector<HTMLDialogElement>("dialog")!;
+    dialog.showModal = vi.fn(() => dialog.setAttribute("open", ""));
+    openObsidianDialog("context");
+    expect(dialog.querySelectorAll("[data-dialog-movable='context']")).toHaveLength(1);
+    closeObsidianDialog("context");
+    expect(document.body.firstElementChild?.matches("[data-dialog-movable='context']")).toBe(true);
+  });
 });

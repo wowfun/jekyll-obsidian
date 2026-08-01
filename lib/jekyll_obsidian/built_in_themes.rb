@@ -12,6 +12,8 @@ module JekyllObsidian
     ALWAYS_RESERVED_NAMESPACES = %w[
       /404.html /sitemap.xml /assets/obsidian /assets/vault
     ].freeze
+    INTERACTIVE_GRAPH_MAX_NODES = 250
+    INTERACTIVE_GRAPH_MAX_EDGES = 1_000
 
     module_function
 
@@ -28,7 +30,7 @@ module JekyllObsidian
     class Presenter
       private
 
-      def project(model:, config:, note_theme_data:, theme_pages:, system_theme_data:, tag_notes:, feed_notes:)
+      def project(model:, config:, note_theme_data:, theme_pages:, system_theme_data:, tag_notes:, feed_notes:, shared_files: [])
         tag_anchors = config.features.fetch("tags") ? tag_anchor_map(tag_notes, config.url_builder) : {}
         pages = model.notes.map do |note|
           note_page(
@@ -43,8 +45,10 @@ module JekyllObsidian
         pages << graph_page(model, config, system_theme_data) if config.features.fetch("graph")
         pages << not_found_page(config, system_theme_data)
 
-        artifacts = ["catalog"]
-        artifacts << "graph" if config.features.fetch("graph")
+        artifacts = []
+        artifacts << "catalog" if config.features.fetch("previews")
+        graph_interactive = interactive_graph?(model, config)
+        artifacts << "graph" if graph_interactive
         artifacts << "search" if config.features.fetch("search")
         artifacts << "sitemap"
         artifacts << "feed" if config.features.fetch("feed")
@@ -55,13 +59,30 @@ module JekyllObsidian
         ThemeOutput.new(
           pages: pages,
           artifacts: artifacts,
+          shared_files: shared_files,
+          site_data: { "obsidian_graph_interactive" => graph_interactive },
           feed_note_ids: feed_notes.sort_by(&:id).map(&:id),
           reserved_namespaces: namespaces
         )
       end
 
       def note_page(note, config, theme_data, tag_anchors)
-        obsidian = note.base_data.fetch("obsidian").merge(
+        properties = note.properties
+        obsidian = {
+          "kind" => "note",
+          "id" => note.id,
+          "content_type" => note.content_type,
+          "published_at" => note.published_at,
+          "route" => note.route,
+          "href" => config.url_builder.href(note.route),
+          "absolute_url" => config.url_builder.absolute_url(note.route),
+          "aliases" => Array(properties["aliases"]),
+          "tags" => Array(properties["tags"]),
+          "cssclasses" => Array(properties["cssclasses"]),
+          "created" => note.created,
+          "updated" => note.updated,
+          "has_h1" => note.has_h1,
+          "source_links" => note.source_links,
           "theme" => config.theme,
           "features" => config.features.merge(note.feature_flags),
           "theme_data" => theme_data,
@@ -73,18 +94,21 @@ module JekyllObsidian
           "links" => config.features.fetch("relations") ? note.links : [],
           "backlinks" => config.features.fetch("relations") ? note.backlinks : [],
           "embedded_by" => config.features.fetch("relations") ? note.embedded_by : []
-        )
-        data = note.base_data.merge(
+        }
+        data = {
+          "title" => note.title,
+          "description" => properties["description"] || note.preview,
+          "image" => note.image_url,
           "layout" => "obsidian-#{config.theme}",
           "obsidian" => obsidian
-        )
+        }.compact
         PageOutput.new(route: note.route, content: note.content, data: data)
       end
 
-      def system_page(config, route, title, content, kind, system_theme_data, theme_data = {})
+      def system_page(config, route, title, kind, system_theme_data, theme_data = {})
         PageOutput.new(
           route: route,
-          content: content,
+          content: "",
           data: {
             "layout" => "obsidian-#{config.theme}",
             "title" => title,
@@ -105,28 +129,67 @@ module JekyllObsidian
       def tags_page(notes, anchors, config, system_theme_data)
         groups = Hash.new { |hash, key| hash[key] = [] }
         notes.each { |note| Array(note.properties["tags"]).each { |tag| groups[tag] << note } }
-        body = groups.keys.sort.map do |tag|
-          links = groups.fetch(tag).sort_by(&:id).map do |note|
-            %(<li><a href="#{h(config.url_builder.href(note.route))}">#{h(note.title)}</a></li>)
-          end.join
-          %(<section id="#{h(anchors.fetch(tag))}"><h2>#{h(tag)}</h2><ul>#{links}</ul></section>)
-        end.join
-        system_page(config, "/tags/", "Tags", %(<h1>Tags</h1>#{body}), "tags", system_theme_data)
+        tag_groups = groups.keys.sort.map do |tag|
+          {
+            "name" => tag,
+            "anchor" => anchors.fetch(tag),
+            "notes" => groups.fetch(tag).sort_by(&:id).map { |note| system_note_card(note, config) }
+          }
+        end
+        system_page(config, "/tags/", "Tags", "tags", system_theme_data, "tag_groups" => tag_groups)
       end
 
       def graph_page(model, config, system_theme_data)
-        items = model.graph_edges.map do |edge|
-          source = model.notes_by_id.fetch(edge.fetch("source"))
-          target = model.notes_by_id.fetch(edge.fetch("target"))
-          %(<li><a href="#{h(config.url_builder.href(source.route))}">#{h(source.title)}</a> #{h(edge.fetch("kind"))} <a href="#{h(config.url_builder.href(target.route))}">#{h(target.title)}</a> <span aria-label="count">&times;#{edge.fetch("count")}</span></li>)
-        end.join
-        content = %(<h1>Graph</h1><div data-graph><p class="graph-status" data-graph-status aria-live="polite">The interactive graph loads on this page.</p></div><details class="graph-fallback" open><summary>Accessible relation list</summary><ul>#{items}</ul></details>)
-        system_page(config, "/graph/", "Graph", content, "graph", system_theme_data)
+        adjacency = Hash.new { |hash, key| hash[key] = Hash.new(0) }
+        model.graph_edges.each do |edge|
+          adjacency[edge.fetch("source")][edge.fetch("target")] += edge.fetch("count")
+          adjacency[edge.fetch("target")][edge.fetch("source")] += edge.fetch("count")
+        end
+        graph_notes = model.notes.map do |note|
+          neighbours = adjacency[note.id].sort_by do |id, count|
+            target = model.notes_by_id.fetch(id)
+            [-count, target.title.downcase, id]
+          end.first(8).map do |id, _count|
+            system_note_card(model.notes_by_id.fetch(id), config)
+          end
+          {
+            "id" => note.id,
+            "title" => note.title,
+            "url" => config.url_builder.href(note.route),
+            "relation_count" => adjacency[note.id].values.sum,
+            "neighbours" => neighbours,
+            "filter_text" => [note.title, *Array(note.properties["tags"])].join(" ").downcase
+          }
+        end
+        system_page(
+          config,
+          "/graph/",
+          "Graph",
+          "graph",
+          system_theme_data,
+          "graph_interactive" => interactive_graph?(model, config),
+          "graph_notes" => graph_notes
+        )
+      end
+
+      def interactive_graph?(model, config)
+        config.features.fetch("graph") && model.notes.length <= INTERACTIVE_GRAPH_MAX_NODES &&
+          model.graph_edges.length <= INTERACTIVE_GRAPH_MAX_EDGES
       end
 
       def not_found_page(config, system_theme_data)
-        content = %(<h1>Page not found</h1><p>The requested page is not in this published site.</p><p><a href="#{h(config.url_builder.href("/"))}">Return home</a></p>)
-        system_page(config, "/404.html", "Page not found", content, "404", system_theme_data)
+        system_page(
+          config,
+          "/404.html",
+          "Page not found",
+          "404",
+          system_theme_data,
+          "home_url" => config.url_builder.href("/")
+        )
+      end
+
+      def system_note_card(note, config)
+        { "id" => note.id, "title" => note.title, "url" => config.url_builder.href(note.route) }
       end
 
       def tag_anchor_map(notes, url_builder)
@@ -172,7 +235,6 @@ module JekyllObsidian
           config,
           "/archive/",
           "Archive",
-          %(<h1>Archive</h1>),
           "archive",
           system_theme_data,
           "archive_groups" => groups
@@ -236,7 +298,9 @@ module JekyllObsidian
           [
             note.id,
             {
-              "docs_tree" => navigation.fetch("tree"),
+              "docs_tree" => note.id == "index.md" ? navigation.fetch("tree") : docs_branch(navigation.fetch("tree"), note.id),
+              "docs_tree_url" => config.url_builder.href("/assets/obsidian/docs-navigation.html"),
+              "docs_index_url" => config.url_builder.href("/"),
               "docs_home_url" => docs_home_url,
               "breadcrumbs" => note.content_type == "doc" ? docs_breadcrumbs(note, model, config) : [],
               "previous" => index && index.positive? ? docs_card(linked[index - 1], config) : nil,
@@ -245,7 +309,9 @@ module JekyllObsidian
           ]
         end
         system_theme_data = {
-          "docs_tree" => navigation.fetch("tree"),
+          "docs_tree" => [],
+          "docs_tree_url" => config.url_builder.href("/assets/obsidian/docs-navigation.html"),
+          "docs_index_url" => config.url_builder.href("/"),
           "docs_home_url" => docs_home_url,
           "breadcrumbs" => [],
           "previous" => nil,
@@ -258,7 +324,12 @@ module JekyllObsidian
           theme_pages: [],
           system_theme_data: system_theme_data,
           tag_notes: model.notes,
-          feed_notes: model.notes
+          feed_notes: model.notes,
+          shared_files: [GeneratedFile.new(
+            route: "/assets/obsidian/docs-navigation.html",
+            content: docs_tree_html(navigation.fetch("tree")),
+            media_type: "text/html"
+          )]
         )
       end
 
@@ -347,6 +418,28 @@ module JekyllObsidian
         [order.nil? ? 1 : 0, order || 0, node.fetch("title").downcase, node.fetch("id")]
       end
 
+      def docs_branch(nodes, note_id)
+        nodes.filter_map do |node|
+          children = docs_branch(node.fetch("children"), note_id)
+          next unless node.fetch("id") == note_id || !children.empty?
+
+          node.merge("children" => children)
+        end
+      end
+
+      def docs_tree_html(nodes)
+        items = nodes.map do |node|
+          label = if node["url"]
+            %(<a href="#{h(node.fetch('url'))}">#{h(node.fetch('title'))}</a>)
+          else
+            %(<span>#{h(node.fetch('title'))}</span>)
+          end
+          children = node.fetch("children").empty? ? "" : docs_tree_html(node.fetch("children"))
+          %(<li class="docs-tree__item">#{label}#{children}</li>)
+        end.join
+        %(<ul class="docs-tree__list">#{items}</ul>)
+      end
+
       def docs_card(note, config, linked: true)
         {
           "id" => note.id,
@@ -385,16 +478,15 @@ module JekyllObsidian
     class DigitalGarden < Presenter
       def render(model:, config:)
         theme_data = model.notes.to_h { |note| [note.id, {}] }
-        items = model.notes.sort_by { |note| [note.title.downcase, note.id] }.map do |note|
-          %(<li><a href="#{h(config.url_builder.href(note.route))}">#{h(note.title)}</a></li>)
-        end.join
+        items = model.notes.sort_by { |note| [note.title.downcase, note.id] }
+          .map { |note| system_note_card(note, config) }
         notes_page = system_page(
           config,
           "/notes/",
           "All notes",
-          %(<h1>All notes</h1><ul class="obsidian-index-list">#{items}</ul>),
           "notes",
-          {}
+          {},
+          "notes" => items
         )
         project(
           model: model,

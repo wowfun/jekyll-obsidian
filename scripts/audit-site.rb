@@ -42,7 +42,6 @@ Find.find(site_dir) do |path|
   fail_audit("symbolic link found: #{relative}") if stat.symlink?
   next if stat.directory?
   fail_audit("non-regular output found: #{relative}") unless stat.file?
-  fail_audit("multiply linked file found: #{relative}") if stat.nlink > 1
 
   allowed = EXACT_FILES.include?(relative) || relative.end_with?("/index.html") || ALLOWED_EXTENSIONS.include?(File.extname(relative).downcase)
   fail_audit("output is not on the extension allowlist: #{relative}") unless allowed

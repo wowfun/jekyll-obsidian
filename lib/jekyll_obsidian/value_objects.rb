@@ -28,32 +28,39 @@ module JekyllObsidian
     end
   end
 
-  class ImmutableStruct < Struct
+  module ImmutableRecord
     class << self
       def define(*members)
-        Class.new(Struct.new(*members, keyword_init: true)) do
+        Class.new(Data.define(*members)) do
           define_method(:initialize) do |**values|
-            super(**values)
-            JekyllObsidian::DeepFreeze.call(self)
+            unknown = values.keys - members
+            raise ArgumentError, "unknown keywords: #{unknown.join(', ')}" unless unknown.empty?
+
+            attributes = members.to_h { |member| [member, values.fetch(member, nil)] }
+            attributes.each_value { |value| JekyllObsidian::DeepFreeze.call(value) }
+            super(**attributes)
           end
         end
       end
     end
   end
 
-  SnapshotEntry = ImmutableStruct.define(
+  SnapshotEntry = ImmutableRecord.define(
     :path,
     :bytes,
     :kind,
     :media_type,
     :size,
+    :device,
+    :inode,
+    :mtime_ns,
     :first_committed_at,
     :last_committed_at
   )
 
-  Snapshot = ImmutableStruct.define(:entries)
+  Snapshot = ImmutableRecord.define(:entries)
 
-  BuildConfig = ImmutableStruct.define(
+  BuildConfig = ImmutableRecord.define(
     :title,
     :description,
     :lang,
@@ -69,20 +76,20 @@ module JekyllObsidian
     :features
   )
 
-  BuildRequest = ImmutableStruct.define(:snapshot, :config)
-  SourceSpan = ImmutableStruct.define(:start_line, :start_column, :end_line, :end_column)
-  Diagnostic = ImmutableStruct.define(:severity, :code, :message, :path, :span)
-  Relation = ImmutableStruct.define(:source_id, :target_id, :kind, :fragment, :source_span)
-  PageOutput = ImmutableStruct.define(:route, :content, :data)
-  GeneratedFile = ImmutableStruct.define(:route, :content, :media_type)
-  CopiedAsset = ImmutableStruct.define(:source_path, :route, :media_type, :size)
-  NoteOutput = ImmutableStruct.define(:id, :title, :route, :properties)
+  BuildRequest = ImmutableRecord.define(:snapshot, :config)
+  SourceSpan = ImmutableRecord.define(:start_line, :start_column, :end_line, :end_column)
+  Diagnostic = ImmutableRecord.define(:severity, :code, :message, :path, :span)
+  Relation = ImmutableRecord.define(:source_id, :target_id, :kind, :fragment, :source_span)
+  PageOutput = ImmutableRecord.define(:route, :content, :data)
+  GeneratedFile = ImmutableRecord.define(:route, :content, :media_type)
+  CopiedAsset = ImmutableRecord.define(:source_path, :route, :media_type, :size, :device, :inode, :mtime_ns)
+  NoteOutput = ImmutableRecord.define(:id, :title, :route, :properties)
 
   # Internal, immutable hand-off between the OFM compiler and the built-in
   # theme presenters. Keeping rendered note content and all relation-derived
   # cards here prevents presentation code from reaching back into MutableNote
   # or repeating Markdown/relation work.
-  PublishedNote = ImmutableStruct.define(
+  PublishedNote = ImmutableRecord.define(
     :id,
     :title,
     :route,
@@ -99,20 +106,21 @@ module JekyllObsidian
     :nav_exclude,
     :has_h1,
     :feature_flags,
-    :base_data,
+    :image_url,
+    :source_links,
     :links,
     :backlinks,
     :embedded_by
   )
 
-  PublishedSiteModel = ImmutableStruct.define(
+  PublishedSiteModel = ImmutableRecord.define(
     :notes,
     :notes_by_id,
     :relations,
     :graph_edges
   )
 
-  EffectiveThemeConfig = ImmutableStruct.define(
+  EffectiveThemeConfig = ImmutableRecord.define(
     :theme,
     :features,
     :content,
@@ -120,14 +128,16 @@ module JekyllObsidian
     :url_builder
   )
 
-  ThemeOutput = ImmutableStruct.define(
+  ThemeOutput = ImmutableRecord.define(
     :pages,
     :artifacts,
+    :shared_files,
+    :site_data,
     :feed_note_ids,
     :reserved_namespaces
   )
 
-  BuildResultBase = ImmutableStruct.define(
+  BuildSuccessBase = ImmutableRecord.define(
     :pages,
     :generated_files,
     :copied_assets,
@@ -135,12 +145,21 @@ module JekyllObsidian
     :relations,
     :notes,
     :theme,
-    :features
+    :features,
+    :site_data
   )
 
-  class BuildResult < BuildResultBase
+  class BuildSuccess < BuildSuccessBase
     def success?
-      diagnostics.none? { |diagnostic| diagnostic.severity == :error }
+      true
+    end
+  end
+
+  BuildFailureBase = ImmutableRecord.define(:diagnostics)
+
+  class BuildFailure < BuildFailureBase
+    def success?
+      false
     end
   end
 end

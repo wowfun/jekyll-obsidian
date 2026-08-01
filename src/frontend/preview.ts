@@ -59,9 +59,9 @@ export function initialisePreviews(): void {
 
   const show = async (anchor: HTMLElement) => {
     const noteId = anchor.dataset.noteId;
+    window.clearTimeout(hideTimer);
     if (!noteId || activeAnchor === anchor) return;
     activeAnchor = anchor;
-    window.clearTimeout(hideTimer);
     try {
       const note = (await catalog()).get(noteId);
       if (!note || activeAnchor !== anchor) return;
@@ -84,7 +84,11 @@ export function initialisePreviews(): void {
   });
   document.addEventListener("pointerout", (event) => {
     const target = event.target;
-    if (target instanceof Element && target.closest(".obsidian-link[data-note-id]")) hide();
+    if (!(target instanceof Element)) return;
+    const anchor = target.closest(".obsidian-link[data-note-id]");
+    const related = event.relatedTarget;
+    if (anchor && related instanceof Node && anchor.contains(related)) return;
+    if (anchor) hide();
   });
   document.addEventListener("focusin", (event) => {
     const target = event.target;
@@ -94,6 +98,10 @@ export function initialisePreviews(): void {
   });
   document.addEventListener("focusout", (event) => {
     const target = event.target;
-    if (target instanceof Element && target.closest(".obsidian-link[data-note-id]")) hide();
+    if (!(target instanceof Element)) return;
+    const anchor = target.closest(".obsidian-link[data-note-id]");
+    const related = event.relatedTarget;
+    if (anchor && related instanceof Node && anchor.contains(related)) return;
+    if (anchor) hide();
   });
 }

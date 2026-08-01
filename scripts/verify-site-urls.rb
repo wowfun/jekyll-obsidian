@@ -4,6 +4,7 @@
 require "json"
 require "nokogiri"
 require "pathname"
+require "set"
 require "uri"
 
 class SiteUrlVerifier
@@ -38,6 +39,7 @@ class SiteUrlVerifier
     @origin = origin.to_s.delete_suffix("/")
     @baseurl = normalize_baseurl(baseurl)
     @errors = []
+    @html_ids = {}
   end
 
   def verify
@@ -70,6 +72,11 @@ class SiteUrlVerifier
     relative = relative_path(path)
     route = route_for_output(relative)
     document = Nokogiri::HTML5.parse(File.read(path, encoding: "UTF-8"))
+    @html_ids[path] = document.css("[id]").map { |node| node["id"] }.to_set
+    if relative == "assets/obsidian/docs-navigation.html"
+      document.css("a[href]").each { |node| verify_reference(node["href"], "/", relative) }
+      return
+    end
     csp_node = document.css("meta[http-equiv]").find do |node|
       node["http-equiv"].to_s.casecmp("Content-Security-Policy").zero?
     end
@@ -132,7 +139,7 @@ class SiteUrlVerifier
     route = strip_baseurl(path)
     output = output_path_for_route(route)
     if File.file?(output)
-      verify_fragment_in_file(output, fragment, source) if fragment && !fragment.empty?
+      verify_fragment_in_file(output, fragment, source) if fragment && !fragment.empty? && File.extname(output).downcase == ".html"
     else
       add_error("#{source}: local target does not exist for #{value.inspect}")
     end
@@ -147,10 +154,11 @@ class SiteUrlVerifier
   end
 
   def verify_fragment_in_file(path, fragment, source)
-    document = Nokogiri::HTML5.parse(File.read(path, encoding: "UTF-8"))
     decoded = URI.decode_uri_component(fragment)
-    add_error("#{source}: missing fragment ##{fragment}") unless document.at_xpath("//*[@id=#{decoded.inspect}]")
-  rescue StandardError
+    ids = @html_ids[path] ||= Nokogiri::HTML5.parse(File.read(path, encoding: "UTF-8"))
+      .css("[id]").map { |node| node["id"] }.to_set
+    add_error("#{source}: missing fragment ##{fragment}") unless ids.include?(decoded)
+  rescue ArgumentError, Nokogiri::XML::SyntaxError
     add_error("#{source}: invalid fragment ##{fragment}")
   end
 
@@ -175,14 +183,10 @@ class SiteUrlVerifier
   end
 
   def verify_json_indexes
-    paths = %w[catalog.v1.json].map { |name| File.join(@site_dir, "assets", "obsidian", name) }
-    paths.concat(
-      %w[graph.v1.json search.v1.json]
-        .map { |name| File.join(@site_dir, "assets", "obsidian", name) }
-        .select { |path| File.file?(path) }
-    )
+    paths = %w[catalog.v1.json graph.v1.json search.v1.json]
+      .map { |name| File.join(@site_dir, "assets", "obsidian", name) }
+      .select { |path| File.file?(path) }
     paths.each do |path|
-      next add_error("missing #{relative_path(path)}") unless File.file?(path)
       payload = JSON.parse(File.read(path, encoding: "UTF-8"))
       add_error("#{relative_path(path)}: schema_version is not 1") unless payload["schema_version"] == 1
       collections = [payload["notes"], payload["nodes"], payload["documents"]].compact
@@ -225,11 +229,22 @@ class SiteUrlVerifier
     Dir.glob(File.join(@site_dir, "**", "*.css")).sort.each do |path|
       css = File.read(path, encoding: "UTF-8")
       css.scan(/url\((?:"|')?([^"')]+)(?:"|')?\)/).flatten.each do |reference|
-        next if reference.start_with?("data:", "http:", "https:")
-        target = File.expand_path(reference.split(/[?#]/, 2).first, File.dirname(path))
-        unless target.start_with?("#{@site_dir}#{File::SEPARATOR}") && File.file?(target)
+        next if reference.start_with?("#", "data:", "http:", "https:")
+        reference_path = URI.decode_uri_component(reference.split(/[?#]/, 2).first)
+        target = if reference_path.start_with?("/")
+          unless baseurl_once?(reference_path)
+            add_error("#{relative_path(path)}: baseurl is missing or repeated in CSS asset #{reference.inspect}")
+            next
+          end
+          output_path_for_route(strip_baseurl(reference_path))
+        else
+          File.expand_path(reference_path, File.dirname(path))
+        end
+        unless (target == @site_dir || target.start_with?("#{@site_dir}#{File::SEPARATOR}")) && File.file?(target)
           add_error("#{relative_path(path)}: missing CSS asset #{reference.inspect}")
         end
+      rescue ArgumentError
+        add_error("#{relative_path(path)}: invalid CSS asset #{reference.inspect}")
       end
     end
   end

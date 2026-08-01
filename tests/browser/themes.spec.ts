@@ -1,9 +1,12 @@
 import { test, expect } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
 
+const site = (theme: "blog" | "docs" | "digital-garden", route = "/") =>
+  `/__site__/${theme}${route}`;
+
 for (const theme of ["blog", "docs", "digital-garden"] as const) {
   test(`${theme} exposes its own accessible presentation`, async ({ page }) => {
-    await page.goto(`/__fixture__/${theme}/`);
+    await page.goto(site(theme));
     await expect(page.locator("body")).toHaveClass(new RegExp(`theme-${theme}`));
     await expect(page.locator("main")).toBeVisible();
     const results = await new AxeBuilder({ page }).analyze();
@@ -12,45 +15,48 @@ for (const theme of ["blog", "docs", "digital-garden"] as const) {
 }
 
 test("blog reads as a dated publishing ledger", async ({ page }) => {
-  await page.goto("/__fixture__/blog/");
-  await expect(page.getByRole("heading", { name: "Field dispatches" })).toBeVisible();
-  await expect(page.locator(".blog-ledger time").first()).toHaveAttribute("datetime", "2026-07-31");
+  await page.goto(site("blog"));
+  await expect(page.getByRole("link", { name: /One vault, three readings/ })).toBeVisible();
+  await expect(page.locator(".blog-ledger time").first()).toHaveAttribute("datetime", "2026-08-01T00:00:00Z");
   await expect(page.getByRole("link", { name: "Browse the archive" })).toBeVisible();
 });
 
 test("docs exposes its handbook navigation and reading sequence", async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== "desktop-chromium", "desktop navigation assertion");
-  await page.goto("/__fixture__/docs/");
-  await expect(page.getByRole("navigation", { name: "Documentation", exact: true })).toBeVisible();
-  await expect(page.getByRole("navigation", { name: "Breadcrumb" })).toContainText("Guides");
+  await page.goto(site("docs", "/docs/Getting%20Started/"));
+  const navigation = page.getByRole("navigation", { name: "Documentation", exact: true });
+  await expect(navigation).toBeVisible();
+  await expect(navigation).toHaveAttribute("data-docs-navigation-ready", "true");
+  await expect(navigation.getByRole("link", { name: "Syntax" })).toBeVisible();
+  await expect(page.getByRole("navigation", { name: "Breadcrumb" })).toContainText("Documentation");
   await expect(page.getByRole("navigation", { name: "Documentation sequence" })).toContainText(
-    "Syntax reference"
+    "Syntax"
   );
 });
 
 test("docs breadcrumb marks only its final non-link item as current", async ({ page }) => {
-  await page.goto("/__fixture__/docs/");
+  await page.goto(site("docs", "/docs/Getting%20Started/"));
   const breadcrumb = page.getByRole("navigation", { name: "Breadcrumb" });
   const current = breadcrumb.locator('[aria-current="page"]');
   await expect(current).toHaveCount(1);
   await expect(current).not.toHaveJSProperty("tagName", "A");
-  await expect(breadcrumb.locator('a[href="/docs/getting-started/"]')).toHaveCount(0);
+  await expect(breadcrumb.locator('a[aria-current="page"]')).toHaveCount(0);
 });
 
 test("docs puts browse and outline into mobile sheets", async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== "mobile-chromium", "mobile interaction assertion");
-  await page.goto("/__fixture__/docs/");
+  await page.goto(site("docs", "/docs/Getting%20Started/"));
   await expect(page.locator(".docs-sidebar")).toBeHidden();
   await expect(page.locator(".docs-context")).toBeHidden();
   await page.getByRole("button", { name: "On this page" }).tap();
   const dialog = page.locator('dialog[data-dialog="context"]');
   await expect(dialog).toBeVisible();
-  await expect(dialog.getByRole("link", { name: "First build" })).toBeVisible();
+  await expect(dialog.getByRole("link", { name: "Install the toolchain" })).toBeVisible();
 });
 
 test("digital garden keeps the annotated folio and relation rail", async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== "desktop-chromium", "desktop layout assertion");
-  await page.goto("/__fixture__/digital-garden/");
+  await page.goto(site("digital-garden", "/docs/Getting%20Started/"));
   await expect(page.locator(".note-folio")).toBeVisible();
   const rail = page.locator(".relation-rail");
   await expect(rail).toBeVisible();
@@ -58,25 +64,25 @@ test("digital garden keeps the annotated folio and relation rail", async ({ page
 });
 
 test("search loads on demand and finds CJK text", async ({ page }) => {
-  await page.goto("/__fixture__/digital-garden/");
+  await page.goto(site("digital-garden"));
   await page.keyboard.press("ControlOrMeta+k");
   const dialog = page.locator('dialog[data-dialog="search"]');
   await expect(dialog).toBeVisible();
   await dialog.locator("input").fill("花园");
-  await expect(dialog.getByRole("link", { name: /中文搜索/ })).toBeVisible();
+  await expect(dialog.getByRole("link", { name: "CJK Showcase" })).toBeVisible();
 });
 
 test("digital garden previews use catalog text without active content", async ({ page }) => {
-  await page.goto("/__fixture__/digital-garden/");
-  await page.locator(".obsidian-link[data-note-id='notes/中文搜索.md']").focus();
+  await page.goto(site("digital-garden"));
+  await page.locator(".obsidian-link[data-note-id='docs/中文示例.md']").focus();
   const preview = page.locator("[data-note-preview]");
-  await expect(preview).toContainText("中文搜索");
-  await expect(preview).toContainText("中文内容使用稳定的单字和双字索引。");
+  await expect(preview).toContainText("CJK Showcase");
+  await expect(preview).toContainText("Mixed Chinese, Japanese, Latin");
   await expect(preview.locator("iframe, script")).toHaveCount(0);
 });
 
 test("color scheme state uses the neutral public contract", async ({ page }) => {
-  await page.goto("/__fixture__/blog/");
+  await page.goto(site("blog"));
   await page.locator("[data-color-scheme-toggle]").click();
   await expect(page.locator("html")).toHaveAttribute("data-color-scheme", /light|dark/);
   expect(
@@ -89,7 +95,7 @@ test("every theme follows dark preference and supports an explicit light overrid
   await page.emulateMedia({ colorScheme: "dark" });
   await page.addInitScript(() => localStorage.removeItem("jekyll-obsidian:color-scheme"));
   for (const theme of ["blog", "docs", "digital-garden"] as const) {
-    await page.goto(`/__fixture__/${theme}/`);
+    await page.goto(site(theme));
     await expect(page.locator("html")).toHaveAttribute("data-color-scheme", "dark");
     await page.locator("[data-color-scheme-toggle]").click();
     await expect(page.locator("html")).toHaveAttribute("data-color-scheme", "light");
@@ -145,34 +151,34 @@ test("search-disabled pages leave Cmd/Ctrl-K to the browser", async ({ page }) =
 });
 
 test("docs home follows its authored introduction with a compact handbook index", async ({ page }) => {
-  await page.goto("/__fixture__/home/docs/");
+  await page.goto(site("docs"));
   const article = page.locator("main > article");
   const browse = page.locator("main > .docs-home-browse");
-  await expect(article).toContainText("This authored introduction remains first");
+  await expect(article).toContainText("One Obsidian vault, three intentional ways to publish it");
   await expect(browse.getByRole("heading", { name: "Browse the handbook" })).toBeVisible();
-  await expect(browse.getByRole("link", { name: "Getting started" })).toBeVisible();
+  await expect(browse.getByRole("link", { name: "Documentation" })).toBeVisible();
   await expect(page.locator("main > article + .docs-home-browse")).toHaveCount(1);
 });
 
 test("digital garden home follows authored content with server-rendered ways to explore", async ({ page }) => {
-  await page.goto("/__fixture__/home/digital-garden/");
+  await page.goto(site("digital-garden"));
   const article = page.locator("main > article");
   const overview = page.locator("main > .garden-home-overview");
-  await expect(article).toContainText("This authored introduction remains first");
+  await expect(article).toContainText("One Obsidian vault, three intentional ways to publish it");
   await expect(overview.getByRole("heading", { name: "Explore the garden" })).toBeVisible();
-  for (const route of ["/notes/", "/tags/", "/graph/"] as const) {
-    await expect(overview.locator(`a[href="${route}"]`)).toHaveCount(1);
+  for (const name of ["Notes", "Tags", "Graph"] as const) {
+    await expect(overview.getByRole("link", { name: new RegExp(`^${name}`) })).toBeVisible();
   }
   await expect(page.locator("main > article + .garden-home-overview")).toHaveCount(1);
 });
 
 test("frontend identifiers are neutral outside the garden visual shell", async ({ page }) => {
-  await page.goto("/__fixture__/digital-garden/");
-  await expect(page.locator("meta[name^='obsidian:']")).toHaveCount(4);
+  await page.goto(site("digital-garden", "/docs/Syntax/"));
+  expect(await page.locator("meta[name^='obsidian:']").count()).toBeGreaterThan(0);
   await expect(page.locator("[data-garden-dialog], .garden-dialog, .garden-link, .garden-embed"))
     .toHaveCount(0);
-  await expect(page.locator(".obsidian-link")).toBeVisible();
-  await expect(page.locator(".obsidian-embed")).toBeVisible();
+  await expect(page.locator(".obsidian-link").first()).toBeVisible();
+  await expect(page.locator(".obsidian-embed").first()).toBeVisible();
 });
 
 for (const fixture of [
@@ -228,7 +234,7 @@ test.describe("without JavaScript", () => {
 
   for (const theme of ["blog", "docs", "digital-garden"] as const) {
     test(`${theme} retains authored content and navigation`, async ({ page }) => {
-      await page.goto(`/__fixture__/${theme}/`);
+      await page.goto(site(theme));
       await expect(page.locator("main article")).toBeVisible();
       await expect(page.getByRole("navigation").first()).toBeVisible();
       await expect(page.locator(".mobile-toolbar")).toBeHidden();

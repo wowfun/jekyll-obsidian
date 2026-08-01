@@ -65,12 +65,9 @@ class ThemeContractTest < Minitest::Test
     assert_equal "doc", page(result, "/blog/explicit-doc/").data.dig("obsidian", "content_type")
     assert_equal "page", page(result, "/misc/").data.dig("obsidian", "content_type")
 
-    catalog = generated_json(result, "/assets/obsidian/catalog.v1.json")
-    indexed = catalog.fetch("notes").to_h { |item| [item.fetch("id"), item] }
-    assert_equal "post", indexed.fetch("blog/from-folder.md").fetch("content_type")
-    assert_equal "2026-07-01T00:00:00Z", indexed.fetch("blog/from-folder.md").fetch("published_at")
-    assert_nil indexed.fetch("blog/explicit-doc.md").fetch("published_at")
-    assert_nil indexed.fetch("misc.md").fetch("published_at")
+    assert_equal "2026-07-01T00:00:00Z", page(result, "/blog/from-folder/").data.dig("obsidian", "published_at")
+    assert_nil page(result, "/blog/explicit-doc/").data.dig("obsidian", "published_at")
+    assert_nil page(result, "/misc/").data.dig("obsidian", "published_at")
   end
 
   def test_post_published_at_precedence_and_missing_date_mode_behavior
@@ -83,10 +80,9 @@ class ThemeContractTest < Minitest::Test
     result = compile(*entries, theme: "blog")
 
     assert result.success?, result.diagnostics.map(&:message).join("\n")
-    catalog = generated_json(result, "/assets/obsidian/catalog.v1.json").fetch("notes").to_h { |item| [item.fetch("id"), item] }
-    assert_equal "2026-07-03T00:00:00Z", catalog.fetch("posts/dated.md").fetch("published_at")
-    assert_equal "2026-07-04T00:00:00Z", catalog.fetch("posts/created.md").fetch("published_at")
-    assert_equal "2026-07-05T12:00:00Z", catalog.fetch("posts/git.md").fetch("published_at")
+    assert_equal "2026-07-03T00:00:00Z", page(result, "/posts/dated/").data.dig("obsidian", "published_at")
+    assert_equal "2026-07-04T00:00:00Z", page(result, "/posts/created/").data.dig("obsidian", "published_at")
+    assert_equal "2026-07-05T12:00:00Z", page(result, "/posts/git/").data.dig("obsidian", "published_at")
     feed = result.generated_files.find { |file| file.route == "/feed.xml" }
     refute_nil feed
     assert_includes feed.content, "<published>2026-07-03T00:00:00Z</published>"
@@ -115,13 +111,13 @@ class ThemeContractTest < Minitest::Test
     blog = compile(*entries, theme: "blog")
     assert blog.success?, blog.diagnostics.map(&:message).join("\n")
     assert_equal %w[/ /404.html /archive/ /blog/post/ /docs/guide/ /tags/], blog.pages.map(&:route)
-    assert_equal %w[/assets/obsidian/catalog.v1.json /assets/obsidian/search.v1.json /feed.xml /sitemap.xml], blog.generated_files.map(&:route)
+    assert_equal %w[/assets/obsidian/search.v1.json /feed.xml /sitemap.xml], blog.generated_files.map(&:route)
     assert_equal "obsidian-blog", page(blog, "/archive/").data.fetch("layout")
 
     docs = compile(*entries, theme: "docs")
     assert docs.success?, docs.diagnostics.map(&:message).join("\n")
     assert_equal %w[/ /404.html /blog/post/ /docs/guide/], docs.pages.map(&:route)
-    assert_equal %w[/assets/obsidian/catalog.v1.json /assets/obsidian/search.v1.json /sitemap.xml], docs.generated_files.map(&:route)
+    assert_equal %w[/assets/obsidian/docs-navigation.html /assets/obsidian/search.v1.json /sitemap.xml], docs.generated_files.map(&:route)
     assert_equal "obsidian-docs", page(docs, "/").data.fetch("layout")
     assert_equal "/docs/guide/", page(docs, "/").data.dig("obsidian", "theme_data", "docs_home_url")
 
@@ -155,7 +151,9 @@ class ThemeContractTest < Minitest::Test
 
     archive = page(result, "/archive/")
     assert_equal %w[2026], archive.data.dig("obsidian", "theme_data", "archive_groups").map { |group| group.fetch("label") }
-    refute_includes page(result, "/tags/").content, "private-page-tag"
+    tag_names = page(result, "/tags/").data.dig("obsidian", "theme_data", "tag_groups")
+      .map { |group| group.fetch("name") }
+    refute_includes tag_names, "private-page-tag"
     feed = result.generated_files.find { |file| file.route == "/feed.xml" }.content
     assert_includes feed, "Older"
     assert_includes feed, "Newer"
@@ -287,7 +285,7 @@ class ThemeContractTest < Minitest::Test
     wrong_root = compile(note("index.md", "---\npublish: true\ncontent_type: post\ndate: 2026-07-01\n---\n# Home"))
     refute wrong_root.success?
     assert wrong_root.diagnostics.any? { |item| item.code == "invalid_root_content_type" }
-    assert_equal "page", page(wrong_root, "/").data.dig("obsidian", "content_type")
+    assert_instance_of JekyllObsidian::BuildFailure, wrong_root
   end
 
   def test_effective_features_include_content_bundles_and_public_dom_is_neutral
@@ -349,6 +347,48 @@ class ThemeContractTest < Minitest::Test
       refute result.success?, "expected digital-garden to reserve /#{reserved}/"
       assert result.diagnostics.any? { |item| item.code == "route_collision" }
     end
+  end
+
+  def test_docs_pages_keep_only_the_current_branch_and_share_one_full_navigation_fragment
+    result = compile(
+      note("index.md", "---\npublish: true\nupdated: 2026-07-30\n---\n# Home"),
+      note("docs/index.md", "---\npublish: true\nupdated: 2026-07-30\n---\n# Docs"),
+      note("docs/a/one.md", "---\npublish: true\nupdated: 2026-07-30\n---\n# One"),
+      note("docs/b/two.md", "---\npublish: true\nupdated: 2026-07-30\n---\n# Two"),
+      theme: "docs"
+    )
+
+    assert result.success?, result.diagnostics.map(&:message).join("\n")
+    branch = page(result, "/docs/a/one/").data.dig("obsidian", "theme_data", "docs_tree")
+    ids = []
+    collect_ids = lambda do |nodes|
+      nodes.each do |node|
+        ids << node.fetch("id")
+        collect_ids.call(node.fetch("children"))
+      end
+    end
+    collect_ids.call(branch)
+    assert_includes ids, "docs/a/one.md"
+    refute_includes ids, "docs/b/two.md"
+    shared = result.generated_files.select { |file| file.route == "/assets/obsidian/docs-navigation.html" }
+    assert_equal 1, shared.length
+    assert_includes shared.first.content, "One"
+    assert_includes shared.first.content, "Two"
+  end
+
+  def test_graph_switches_to_bounded_directory_above_the_interactive_node_budget
+    entries = [note("index.md", "---\npublish: true\nupdated: 2026-07-30\n---\n# Home")]
+    250.times do |index|
+      entries << note("notes/#{index}.md", "---\npublish: true\nupdated: 2026-07-30\n---\n# Note #{index}")
+    end
+
+    result = compile(*entries)
+    assert result.success?, result.diagnostics.map(&:message).join("\n")
+    assert_equal false, result.site_data.fetch("obsidian_graph_interactive")
+    refute result.generated_files.any? { |file| file.route == "/assets/obsidian/graph.v1.json" }
+    graph_data = page(result, "/graph/").data.dig("obsidian", "theme_data")
+    assert_equal false, graph_data.fetch("graph_interactive")
+    assert_equal 251, graph_data.fetch("graph_notes").length
   end
 
   def test_feature_and_always_generated_namespaces_reserve_matching_directory_routes

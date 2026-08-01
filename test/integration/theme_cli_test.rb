@@ -55,6 +55,50 @@ class ThemeCliTest < Minitest::Test
     assert_includes "#{stdout}\n#{stderr}", "--theme"
   end
 
+  def test_production_build_rejects_a_missing_origin_before_running_tooling
+    stdout, stderr, status = Open3.capture3(
+      {
+        "PATH" => "#{@ruby_bin}:#{ENV.fetch("PATH")}",
+        "JEKYLL_ENV" => "production",
+        "GITHUB_REPOSITORY" => nil,
+        "PAGES_ORIGIN" => nil,
+        "JEKYLL_URL" => nil
+      },
+      File.join(@project_root, "bin", "build"),
+      "--skip-assets",
+      chdir: @project_root
+    )
+
+    refute status.success?
+    assert_includes "#{stdout}\n#{stderr}", "production builds require --url"
+  end
+
+  def test_failed_staged_build_preserves_the_last_good_destination
+    destination_name = "_site-cli-last-good"
+    destination_path = File.join(@project_root, destination_name)
+    FileUtils.mkdir_p(destination_path)
+    File.write(File.join(destination_path, "marker.txt"), "last good")
+
+    Dir.mktmpdir("jekyll-obsidian-cli") do |temporary|
+      install_failing_bundle(temporary)
+      _stdout, _stderr, status = Open3.capture3(
+        {
+          "PATH" => "#{temporary}:#{@ruby_bin}:#{ENV.fetch("PATH")}",
+          "JEKYLL_ENV" => "development"
+        },
+        File.join(@project_root, "bin", "build"),
+        "--destination", destination_name,
+        "--skip-assets",
+        chdir: @project_root
+      )
+
+      refute status.success?
+      assert_equal "last good", File.read(File.join(destination_path, "marker.txt"))
+    end
+  ensure
+    FileUtils.rm_rf(destination_path) if destination_path
+  end
+
   def test_dev_help_exposes_the_same_theme_choices
     stdout, stderr, status = Open3.capture3(
       { "PATH" => "#{@ruby_bin}:#{ENV.fetch("PATH")}" },
@@ -98,6 +142,12 @@ class ThemeCliTest < Minitest::Test
       overlay=${config#*,}
       cp "$overlay" "$CAPTURE_PATH"
     SH
+    FileUtils.chmod(0o755, executable)
+  end
+
+  def install_failing_bundle(directory)
+    executable = File.join(directory, "bundle")
+    File.write(executable, "#!/bin/sh\nexit 1\n")
     FileUtils.chmod(0o755, executable)
   end
 end

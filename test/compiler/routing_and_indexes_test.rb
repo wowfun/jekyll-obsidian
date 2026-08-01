@@ -22,6 +22,24 @@ class RoutingAndIndexesTest < Minitest::Test
     end
   end
 
+  def test_url_builder_keeps_non_default_ports_for_each_scheme
+    assert_equal "https://example.test:80/note/", JekyllObsidian::UrlBuilder.new(origin: "https://example.test:80", baseurl: "").absolute_url("/note/")
+    assert_equal "http://example.test:443/note/", JekyllObsidian::UrlBuilder.new(origin: "http://example.test:443", baseurl: "").absolute_url("/note/")
+    assert_equal "https://example.test/note/", JekyllObsidian::UrlBuilder.new(origin: "https://example.test:443", baseurl: "").absolute_url("/note/")
+    assert_nil JekyllObsidian::UrlBuilder.new(origin: "", baseurl: "/project").absolute_url("/note/")
+  end
+
+  def test_implicit_source_relative_resolution_precedes_basename_fallback
+    result = compile(
+      note("index.md", "---\npublish: true\nupdated: 2026-07-30\n---\n# Home"),
+      note("guides/page.md", "---\npublish: true\nupdated: 2026-07-30\n---\n# Page\n[[child]]"),
+      note("guides/child.md", "---\npublish: true\nupdated: 2026-07-30\n---\n# Local child")
+    )
+
+    assert result.success?, result.diagnostics.map(&:message).join("\n")
+    assert_includes page(result, "/guides/page/").content, 'href="/guides/child/"'
+  end
+
   def test_routes_separate_permalink_route_href_and_absolute_url
     result = compile(
       note("index.md", "---\npublish: true\nupdated: 2026-07-30\n---\n# Home\n[[Notes/Café]]"),
@@ -94,9 +112,10 @@ class RoutingAndIndexesTest < Minitest::Test
     MARKDOWN
 
     assert result.success?, result.diagnostics.map(&:message).join("\n")
-    tags = page(result, "/tags/").content
-    assert_includes tags, 'id="a-b"'
-    assert_includes tags, 'id="a-b-2"'
+    anchors = page(result, "/tags/").data.dig("obsidian", "theme_data", "tag_groups")
+      .map { |group| group.fetch("anchor") }
+    assert_includes anchors, "a-b"
+    assert_includes anchors, "a-b-2"
     tag_links = page(result, "/").data.dig("obsidian", "tag_links")
     assert_equal ["a-b", "a-b-2"], tag_links.map { |item| item.fetch("anchor") }
   end
