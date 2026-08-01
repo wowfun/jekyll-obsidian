@@ -513,7 +513,7 @@ class JekyllAdapterTest < Minitest::Test
 
     build_site.process
     feed = File.read(File.join(destination, "feed.xml"))
-    assert_includes feed, "2026-07-31T12:34:56+00:00"
+    assert_includes feed, "2026-07-31T12:34:56Z"
     assert_includes feed, "中文"
   end
 

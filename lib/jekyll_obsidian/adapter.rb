@@ -397,7 +397,8 @@ module JekyllObsidian
         stripped = line.strip
         next if stripped.empty?
         if stripped.start_with?("\x1e")
-          current_time = stripped.delete_prefix("\x1e")
+          # Git 2.45+ emits Z for UTC while older versions emit +00:00.
+          current_time = stripped.delete_prefix("\x1e").sub(/\+00:00\z/, "Z")
           next
         end
         next unless current_time
