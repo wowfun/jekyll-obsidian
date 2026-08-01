@@ -11,7 +11,7 @@
   "scripts": {
     "build": "node scripts/build-assets.mjs",
     "typecheck": "tsc --noEmit",
-    "test": "npm run typecheck && vitest run && node --test tests/node/**/*.test.mjs",
+    "test": "npm run build && npm run typecheck && vitest run && node --test tests/node/**/*.test.mjs",
     "test:watch": "vitest",
     "test:browser": "npm run build && GITHUB_REPOSITORY=example/jekyll-obsidian JEKYLL_ENV=production bin/build --url http://127.0.0.1:4173 --baseurl \"\" --destination _site-browser --skip-assets && playwright test",
     "test:e2e": "npm run test:browser"
