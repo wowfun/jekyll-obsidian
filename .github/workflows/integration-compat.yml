@@ -50,6 +50,7 @@ jobs:
         shell: bash
         env:
           INTEGRATION_REFERENCE_DIR: .integration-reference
+          MSYS: winsymlinks:nativestrict
         run: website/test/integration/integrate_contract.sh
 
       - name: Exercise CMD, Windows PowerShell, and PowerShell 7
