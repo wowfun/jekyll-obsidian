@@ -7,17 +7,20 @@ module JekyllObsidian
   class WorkspaceLayout
     class Invalid < StandardError; end
 
+    DEFAULT_SOURCE = Object.new.freeze
+    BUNDLED_SOURCE_BASENAME = "docs"
+
     attr_reader :workspace_root, :site_root, :source_root, :source,
       :destination_root, :jekyll_cache_root, :application_cache_root, :application_assets_root
 
-    def self.resolve(site:, source:)
+    def self.resolve(site:, source: DEFAULT_SOURCE)
       new(site:, source:).tap(&:validate!)
     end
 
     def initialize(site:, source:)
       @site_root = canonical_directory(site.source, "Jekyll source")
       @workspace_root = discover_workspace_root(@site_root)
-      @source = normalize_source(source)
+      @source = source.equal?(DEFAULT_SOURCE) ? bundled_source : normalize_source(source)
       @source_root = File.expand_path(@source, @workspace_root)
       @destination_root = File.expand_path(site.dest)
       @jekyll_cache_root = File.expand_path(site.cache_dir)
@@ -72,6 +75,15 @@ module JekyllObsidian
       raise Invalid, "invalid obsidian.source: #{exception.message}"
     end
 
+    def bundled_source
+      Pathname.new(File.join(@site_root, BUNDLED_SOURCE_BASENAME))
+        .relative_path_from(Pathname.new(@workspace_root))
+        .to_s
+        .tr(File::SEPARATOR, "/")
+    rescue ArgumentError => exception
+      raise Invalid, "cannot resolve bundled obsidian.source: #{exception.message}"
+    end
+
     def validate_site_root!
       unless strict_descendant?(@site_root, @workspace_root)
         raise Invalid, "Jekyll source must be a directory inside the workspace root"
@@ -93,7 +105,8 @@ module JekyllObsidian
       unless real_source == @source_root
         raise Invalid, "obsidian.source cannot contain symlink path components"
       end
-      if paths_overlap?(@source_root, @site_root)
+      bundled_source_root = File.join(@site_root, BUNDLED_SOURCE_BASENAME)
+      if paths_overlap?(@source_root, @site_root) && @source_root != bundled_source_root
         raise Invalid, "obsidian.source must not overlap the Jekyll source"
       end
     rescue SystemCallError => exception

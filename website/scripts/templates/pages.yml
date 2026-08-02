@@ -4,13 +4,13 @@ name: Verify and deploy Pages
 on:
   push:
     paths:
-      - 'website/docs/**'
+      - '__JEKYLL_OBSIDIAN_SOURCE_GLOB__'
       - 'website/**'
       - '.github/jekyll-obsidian.yml'
       - '.github/workflows/pages.yml'
   pull_request:
     paths:
-      - 'website/docs/**'
+      - '__JEKYLL_OBSIDIAN_SOURCE_GLOB__'
       - 'website/**'
       - '.github/jekyll-obsidian.yml'
       - '.github/workflows/pages.yml'

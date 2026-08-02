@@ -15,10 +15,3 @@
 /.vscode/
 .DS_Store
 Thumbs.db
-
-# Obsidian per-device state; stable vault settings remain tracked
-/vault/.obsidian/workspace.json
-/vault/.obsidian/workspace-mobile.json
-/vault/.obsidian/cache/
-/vault/.obsidian/plugins/
-/vault/.trash/

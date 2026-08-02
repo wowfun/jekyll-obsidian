@@ -5,7 +5,7 @@ url: ""
 baseurl: ""
 
 obsidian:
-  source: vault
+  source: website/docs
   syntax_profile: ofm@1
   theme: digital-garden
   repository: ""

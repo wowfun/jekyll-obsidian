@@ -15,7 +15,7 @@ The project has three cooperating modules behind one compiler interface: the pur
 
 ## Reader isolation
 
-`website/` is the Jekyll source, while the configured content directory is resolved from the host repository root. Jekyll's Reader scans only the site directory, so it never walks sibling application code or the host `vault/` or `docs/` tree. An `after_init` hook resolves and validates the workspace, site, content, cache, and destination paths before the Reader runs. A highest-priority generator checks Jekyll pages, collections, and static files again and stops the build if a site symlink exposed content from outside that boundary.
+`website/` is the Jekyll source, while the configured content directory is resolved from the host repository root. The bundled `website/docs/` vault is the one controlled site-local exception; an `after_init` hook resolves the workspace and excludes that directory before Jekyll's Reader runs. External host content such as `docs/` remains outside the site directory. A highest-priority generator checks Jekyll pages, collections, and static files again and stops the build if Reader isolation was bypassed through configuration or a symlink.
 
 ## Compiler boundary
 

@@ -29,6 +29,7 @@ class ThemeCliTest < Minitest::Test
           "CAPTURE_PATH" => capture
         },
         File.join(@project_root, "bin", "build"),
+        "--source", "website/docs",
         "--theme", "docs",
         "--destination", "_site-cli-overlay",
         "--skip-assets",
@@ -38,12 +39,40 @@ class ThemeCliTest < Minitest::Test
       assert status.success?, "#{stdout}\n#{stderr}"
       overlay = YAML.safe_load_file(capture, permitted_classes: [], aliases: false)
       assert_equal true, overlay["disable_disk_cache"]
+      assert_equal "website/docs", overlay.dig("obsidian", "source")
       assert_equal "docs", overlay.dig("obsidian", "theme")
     end
 
     assert_equal before, Digest::SHA256.file(config_path).hexdigest
   ensure
     FileUtils.rm_rf(File.join(@project_root, "_site-cli-overlay"))
+  end
+
+  def test_build_loads_the_host_configuration_before_the_temporary_overlay
+    Dir.mktmpdir("jekyll-obsidian-cli") do |temporary|
+      captured_config = File.join(temporary, "config-paths.txt")
+      install_fake_bundle(temporary)
+      stdout, stderr, status = Open3.capture3(
+        {
+          "PATH" => "#{temporary}:#{@ruby_bin}:#{ENV.fetch("PATH")}",
+          "JEKYLL_ENV" => "development",
+          "CAPTURE_PATH" => File.join(temporary, "overlay.yml"),
+          "CAPTURE_CONFIG_PATH" => captured_config
+        },
+        File.join(@project_root, "bin", "build"),
+        "--destination", "_site-cli-host-config",
+        "--skip-assets",
+        chdir: @project_root
+      )
+
+      assert status.success?, "#{stdout}\n#{stderr}"
+      paths = File.read(captured_config).split(",")
+      assert_equal File.join(@project_root, "_config.yml"), paths[0]
+      assert_equal File.expand_path("../../../.github/jekyll-obsidian.yml", __dir__), paths[1]
+      assert_match(%r{/\.jekyll-obsidian-cache/config\.[^/]+/config\.yml\z}, paths[2])
+    end
+  ensure
+    FileUtils.rm_rf(File.join(@project_root, "_site-cli-host-config"))
   end
 
   def test_build_rejects_an_unknown_theme
@@ -149,8 +178,11 @@ class ThemeCliTest < Minitest::Test
         fi
         previous=$argument
       done
-      overlay=${config#*,}
+      overlay=${config##*,}
       cp "$overlay" "$CAPTURE_PATH"
+      if [ -n "${CAPTURE_CONFIG_PATH:-}" ]; then
+        printf '%s' "$config" > "$CAPTURE_CONFIG_PATH"
+      fi
     SH
     FileUtils.chmod(0o755, executable)
   end

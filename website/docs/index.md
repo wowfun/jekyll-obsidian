@@ -20,7 +20,7 @@ updated: 2026-07-31
 This site is both starter content and the manual for `jekyll-obsidian`. Every page began as an ordinary Markdown note in this vault; the configured theme decides whether the result reads as a blog, a handbook, or a digital garden.
 
 > [!note] Open the source in Obsidian
-> The site compiler reads `vault/`, but it never rewrites the vault. Open this directory directly and keep using links, properties, callouts, and embeds in Obsidian.
+> The compiler reads `website/docs/`, but never rewrites the vault. Open this directory directly and keep using links, properties, callouts, and embeds in Obsidian.
 
 ![An annotated folio connecting notes, tags, and source material](assets/research-folio.svg)
 

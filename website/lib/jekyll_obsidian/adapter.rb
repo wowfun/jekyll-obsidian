@@ -92,6 +92,7 @@ module JekyllObsidian
     def prepare_site(site)
       site.singleton_class.prepend(SiteProcessCleanup) unless site.singleton_class < SiteProcessCleanup
       obsidian, _layout = normalize_obsidian_configuration(site)
+      exclude_bundled_source(site)
       site.config["obsidian"] = obsidian
     end
 
@@ -143,7 +144,8 @@ module JekyllObsidian
       unknown = configured.keys.map(&:to_s) - CONFIG_KEYS
       fatal("obsidian contains unsupported key: #{unknown.sort.first}") unless unknown.empty?
 
-      layout = resolve_workspace_layout(site, configured.fetch("source", "vault"))
+      source = configured.key?("source") ? configured["source"] : WorkspaceLayout::DEFAULT_SOURCE
+      layout = resolve_workspace_layout(site, source)
       obsidian = {
         "source" => layout.source,
         "syntax_profile" => configured.fetch("syntax_profile", "ofm@1"),
@@ -160,6 +162,12 @@ module JekyllObsidian
       WorkspaceLayout.resolve(site:, source:)
     rescue WorkspaceLayout::Invalid => exception
       fatal(exception.message)
+    end
+
+    def exclude_bundled_source(site)
+      excluded = (Array(site.exclude).map(&:to_s) + [WorkspaceLayout::BUNDLED_SOURCE_BASENAME]).uniq
+      site.exclude = excluded
+      site.config["exclude"] = excluded
     end
 
     def assert_vault_was_not_read(site, layout)

@@ -8,16 +8,18 @@ tags:
   - guide/getting-started
 description: Configure a site, publish the first note, and run the local server.
 created: 2026-07-31
-updated: 2026-07-31
+updated: 2026-08-02
 ---
 
 # Getting Started
 
-The template keeps the writing workflow inside `vault/` and the publishing workflow in `website/`. Obsidian can open the content folder without conversion or a special export step.
+The bundled vault lives in `website/docs/`; the publishing workflow stays in `website/`. Obsidian opens the content folder without conversion or a special export step.
 
 ## Install the toolchain
 
-Install Ruby 4.0.x, Node.js 26.x, and Git. CI pins the exact patch versions used by the repository. Then run these commands from the repository root:
+To integrate this site into another repository without installing Ruby or Node.js, follow [[Integration|Host Integration]]. The dependency-free integration command generates the host configuration and Pages workflow; GitHub Actions installs the complete build toolchain remotely.
+
+For local preview and testing, install Ruby 4.0.x, Node.js 26.x, and Git on macOS, Linux, or WSL. CI pins the exact patch versions used by the repository. Then run these commands from the repository root:
 
 ```sh
 website/bin/setup
@@ -26,9 +28,11 @@ website/bin/dev
 
 `website/bin/setup` installs the locked Ruby and Node dependencies under `website/`. `website/bin/dev` watches the configured content directory and the site sources, rebuilds frontend assets only when their inputs change, and serves `website/_site`.
 
+Native Windows initialization and Pages deployment use `website\bin\integrate.cmd`; use WSL when a local Jekyll preview is required.
+
 ## Publish one note
 
-Create a Markdown file anywhere under `vault/`. Add frontmatter with a YAML boolean:
+Create a Markdown file under `website/docs/`. Add frontmatter with a YAML boolean:
 
 ```yaml
 ---

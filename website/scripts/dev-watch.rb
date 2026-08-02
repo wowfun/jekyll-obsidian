@@ -4,7 +4,6 @@
 require "listen"
 require "open3"
 require "optparse"
-require "yaml"
 require_relative "../lib/jekyll_obsidian/dev_watch"
 require_relative "../lib/jekyll_obsidian/workspace_layout"
 
@@ -13,6 +12,7 @@ WatcherSite = Struct.new(:source, :dest, :cache_dir, keyword_init: true)
 
 SITE_IGNORE_PATTERN = %r{\A(?:\.git|\.bundle|\.jekyll-cache|\.jekyll-obsidian-cache|node_modules|vendor|_site(?:-[^/]+)?)(?:/|\z)}
 CONTENT_IGNORE_PATTERN = %r{\A(?:\.obsidian|\.trash)(?:/|\z)}
+HOST_CONFIG_RELATIVE_PATH = ".github/jekyll-obsidian.yml"
 SITE_WATCH_ENTRIES = %w[
   lib
   _plugins
@@ -50,14 +50,22 @@ end.parse!
 site_dir = File.expand_path("..", __dir__)
 destination = "_site"
 
+def host_config_path(site_dir)
+  File.join(File.dirname(site_dir), HOST_CONFIG_RELATIVE_PATH)
+end
+
+def configuration_paths(site_dir)
+  paths = [File.join(site_dir, "_config.yml")]
+  host_config = host_config_path(site_dir)
+  paths << host_config if File.file?(host_config) && !File.symlink?(host_config)
+  paths
+end
+
 def configured_source(site_dir)
-  config_path = File.join(site_dir, "_config.yml")
-  config = YAML.safe_load_file(config_path, permitted_classes: [], aliases: false) || {}
-  obsidian = config["obsidian"]
-  source = obsidian.is_a?(Hash) ? obsidian["source"] : nil
-  source.is_a?(String) && !source.empty? ? source : "vault"
-rescue Psych::Exception, SystemCallError
-  "vault"
+  JekyllObsidian::DevWatch.configured_source(
+    site_dir:,
+    configuration_paths: configuration_paths(site_dir)
+  )
 end
 
 def resolve_layout(site_dir, destination)
@@ -120,6 +128,18 @@ def start_content_listener(content_root, changes)
   end.tap(&:start)
 end
 
+def start_host_config_listener(site_dir, changes)
+  config_path = host_config_path(site_dir)
+  config_directory = File.dirname(config_path)
+  return nil unless File.directory?(config_directory) && !File.symlink?(config_directory)
+
+  Listen.to(config_directory) do |modified, added, removed|
+    next unless (modified + added + removed).any? { |path| File.expand_path(path) == config_path }
+
+    changes << [:host_config, HOST_CONFIG_RELATIVE_PATH]
+  end.tap(&:start)
+end
+
 begin
   layout = resolve_layout(site_dir, destination)
 rescue JekyllObsidian::WorkspaceLayout::Invalid => exception
@@ -135,6 +155,7 @@ server_command = [
   "bundle", "exec", "jekyll", "serve",
   "--skip-initial-build",
   "--no-watch",
+  "--config", configuration_paths(site_dir).join(","),
   "--destination", File.join(site_dir, destination),
   "--baseurl", options.baseurl,
   "--host", options.host,
@@ -163,6 +184,7 @@ puts "Watching #{layout.source}/ and site sources. Serving http://#{options.host
 changes = Queue.new
 site_listener = start_site_listener(site_dir, changes)
 content_listener = start_content_listener(layout.source_root, changes)
+host_config_listener = start_host_config_listener(site_dir, changes)
 exited_server = nil
 
 begin
@@ -206,6 +228,7 @@ begin
 ensure
   site_listener.stop
   content_listener.stop
+  host_config_listener&.stop
 end
 
 Process.wait(server_pid) unless exited_server

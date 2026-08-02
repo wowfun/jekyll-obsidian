@@ -1,0 +1,7 @@
+# Keep the copied workspace runnable after a native Windows checkout.
+bin/* text eol=lf
+bin/*.ps1 text eol=crlf
+bin/*.cmd text eol=crlf
+scripts/templates/*.yml text eol=lf
+test/integration/*.sh text eol=lf
+test/integration/*.ps1 text eol=crlf

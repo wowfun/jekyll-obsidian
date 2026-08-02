@@ -15,9 +15,11 @@ class JekyllAdapterTest < Minitest::Test
     @temporary_root = Dir.mktmpdir("jekyll-obsidian-integration")
     @site_root = File.join(@temporary_root, "website")
     FileUtils.mkdir_p(File.join(@site_root, "_layouts"))
+    FileUtils.mkdir_p(File.join(@site_root, "docs"))
     FileUtils.mkdir_p(File.join(@temporary_root, "vault", "media"))
     FileUtils.mkdir_p(File.join(@temporary_root, "src"))
     File.write(File.join(@temporary_root, "src", "private.rb"), "Host source leak marker")
+    File.write(File.join(@site_root, "docs", "private.md"), "Bundled example leak marker")
     %w[obsidian-blog obsidian-docs obsidian-digital-garden].each do |layout|
       File.write(File.join(@site_root, "_layouts", "#{layout}.html"), <<~LIQUID)
         <!doctype html><html data-theme="#{layout.delete_prefix("obsidian-")}"><body><div data-layout="once">{{ content }}</div></body></html>
@@ -45,7 +47,8 @@ class JekyllAdapterTest < Minitest::Test
   end
 
   def test_real_site_process_isolates_vault_and_renders_layout_once
-    site = build_site
+    site = build_site("exclude" => [])
+    assert_includes site.config.fetch("exclude"), "docs"
     site.process
 
     index = File.read(File.join(destination, "index.html"))
@@ -60,6 +63,7 @@ class JekyllAdapterTest < Minitest::Test
     generated = Dir.glob(File.join(destination, "**", "*")).select { |path| File.file?(path) }.map { |path| File.binread(path) }.join("\n")
     refute_includes generated, "Private leak marker"
     refute_includes generated, "Host source leak marker"
+    refute_includes generated, "Bundled example leak marker"
     refute_includes generated, "unused-private-image"
 
     catalog = File.read(File.join(destination, "assets", "obsidian", "catalog.v1.json"))
@@ -153,10 +157,35 @@ class JekyllAdapterTest < Minitest::Test
     assert_empty site.static_files.select { |file| file.path.to_s.include?("docs") }
   end
 
+  def test_bundled_docs_source_is_excluded_before_reader_and_compiled_by_the_adapter
+    FileUtils.remove_entry(File.join(@site_root, "docs"))
+    FileUtils.mv(File.join(@temporary_root, "vault"), File.join(@site_root, "docs"))
+    site = build_site(
+      "exclude" => [],
+      "obsidian" => obsidian_config.merge("source" => "website/docs")
+    )
+
+    assert_includes site.config.fetch("exclude"), "docs"
+
+    site.process
+
+    assert File.file?(File.join(destination, "index.html"))
+    refute File.exist?(File.join(destination, "private.md"))
+    refute File.exist?(File.join(destination, "media", "unused.png"))
+    assert_empty site.pages.reject { |page| page.respond_to?(:obsidian_route) }
+    assert_empty site.static_files.select { |file| file.path.to_s.start_with?(File.join(@site_root, "docs")) }
+
+    homepage = site.pages.find { |page| page.respond_to?(:obsidian_route) && page.obsidian_route == "/" }
+    assert_equal(
+      "https://github.com/example/obsidian/edit/main/website/docs/index.md",
+      homepage.data.dig("obsidian", "source_links", "edit")
+    )
+  end
+
   def test_missing_obsidian_configuration_uses_public_defaults
     site = build_site("obsidian" => nil)
 
-    assert_equal "vault", site.config.dig("obsidian", "source")
+    assert_equal "website/docs", site.config.dig("obsidian", "source")
     assert_equal "digital-garden", site.config.dig("obsidian", "theme")
     assert_nil site.config.dig("obsidian", "content")
     assert_nil site.config.dig("obsidian", "features")

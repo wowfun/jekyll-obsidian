@@ -1,10 +1,25 @@
 # frozen_string_literal: true
 
+require "jekyll"
 require_relative "workspace_layout"
 
 module JekyllObsidian
   module DevWatch
     module_function
+
+    def configured_source(site_dir:, configuration_paths:)
+      config = Jekyll.configuration(
+        "source" => site_dir,
+        "config" => configuration_paths,
+        "quiet" => true
+      )
+      obsidian = config["obsidian"]
+      return WorkspaceLayout::DEFAULT_SOURCE unless obsidian.is_a?(Hash) && obsidian.key?("source")
+
+      obsidian["source"]
+    rescue LoadError, Psych::Exception, SystemCallError
+      WorkspaceLayout::DEFAULT_SOURCE
+    end
 
     def rebuild_and_refresh(
       batch:, build_assets:, site_dir:, destination:, layout:, content_listener:, changes:,
@@ -12,7 +27,9 @@ module JekyllObsidian
     )
       output.puts("Source changed. Rebuilding#{build_assets ? " assets and site" : " site"}...")
       build_runner.call(build_assets)
-      return [layout, content_listener] unless batch.include?([:site, "_config.yml"])
+      config_changed = batch.include?([:site, "_config.yml"]) ||
+        batch.any? { |kind, _path| kind == :host_config }
+      return [layout, content_listener] unless config_changed
 
       begin
         next_layout = layout_resolver.call(site_dir, destination)

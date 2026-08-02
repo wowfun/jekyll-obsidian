@@ -6,6 +6,8 @@ PROJECT_DIR=$(CDPATH= cd -- "$SCRIPT_DIR/.." && pwd)
 export BUNDLE_GEMFILE="$PROJECT_DIR/Gemfile"
 
 cd "$PROJECT_DIR"
+test/integration/integrate_contract.sh
+test/integration/build_contract.sh
 npm run build
 bundle exec rake test
 npm run test:prepared

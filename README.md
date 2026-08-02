@@ -1,6 +1,6 @@
 # jekyll-obsidian
 
-`jekyll-obsidian` turns a folder that Obsidian can open directly into a configurable Jekyll blog, documentation site, or digital garden. Notes stay as Markdown in `vault/`; only notes whose frontmatter contains the YAML boolean `publish: true` enter the generated site. Obsidian's `.obsidian/` state and `.trash/` are excluded from the content snapshot.
+`jekyll-obsidian` turns a folder that Obsidian can open directly into a configurable Jekyll blog, documentation site, or digital garden. The bundled example vault lives in `website/docs/`; only notes whose frontmatter contains the YAML boolean `publish: true` enter the generated site. Obsidian's `.obsidian/` state and `.trash/` are excluded from the content snapshot.
 
 The same vault can be built with three first-party themes:
 
@@ -18,14 +18,19 @@ Canvas and Bases files become downloads when a public note links to them. They c
 
 ## Requirements
 
-- Ruby 4.0.x
-- Node.js 26.x
-- Git
-- macOS, Linux, or WSL
+Publishing through GitHub Pages does not require Ruby, Node.js, Bundler, npm, or a browser on your computer. GitHub Actions installs the complete build toolchain.
 
-Native Windows command scripts are not included.
+Local preview and testing additionally require Ruby 4.0.x, Node.js 26.x, and Git on macOS, Linux, or WSL. Native Windows supports the integration and deployment setup below; use WSL for the local Jekyll development commands.
 
-## Start
+## Deploy in three steps
+
+1. Copy `website/` to the host repository root and make sure the chosen content directory has a public `index.md`.
+2. Run `website/bin/integrate` on macOS, Linux, or WSL. On native Windows, run `.\website\bin\integrate.cmd`.
+3. In the repository's Pages settings, select GitHub Actions as the source, then commit and push.
+
+The command creates the host configuration and Pages workflow. It does not install anything or contact GitHub. Ruby, Node.js, and Chromium are installed by GitHub Actions after the push.
+
+## Local development
 
 Create a repository from this template, then run:
 
@@ -34,7 +39,7 @@ website/bin/setup
 website/bin/dev
 ```
 
-Open `vault/` directly in Obsidian. Publish a note with typed frontmatter:
+Open `website/docs/` directly in Obsidian. Publish a note with typed frontmatter:
 
 ```yaml
 ---
@@ -56,38 +61,49 @@ The destination name is resolved inside `website/`, so the second command writes
 
 ## Configure
 
-Edit `website/_config.yml`:
+The bundled example uses `website/_config.yml`. A host repository should keep its overrides in `.github/jekyll-obsidian.yml`, which is loaded after the bundled defaults:
 
 ```yaml
 title: My Site
 description: Built from an Obsidian vault
 lang: en
-url: ""
-baseurl: ""
 
 obsidian:
-  source: vault
-  syntax_profile: ofm@1
-  theme: digital-garden
+  # jekyll-obsidian:managed-start
+  source: docs
+  theme: docs
+  # jekyll-obsidian:managed-end
   repository: owner/repository
   edit_branch: main
   content:
-    default_type: page
+    default_type: doc
     directories:
-      post: [blog]
-      doc: [docs]
+      post: []
+      doc: []
   features: {}
 ```
 
-`obsidian.source` is resolved from the repository root, not from `website/`. It must name a normalized relative directory inside the repository. The compiler rejects symlinks, path traversal, overlap with the site or destination, and routes that normalize to the same destination.
+`obsidian.source` is resolved from the repository root, not from `website/`. It must name a normalized relative directory inside the repository. The bundled `website/docs` directory is the only content root allowed inside the Jekyll source; host content normally remains outside it. The compiler rejects symlinks, path traversal, other site overlaps, destination overlaps, and routes that normalize to the same destination.
 
 `content_type: post | doc | page` overrides directory classification. Blog post dates resolve from `date`, then `created`, then the first Git commit. Docs navigation uses `nav_order` and `nav_exclude`. An `image` property resolves to a published image URL and supplies `og:image`. Theme feature defaults can be overridden with strict booleans for `search`, `tags`, `feed`, `graph`, `relations`, `previews`, and `outline`.
 
-The root `vault/index.md` remains the authored homepage. Each theme appends its own useful overview to that content.
+The root `website/docs/index.md` remains the authored homepage. Each theme appends its own useful overview to that content.
 
 ## Add the site to another repository
 
-Copy `website/` and the Pages workflow into a host repository, then point `obsidian.source` at its documentation directory:
+Copy only `website/` into the host repository. With an existing public `docs/index.md`, configure the site and generate the Pages workflow with one dependency-free command:
+
+```sh
+# macOS, Linux, or WSL
+website/bin/integrate
+```
+
+```powershell
+# Native Windows, from PowerShell
+.\website\bin\integrate.cmd
+```
+
+The default is `--source docs --theme docs`. Use options such as `--source handbook --theme digital-garden` for another repository-relative content directory or theme. The command does not install dependencies or contact GitHub.
 
 ```text
 repository/
@@ -97,16 +113,16 @@ repository/
 │   ├── bin/
 │   └── ...
 └── .github/
+    ├── jekyll-obsidian.yml
     └── workflows/
         └── pages.yml
 ```
 
-```yaml
-obsidian:
-  source: docs
-```
+The command maintains `source` and `theme` inside `.github/jekyll-obsidian.yml`, preserves other host overrides, and renders `.github/workflows/pages.yml` with the correct content trigger. Run `website/bin/integrate --check` to verify that they remain synchronized. Existing unrelated Pages workflows are never overwritten without `--force-workflow`.
 
-Jekyll reads only `website/`; the adapter snapshots `docs/` from the host repository. Site dependencies, caches, test reports, and generated output remain under `website/`. The included workflow watches `website/**`, `vault/**`, `docs/**`, and the workflow file itself. If you use another source directory, add its path to both the `push.paths` and `pull_request.paths` lists.
+Finally, open the repository's **Settings → Pages**, choose **GitHub Actions** under **Build and deployment → Source**, then commit and push. No `gh-pages` branch, deployment secret, or manual `url`/`baseurl` is required. See the [host integration guide](website/docs/docs/Integration.md) for Windows commands, conflict handling, updating, and the publication boundary.
+
+Jekyll reads `website/`, but the adapter excludes its bundled example vault before Jekyll's Reader runs and snapshots only the configured content root. Site dependencies, examples, caches, test reports, and generated output remain under `website/`.
 
 ## Test and deploy
 
@@ -116,7 +132,7 @@ website/bin/test
 RUN_BROWSER_TESTS=1 website/bin/test
 ```
 
-The included GitHub Actions workflow builds frontend assets once, verifies all three themes at the domain root plus one project-path deployment, then publishes the configured theme from trusted default-branch builds. See [the deployment guide](vault/docs/Deployment.md) for Pages permissions, custom domains, and artifact checks.
+These commands are optional for deploy-only consumers. The generated GitHub Actions workflow independently installs the locked toolchain, tests the bundled template, validates the host content, and publishes the configured theme from trusted default-branch builds. See [the deployment guide](website/docs/docs/Deployment.md) for Pages permissions, custom domains, and artifact checks.
 
 ## Security model
 
@@ -124,7 +140,7 @@ Raw HTML in public notes is trusted author input. The compiler removes HTML and 
 
 Production pages include a meta Content Security Policy. GitHub Pages cannot promote it to a response header, so it is a browser-side safeguard rather than a complete hosting boundary. Review authored HTML and linked HTTPS media before publishing.
 
-The pinned OFM contract is documented in [website/docs/ofm-conformance.md](website/docs/ofm-conformance.md). The public notes under `vault/docs/` cover setup, syntax, customization, deployment, architecture, and CJK behavior.
+The pinned OFM contract is documented in [website/docs/ofm-conformance.md](website/docs/ofm-conformance.md). The public notes under `website/docs/docs/` cover setup, syntax, customization, deployment, architecture, and CJK behavior.
 
 ## License
 

@@ -7,23 +7,23 @@ tags:
   - github-pages
 description: Test and deploy any built-in theme with the included GitHub Pages workflow.
 created: 2026-07-31
-updated: 2026-07-31
+updated: 2026-08-02
 ---
 
 # Deployment
 
-The included workflow targets GitHub.com. It separates untrusted verification from the trusted Pages build.
+The generated workflow targets GitHub.com. It separates untrusted verification from the trusted Pages build. A host can create or refresh it without a local Ruby or Node.js installation by running `website/bin/integrate` or `website\bin\integrate.cmd`.
 
 ## Pull requests and pushes
 
-Every pull request and every push to the repository's default branch checks out the full Git history, installs the locked Ruby and Node dependencies, runs the test suite, and builds all three themes in both deployment shapes:
+Every pull request and every push to the repository's default branch checks out the full Git history, runs the dependency-free integration drift check, installs the locked Ruby and Node dependencies, runs the template test suite, and validates the configured host content. The bundled example is built with all three themes in both deployment shapes:
 
 1. At a domain root, such as `https://owner.github.io/`.
 2. Under a project path, such as `https://owner.github.io/jekyll-obsidian/`.
 
 Pull request jobs have `contents: read` permission. They do not call `configure-pages`, upload a Pages artifact, or deploy.
 
-The workflow watches `website/**`, `vault/**`, `docs/**`, and its own workflow file. If `obsidian.source` names another directory, add that path to the workflow's `push.paths` and `pull_request.paths` lists.
+The workflow watches the configured content directory, `website/**`, `.github/jekyll-obsidian.yml`, and its own file. Do not edit these trigger paths manually; re-run the integration command when the source changes. Template browser and visual baselines always use `website/docs`, while a separate production build validates the host source, so custom documentation cannot be mistaken for a visual regression.
 
 ## Trusted Pages build
 

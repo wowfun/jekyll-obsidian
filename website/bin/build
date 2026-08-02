@@ -3,6 +3,7 @@ set -eu
 
 SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 PROJECT_DIR=$(CDPATH= cd -- "$SCRIPT_DIR/.." && pwd)
+HOST_DIR=$(CDPATH= cd -- "$PROJECT_DIR/.." && pwd)
 export BUNDLE_GEMFILE="$PROJECT_DIR/Gemfile"
 
 origin=${PAGES_ORIGIN:-${JEKYLL_URL:-}}
@@ -11,6 +12,8 @@ base_path_is_set=0
 destination=_site
 build_assets=1
 theme=""
+source_override=""
+example_mode=0
 
 if [ "${PAGES_BASE_PATH+x}" = x ]; then
   base_path=$PAGES_BASE_PATH
@@ -21,7 +24,7 @@ elif [ "${JEKYLL_BASEURL+x}" = x ]; then
 fi
 
 usage() {
-  printf '%s\n' "Usage: <site-dir>/bin/build [--url ORIGIN] [--baseurl PATH] [--theme blog|docs|digital-garden] [--destination _site[-NAME]] [--skip-assets]"
+  printf '%s\n' "Usage: <site-dir>/bin/build [--url ORIGIN] [--baseurl PATH] [--source PATH | --example] [--theme blog|docs|digital-garden] [--destination _site[-NAME]] [--skip-assets]"
 }
 
 fail() {
@@ -55,6 +58,16 @@ while [ "$#" -gt 0 ]; do
       esac
       shift 2
       ;;
+    --source)
+      [ "$#" -ge 2 ] || fail "--source requires a value."
+      [ -n "$2" ] || fail "--source requires a non-empty value."
+      source_override=$2
+      shift 2
+      ;;
+    --example)
+      example_mode=1
+      shift
+      ;;
     --skip-assets)
       build_assets=0
       shift
@@ -69,6 +82,11 @@ while [ "$#" -gt 0 ]; do
       ;;
   esac
 done
+
+if [ "$example_mode" -eq 1 ]; then
+  [ -z "$source_override" ] || fail "--example cannot be combined with --source."
+  source_override=website/docs
+fi
 
 case "$destination" in
   _site|_site-[A-Za-z0-9]* ) ;;
@@ -105,6 +123,16 @@ application_cache=$PROJECT_DIR/.jekyll-obsidian-cache
 assert_local_directory "$jekyll_cache" "Jekyll cache"
 assert_local_directory "$application_cache" "Application cache"
 mkdir -p "$jekyll_cache" "$application_cache"
+
+host_config=$HOST_DIR/.github/jekyll-obsidian.yml
+if [ -L "$HOST_DIR/.github" ] || [ -L "$host_config" ]; then
+  fail "host configuration must not use symbolic links."
+fi
+config_files=$PROJECT_DIR/_config.yml
+if [ "$example_mode" -eq 0 ] && [ -e "$host_config" ]; then
+  [ -f "$host_config" ] || fail ".github/jekyll-obsidian.yml must be a regular file."
+  config_files=$config_files,$host_config
+fi
 
 if [ -n "${GITHUB_REPOSITORY:-}" ]; then
   case "$GITHUB_REPOSITORY" in
@@ -178,16 +206,40 @@ yaml_string() {
 }
 
 {
-  printf 'url: '
+  printf 'source: '
+  yaml_string "$PROJECT_DIR"
+  printf '\nplugins_dir: '
+  yaml_string "_plugins"
+  printf '\nlayouts_dir: '
+  yaml_string "_layouts"
+  printf '\nincludes_dir: '
+  yaml_string "_includes"
+  printf '\ndata_dir: '
+  yaml_string "_data"
+  printf '\ncollections_dir: '
+  yaml_string ""
+  printf '\ncache_dir: '
+  yaml_string "$jekyll_cache"
+  printf '\nsafe: false'
+  printf '\nincremental: false'
+  printf '\nstrict_front_matter: true'
+  printf '\nurl: '
   yaml_string "$origin"
   printf '\nbaseurl: '
   yaml_string "$base_path"
   printf '\ndisable_disk_cache: true'
   printf '\ndestination: '
   yaml_string "$staging_destination"
-  if [ -n "$theme" ]; then
-    printf '\nobsidian:\n  theme: '
-    yaml_string "$theme"
+  if [ -n "$source_override" ] || [ -n "$theme" ]; then
+    printf '\nobsidian:'
+    if [ -n "$source_override" ]; then
+      printf '\n  source: '
+      yaml_string "$source_override"
+    fi
+    if [ -n "$theme" ]; then
+      printf '\n  theme: '
+      yaml_string "$theme"
+    fi
   fi
   printf '\n'
 } > "$overlay"
@@ -197,7 +249,7 @@ if [ "$build_assets" -eq 1 ]; then
   npm run build
 fi
 
-JEKYLL_ENV=$build_environment bundle exec jekyll build --trace --config "$PROJECT_DIR/_config.yml,$overlay"
+JEKYLL_ENV=$build_environment bundle exec jekyll build --trace --config "$config_files,$overlay"
 
 if [ "$build_environment" = production ]; then
   "$PROJECT_DIR/scripts/audit-site.sh" "$staging_destination"

@@ -1,0 +1,59 @@
+name: Verify host integration compatibility
+
+on:
+  push:
+    paths:
+      - 'website/bin/integrate'
+      - 'website/bin/integrate.cmd'
+      - 'website/bin/integrate.ps1'
+      - 'website/scripts/templates/**'
+      - 'website/test/integration/integrate_contract.*'
+      - 'website/.gitattributes'
+      - '.gitattributes'
+      - '.github/workflows/integration-compat.yml'
+  pull_request:
+    paths:
+      - 'website/bin/integrate'
+      - 'website/bin/integrate.cmd'
+      - 'website/bin/integrate.ps1'
+      - 'website/scripts/templates/**'
+      - 'website/test/integration/integrate_contract.*'
+      - 'website/.gitattributes'
+      - '.gitattributes'
+      - '.github/workflows/integration-compat.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  posix:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+
+      - name: Exercise the POSIX adapter
+        run: website/test/integration/integrate_contract.sh
+
+  windows:
+    runs-on: windows-latest
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+
+      - name: Generate the POSIX reference output
+        shell: bash
+        env:
+          INTEGRATION_REFERENCE_DIR: .integration-reference
+        run: website/test/integration/integrate_contract.sh
+
+      - name: Exercise CMD, Windows PowerShell, and PowerShell 7
+        shell: pwsh
+        env:
+          INTEGRATION_REFERENCE_DIR: .integration-reference
+        run: .\website\test\integration\integrate_contract.ps1

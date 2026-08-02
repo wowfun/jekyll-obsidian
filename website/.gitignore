@@ -30,3 +30,10 @@ pnpm-debug.log*
 !/.env.example
 /tmp/
 /log/
+
+# Obsidian per-device state; stable example-vault settings remain tracked
+/docs/.obsidian/workspace.json
+/docs/.obsidian/workspace-mobile.json
+/docs/.obsidian/cache/
+/docs/.obsidian/plugins/
+/docs/.trash/

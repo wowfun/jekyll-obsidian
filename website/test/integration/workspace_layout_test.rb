@@ -11,7 +11,7 @@ class WorkspaceLayoutTest < Minitest::Test
   def setup
     @workspace_root = Dir.mktmpdir("jekyll-obsidian-workspace")
     @site_root = File.join(@workspace_root, "website")
-    FileUtils.mkdir_p(@site_root)
+    FileUtils.mkdir_p(File.join(@site_root, "docs"))
     FileUtils.mkdir_p(File.join(@workspace_root, "vault"))
     FileUtils.mkdir_p(File.join(@workspace_root, "docs"))
     run_git(@workspace_root, "init", "--quiet")
@@ -38,6 +38,25 @@ class WorkspaceLayoutTest < Minitest::Test
       assert_equal File.join(@site_root, ".jekyll-obsidian-cache", "assets"), layout.application_assets_root
       assert_predicate layout, :frozen?
     end
+  end
+
+  def test_defaults_to_the_bundled_site_docs_directory
+    layout = resolve
+
+    assert_equal "website/docs", layout.source
+    assert_equal File.join(@site_root, "docs"), layout.source_root
+  end
+
+  def test_accepts_only_the_bundled_docs_directory_inside_the_site
+    layout = resolve(source: "website/docs")
+
+    assert_equal File.join(@site_root, "docs"), layout.source_root
+
+    FileUtils.mkdir_p(File.join(@site_root, "docs", "nested"))
+    error = assert_raises(JekyllObsidian::WorkspaceLayout::Invalid) do
+      resolve(source: "website/docs/nested")
+    end
+    assert_match(/must not overlap the Jekyll source/, error.message)
   end
 
   def test_discovers_the_workspace_when_the_site_directory_is_renamed
@@ -211,7 +230,7 @@ class WorkspaceLayoutTest < Minitest::Test
 
   private
 
-  def resolve(source:, site_root: @site_root)
+  def resolve(source: JekyllObsidian::WorkspaceLayout::DEFAULT_SOURCE, site_root: @site_root)
     JekyllObsidian::WorkspaceLayout.resolve(
       site: site_fixture(site_root:),
       source:
