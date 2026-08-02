@@ -39,6 +39,7 @@ function Invoke-Adapter([string]$Adapter, [string]$Root, [string[]]$Arguments, [
         default { Fail "unknown adapter $Adapter" }
     }
     $code = $LASTEXITCODE
+    $global:LASTEXITCODE = 0
     if ($ShouldSucceed -and $code -ne 0) { Fail "$Adapter exited with $code" }
     if (-not $ShouldSucceed -and $code -eq 0) { Fail "$Adapter unexpectedly succeeded" }
     return $code
