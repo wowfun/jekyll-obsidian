@@ -3,6 +3,7 @@ $Utf8NoBom = New-Object System.Text.UTF8Encoding($false)
 $TestDir = [System.IO.Path]::GetFullPath($PSScriptRoot)
 $SiteDir = [System.IO.Directory]::GetParent([System.IO.Directory]::GetParent($TestDir).FullName).FullName
 $TemporaryRoots = New-Object System.Collections.Generic.List[string]
+$TemporaryDirectoryLinks = New-Object System.Collections.Generic.List[string]
 
 function Fail([string]$Message) { throw "Windows integration contract failed: $Message" }
 
@@ -153,23 +154,35 @@ try {
     $junctionRoot = New-Host
     [System.IO.Directory]::CreateDirectory((Join-Path $junctionRoot "real-docs")) | Out-Null
     Write-Lf (Join-Path $junctionRoot "real-docs\index.md") "---`npublish: true`n---`n# Junction`n"
-    & cmd.exe /d /c mklink /J (Join-Path $junctionRoot "linked-docs") (Join-Path $junctionRoot "real-docs") *> $null
-    if ($LASTEXITCODE -eq 0) { [void](Invoke-Adapter "pwsh" $junctionRoot @("--source", "linked-docs") $false) }
+    $junctionPath = Join-Path $junctionRoot "linked-docs"
+    & cmd.exe /d /c mklink /J $junctionPath (Join-Path $junctionRoot "real-docs") *> $null
+    if ($LASTEXITCODE -eq 0) {
+        [void]$TemporaryDirectoryLinks.Add($junctionPath)
+        [void](Invoke-Adapter "pwsh" $junctionRoot @("--source", "linked-docs") $false)
+    }
 
     $symlinkRoot = New-Host
     [System.IO.Directory]::CreateDirectory((Join-Path $symlinkRoot "real-docs")) | Out-Null
     Write-Lf (Join-Path $symlinkRoot "real-docs\index.md") "---`npublish: true`n---`n# Symbolic link`n"
+    $symlinkPath = Join-Path $symlinkRoot "linked-docs"
     try {
-        New-Item -ItemType SymbolicLink -Path (Join-Path $symlinkRoot "linked-docs") -Target (Join-Path $symlinkRoot "real-docs") -ErrorAction Stop | Out-Null
+        New-Item -ItemType SymbolicLink -Path $symlinkPath -Target (Join-Path $symlinkRoot "real-docs") -ErrorAction Stop | Out-Null
+        [void]$TemporaryDirectoryLinks.Add($symlinkPath)
         [void](Invoke-Adapter "pwsh" $symlinkRoot @("--source", "linked-docs") $false)
     }
     catch {
-        if (Test-Path -LiteralPath (Join-Path $symlinkRoot "linked-docs")) { throw }
+        if (Test-Path -LiteralPath $symlinkPath) { throw }
     }
 
     Write-Output "Windows host integration contract passed."
 }
 finally {
+    foreach ($path in $TemporaryDirectoryLinks) {
+        $item = Get-Item -Force -LiteralPath $path -ErrorAction SilentlyContinue
+        if ($null -ne $item -and ($item.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0) {
+            [System.IO.Directory]::Delete($path)
+        }
+    }
     foreach ($root in $TemporaryRoots) {
         if (Test-Path -LiteralPath $root) { [System.IO.Directory]::Delete($root, $true) }
     }
