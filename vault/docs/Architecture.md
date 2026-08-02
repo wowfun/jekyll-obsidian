@@ -15,7 +15,7 @@ The project has three cooperating modules behind one compiler interface: the pur
 
 ## Reader isolation
 
-Jekyll reads ordinary pages and static files before it runs generators. `_config.yml` excludes the default `vault/`, and an `after_init` hook validates and excludes the configured source before the Reader runs. A highest-priority generator checks the pages, collections, and static files again and stops the build if vault material escaped that boundary.
+`website/` is the Jekyll source, while the configured content directory is resolved from the host repository root. Jekyll's Reader scans only the site directory, so it never walks sibling application code or the host `vault/` or `docs/` tree. An `after_init` hook resolves and validates the workspace, site, content, cache, and destination paths before the Reader runs. A highest-priority generator checks Jekyll pages, collections, and static files again and stops the build if a site symlink exposed content from outside that boundary.
 
 ## Compiler boundary
 
@@ -40,7 +40,7 @@ Embedded links remain relationships of their authored source note. They do not b
 
 ## Adapter boundary
 
-The adapter takes one filesystem snapshot, optionally scans Git history once, and calls the compiler. It performs a global preflight before it appends any output to Jekyll. Generated HTML, JSON, and XML use pages without source files. Reachable attachments use a controlled static-file subclass because Jekyll's ordinary static files copy existing source files.
+The adapter takes one filesystem snapshot from the content root, optionally scans Git history from the workspace root, and calls the compiler. Jekyll and frontend assets continue to use the site root, while caches and destinations stay below it. The adapter performs a global preflight before it appends any output to Jekyll. Generated HTML, JSON, and XML use pages without source files. Reachable attachments use a controlled static-file subclass because Jekyll's ordinary static files copy existing source files.
 
 The adapter also loads only the selected theme and feature closure from the hashed frontend manifest into `site.data`. Layouts pass routes through Jekyll's URL helpers, so JavaScript never assumes a deployment base path.
 

@@ -13,10 +13,13 @@ class JekyllAdapterTest < Minitest::Test
     @previous_jekyll_env = ENV["JEKYLL_ENV"]
     ENV["JEKYLL_ENV"] = "production"
     @temporary_root = Dir.mktmpdir("jekyll-obsidian-integration")
-    FileUtils.mkdir_p(File.join(@temporary_root, "_layouts"))
+    @site_root = File.join(@temporary_root, "website")
+    FileUtils.mkdir_p(File.join(@site_root, "_layouts"))
     FileUtils.mkdir_p(File.join(@temporary_root, "vault", "media"))
+    FileUtils.mkdir_p(File.join(@temporary_root, "src"))
+    File.write(File.join(@temporary_root, "src", "private.rb"), "Host source leak marker")
     %w[obsidian-blog obsidian-docs obsidian-digital-garden].each do |layout|
-      File.write(File.join(@temporary_root, "_layouts", "#{layout}.html"), <<~LIQUID)
+      File.write(File.join(@site_root, "_layouts", "#{layout}.html"), <<~LIQUID)
         <!doctype html><html data-theme="#{layout.delete_prefix("obsidian-")}"><body><div data-layout="once">{{ content }}</div></body></html>
       LIQUID
     end
@@ -52,14 +55,70 @@ class JekyllAdapterTest < Minitest::Test
     assert File.file?(File.join(destination, "assets", "vault", "media", "public.png"))
     refute File.exist?(File.join(destination, "assets", "vault", "media", "unused.png"))
     refute File.exist?(File.join(destination, "vault"))
+    refute File.exist?(File.join(destination, "src"))
 
     generated = Dir.glob(File.join(destination, "**", "*")).select { |path| File.file?(path) }.map { |path| File.binread(path) }.join("\n")
     refute_includes generated, "Private leak marker"
+    refute_includes generated, "Host source leak marker"
     refute_includes generated, "unused-private-image"
 
     catalog = File.read(File.join(destination, "assets", "obsidian", "catalog.v1.json"))
     assert catalog.start_with?("{\"schema_version\":1")
     refute_includes catalog, "<!doctype html>"
+
+    homepage = site.pages.find { |page| page.respond_to?(:obsidian_route) && page.obsidian_route == "/" }
+    assert_equal(
+      "https://github.com/example/obsidian/edit/main/vault/index.md",
+      homepage.data.dig("obsidian", "source_links", "edit")
+    )
+  end
+
+  def test_obsidian_trash_is_not_compiled_as_public_content
+    trash_root = File.join(@temporary_root, "vault", ".trash")
+    FileUtils.mkdir_p(trash_root)
+    File.write(File.join(trash_root, "deleted.md"), <<~MARKDOWN)
+      ---
+      publish: true
+      title: Deleted
+      ---
+      Deleted trash marker
+    MARKDOWN
+
+    site = build_site
+    site.process
+
+    refute File.exist?(File.join(destination, ".trash"))
+    generated = Dir.glob(File.join(destination, "**", "*"), File::FNM_DOTMATCH)
+      .select { |path| File.file?(path) }
+      .map { |path| File.binread(path) }
+      .join("\n")
+    refute_includes generated, "Deleted trash marker"
+  end
+
+  def test_render_failure_cleans_staged_vault_assets
+    File.write(
+      File.join(@site_root, "_layouts", "obsidian-digital-garden.html"),
+      "{% include missing-staging-cleanup-fixture.html %}"
+    )
+    site = build_site
+
+    2.times do
+      assert_raises(StandardError) { site.process }
+
+      staging = Dir.glob(File.join(@site_root, ".jekyll-obsidian-cache", "vault-assets.*"))
+      assert_empty staging
+    end
+  end
+
+  def test_write_failure_cleans_staged_vault_assets
+    site = build_site
+    site.define_singleton_method(:write) { raise IOError, "intentional write failure" }
+
+    error = assert_raises(IOError) { site.process }
+
+    assert_equal "intentional write failure", error.message
+    staging = Dir.glob(File.join(@site_root, ".jekyll-obsidian-cache", "vault-assets.*"))
+    assert_empty staging
   end
 
   def test_blog_archive_renders_each_entry_once
@@ -73,7 +132,7 @@ class JekyllAdapterTest < Minitest::Test
       ---
       # One dispatch
     MARKDOWN
-    File.write(File.join(@temporary_root, "_layouts", "obsidian-blog.html"), <<~LIQUID)
+    File.write(File.join(@site_root, "_layouts", "obsidian-blog.html"), <<~LIQUID)
       <!doctype html><html><body>{{ content }}{% if page.obsidian.kind == 'archive' %}{% for group in page.obsidian.theme_data.archive_groups %}{% for post in group.posts %}<a data-archive-entry href="{{ post.url }}">{{ post.title }}</a>{% endfor %}{% endfor %}{% endif %}</body></html>
     LIQUID
 
@@ -84,13 +143,14 @@ class JekyllAdapterTest < Minitest::Test
     assert_equal 1, archive.scan(">One dispatch<").length
   end
 
-  def test_dynamic_source_is_excluded_before_reader
-    FileUtils.mv(File.join(@temporary_root, "vault"), File.join(@temporary_root, "notebook"))
-    site = build_site("obsidian" => obsidian_config.merge("source" => "notebook"))
-    site.read
+  def test_host_docs_source_is_compiled_without_entering_the_reader
+    FileUtils.mv(File.join(@temporary_root, "vault"), File.join(@temporary_root, "docs"))
+    site = build_site("obsidian" => obsidian_config.merge("source" => "docs"))
+    site.process
 
-    assert_empty site.pages.select { |page| page.path.to_s.include?("notebook") }
-    assert_empty site.static_files.select { |file| file.path.to_s.include?("notebook") }
+    assert File.file?(File.join(destination, "index.html"))
+    assert_empty site.pages.select { |page| page.path.to_s.include?("docs") }
+    assert_empty site.static_files.select { |file| file.path.to_s.include?("docs") }
   end
 
   def test_missing_obsidian_configuration_uses_public_defaults
@@ -105,7 +165,7 @@ class JekyllAdapterTest < Minitest::Test
   def test_reader_rejects_public_symlink_that_resolves_into_private_vault_content
     File.symlink(
       File.join(@temporary_root, "vault", "private.md"),
-      File.join(@temporary_root, "public-alias.html")
+      File.join(@site_root, "public-alias.html")
     )
     site = build_site
 
@@ -118,7 +178,7 @@ class JekyllAdapterTest < Minitest::Test
   def test_reader_rejects_page_symlink_that_resolves_into_private_vault_content
     private_page = File.join(@temporary_root, "vault", "private-page.html")
     File.write(private_page, "---\ntitle: Private\n---\nPrivate page marker")
-    File.symlink(private_page, File.join(@temporary_root, "public-page.html"))
+    File.symlink(private_page, File.join(@site_root, "public-page.html"))
     site = build_site
 
     error = assert_raises(Jekyll::Errors::FatalException) { site.process }
@@ -130,8 +190,8 @@ class JekyllAdapterTest < Minitest::Test
   def test_reader_rejects_collection_document_symlink_that_resolves_into_private_vault_content
     private_document = File.join(@temporary_root, "vault", "private-document.md")
     File.write(private_document, "---\npublish: false\n---\nPrivate document marker")
-    FileUtils.mkdir_p(File.join(@temporary_root, "_docs"))
-    File.symlink(private_document, File.join(@temporary_root, "_docs", "public.md"))
+    FileUtils.mkdir_p(File.join(@site_root, "_docs"))
+    File.symlink(private_document, File.join(@site_root, "_docs", "public.md"))
     site = build_site("collections" => { "docs" => { "output" => true } })
 
     error = assert_raises(Jekyll::Errors::FatalException) { site.process }
@@ -141,7 +201,7 @@ class JekyllAdapterTest < Minitest::Test
   end
 
   def test_reader_rejects_directory_symlink_chain_into_private_vault_content
-    File.symlink(File.join(@temporary_root, "vault"), File.join(@temporary_root, "public-copy"))
+    File.symlink(File.join(@temporary_root, "vault"), File.join(@site_root, "public-copy"))
     site = build_site
 
     error = assert_raises(Jekyll::Errors::FatalException) { site.process }
@@ -150,11 +210,12 @@ class JekyllAdapterTest < Minitest::Test
     refute File.exist?(File.join(destination, "public-copy"))
   end
 
-  def test_include_overlap_is_rejected_during_initialization
+  def test_source_overlapping_the_jekyll_site_is_rejected_during_initialization
+    FileUtils.mkdir_p(File.join(@site_root, "content"))
     error = assert_raises(Jekyll::Errors::FatalException) do
-      build_site("include" => ["vault"])
+      build_site("obsidian" => obsidian_config.merge("source" => "website/content"))
     end
-    assert_includes error.message, "obsidian.source"
+    assert_includes error.message, "must not overlap the Jekyll source"
   end
 
   def test_vault_symlink_is_rejected
@@ -174,7 +235,7 @@ class JekyllAdapterTest < Minitest::Test
   end
 
   def test_existing_jekyll_route_collision_fails_before_atomic_append
-    File.write(File.join(@temporary_root, "graph.html"), "---\npermalink: /graph/\n---\nExisting")
+    File.write(File.join(@site_root, "graph.html"), "---\npermalink: /graph/\n---\nExisting")
     site = build_site
     error = assert_raises(Jekyll::Errors::FatalException) { site.process }
     assert_includes error.message, "collision"
@@ -182,7 +243,7 @@ class JekyllAdapterTest < Minitest::Test
   end
 
   def test_static_root_index_collision_uses_final_destination_and_is_atomic
-    File.write(File.join(@temporary_root, "index.html"), "Existing static index")
+    File.write(File.join(@site_root, "index.html"), "Existing static index")
     site = build_site
 
     error = assert_raises(Jekyll::Errors::FatalException) { site.process }
@@ -192,8 +253,8 @@ class JekyllAdapterTest < Minitest::Test
   end
 
   def test_nested_static_index_collision_uses_final_destination
-    FileUtils.mkdir_p(File.join(@temporary_root, "notes"))
-    File.write(File.join(@temporary_root, "notes", "index.html"), "Existing notes index")
+    FileUtils.mkdir_p(File.join(@site_root, "notes"))
+    File.write(File.join(@site_root, "notes", "index.html"), "Existing notes index")
     site = build_site
 
     error = assert_raises(Jekyll::Errors::FatalException) { site.process }
@@ -203,9 +264,9 @@ class JekyllAdapterTest < Minitest::Test
   end
 
   def test_output_collection_document_collision_is_atomic
-    FileUtils.mkdir_p(File.join(@temporary_root, "_docs"))
+    FileUtils.mkdir_p(File.join(@site_root, "_docs"))
     File.write(
-      File.join(@temporary_root, "_docs", "home.md"),
+      File.join(@site_root, "_docs", "home.md"),
       "---\npermalink: /\n---\n# Existing collection home"
     )
     site = build_site("collections" => { "docs" => { "output" => true } })
@@ -228,18 +289,18 @@ class JekyllAdapterTest < Minitest::Test
     assert_equal "preserve me", File.read(canary)
   end
 
-  def test_destination_parent_component_symlink_is_rejected
+  def test_nested_destination_is_rejected_before_it_can_follow_a_symlink
     external = File.join(@temporary_root, "external-parent")
     FileUtils.mkdir_p(external)
     canary = File.join(external, "canary.txt")
     File.write(canary, "preserve me")
-    redirect = File.join(@temporary_root, "output-redirect")
+    redirect = File.join(@site_root, "output-redirect")
     File.symlink(external, redirect)
 
     error = assert_raises(Jekyll::Errors::FatalException) do
       build_site("destination" => File.join(redirect, "site")).process
     end
-    assert_includes error.message, "destination path contains a symlink"
+    assert_includes error.message, "destination must be a top-level _site"
     assert_equal "preserve me", File.read(canary)
   end
 
@@ -256,31 +317,50 @@ class JekyllAdapterTest < Minitest::Test
     assert_equal "preserve me", File.read(canary)
   end
 
-  def test_destination_inside_obsidian_source_is_rejected_during_initialization
+  def test_destination_outside_the_jekyll_site_is_rejected_during_initialization
     unsafe_destination = File.join(@temporary_root, "vault", "published")
 
     error = assert_raises(Jekyll::Errors::FatalException) do
       build_site("destination" => unsafe_destination)
     end
-    assert_includes error.message, "overlaps obsidian.source"
+    assert_includes error.message, "destination must stay inside the Jekyll source"
   end
 
-  def test_destination_containing_obsidian_source_is_rejected_during_initialization
-    FileUtils.mkdir_p(File.join(@temporary_root, "content"))
-    FileUtils.mv(File.join(@temporary_root, "vault"), File.join(@temporary_root, "content", "vault"))
-    unsafe_destination = File.join(@temporary_root, "content")
+  def test_destination_cannot_contain_the_jekyll_site
+    unsafe_destination = @temporary_root
 
     error = assert_raises(Jekyll::Errors::FatalException) do
-      build_site(
-        "destination" => unsafe_destination,
-        "obsidian" => obsidian_config.merge("source" => "content/vault")
-      )
+      build_site("destination" => unsafe_destination)
     end
-    assert_includes error.message, "overlaps obsidian.source"
+    assert_includes error.message, "Destination directory cannot be or contain the Source directory"
+  end
+
+  def test_jekyll_cache_symlink_is_rejected_before_core_writes_through_it
+    external = File.join(@temporary_root, "external-cache")
+    FileUtils.mkdir_p(external)
+    File.symlink(external, File.join(@site_root, ".jekyll-cache"))
+
+    error = assert_raises(Jekyll::Errors::FatalException) { build_site }
+
+    assert_includes error.message, "Jekyll cache"
+    assert_includes error.message, "symbolic link"
+    refute File.exist?(File.join(external, ".gitignore"))
+  end
+
+  def test_disabled_jekyll_disk_cache_does_not_follow_nested_cache_symlinks
+    cache_root = File.join(@site_root, ".jekyll-cache")
+    FileUtils.mkdir_p(cache_root)
+    external_target = File.join(@temporary_root, "outside-cache-gitignore")
+    File.symlink(external_target, File.join(cache_root, ".gitignore"))
+
+    build_site.process
+
+    refute File.exist?(external_target)
+    assert File.symlink?(File.join(cache_root, ".gitignore"))
   end
 
   def test_unsafe_encoded_jekyll_route_is_rejected_during_preflight
-    File.write(File.join(@temporary_root, "unsafe.html"), "---\npermalink: /safe/%2Fhidden/\n---\nUnsafe")
+    File.write(File.join(@site_root, "unsafe.html"), "---\npermalink: /safe/%2Fhidden/\n---\nUnsafe")
     site = build_site
 
     error = assert_raises(Jekyll::Errors::FatalException) { site.process }
@@ -289,7 +369,7 @@ class JekyllAdapterTest < Minitest::Test
   end
 
   def test_non_development_builds_require_the_application_asset_manifest
-    FileUtils.rm(File.join(@temporary_root, ".jekyll-obsidian-cache", "assets", "manifest.json"))
+    FileUtils.rm(File.join(@site_root, ".jekyll-obsidian-cache", "assets", "manifest.json"))
 
     %w[production ci].each do |environment|
       ENV["JEKYLL_ENV"] = environment
@@ -302,7 +382,7 @@ class JekyllAdapterTest < Minitest::Test
 
   def test_development_allows_a_missing_application_asset_manifest
     ENV["JEKYLL_ENV"] = "development"
-    FileUtils.rm(File.join(@temporary_root, ".jekyll-obsidian-cache", "assets", "manifest.json"))
+    FileUtils.rm(File.join(@site_root, ".jekyll-obsidian-cache", "assets", "manifest.json"))
     site = build_site
 
     site.process
@@ -310,7 +390,7 @@ class JekyllAdapterTest < Minitest::Test
   end
 
   def test_missing_active_theme_asset_fails_before_atomic_append
-    FileUtils.rm(File.join(@temporary_root, ".jekyll-obsidian-cache", "assets", "digital-garden.js"))
+    FileUtils.rm(File.join(@site_root, ".jekyll-obsidian-cache", "assets", "digital-garden.js"))
     site = build_site
 
     error = assert_raises(Jekyll::Errors::FatalException) { site.process }
@@ -336,18 +416,31 @@ class JekyllAdapterTest < Minitest::Test
   end
 
   def test_application_asset_cache_root_symlink_is_rejected_before_atomic_append
-    cache_root = File.join(@temporary_root, ".jekyll-obsidian-cache", "assets")
+    cache_root = File.join(@site_root, ".jekyll-obsidian-cache", "assets")
     external_root = Dir.mktmpdir("obsidian-assets-outside")
     external_assets = File.join(external_root, "assets")
     FileUtils.mv(cache_root, external_assets)
     File.symlink(external_assets, cache_root)
-    site = build_site
+    error = assert_raises(Jekyll::Errors::FatalException) { build_site.process }
 
-    error = assert_raises(Jekyll::Errors::FatalException) { site.process }
+    assert_includes error.message, "application assets"
+    assert_includes error.message, "symbolic link"
+  ensure
+    FileUtils.remove_entry(external_root) if external_root && File.exist?(external_root)
+  end
 
-    assert_includes error.message, "application asset cache"
-    assert_includes error.message, "symlink"
-    refute site.pages.any? { |page| page.class.name.include?("GeneratedPage") }
+  def test_application_asset_intermediate_symlink_is_rejected_before_atomic_append
+    cache_root = File.join(@site_root, ".jekyll-obsidian-cache", "assets")
+    feature_root = File.join(cache_root, "features")
+    external_root = Dir.mktmpdir("obsidian-feature-assets-outside")
+    external_features = File.join(external_root, "features")
+    FileUtils.mv(feature_root, external_features)
+    File.symlink(external_features, feature_root)
+
+    error = assert_raises(Jekyll::Errors::FatalException) { build_site.process }
+
+    assert_includes error.message, "application asset"
+    assert_includes error.message, "symbolic link"
   ensure
     FileUtils.remove_entry(external_root) if external_root && File.exist?(external_root)
   end
@@ -554,19 +647,27 @@ class JekyllAdapterTest < Minitest::Test
         ["\x1e2026-07-30T00:00:00Z\nvault/index.md\n", "", status]
       end
     end
-    site = Object.new
-    site.define_singleton_method(:source) { @temporary_root }
-    site.instance_variable_set(:@temporary_root, @temporary_root)
-    site.define_singleton_method(:in_source_dir) { |*parts| File.join(source, *parts) }
+    layout = JekyllObsidian::WorkspaceLayout.resolve(site: build_site, source: "vault")
+    FileUtils.mkdir_p(layout.jekyll_cache_root)
+    canary = File.join(@temporary_root, "git-cache-canary.json")
+    File.write(canary, "preserve me")
+    predictable_temporary = File.join(
+      layout.jekyll_cache_root,
+      "jekyll-obsidian-git-times.json.#{Process.pid}.tmp"
+    )
+    File.symlink(canary, predictable_temporary)
 
     Open3.stub(:capture3, capture) do
-      first = JekyllObsidian::Adapter.send(:git_time_map, site, "vault")
-      second = JekyllObsidian::Adapter.send(:git_time_map, site, "vault")
+      first = JekyllObsidian::Adapter.send(:git_time_map, layout)
+      second = JekyllObsidian::Adapter.send(:git_time_map, layout)
       assert_equal first, second
     end
 
     assert_equal 1, calls.count { |command| command.include?("log") }
-    assert File.file?(File.join(@temporary_root, ".jekyll-cache", "jekyll-obsidian-git-times.json"))
+    assert calls.all? { |command| command[2] == @temporary_root }
+    assert File.file?(File.join(@site_root, ".jekyll-cache", "jekyll-obsidian-git-times.json"))
+    assert_equal "preserve me", File.read(canary)
+    assert File.symlink?(predictable_temporary)
   end
 
   def test_publish_true_to_false_removes_stale_note_and_indexes
@@ -587,7 +688,7 @@ class JekyllAdapterTest < Minitest::Test
   private
 
   def destination
-    File.join(@temporary_root, "_site")
+    File.join(@site_root, "_site")
   end
 
   def obsidian_config
@@ -608,7 +709,7 @@ class JekyllAdapterTest < Minitest::Test
   def build_site(overrides = {})
     config = Jekyll.configuration(
       {
-        "source" => @temporary_root,
+        "source" => @site_root,
         "destination" => destination,
         "disable_disk_cache" => true,
         "quiet" => true,
@@ -618,7 +719,7 @@ class JekyllAdapterTest < Minitest::Test
         "lang" => "en",
         "url" => "https://example.test",
         "baseurl" => "",
-        "exclude" => ["vault", ".jekyll-obsidian-cache"],
+        "exclude" => [".jekyll-obsidian-cache"],
         "obsidian" => obsidian_config
       }.merge(overrides)
     )
@@ -645,7 +746,7 @@ class JekyllAdapterTest < Minitest::Test
   end
 
   def write_asset_manifest(overrides)
-    root = File.join(@temporary_root, ".jekyll-obsidian-cache", "assets")
+    root = File.join(@site_root, ".jekyll-obsidian-cache", "assets")
     FileUtils.mkdir_p(root)
     manifest = { "schema_version" => 1, "features" => {} }.merge(overrides)
     files = manifest.fetch("entries").values.flat_map { |entry| entry.fetch("files") }
@@ -662,10 +763,10 @@ class JekyllAdapterTest < Minitest::Test
   def install_project_layout
     project_root = File.expand_path("../..", __dir__)
     %w[obsidian-blog obsidian-docs obsidian-digital-garden].each do |layout|
-      FileUtils.cp(File.join(project_root, "_layouts", "#{layout}.html"), File.join(@temporary_root, "_layouts", "#{layout}.html"))
+      FileUtils.cp(File.join(project_root, "_layouts", "#{layout}.html"), File.join(@site_root, "_layouts", "#{layout}.html"))
     end
-    FileUtils.mkdir_p(File.join(@temporary_root, "_includes"))
-    FileUtils.cp_r(File.join(project_root, "_includes", "."), File.join(@temporary_root, "_includes"))
+    FileUtils.mkdir_p(File.join(@site_root, "_includes"))
+    FileUtils.cp_r(File.join(project_root, "_includes", "."), File.join(@site_root, "_includes"))
   end
 
   def run_git(*arguments, environment: {})

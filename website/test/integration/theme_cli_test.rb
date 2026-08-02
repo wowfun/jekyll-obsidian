@@ -16,6 +16,8 @@ class ThemeCliTest < Minitest::Test
   def test_build_theme_override_uses_a_temporary_overlay_without_rewriting_config
     config_path = File.join(@project_root, "_config.yml")
     before = Digest::SHA256.file(config_path).hexdigest
+    base_config = YAML.safe_load_file(config_path, permitted_classes: [], aliases: false)
+    assert_equal true, base_config["disable_disk_cache"]
 
     Dir.mktmpdir("jekyll-obsidian-cli") do |temporary|
       capture = File.join(temporary, "overlay.yml")
@@ -30,11 +32,12 @@ class ThemeCliTest < Minitest::Test
         "--theme", "docs",
         "--destination", "_site-cli-overlay",
         "--skip-assets",
-        chdir: @project_root
+        chdir: File.dirname(@project_root)
       )
 
       assert status.success?, "#{stdout}\n#{stderr}"
       overlay = YAML.safe_load_file(capture, permitted_classes: [], aliases: false)
+      assert_equal true, overlay["disable_disk_cache"]
       assert_equal "docs", overlay.dig("obsidian", "theme")
     end
 
@@ -48,7 +51,7 @@ class ThemeCliTest < Minitest::Test
       { "PATH" => "#{@ruby_bin}:#{ENV.fetch("PATH")}" },
       File.join(@project_root, "bin", "build"),
       "--theme", "magazine",
-      chdir: @project_root
+      chdir: File.dirname(@project_root)
     )
 
     refute status.success?
@@ -100,16 +103,23 @@ class ThemeCliTest < Minitest::Test
   end
 
   def test_dev_help_exposes_the_same_theme_choices
-    stdout, stderr, status = Open3.capture3(
-      { "PATH" => "#{@ruby_bin}:#{ENV.fetch("PATH")}" },
-      File.join(@project_root, "bin", "dev"),
-      "--help",
-      chdir: @project_root
-    )
+    Dir.mktmpdir("jekyll-obsidian-cwd") do |temporary|
+      stdout, stderr, status = Open3.capture3(
+        {
+          "PATH" => "#{@ruby_bin}:#{ENV.fetch("PATH")}",
+          "BUNDLE_GEMFILE" => File.join(temporary, "missing-host-Gemfile"),
+          "RUBYOPT" => nil,
+          "RUBYLIB" => nil
+        },
+        File.join(@project_root, "bin", "dev"),
+        "--help",
+        chdir: temporary
+      )
 
-    assert status.success?, stderr
-    assert_includes stdout, "--theme"
-    assert_includes stdout, "digital-garden"
+      assert status.success?, stderr
+      assert_includes stdout, "--theme"
+      assert_includes stdout, "digital-garden"
+    end
   end
 
   def test_dev_rejects_an_unknown_theme_before_starting_the_watcher

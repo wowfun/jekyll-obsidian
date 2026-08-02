@@ -13,18 +13,18 @@ updated: 2026-07-31
 
 # Getting Started
 
-The template keeps the writing workflow inside `vault/` and the publishing workflow outside it. Obsidian can open the folder without conversion or a special export step.
+The template keeps the writing workflow inside `vault/` and the publishing workflow in `website/`. Obsidian can open the content folder without conversion or a special export step.
 
 ## Install the toolchain
 
 Install Ruby 4.0.x, Node.js 26.x, and Git. CI pins the exact patch versions used by the repository. Then run these commands from the repository root:
 
 ```sh
-bin/setup
-bin/dev
+website/bin/setup
+website/bin/dev
 ```
 
-`bin/setup` installs the locked Ruby and Node dependencies. `bin/dev` uses filesystem events to watch the vault and site sources, rebuilds frontend assets only when their inputs change, and serves the resulting `_site` directory.
+`website/bin/setup` installs the locked Ruby and Node dependencies under `website/`. `website/bin/dev` watches the configured content directory and the site sources, rebuilds frontend assets only when their inputs change, and serves `website/_site`.
 
 ## Publish one note
 
@@ -39,7 +39,7 @@ tags:
 ---
 ```
 
-The value must be the boolean `true`. The strings `"true"` and `"yes"` are invalid. A Markdown file without frontmatter, or with `publish: false`, stays out of HTML, search, graph data, feeds, sitemaps, and copied assets.
+The value must be the boolean `true`. The strings `"true"` and `"yes"` are invalid. A Markdown file without frontmatter, or with `publish: false`, stays out of HTML, search, graph data, feeds, sitemaps, and copied assets. The configured content directory's `.obsidian/` and `.trash/` trees are excluded before this publication check.
 
 ## Add links and attachments
 
@@ -58,15 +58,15 @@ Only attachments reached from public notes, their `image` property, or their tra
 Run:
 
 ```sh
-RUN_BROWSER_TESTS=1 bin/test
-JEKYLL_ENV=production bin/build \
+RUN_BROWSER_TESTS=1 website/bin/test
+JEKYLL_ENV=production website/bin/build \
   --url https://example.test \
   --baseurl /jekyll-obsidian \
   --destination _site
 ```
 
-Install the local browser once with `npx playwright install chromium`. Without `RUN_BROWSER_TESTS=1`, `bin/test` runs the Ruby and TypeScript suites and reports that browser coverage was skipped.
+Install the local browser once with `(cd website && npx playwright install chromium)`. Without `RUN_BROWSER_TESTS=1`, `website/bin/test` runs the Ruby and TypeScript suites and reports that browser coverage was skipped. The build command resolves `_site` inside the site directory and writes `website/_site`.
 
 The production build fails on ambiguous or private embeds, cycles, path escapes, symlinks, and URL collisions. Ordinary unresolved links stay visible and produce warnings.
 
-Try `bin/dev --theme blog`, `bin/dev --theme docs`, or `bin/dev --theme digital-garden` against this same vault. Continue with [[Syntax]] or review the [[Deployment]] path.
+Try `website/bin/dev --theme blog`, `website/bin/dev --theme docs`, or `website/bin/dev --theme digital-garden` against this same vault. Continue with [[Syntax]] or review the [[Deployment]] path.

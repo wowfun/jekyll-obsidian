@@ -3,6 +3,7 @@ set -eu
 
 SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 PROJECT_DIR=$(CDPATH= cd -- "$SCRIPT_DIR/.." && pwd)
+export BUNDLE_GEMFILE="$PROJECT_DIR/Gemfile"
 
 origin=${PAGES_ORIGIN:-${JEKYLL_URL:-}}
 base_path=""
@@ -20,7 +21,7 @@ elif [ "${JEKYLL_BASEURL+x}" = x ]; then
 fi
 
 usage() {
-  printf '%s\n' "Usage: bin/build [--url ORIGIN] [--baseurl PATH] [--theme blog|docs|digital-garden] [--destination _site[-NAME]] [--skip-assets]"
+  printf '%s\n' "Usage: <site-dir>/bin/build [--url ORIGIN] [--baseurl PATH] [--theme blog|docs|digital-garden] [--destination _site[-NAME]] [--skip-assets]"
 }
 
 fail() {
@@ -84,6 +85,27 @@ if [ -e "$target_destination" ] && [ ! -d "$target_destination" ]; then
   fail "--destination must be a directory when it already exists."
 fi
 
+assert_local_directory() {
+  directory=$1
+  label=$2
+  case "$directory" in
+    "$PROJECT_DIR"/*) ;;
+    *) fail "$label must stay inside the site directory." ;;
+  esac
+  if [ -L "$directory" ]; then
+    fail "$label must not be a symbolic link."
+  fi
+  if [ -e "$directory" ] && [ ! -d "$directory" ]; then
+    fail "$label must be a directory."
+  fi
+}
+
+jekyll_cache=$PROJECT_DIR/.jekyll-cache
+application_cache=$PROJECT_DIR/.jekyll-obsidian-cache
+assert_local_directory "$jekyll_cache" "Jekyll cache"
+assert_local_directory "$application_cache" "Application cache"
+mkdir -p "$jekyll_cache" "$application_cache"
+
 if [ -n "${GITHUB_REPOSITORY:-}" ]; then
   case "$GITHUB_REPOSITORY" in
     */*) ;;
@@ -135,10 +157,9 @@ if [ "$build_environment" = production ] && [ -z "$origin" ]; then
   fail "production builds require --url or PAGES_ORIGIN."
 fi
 
-overlay_dir=$(mktemp -d "${TMPDIR:-/tmp}/jekyll-obsidian.XXXXXX")
+overlay_dir=$(mktemp -d "$application_cache/config.XXXXXX")
 overlay=$overlay_dir/config.yml
-mkdir -p "$PROJECT_DIR/.jekyll-obsidian-cache"
-staging_destination=$(mktemp -d "$PROJECT_DIR/.jekyll-obsidian-cache/site-build.XXXXXX")
+staging_destination=$(mktemp -d "$application_cache/site-build.XXXXXX")
 cleanup() {
   if [ -n "${staging_destination:-}" ] && [ -d "$staging_destination" ]; then
     rm -rf -- "$staging_destination"
@@ -161,6 +182,7 @@ yaml_string() {
   yaml_string "$origin"
   printf '\nbaseurl: '
   yaml_string "$base_path"
+  printf '\ndisable_disk_cache: true'
   printf '\ndestination: '
   yaml_string "$staging_destination"
   if [ -n "$theme" ]; then
@@ -182,8 +204,10 @@ if [ "$build_environment" = production ]; then
   bundle exec ruby "$PROJECT_DIR/scripts/verify-site-urls.rb" "$staging_destination" "$origin" "$base_path"
 fi
 
-backup_destination=$PROJECT_DIR/.jekyll-obsidian-cache/site-backup-$$
-[ ! -e "$backup_destination" ] || fail "stale site backup exists: $backup_destination"
+backup_destination=$application_cache/site-backup-$$
+if [ -e "$backup_destination" ] || [ -L "$backup_destination" ]; then
+  fail "stale site backup exists: $backup_destination"
+fi
 had_previous=0
 if [ -d "$target_destination" ]; then
   mv -- "$target_destination" "$backup_destination"

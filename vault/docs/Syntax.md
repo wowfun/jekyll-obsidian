@@ -34,7 +34,7 @@ Common Markdown works alongside ==highlighting==, footnotes, and task states.[^c
 - [ ] Replace the sample title.
 - [/] Review a draft.
 
-[^contract]: The full compatibility table is maintained in `docs/ofm-conformance.md`.
+[^contract]: The full compatibility table is maintained in `website/docs/ofm-conformance.md`.
 
 ## Callouts
 

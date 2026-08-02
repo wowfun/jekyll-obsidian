@@ -11,7 +11,7 @@ updated: 2026-07-31
 
 # Customization
 
-Start with `_config.yml`. The public configuration stays small enough to review in one place:
+Start with `website/_config.yml`. The public configuration stays small enough to review in one place:
 
 ```yaml
 title: My Site
@@ -34,6 +34,8 @@ obsidian:
   features: {}
 ```
 
+`obsidian.source` is relative to the host repository root. Keep `source: vault` for the starter content, or use `source: docs` to publish an existing documentation directory outside `website/`.
+
 ## Site identity
 
 `title`, `description`, and `lang` feed the shell, metadata, Atom, and accessibility labels. Set `obsidian.repository` to an `owner/repository` pair to show Edit, History, View source, and Report issue links. If it is blank, the build checks `GITHUB_REPOSITORY` and the local `origin` remote. The links stay hidden when no repository can be identified.
@@ -43,9 +45,11 @@ obsidian:
 Each build selects one complete presentation preset. `blog` adds chronology and archive, `docs` adds a hierarchical handbook navigator, and `digital-garden` adds relation context and graph exploration. A command-line override is useful for comparing the same content without editing configuration:
 
 ```sh
-bin/dev --theme docs
-bin/build --theme blog --url https://example.test --baseurl "" --destination _site
+website/bin/dev --theme docs
+website/bin/build --theme blog --url https://example.test --baseurl "" --destination _site
 ```
+
+The build writes the named destination below `website/`, so `_site` becomes `website/_site`.
 
 Feature keys omitted from `obsidian.features` inherit the theme defaults. Explicit YAML booleans can override `search`, `tags`, `feed`, `graph`, `relations`, `previews`, and `outline`.
 

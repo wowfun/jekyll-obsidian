@@ -303,7 +303,7 @@ class SiteUrlVerifier
 end
 
 unless ARGV.length == 3
-  warn "Usage: scripts/verify-site-urls.rb SITE_DIR ORIGIN BASEURL"
+  warn "Usage: <site-dir>/scripts/verify-site-urls.rb SITE_DIR ORIGIN BASEURL"
   exit 64
 end
 

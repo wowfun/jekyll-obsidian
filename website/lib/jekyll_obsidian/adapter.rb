@@ -5,14 +5,28 @@ require "fileutils"
 require "json"
 require "open3"
 require "pathname"
+require "tempfile"
 require "tmpdir"
 require "jekyll"
 require_relative "../jekyll_obsidian"
+require_relative "workspace_layout"
 
 module JekyllObsidian
   module Adapter
     BUNDLED_FEATURE_IDS = %w[search graph previews math mermaid].freeze
     CONFIG_KEYS = %w[source syntax_profile theme repository edit_branch content features].freeze
+    IGNORED_CONTENT_DIRECTORIES = %w[.obsidian .trash].freeze
+    STAGING_BASENAME_PATTERN = /\Avault-assets\.[A-Za-z0-9.-]+\z/
+    StagingLease = Struct.new(:parent, :path, keyword_init: true)
+
+    module SiteProcessCleanup
+      def process(...)
+        super
+      ensure
+        Adapter.cleanup_staging(self)
+      end
+    end
+
     class GeneratedPage < Jekyll::PageWithoutAFile
       attr_reader :obsidian_route
 
@@ -76,19 +90,16 @@ module JekyllObsidian
     class << self
 
     def prepare_site(site)
-      obsidian = normalize_obsidian_configuration(site)
-      source = obsidian.fetch("source")
-      assert_safe_destination(site, source)
-      site.exclude = Array(site.exclude).dup
-      site.exclude << source unless site.exclude.include?(source)
-      site.config["exclude"] = site.exclude.dup
+      site.singleton_class.prepend(SiteProcessCleanup) unless site.singleton_class < SiteProcessCleanup
+      obsidian, _layout = normalize_obsidian_configuration(site)
       site.config["obsidian"] = obsidian
     end
 
     def generate(site)
       source = site.config.fetch("obsidian").fetch("source")
-      assert_vault_was_not_read(site, source)
-      result = compile(site, source)
+      layout = resolve_workspace_layout(site, source)
+      assert_vault_was_not_read(site, layout)
+      result = compile(site, layout)
       log_diagnostics(result)
       unless result.success?
         summary = result.diagnostics.select { |item| item.severity == :error }
@@ -97,20 +108,30 @@ module JekyllObsidian
         fatal("obsidian compilation failed: #{summary}")
       end
 
-      staging_root = stage_vault_assets(site, source, result)
+      staging_root = stage_vault_assets(site, layout, result)
       begin
         site.data["obsidian_feed_available"] = result.generated_files.any? { |output| output.route == "/feed.xml" }
         site.data.merge!(result.site_data)
         pages, vault_assets = generated_objects(site, result, staging_root)
-        app_assets = app_asset_objects(site, theme: result.theme, features: result.features)
+        app_assets = app_asset_objects(site, layout:, theme: result.theme, features: result.features)
         preflight_collisions(site, pages, vault_assets + app_assets)
         site.pages.concat(pages)
         site.static_files.concat(vault_assets).concat(app_assets)
       rescue StandardError
-        site.data.delete("jekyll_obsidian_staging_root")
-        FileUtils.remove_entry(staging_root) if File.exist?(staging_root)
+        cleanup_staging(site)
         raise
       end
+    end
+
+    def cleanup_staging(site)
+      lease = site.remove_instance_variable(:@jekyll_obsidian_staging_lease)
+      return unless lease.is_a?(StagingLease)
+      return unless File.dirname(lease.path) == lease.parent
+      return unless File.basename(lease.path).match?(STAGING_BASENAME_PATTERN)
+
+      FileUtils.remove_entry(lease.path) if File.exist?(lease.path) || File.symlink?(lease.path)
+    rescue NameError
+      nil
     end
 
     private
@@ -122,9 +143,9 @@ module JekyllObsidian
       unknown = configured.keys.map(&:to_s) - CONFIG_KEYS
       fatal("obsidian contains unsupported key: #{unknown.sort.first}") unless unknown.empty?
 
-      source = validate_source_configuration(site, configured.fetch("source", "vault"))
-      {
-        "source" => source,
+      layout = resolve_workspace_layout(site, configured.fetch("source", "vault"))
+      obsidian = {
+        "source" => layout.source,
         "syntax_profile" => configured.fetch("syntax_profile", "ofm@1"),
         "theme" => configured.fetch("theme", "digital-garden"),
         "repository" => configured.fetch("repository", ""),
@@ -132,60 +153,17 @@ module JekyllObsidian
         "content" => configured["content"],
         "features" => configured["features"]
       }
+      [obsidian, layout]
     end
 
-    def validate_source_configuration(site, raw)
-      fatal("obsidian.source must be a repository-relative directory") unless raw.is_a?(String)
-
-      source = raw.unicode_normalize(:nfc).tr("\\", "/")
-      path = Pathname.new(source)
-      if source.empty? || source == "." || path.absolute? || path.cleanpath.to_s != source || source.split("/").any? { |part| part.empty? || part == ".." }
-        fatal("obsidian.source must be a normalized repository-relative directory")
-      end
-
-      Array(site.include).each do |included|
-        next unless included.is_a?(String)
-        normalized = included.delete_prefix("./").delete_suffix("/")
-        fatal("obsidian.source overlaps Jekyll include: #{included}") if path_overlap?(source, normalized)
-      end
-
-      collections_dir = site.config.fetch("collections_dir", "").to_s.delete_suffix("/")
-      Array(site.collection_names).each do |label|
-        collection_path = [collections_dir, "_#{label}"].reject(&:empty?).join("/")
-        fatal("obsidian.source overlaps Jekyll collection #{label}") if path_overlap?(source, collection_path)
-      end
-
-      absolute = site.in_source_dir(source)
-      fatal("obsidian.source does not exist: #{source}") unless File.directory?(absolute)
-      assert_regular_directory_chain(site.source, absolute)
-      real_source = File.realpath(site.source)
-      real_vault = File.realpath(absolute)
-      unless real_vault == real_source || real_vault.start_with?("#{real_source}#{File::SEPARATOR}")
-        fatal("obsidian.source escapes the repository")
-      end
-      fatal("obsidian.source cannot be the repository root") if real_vault == real_source
-      source
-    rescue ArgumentError, SystemCallError => exception
-      fatal("invalid obsidian.source: #{exception.message}")
+    def resolve_workspace_layout(site, source)
+      WorkspaceLayout.resolve(site:, source:)
+    rescue WorkspaceLayout::Invalid => exception
+      fatal(exception.message)
     end
 
-    def assert_regular_directory_chain(root, target)
-      relative = Pathname.new(target).relative_path_from(Pathname.new(root)).each_filename.to_a
-      cursor = root
-      relative.each do |part|
-        cursor = File.join(cursor, part)
-        stat = File.lstat(cursor)
-        fatal("obsidian.source cannot contain symlink path components") if stat.symlink?
-      end
-    end
-
-    def path_overlap?(left, right)
-      return false if right.nil? || right.empty?
-      left == right || left.start_with?("#{right}/") || right.start_with?("#{left}/")
-    end
-
-    def assert_vault_was_not_read(site, source)
-      root = site.in_source_dir(source)
+    def assert_vault_was_not_read(site, layout)
+      root = layout.source_root
       leaked = []
       site.pages.each { |page| leaked << page.path if path_inside?(page.path, root, site.source) }
       site.static_files.each { |file| leaked << file.path if path_inside?(file.path, root, site.source) }
@@ -215,38 +193,9 @@ module JekyllObsidian
       candidate == root || candidate.start_with?("#{root}#{File::SEPARATOR}")
     end
 
-    def assert_safe_destination(site, source)
-      repository_root = File.expand_path(site.source)
-      vault_root = File.expand_path(site.in_source_dir(source))
-      destination_root = File.expand_path(site.dest)
-
-      if path_descendant?(destination_root, vault_root) || path_descendant?(vault_root, destination_root)
-        fatal("destination overlaps obsidian.source")
-      end
-      if path_descendant?(repository_root, destination_root)
-        fatal("destination cannot contain the repository source")
-      end
-
-      assert_no_destination_symlink_components(destination_root)
-      fatal("destination must be a directory: #{destination_root}") if File.exist?(destination_root) && !File.directory?(destination_root)
-    rescue SystemCallError => exception
-      fatal("cannot validate destination #{site.dest}: #{exception.message}")
-    end
-
-    def assert_no_destination_symlink_components(destination)
-      cursor = Pathname.new(File::SEPARATOR)
-      Pathname.new(destination).each_filename do |component|
-        cursor = cursor.join(component)
-        stat = File.lstat(cursor)
-        fatal("destination path contains a symlink: #{cursor}") if stat.symlink?
-      rescue Errno::ENOENT
-        break
-      end
-    end
-
-    def build_snapshot(site, source)
-      root = site.in_source_dir(source)
-      git_times = git_time_map(site, source)
+    def build_snapshot(layout)
+      root = layout.source_root
+      git_times = git_time_map(layout)
       entries = []
       Find.find(root) do |absolute|
         relative = Pathname.new(absolute).relative_path_from(Pathname.new(root)).to_s
@@ -254,7 +203,10 @@ module JekyllObsidian
 
         stat = File.lstat(absolute)
         fatal("vault symlink rejected: #{relative}") if stat.symlink?
-        if relative == ".obsidian" || relative.start_with?(".obsidian#{File::SEPARATOR}")
+        ignored = IGNORED_CONTENT_DIRECTORIES.any? do |directory|
+          relative == directory || relative.start_with?("#{directory}#{File::SEPARATOR}")
+        end
+        if ignored
           Find.prune if stat.directory?
           next
         end
@@ -288,14 +240,17 @@ module JekyllObsidian
       fatal("vault changed during snapshot: #{exception.message}")
     end
 
-    def git_time_map(site, source)
-      head, _head_error, head_status = Open3.capture3("git", "-C", site.source, "rev-parse", "HEAD")
+    def git_time_map(layout)
+      source = layout.source
+      head, _head_error, head_status = Open3.capture3("git", "-C", layout.workspace_root, "rev-parse", "HEAD")
       return {} unless head_status.success?
 
       head = head.strip
-      cache_path = site.in_source_dir(".jekyll-cache", "jekyll-obsidian-git-times.json")
-      if File.file?(cache_path)
-        cached = JSON.parse(File.read(cache_path, encoding: "UTF-8"))
+      cache_path = File.join(layout.jekyll_cache_root, "jekyll-obsidian-git-times.json")
+      ensure_runtime_directory!(layout.jekyll_cache_root, "Jekyll cache")
+      cached_bytes = read_regular_cache_file(cache_path, "Git date cache")
+      if cached_bytes
+        cached = JSON.parse(cached_bytes)
         if cached["head"] == head && cached["source"] == source && cached["times"].is_a?(Hash)
           return cached.fetch("times").transform_values do |times|
             { first: times["first"], last: times["last"] }
@@ -304,7 +259,7 @@ module JekyllObsidian
       end
 
       command = [
-        "git", "-C", site.source, "-c", "core.quotePath=false",
+        "git", "-C", layout.workspace_root, "-c", "core.quotePath=false",
         "log", "--format=%x1e%aI", "--name-only", "--", source
       ]
       stdout, _stderr, status = Open3.capture3(*command)
@@ -329,23 +284,57 @@ module JekyllObsidian
         item[:first] = current_time
       end
       FileUtils.mkdir_p(File.dirname(cache_path))
-      temporary = "#{cache_path}.#{Process.pid}.tmp"
-      File.write(temporary, JSON.generate("head" => head, "source" => source, "times" => result))
-      File.rename(temporary, cache_path)
+      temporary = Tempfile.create(["jekyll-obsidian-git-times.", ".tmp"], File.dirname(cache_path))
+      temporary_path = temporary.path
+      temporary.write(JSON.generate("head" => head, "source" => source, "times" => result))
+      temporary.flush
+      temporary.fsync
+      temporary.close
+      File.rename(temporary_path, cache_path)
       result
     rescue JSON::ParserError, SystemCallError
       {}
     ensure
-      FileUtils.rm_f(temporary) if defined?(temporary) && temporary
+      temporary.close if defined?(temporary) && temporary && !temporary.closed?
+      FileUtils.rm_f(temporary_path) if defined?(temporary_path) && temporary_path
     end
 
-    def repository_identity(site)
+    def ensure_runtime_directory!(root, label)
+      FileUtils.mkdir_p(root)
+      stat = File.lstat(root)
+      unless stat.directory? && !stat.symlink? && File.realpath(root) == root
+        fatal("#{label} must be a non-symlink directory")
+      end
+    rescue SystemCallError => exception
+      fatal("cannot validate #{label}: #{exception.message}")
+    end
+
+    def read_regular_cache_file(path, label)
+      return nil unless File.exist?(path) || File.symlink?(path)
+
+      before = File.lstat(path)
+      fatal("#{label} must be a non-symlink regular file") unless before.file? && !before.symlink?
+      flags = File::RDONLY | (File.const_defined?(:NOFOLLOW) ? File::NOFOLLOW : 0)
+      File.open(path, flags) do |file|
+        opened = file.stat
+        unless opened.file? && opened.dev == before.dev && opened.ino == before.ino
+          fatal("#{label} changed while opening")
+        end
+        file.read
+      end
+    rescue SystemCallError => exception
+      fatal("cannot read #{label}: #{exception.message}")
+    end
+
+    def repository_identity(site, layout)
       explicit = site.config.dig("obsidian", "repository").to_s.strip
       return explicit unless explicit.empty?
       environment = ENV.fetch("GITHUB_REPOSITORY", "").strip
       return environment unless environment.empty?
 
-      stdout, _stderr, status = Open3.capture3("git", "-C", site.source, "config", "--get", "remote.origin.url")
+      stdout, _stderr, status = Open3.capture3(
+        "git", "-C", layout.workspace_root, "config", "--get", "remote.origin.url"
+      )
       return nil unless status.success?
       remote = stdout.strip
       match = remote.match(%r{(?:github\.com[:/])([^/\s]+/[^/\s]+?)(?:\.git)?\z}i)
@@ -354,19 +343,19 @@ module JekyllObsidian
       nil
     end
 
-    def compile(site, source)
-      repository = repository_identity(site)
+    def compile(site, layout)
+      repository = repository_identity(site, layout)
       Jekyll.logger.warn("Obsidian:", "repository identity unavailable; GitHub collaboration links are hidden") unless repository
       obsidian = site.config.fetch("obsidian")
       request = BuildRequest.new(
-        snapshot: build_snapshot(site, source),
+        snapshot: build_snapshot(layout),
         config: BuildConfig.new(
           title: site.config["title"].to_s,
           description: site.config["description"].to_s,
           lang: site.config.fetch("lang", "en").to_s,
           url: site.config["url"].to_s,
           baseurl: site.config["baseurl"].to_s,
-          source: source,
+          source: layout.source,
           syntax_profile: obsidian.fetch("syntax_profile"),
           theme: obsidian.fetch("theme"),
           content: obsidian.fetch("content"),
@@ -379,9 +368,12 @@ module JekyllObsidian
       VaultCompiler.compile(request)
     end
 
-    def stage_vault_assets(site, source, result)
-      staging_root = Dir.mktmpdir("jekyll-obsidian-vault-")
-      vault_root = site.in_source_dir(source)
+    def stage_vault_assets(site, layout, result)
+      cleanup_staging(site)
+      FileUtils.mkdir_p(layout.application_cache_root)
+      validate_application_cache_root!(layout)
+      staging_root = Dir.mktmpdir("vault-assets.", layout.application_cache_root)
+      vault_root = layout.source_root
       result.copied_assets.each do |output|
         source_path = File.join(vault_root, output.source_path)
         destination = File.join(staging_root, output.source_path)
@@ -396,7 +388,10 @@ module JekyllObsidian
           File.open(destination, File::WRONLY | File::CREAT | File::EXCL, 0o644) { |target| IO.copy_stream(file, target) }
         end
       end
-      site.data["jekyll_obsidian_staging_root"] = staging_root
+      site.instance_variable_set(
+        :@jekyll_obsidian_staging_lease,
+        StagingLease.new(parent: layout.application_cache_root, path: staging_root).freeze
+      )
       staging_root
     rescue StandardError
       FileUtils.remove_entry(staging_root) if staging_root && File.exist?(staging_root)
@@ -415,9 +410,9 @@ module JekyllObsidian
       [pages + generated, assets]
     end
 
-    def app_asset_objects(site, theme:, features:)
-      root = site.in_source_dir(".jekyll-obsidian-cache", "assets")
-      validate_application_asset_root!(site, root)
+    def app_asset_objects(site, layout:, theme:, features:)
+      root = layout.application_assets_root
+      validate_application_asset_root!(layout, root)
       manifest_path = File.join(root, "manifest.json")
       unless File.file?(manifest_path)
         fatal("application asset manifest is missing: #{manifest_path}") unless Jekyll.env == "development"
@@ -476,8 +471,16 @@ module JekyllObsidian
       fatal("cannot load application assets: #{exception.message}")
     end
 
-    def validate_application_asset_root!(site, root)
-      site_root = File.expand_path(site.source)
+    def validate_application_cache_root!(layout)
+      root = layout.application_cache_root
+      stat = File.lstat(root)
+      fatal("application cache must be a non-symlink directory") unless stat.directory? && !stat.symlink?
+    rescue SystemCallError => exception
+      fatal("cannot validate application cache: #{exception.message}")
+    end
+
+    def validate_application_asset_root!(layout, root)
+      site_root = layout.site_root
       expanded_root = File.expand_path(root)
       unless path_descendant?(expanded_root, site_root) && expanded_root != site_root
         fatal("application asset cache escapes the site source")
@@ -498,8 +501,21 @@ module JekyllObsidian
         fatal("#{label} escapes the application asset cache")
       end
 
-      stat = File.lstat(expanded)
-      fatal("#{label} is not a regular file") unless stat.file? && !stat.symlink?
+      relative = Pathname.new(expanded).relative_path_from(Pathname.new(expanded_cache_root))
+      cursor = expanded_cache_root
+      parts = relative.each_filename.to_a
+      parts.each_with_index do |part, index|
+        cursor = File.join(cursor, part)
+        stat = File.lstat(cursor)
+        fatal("#{label} path contains a symbolic link: #{cursor}") if stat.symlink?
+        if index == parts.length - 1
+          fatal("#{label} is not a regular file") unless stat.file?
+        else
+          fatal("#{label} path contains a non-directory: #{cursor}") unless stat.directory?
+        end
+      end
+    rescue ArgumentError
+      fatal("#{label} escapes the application asset cache")
     end
 
     def validate_manifest_entry!(entry, location)
@@ -612,6 +628,5 @@ Jekyll::Hooks.register :site, :after_init do |site|
 end
 
 Jekyll::Hooks.register :site, :post_write do |site|
-  staging_root = site.data.delete("jekyll_obsidian_staging_root")
-  FileUtils.remove_entry(staging_root) if staging_root && File.exist?(staging_root)
+  JekyllObsidian::Adapter.cleanup_staging(site)
 end

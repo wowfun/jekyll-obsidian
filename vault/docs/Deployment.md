@@ -23,11 +23,13 @@ Every pull request and every push to the repository's default branch checks out 
 
 Pull request jobs have `contents: read` permission. They do not call `configure-pages`, upload a Pages artifact, or deploy.
 
+The workflow watches `website/**`, `vault/**`, `docs/**`, and its own workflow file. If `obsidian.source` names another directory, add that path to the workflow's `push.paths` and `pull_request.paths` lists.
+
 ## Trusted Pages build
 
-On a trusted default-branch push or a default-branch manual run, `build_pages` waits for verification. `actions/configure-pages` supplies the authoritative `origin` and `base_path`. The workflow passes both values to `bin/build`, which writes a temporary Jekyll config overlay.
+On a trusted default-branch push or a default-branch manual run, `build_pages` waits for verification. `actions/configure-pages` supplies the authoritative `origin` and `base_path`. The workflow passes both values to `website/bin/build`, which writes a temporary Jekyll config overlay under the site directory.
 
-Before upload, the audit checks that `_site/index.html` exists, every output path is allowed, links are regular files rather than symbolic or multiply linked files, and the site remains within GitHub Pages' 1 GB published-site limit.
+Before upload, the audit checks that `website/_site/index.html` exists, every output path is allowed, links are regular files rather than symbolic or multiply linked files, and the site remains within GitHub Pages' 1 GB published-site limit.
 
 The deployment job alone receives `pages: write` and `id-token: write`. It uses the `github-pages` environment and reports the URL returned by the deployment action.
 
@@ -35,7 +37,7 @@ The deployment job alone receives `pages: write` and `id-token: write`. It uses 
 
 The compiler keeps `baseurl` out of permalinks. One URL builder combines routes with the configured base path for HTML, assets, canonical links, feeds, sitemaps, and JSON requests.
 
-When Pages metadata is unavailable in a pull request, `bin/build` inspects `GITHUB_REPOSITORY`. A repository named `<owner>.github.io` uses the domain root. Any other repository uses `/<repository>`.
+When Pages metadata is unavailable in a pull request, `website/bin/build` inspects `GITHUB_REPOSITORY`. A repository named `<owner>.github.io` uses the domain root. Any other repository uses `/<repository>`.
 
 ## Custom domains
 

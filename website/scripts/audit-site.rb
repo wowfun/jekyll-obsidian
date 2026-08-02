@@ -22,7 +22,7 @@ def fail_audit(message)
   exit 1
 end
 
-site_dir = File.expand_path(ARGV.fetch(0, "_site"))
+site_dir = File.expand_path(ARGV.fetch(0, File.expand_path("../_site", __dir__)))
 fail_audit("#{site_dir} is not a directory") unless File.directory?(site_dir)
 fail_audit("the site root must not be a symbolic link") if File.lstat(site_dir).symlink?
 fail_audit("index.html is missing") unless File.file?(File.join(site_dir, "index.html"))
