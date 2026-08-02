@@ -657,10 +657,14 @@ class JekyllAdapterTest < Minitest::Test
     )
     File.symlink(canary, predictable_temporary)
 
-    Open3.stub(:capture3, capture) do
+    original_capture3 = Open3.method(:capture3)
+    Open3.define_singleton_method(:capture3, capture)
+    begin
       first = JekyllObsidian::Adapter.send(:git_time_map, layout)
       second = JekyllObsidian::Adapter.send(:git_time_map, layout)
       assert_equal first, second
+    ensure
+      Open3.define_singleton_method(:capture3, original_capture3)
     end
 
     assert_equal 1, calls.count { |command| command.include?("log") }
