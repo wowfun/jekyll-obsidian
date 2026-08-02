@@ -1,12 +1,14 @@
 ---
 publish: true
 title: Architecture
-nav_order: 40
+nav_order: 10
+permalink: /docs/Architecture/
 tags:
+  - guide/development
   - guide/architecture
 description: How the pure vault compiler and the filesystem-facing Jekyll adapter divide responsibility.
 created: 2026-07-31
-updated: 2026-07-31
+updated: 2026-08-02
 ---
 
 # Architecture
@@ -52,4 +54,4 @@ The adapter also loads only the selected theme and feature closure from the hash
 
 Generated data is UTF-8, schema-versioned, and stably sorted. No build timestamp is added. Explicit note dates win over Git dates, and the compiler never falls back to the current time. If one public note lacks a deterministic update time, the compiler skips the entire Atom feed and emits a warning.
 
-See [[Syntax]] for the authoring contract and [[Deployment]] for the hosted pipeline.
+See [[docs/Syntax|Syntax]] for the authoring contract and [[docs/Deployment|Deployment]] for the hosted pipeline.

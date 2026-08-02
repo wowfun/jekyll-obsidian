@@ -53,6 +53,8 @@ The command needs neither Ruby nor Node.js. It defaults to `docs/` and the `docs
 
 Then open **Settings → Pages → Build and deployment**, choose **GitHub Actions** as the Source, commit the generated files, and push. GitHub Actions installs Ruby, Node.js, dependencies, and Chromium before building and deploying the site.
 
+After **Verify and deploy Pages** succeeds, open the URL from its `deploy` job or from **Settings → Pages**. A normal project repository uses `https://<owner>.github.io/<repository>/`; a repository named `<owner>.github.io` uses `https://<owner>.github.io/`. A configured custom domain replaces that default. [[Deployment]] explains how the workflow obtains and applies the final URL.
+
 ## Choose a source and theme
 
 Both platform adapters accept the same options:

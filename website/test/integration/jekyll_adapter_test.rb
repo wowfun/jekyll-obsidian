@@ -77,6 +77,18 @@ class JekyllAdapterTest < Minitest::Test
     )
   end
 
+  def test_real_footer_links_to_the_configured_github_repository
+    install_project_layout
+    site = build_site
+
+    site.process
+
+    index = File.read(File.join(destination, "index.html"))
+    assert_includes index, 'class="site-footer__github"'
+    assert_includes index, 'href="https://github.com/example/obsidian"'
+    assert_includes index, 'aria-label="View this project on GitHub"'
+  end
+
   def test_obsidian_trash_is_not_compiled_as_public_content
     trash_root = File.join(@temporary_root, "vault", ".trash")
     FileUtils.mkdir_p(trash_root)

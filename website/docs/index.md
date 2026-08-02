@@ -12,7 +12,7 @@ image: assets/research-folio.svg
 cssclasses:
   - obsidian-home
 created: 2026-07-31
-updated: 2026-07-31
+updated: 2026-08-02
 ---
 
 # One vault, three ways to publish
@@ -26,11 +26,12 @@ This site is both starter content and the manual for `jekyll-obsidian`. Every pa
 
 ## Begin here
 
-- [[Getting Started]] covers the first local build and the publication boundary.
+- [[Integration|Host Integration]] covers copying `website/` into another repository.
+- [[Getting Started]] covers local authoring and the publication boundary.
 - [[Syntax]] lists the Obsidian-flavored Markdown supported in v1.
 - [[Customization]] explains type, color, navigation, and repository links.
 - [[Deployment]] follows the GitHub Pages workflow from pull request to release.
-- [[Architecture]] describes the compiler and the Jekyll adapter.
+- [[docs/development/index|Developer Guide]] covers contributor setup, architecture, and the OFM contract.
 - [[中文示例|CJK showcase]] demonstrates Chinese, Japanese, and mixed-script search.
 
 ## A useful constraint

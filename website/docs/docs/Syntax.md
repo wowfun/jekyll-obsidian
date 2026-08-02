@@ -18,11 +18,11 @@ The `ofm@1` profile has a versioned contract. It favors source that reads well i
 
 ## Links and embeds
 
-Use a wikilink for another note and an alias for display text: [[Architecture|compiler architecture]]. A heading fragment links to [[Architecture#Compiler boundary]]. A block fragment links to [[Architecture#^compiler-contract]].
+Use a wikilink for another note and an alias for display text: [[docs/development/architecture|compiler architecture]]. A heading fragment links to [[docs/development/architecture#Compiler boundary|Compiler boundary]]. A block fragment links to [[docs/development/architecture#^compiler-contract|compiler contract]].
 
 The next excerpt is embedded from the architecture note:
 
-![[Architecture#^compiler-contract]]
+![[docs/development/architecture#^compiler-contract]]
 
 Embeds keep their source attribution. When the same excerpt appears more than once, the compiler scopes its DOM IDs so anchors remain unique.
 
@@ -34,7 +34,7 @@ Common Markdown works alongside ==highlighting==, footnotes, and task states.[^c
 - [ ] Replace the sample title.
 - [/] Review a draft.
 
-[^contract]: The full compatibility table is maintained in `website/docs/ofm-conformance.md`.
+[^contract]: The full compatibility table is maintained in [[docs/development/ofm-conformance|OFM v1 Conformance]].
 
 ## Callouts
 

@@ -60,7 +60,10 @@ module JekyllObsidian
           pages: pages,
           artifacts: artifacts,
           shared_files: shared_files,
-          site_data: { "obsidian_graph_interactive" => graph_interactive },
+          site_data: {
+            "obsidian_graph_interactive" => graph_interactive,
+            "obsidian_repository_url" => repository_url(config)
+          }.compact,
           feed_note_ids: feed_notes.sort_by(&:id).map(&:id),
           reserved_namespaces: namespaces
         )
@@ -175,6 +178,13 @@ module JekyllObsidian
       def interactive_graph?(model, config)
         config.features.fetch("graph") && model.notes.length <= INTERACTIVE_GRAPH_MAX_NODES &&
           model.graph_edges.length <= INTERACTIVE_GRAPH_MAX_EDGES
+      end
+
+      def repository_url(config)
+        repository = config.site.repository.to_s
+        return unless repository.match?(/\A[\w.-]+\/[\w.-]+\z/)
+
+        "https://github.com/#{repository}"
       end
 
       def not_found_page(config, system_theme_data)

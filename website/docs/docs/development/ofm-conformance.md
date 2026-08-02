@@ -1,4 +1,19 @@
-# OFM v1 conformance
+---
+publish: true
+title: OFM v1 Conformance
+nav_order: 20
+aliases:
+  - OFM conformance
+tags:
+  - guide/development
+  - ofm
+  - specification
+description: The pinned ofm@1 compatibility contract for notes, embeds, media, plugins, and build errors.
+created: 2026-07-31
+updated: 2026-08-02
+---
+
+# OFM v1 Conformance
 
 The `ofm@1` profile is pinned to the Obsidian Help repository at commit [`1d26fe9d22673ba476c77919800ce514dc0907e0`](https://github.com/obsidianmd/obsidian-help/tree/1d26fe9d22673ba476c77919800ce514dc0907e0). This document describes the template contract. It does not claim compatibility with future Obsidian releases.
 
@@ -15,7 +30,7 @@ Each feature has one of three outcomes:
 | CommonMark paragraphs, lists, quotations, code, tables, and strikethrough | render | Parsed once per public note with Commonmarker 2.9.0. |
 | Hard line breaks | render | Obsidian-style line breaks are enabled by the syntax profile. |
 | Wikilinks | render | Resolution checks a vault-relative path, then a source-relative path, then a unique basename. |
-| Wikilink display text | render | `[[note|label]]` uses `label`. Frontmatter aliases do not become implicit link targets. |
+| Wikilink display text | render | `[[note\|label]]` uses `label`. Frontmatter aliases do not become implicit link targets. |
 | Heading and block links | render | Heading chains resolve by their terminal heading within the stated chain; duplicate headings receive stable suffixed IDs, and `^block-id` fragments resolve within a public target. Missing fragments keep links unresolved, while missing embed fragments follow the production/development error policy below. |
 | Note, heading, and block embeds | render | Each embed gets a semantic wrapper, source link, and instance-scoped DOM IDs. One host page may expand at most 16 levels, 256 instances, and 2 MiB of embedded HTML. Development shows a deterministic placeholder at the limit; production fails. |
 | Highlights | render | `==highlighted text==` produces semantic highlight markup. |
@@ -46,7 +61,7 @@ Each feature has one of three outcomes:
 | Markdown links to notes | render | Internal URLs use the same resolver and URL builder as wikilinks. |
 | External HTTP and HTTPS links | render | Preserved with context-safe escaping. |
 | `javascript:`, `data:`, `file:`, and `vbscript:` Markdown URLs | unsupported | Rejected. |
-| Images: AVIF, BMP, GIF, JPEG, PNG, SVG, WebP | render | Local files publish only when reached from public authored content or its transclusion closure. Wikilink dimensions and Markdown alt suffixes such as `alt|320x180` are supported. |
+| Images: AVIF, BMP, GIF, JPEG, PNG, SVG, WebP | render | Local files publish only when reached from public authored content or its transclusion closure. Wikilink dimensions and Markdown alt suffixes such as `alt\|320x180` are supported. |
 | Audio: 3GP, FLAC, M4A, MP3, OGG, WAV | render | Rendered with native controls when local and reachable. In v1, `.3gp` is always audio. |
 | Video: MKV, MOV, MP4, OGV, WebM | render | Rendered with native controls when local and reachable. In v1, `.webm` is always video; browser codec support still applies. |
 | PDF embeds | render | Native PDF objects support page and height options. Only local published attachments are embedded. |

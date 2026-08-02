@@ -33,7 +33,13 @@ Before upload, the audit checks that `website/_site/index.html` exists, every ou
 
 The deployment job alone receives `pages: write` and `id-token: write`. It uses the `github-pages` environment and reports the URL returned by the deployment action.
 
-## Root sites and project sites
+## Find the deployed site
+
+After **Verify and deploy Pages** succeeds on the default branch, GitHub reports the public URL in the workflow's `deploy` job and in **Settings → Pages**. The deployment job's `github-pages` environment links to the same URL.
+
+Without a custom domain, a repository named `<owner>.github.io` is available at `https://<owner>.github.io/`. Any other repository is available at `https://<owner>.github.io/<repository>/`.
+
+## Root sites and project paths
 
 The compiler keeps `baseurl` out of permalinks. One URL builder combines routes with the configured base path for HTML, assets, canonical links, feeds, sitemaps, and JSON requests.
 
@@ -41,8 +47,8 @@ When Pages metadata is unavailable in a pull request, `website/bin/build` inspec
 
 ## Custom domains
 
-Configure the domain in Pages settings or through the GitHub Pages API. Add the required CNAME, A, ALIAS, or ANAME DNS records at your DNS provider. A `CNAME` file in the repository is ignored by this Actions publishing mode.
+Configure the domain in Pages settings or through the GitHub Pages API. Add the required CNAME, A, ALIAS, or ANAME DNS records at your DNS provider. A `CNAME` file in the repository is ignored by this Actions publishing mode. After deployment, use the custom URL reported in **Settings → Pages**.
 
 Run the workflow manually after adding or removing a domain. That rebuild updates canonical URLs, Open Graph metadata, Atom links, and the sitemap.
 
-Return to [[Getting Started]] for local commands or [[Architecture]] for build internals.
+Return to [[docs/Getting Started|Getting Started]] for local commands or [[docs/development/architecture|Architecture]] for build internals.

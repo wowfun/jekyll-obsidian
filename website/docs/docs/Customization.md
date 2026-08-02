@@ -82,4 +82,4 @@ An explicit `content_type: post | doc | page` wins over directory defaults. Post
 
 Docs navigation follows vault directories. `nav_order` sorts sibling documents and `nav_exclude: true` removes only that note link; children remain reachable. Each non-root page initially renders its current branch, then loads the shared full navigation when JavaScript is available. Search builds its index in a Web Worker. Graphs above 250 notes or 1,000 aggregated edges use the accessible note directory instead of a global force simulation.
 
-See [[Architecture]] before changing compiler or adapter boundaries.
+See [[docs/development/architecture|Architecture]] before changing compiler or adapter seams.

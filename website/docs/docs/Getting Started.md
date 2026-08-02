@@ -19,7 +19,7 @@ The bundled vault lives in `website/docs/`; the publishing workflow stays in `we
 
 To integrate this site into another repository without installing Ruby or Node.js, follow [[Integration|Host Integration]]. The dependency-free integration command generates the host configuration and Pages workflow; GitHub Actions installs the complete build toolchain remotely.
 
-For local preview and testing, install Ruby 4.0.x, Node.js 26.x, and Git on macOS, Linux, or WSL. CI pins the exact patch versions used by the repository. Then run these commands from the repository root:
+For local preview, install Ruby 4.0.x, Node.js 26.x, and Git on macOS, Linux, or WSL. CI pins the exact patch versions used by the repository. Then run these commands from the repository root:
 
 ```sh
 website/bin/setup
@@ -50,8 +50,8 @@ The value must be the boolean `true`. The strings `"true"` and `"yes"` are inval
 Use the same syntax you use in Obsidian:
 
 ```md
-Read [[Architecture#Compiler boundary]].
-![[Architecture#^compiler-contract]]
+Read [[docs/development/architecture#Compiler boundary]].
+![[docs/development/architecture#^compiler-contract]]
 ![[assets/research-folio.svg|640]]
 ```
 
@@ -59,18 +59,17 @@ Only attachments reached from public notes, their `image` property, or their tra
 
 ## Check before a push
 
-Run:
+Build the configured content with production checks before publishing:
 
 ```sh
-RUN_BROWSER_TESTS=1 website/bin/test
 JEKYLL_ENV=production website/bin/build \
   --url https://example.test \
   --baseurl /jekyll-obsidian \
   --destination _site
 ```
 
-Install the local browser once with `(cd website && npx playwright install chromium)`. Without `RUN_BROWSER_TESTS=1`, `website/bin/test` runs the Ruby and TypeScript suites and reports that browser coverage was skipped. The build command resolves `_site` inside the site directory and writes `website/_site`.
+The build command resolves `_site` inside the site directory and writes `website/_site`. Contributors changing the implementation should also run the test suites documented in [[docs/development/index|Developer Guide]].
 
 The production build fails on ambiguous or private embeds, cycles, path escapes, symlinks, and URL collisions. Ordinary unresolved links stay visible and produce warnings.
 
-Try `website/bin/dev --theme blog`, `website/bin/dev --theme docs`, or `website/bin/dev --theme digital-garden` against this same vault. Continue with [[Syntax]] or review the [[Deployment]] path.
+Try `website/bin/dev --theme blog`, `website/bin/dev --theme docs`, or `website/bin/dev --theme digital-garden` against this same vault. Continue with [[docs/Syntax|Syntax]] or review the [[docs/Deployment|Deployment]] path.

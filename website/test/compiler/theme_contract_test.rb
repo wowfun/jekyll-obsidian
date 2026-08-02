@@ -11,10 +11,21 @@ class ThemeContractTest < Minitest::Test
     assert_equal "digital-garden", default_result.theme
     assert_equal "obsidian-digital-garden", page(default_result, "/").data.fetch("layout")
     assert_equal "digital-garden", page(default_result, "/").data.dig("obsidian", "theme")
+    assert_equal "https://github.com/example/garden", default_result.site_data.fetch("obsidian_repository_url")
 
     invalid_result = compile(home, theme: "magazine")
     refute invalid_result.success?
     assert invalid_result.diagnostics.any? { |item| item.code == "invalid_theme" }
+  end
+
+  def test_invalid_repository_does_not_publish_a_github_url
+    result = compile(
+      note("index.md", "---\npublish: true\nupdated: 2026-07-30\n---\n# Home"),
+      repository: "https://example.test/not-github"
+    )
+
+    assert result.success?, result.diagnostics.map(&:message).join("\n")
+    refute result.site_data.key?("obsidian_repository_url")
   end
 
   def test_public_root_index_is_required_in_development_too

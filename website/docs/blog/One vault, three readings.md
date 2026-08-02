@@ -14,4 +14,4 @@ A blog asks what is new. Documentation asks where the reader is. A digital garde
 
 `jekyll-obsidian` keeps one publication and OFM contract, then gives each task a distinct presenter. URLs stay stable while navigation changes around them.
 
-Read [[Architecture#Theme presenter seam]] for the module seam or [[Customization#Site themes]] to switch the active theme.
+Read [[docs/development/architecture#Theme presenter seam|Architecture]] for the module seam or [[docs/Customization#Site themes|Customization]] to switch the active theme.
