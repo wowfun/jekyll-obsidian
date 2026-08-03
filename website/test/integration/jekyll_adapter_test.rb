@@ -2,10 +2,10 @@
 
 require "digest"
 require "fileutils"
+require "test_helper"
 require "jekyll"
 require "open3"
 require "tmpdir"
-require "test_helper"
 require "jekyll_obsidian/adapter"
 
 class JekyllAdapterTest < Minitest::Test
@@ -120,7 +120,8 @@ class JekyllAdapterTest < Minitest::Test
     site = build_site
 
     2.times do
-      assert_raises(StandardError) { site.process }
+      error = assert_expected_failure(StandardError) { site.process }
+      assert_includes error.message, "missing-staging-cleanup-fixture.html"
 
       staging = Dir.glob(File.join(@site_root, ".jekyll-obsidian-cache", "vault-assets.*"))
       assert_empty staging
@@ -652,7 +653,7 @@ class JekyllAdapterTest < Minitest::Test
 
   def test_unknown_theme_is_rejected_before_reader
     site = build_site("website" => website_config.merge("theme" => "magazine"))
-    error = assert_raises(Jekyll::Errors::FatalException) { site.process }
+    error = assert_expected_failure(Jekyll::Errors::FatalException) { site.process }
 
     assert_includes error.message, "invalid_theme"
   end
@@ -668,14 +669,14 @@ class JekyllAdapterTest < Minitest::Test
 
   def test_feature_overrides_must_be_yaml_booleans
     site = build_site("website" => website_config.merge("features" => { "search" => "yes" }))
-    error = assert_raises(Jekyll::Errors::FatalException) { site.process }
+    error = assert_expected_failure(Jekyll::Errors::FatalException) { site.process }
 
     assert_includes error.message, "invalid_feature"
   end
 
   def test_unknown_feature_override_is_rejected
     site = build_site("website" => website_config.merge("features" => { "unknown" => true }))
-    error = assert_raises(Jekyll::Errors::FatalException) { site.process }
+    error = assert_expected_failure(Jekyll::Errors::FatalException) { site.process }
 
     assert_includes error.message, "invalid_feature"
     assert_includes error.message, "unknown"
@@ -690,7 +691,7 @@ class JekyllAdapterTest < Minitest::Test
         }
       )
     )
-    error = assert_raises(Jekyll::Errors::FatalException) { site.process }
+    error = assert_expected_failure(Jekyll::Errors::FatalException) { site.process }
 
     assert_includes error.message, "overlapping_content_directories"
   end
@@ -815,7 +816,7 @@ class JekyllAdapterTest < Minitest::Test
     assert_equal first_count, site.pages.count { |page| page.class.name.include?("GeneratedPage") }
 
     File.write(File.join(@temporary_root, "vault", "index.md"), "---\npublish: false\n---\nStale marker")
-    error = assert_raises(Jekyll::Errors::FatalException) { site.process }
+    error = assert_expected_failure(Jekyll::Errors::FatalException) { site.process }
     assert_includes error.message, "index"
     # A failed build never appends a new output set. The previous destination is
     # intentionally left intact because cleanup/write were never reached.
@@ -862,14 +863,10 @@ class JekyllAdapterTest < Minitest::Test
     )
     File.symlink(canary, predictable_temporary)
 
-    original_capture3 = Open3.method(:capture3)
-    Open3.define_singleton_method(:capture3, capture)
-    begin
+    with_replaced_singleton_method(Open3, :capture3, capture) do
       first = JekyllObsidian::Adapter.send(:git_time_map, layout)
       second = JekyllObsidian::Adapter.send(:git_time_map, layout)
       assert_equal first, second
-    ensure
-      Open3.define_singleton_method(:capture3, original_capture3)
     end
 
     assert_equal 1, calls.count { |command| command.include?("log") }
@@ -895,6 +892,23 @@ class JekyllAdapterTest < Minitest::Test
   end
 
   private
+
+  def assert_expected_failure(error_class, &block)
+    error = nil
+    capture_io { error = assert_raises(error_class, &block) }
+    error
+  end
+
+  def with_replaced_singleton_method(target, method_name, replacement)
+    singleton_class = target.singleton_class
+    original = target.method(method_name)
+    singleton_class.send(:remove_method, method_name)
+    singleton_class.send(:define_method, method_name, replacement)
+    yield
+  ensure
+    singleton_class.send(:remove_method, method_name)
+    singleton_class.send(:define_method, method_name, original)
+  end
 
   def destination
     File.join(@site_root, "_site")

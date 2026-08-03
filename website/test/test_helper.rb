@@ -2,6 +2,7 @@
 
 require "json"
 require "minitest/autorun"
+require_relative "support/warning_filter"
 require "jekyll_obsidian"
 
 module CompilerTestHelpers
