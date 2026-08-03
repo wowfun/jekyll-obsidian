@@ -1,7 +1,7 @@
 export type ColorScheme = "light" | "dark";
 
-export const COLOR_SCHEME_STORAGE_KEY = "jekyll-obsidian:color-scheme";
-export const COLOR_SCHEME_EVENT = "jekyll-obsidian:color-scheme-changed";
+export const COLOR_SCHEME_STORAGE_KEY = "website:color-scheme";
+export const COLOR_SCHEME_EVENT = "website:color-scheme-changed";
 
 export function preferredColorScheme(
   storage: Pick<Storage, "getItem"> = localStorage,
@@ -25,10 +25,14 @@ export function applyColorScheme(
   root.style.colorScheme = scheme;
   for (const button of document.querySelectorAll<HTMLButtonElement>("[data-color-scheme-toggle]")) {
     const next = scheme === "dark" ? "light" : "dark";
-    button.setAttribute("aria-label", `Use ${next} color scheme`);
+    button.setAttribute("aria-label", next === "dark"
+      ? button.dataset.schemeUseDark || "Use dark color scheme"
+      : button.dataset.schemeUseLight || "Use light color scheme");
     button.setAttribute("aria-pressed", String(scheme === "dark"));
     const label = button.querySelector<HTMLElement>("[data-color-scheme-label]");
-    if (label) label.textContent = next === "dark" ? "Dark" : "Light";
+    if (label) label.textContent = next === "dark"
+      ? button.dataset.schemeDark || "Dark"
+      : button.dataset.schemeLight || "Light";
   }
   document.dispatchEvent(new CustomEvent(COLOR_SCHEME_EVENT, { detail: { scheme } }));
 }

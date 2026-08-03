@@ -1,15 +1,19 @@
-import { initialiseDialogs, openObsidianDialog } from "./dialogs";
+import { initialiseDialogs, openWebsiteDialog } from "./dialogs";
 import { initialiseOutline } from "./outline";
 import { initialiseColorScheme } from "./color-scheme";
 import { readSiteUrl } from "./urls";
+import { initialiseLanguageSwitcher } from "./language-switcher";
+import { initialiseComments } from "./comments";
 
-export function initialiseObsidian(): void {
+export function initialiseWebsite(): void {
   document.documentElement.classList.remove("no-js");
   document.documentElement.classList.add("js");
 
   initialiseColorScheme();
   initialiseDialogs();
   initialiseOutline();
+  initialiseLanguageSwitcher();
+  initialiseComments();
 
   if (document.querySelector("[data-docs-navigation]")) {
     void import("./docs-navigation")
@@ -30,7 +34,7 @@ export function initialiseObsidian(): void {
   if (readSiteUrl("search")) {
     let searchPromise: Promise<typeof import("./search")> | null = null;
     const openSearch = async () => {
-      const dialog = openObsidianDialog("search");
+      const dialog = openWebsiteDialog("search");
       if (!dialog) return;
       searchPromise ??= import("./search");
       const status = dialog.querySelector<HTMLElement>("[data-search-status]");
@@ -38,7 +42,7 @@ export function initialiseObsidian(): void {
         const search = await searchPromise;
         await search.activateSearch(dialog);
       } catch {
-        if (status) status.textContent = "Search could not be loaded. Reload the page and try again.";
+        if (status) status.textContent = dialog.dataset.searchUnavailable || "Search could not be loaded. Reload the page and try again.";
       }
     };
 
@@ -57,7 +61,7 @@ export function initialiseObsidian(): void {
     });
   }
 
-  if (document.querySelector("pre code.language-mermaid, [data-obsidian-mermaid]")) {
+  if (document.querySelector("pre code.language-mermaid, [data-website-mermaid]")) {
     void import("./mermaid")
       .then(({ renderMermaid }) => renderMermaid())
       .catch(() => {
@@ -80,7 +84,7 @@ export function initialiseObsidian(): void {
       .catch(() => {
         graph.dataset.graphError = "true";
         const status = graph.querySelector<HTMLElement>("[data-graph-status]");
-        if (status) status.textContent = "The interactive graph could not be loaded. Use the note directory below.";
+        if (status) status.textContent = graph.dataset.graphUnavailable || "The interactive graph could not be loaded. Use the note directory below.";
       });
   }
 

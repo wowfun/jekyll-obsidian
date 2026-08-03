@@ -1,0 +1,8 @@
+<ul class="docs-tree__list">
+  {% for node in include.nodes %}
+    <li class="docs-tree__item">
+      {% if node.url %}<a href="{{ node.url | escape }}"{% if node.url == page.website.href %} aria-current="page"{% endif %}>{{ node.title | escape }}</a>{% else %}<span>{{ node.title | escape }}</span>{% endif %}
+      {% if node.children and node.children.size > 0 %}{% include website/docs-tree.html nodes=node.children %}{% endif %}
+    </li>
+  {% endfor %}
+</ul>

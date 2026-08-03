@@ -47,7 +47,7 @@ grep -Fqx 'title: My Project Documentation' "$default_host/.github/jekyll-obsidi
 grep -Fqx '  repository: ""' "$default_host/.github/jekyll-obsidian.yml" || fail "repository auto-detection default was not generated."
 grep -Fqx '    default_type: doc' "$default_host/.github/jekyll-obsidian.yml" || fail "the default host content was not classified as documentation."
 grep -Fqx '      post: []' "$default_host/.github/jekyll-obsidian.yml" || fail "the default host post directories were not reset."
-grep -Fqx '      doc: []' "$default_host/.github/jekyll-obsidian.yml" || fail "the default host doc directories were not rooted at obsidian.source."
+grep -Fqx '      doc: []' "$default_host/.github/jekyll-obsidian.yml" || fail "the default host doc directories were not rooted at website.source."
 [ "$(grep -Fxc "      - 'docs/**'" "$default_host/.github/workflows/pages.yml")" -eq 2 ] || fail "content trigger was not generated twice."
 grep -Fq "bin/integrate --check" "$default_host/.github/workflows/pages.yml" || fail "workflow does not check integration drift."
 grep -Fq -- "--example" "$default_host/.github/workflows/pages.yml" || fail "template regression builds are not isolated."
@@ -74,8 +74,25 @@ awk '
 mv -- "$config_tmp" "$default_host/.github/jekyll-obsidian.yml"
 "$default_host/website/bin/integrate" --theme digital-garden >/dev/null
 grep -Fqx 'title: Preserved host title' "$default_host/.github/jekyll-obsidian.yml" || fail "top-level host configuration was lost."
-grep -Fqx '  repository: owner/project' "$default_host/.github/jekyll-obsidian.yml" || fail "Obsidian host configuration was lost."
+grep -Fqx '  repository: owner/project' "$default_host/.github/jekyll-obsidian.yml" || fail "website host configuration was lost."
 grep -Fqx "  theme: 'digital-garden'" "$default_host/.github/jekyll-obsidian.yml" || fail "theme was not updated."
+
+new_host
+detached_markers_host=$new_host_path
+mkdir -p "$detached_markers_host/.github"
+printf '%s\n' \
+  'website:' \
+  '  repository: owner/project' \
+  'other:' \
+  '  # jekyll-obsidian:managed-start' \
+  "  source: 'docs'" \
+  "  theme: 'docs'" \
+  '  # jekyll-obsidian:managed-end' > "$detached_markers_host/.github/jekyll-obsidian.yml"
+detached_before=$(cksum "$detached_markers_host/.github/jekyll-obsidian.yml")
+if "$detached_markers_host/website/bin/integrate" >/dev/null 2>&1; then
+  fail "managed markers outside the website root were accepted."
+fi
+[ "$detached_before" = "$(cksum "$detached_markers_host/.github/jekyll-obsidian.yml")" ] || fail "detached managed markers were rewritten."
 
 mkdir -p "$default_host/Documentation/用户 指南"
 printf '%s\n' '---' 'publish: true' '---' '# Unicode documentation' > "$default_host/Documentation/用户 指南/index.md"
@@ -118,7 +135,7 @@ new_host
 reversed_markers_host=$new_host_path
 mkdir -p "$reversed_markers_host/.github"
 printf '%s\n' \
-  'obsidian:' \
+  'website:' \
   '  # jekyll-obsidian:managed-end' \
   '  # jekyll-obsidian:managed-start' \
   "  source: 'docs'" \

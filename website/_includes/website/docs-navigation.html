@@ -1,0 +1,7 @@
+{% if page.website.theme_data.previous or page.website.theme_data.next %}
+  {% assign ui = page.website.i18n.messages %}
+  <nav class="sequence-navigation" aria-label="{{ ui.documentation_sequence | default: 'Documentation sequence' | escape }}">
+    {% if page.website.theme_data.previous %}<a rel="prev" href="{{ page.website.theme_data.previous.url | escape }}"><span>{{ ui.previous | default: 'Previous' | escape }}</span><strong>{{ page.website.theme_data.previous.title | escape }}</strong></a>{% endif %}
+    {% if page.website.theme_data.next %}<a rel="next" href="{{ page.website.theme_data.next.url | escape }}"><span>{{ ui.next | default: 'Next' | escape }}</span><strong>{{ page.website.theme_data.next.title | escape }}</strong></a>{% endif %}
+  </nav>
+{% endif %}

@@ -113,7 +113,7 @@ class WorkspaceLayoutTest < Minitest::Test
       error = assert_raises(JekyllObsidian::WorkspaceLayout::Invalid) do
         resolve(source:)
       end
-      assert_match(/obsidian\.source/, error.message)
+      assert_match(/website\.source/, error.message)
     end
   end
 
@@ -128,7 +128,7 @@ class WorkspaceLayoutTest < Minitest::Test
       resolve(source: "content/linked-vault")
     end
 
-    assert_match(/obsidian\.source.*symbolic link/, error.message)
+    assert_match(/website\.source.*symbolic link/, error.message)
   end
 
   def test_rejects_sources_that_overlap_the_site_in_either_direction

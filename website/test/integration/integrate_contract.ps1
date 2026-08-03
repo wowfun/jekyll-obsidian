@@ -126,6 +126,15 @@ try {
     if (-not $preservedConfig.Contains("  repository: owner/project")) { Fail "repository setting was not preserved" }
     if (-not $preservedConfig.Contains("  theme: 'digital-garden'")) { Fail "managed theme was not updated" }
 
+    $detachedMarkersRoot = New-Host
+    [System.IO.Directory]::CreateDirectory((Join-Path $detachedMarkersRoot ".github")) | Out-Null
+    $detachedMarkersPath = Join-Path $detachedMarkersRoot ".github\jekyll-obsidian.yml"
+    Write-Lf $detachedMarkersPath "website:`n  repository: owner/project`nother:`n  # jekyll-obsidian:managed-start`n  source: 'docs'`n  theme: 'docs'`n  # jekyll-obsidian:managed-end`n"
+    $detachedBefore = [System.IO.File]::ReadAllBytes($detachedMarkersPath)
+    [void](Invoke-Adapter "pwsh" $detachedMarkersRoot @() $false)
+    $detachedAfter = [System.IO.File]::ReadAllBytes($detachedMarkersPath)
+    if ([Convert]::ToBase64String($detachedBefore) -ne [Convert]::ToBase64String($detachedAfter)) { Fail "detached managed markers were rewritten" }
+
     $conflictRoot = New-Host
     [System.IO.Directory]::CreateDirectory((Join-Path $conflictRoot ".github\workflows")) | Out-Null
     Write-Lf (Join-Path $conflictRoot ".github\workflows\pages.yml") "name: Existing workflow`n"

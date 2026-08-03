@@ -1,0 +1,16 @@
+{% assign ui = page.website.i18n.messages %}
+{% case page.website.kind %}
+{% when 'archive' %}
+  <h1>{{ ui.archive | default: 'Archive' | escape }}</h1>
+{% when 'tags' %}
+  <h1>{{ ui.tags | default: 'Tags' | escape }}</h1>
+  {% for group in page.website.theme_data.tag_groups %}<section id="{{ group.anchor | escape }}"><h2>{{ group.name | escape }}</h2><ul>{% for note in group.notes %}<li><a href="{{ note.url | escape }}">{{ note.title | escape }}</a></li>{% endfor %}</ul></section>{% endfor %}
+{% when 'graph' %}
+  <h1>{{ ui.graph | default: 'Graph' | escape }}</h1>
+  {% if page.website.theme_data.graph_interactive %}<div data-graph{% if ui.graph_loading %} data-graph-loading="{{ ui.graph_loading | escape }}"{% endif %}{% if ui.graph_unavailable %} data-graph-unavailable="{{ ui.graph_unavailable | escape }}"{% endif %}{% if ui.graph_summary %} data-graph-summary="{{ ui.graph_summary | escape }}"{% endif %}{% if ui.graph_node_label %} data-graph-node-label="{{ ui.graph_node_label | escape }}"{% endif %}{% if ui.graph_title %} data-graph-title="{{ ui.graph_title | escape }}"{% endif %}{% if ui.graph_description %} data-graph-description="{{ ui.graph_description | escape }}"{% endif %}><p class="graph-status" data-graph-status aria-live="polite">{{ ui.graph_loads_here | default: 'The interactive graph loads on this page.' | escape }}</p></div>{% else %}<p class="graph-status">{{ ui.graph_too_large | default: 'This site is too large for a useful global simulation. Browse local relations below.' | escape }}</p>{% endif %}
+  <details class="graph-fallback" open><summary>{{ ui.graph_directory | default: 'Accessible note directory' | escape }}</summary><label class="graph-directory__filter">{{ ui.filter_notes | default: 'Filter notes' | escape }} <input type="search" data-graph-directory-filter></label><ul class="graph-directory" data-graph-directory>{% for note in page.website.theme_data.graph_notes %}<li data-graph-directory-item data-graph-filter-text="{{ note.filter_text | escape }}"><a href="{{ note.url | escape }}">{{ note.title | escape }}</a> <span>{{ note.relation_count }} {% if note.relation_count == 1 %}{{ ui.relation_one | default: 'relation' | escape }}{% else %}{{ ui.relation_many | default: 'relations' | escape }}{% endif %}</span>{% if note.neighbours.size > 0 %}<span> — {% for neighbour in note.neighbours %}<a href="{{ neighbour.url | escape }}">{{ neighbour.title | escape }}</a>{% unless forloop.last %}, {% endunless %}{% endfor %}</span>{% endif %}</li>{% endfor %}</ul></details>
+{% when 'notes' %}
+  <h1>{{ ui.all_notes | default: 'All notes' | escape }}</h1><ul class="website-index-list">{% for note in page.website.theme_data.notes %}<li><a href="{{ note.url | escape }}">{{ note.title | escape }}</a></li>{% endfor %}</ul>
+{% when '404' %}
+  <h1>{{ ui.page_not_found | default: 'Page not found' | escape }}</h1><p>{{ ui.page_not_found_description | default: 'The requested page is not in this published site.' | escape }}</p><p><a href="{{ page.website.theme_data.home_url | escape }}">{{ ui.return_home | default: 'Return home' | escape }}</a></p>
+{% endcase %}

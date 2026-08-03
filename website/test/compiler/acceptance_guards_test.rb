@@ -57,19 +57,19 @@ class AcceptanceGuardsTest < Minitest::Test
 
   def profile_synthetic_vault(size)
     entries = synthetic_chain(size)
-    compile(*entries) # Warm Commonmarker and Ruby before taking the sample.
+    compile(*entries, theme: "digital-garden") # Warm Commonmarker and Ruby before taking the sample.
 
     result = nil
     elapsed = nil
     parsed_markdown = with_commonmarker_parse_probe do |calls|
       started_at = Process.clock_gettime(Process::CLOCK_MONOTONIC)
-      result = compile(*entries)
+      result = compile(*entries, theme: "digital-garden")
       elapsed = Process.clock_gettime(Process::CLOCK_MONOTONIC) - started_at
       calls
     end
 
     assert result.success?, result.diagnostics.map(&:message).join("\n")
-    graph = generated_json(result, "/assets/obsidian/graph.v1.json")
+    graph = generated_json(result, "/assets/website/graph.v1.json")
     {
       parse_count: parsed_markdown.length,
       relation_count: result.relations.length,

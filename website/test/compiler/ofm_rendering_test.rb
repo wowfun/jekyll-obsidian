@@ -15,7 +15,7 @@ class OfmRenderingTest < Minitest::Test
     MARKDOWN
 
     html = page(result, "/").content
-    assert_includes html, '<aside class="obsidian-callout obsidian-callout--tip callout" data-callout="tip" role="note">'
+    assert_includes html, '<aside class="website-callout website-callout--tip callout" data-callout="tip" role="note">'
   end
 
   def test_comments_and_embeds_inside_code_or_raw_html_are_not_interpreted
@@ -57,12 +57,12 @@ class OfmRenderingTest < Minitest::Test
     refute_includes html, "JEKYLL_OBSIDIAN_CODE_"
     assert_includes html, "![[target]] remains authored raw HTML text."
     assert_equal 1, html.scan("Embedded once.").length
-    search = generated_json(result, "/assets/obsidian/search.v1.json")
+    search = generated_json(result, "/assets/website/search.v1.json")
     refute_includes search.fetch("documents").first.fetch("text"), "JEKYLL_OBSIDIAN_CODE_"
   end
 
   def test_inline_tags_join_frontmatter_but_code_comments_and_html_do_not
-    result = compile(note("index.md", <<~MARKDOWN))
+    result = compile(note("index.md", <<~MARKDOWN), theme: "digital-garden")
       ---
       publish: true
       tags: [frontmatter]
@@ -83,10 +83,10 @@ class OfmRenderingTest < Minitest::Test
     MARKDOWN
 
     assert result.success?, result.diagnostics.map(&:message).join("\n")
-    catalog = generated_json(result, "/assets/obsidian/catalog.v1.json")
+    catalog = generated_json(result, "/assets/website/catalog.v1.json")
     tags = catalog.fetch("notes").first.fetch("tags")
     assert_equal ["field-notes", "frontmatter", "guide/syntax"], tags
-    tag_names = page(result, "/tags/").data.dig("obsidian", "theme_data", "tag_groups")
+    tag_names = page(result, "/tags/").data.dig("website", "theme_data", "tag_groups")
       .map { |group| group.fetch("name") }
     assert_includes tag_names, "field-notes"
     refute_includes tag_names, "inline-code"
@@ -116,10 +116,10 @@ class OfmRenderingTest < Minitest::Test
 
     html = page(result, "/").content
     assert_includes html, 'id="reference-block"'
-    assert_includes html, '<details class="obsidian-callout obsidian-callout--field-observation callout"'
+    assert_includes html, '<details class="website-callout website-callout--field-observation callout"'
     assert_includes html, "Folded title"
     assert_includes html, "data-math-style"
-    assert_includes html, "data-obsidian-mermaid"
+    assert_includes html, "data-website-mermaid"
   end
 
   def test_custom_task_states_remain_distinguishable_and_accessible
@@ -198,7 +198,7 @@ class OfmRenderingTest < Minitest::Test
     assert_nil raw_task["data-task"]
     assert_equal "?", quoted_task["data-task"]
     assert_nil raw_code["lang"]
-    assert_equal "mermaid", document.at_css("pre[data-obsidian-mermaid]")["lang"]
+    assert_equal "mermaid", document.at_css("pre[data-website-mermaid]")["lang"]
     assert_equal "/raw/", document.css("a").find { |node| node.text == "Raw link" }["href"]
     assert_equal "/target/", document.css("a").find { |node| node.text == "Markdown link" }["href"]
     assert_empty document.css("[data-sourcepos]")
@@ -219,16 +219,17 @@ class OfmRenderingTest < Minitest::Test
 
         \![[media/private.png]] \#private-escaped-tag
       MARKDOWN
-      attachment("media/private.png", "PRIVATE-ASSET", media_type: "image/png")
+      attachment("media/private.png", "PRIVATE-ASSET", media_type: "image/png"),
+      theme: "digital-garden"
     )
 
     assert result.success?, result.diagnostics.map(&:message).join("\n")
     assert_empty result.copied_assets
     assert_empty result.relations
     assert_includes page(result, "/").content, "![[media/private.png]] #private-code-tag"
-    refute_includes generated_json(result, "/assets/obsidian/catalog.v1.json").fetch("notes").first.fetch("tags"), "private-code-tag"
-    refute_includes generated_json(result, "/assets/obsidian/catalog.v1.json").fetch("notes").first.fetch("tags"), "private-quote-code-tag"
-    refute_includes generated_json(result, "/assets/obsidian/catalog.v1.json").fetch("notes").first.fetch("tags"), "private-escaped-tag"
+    refute_includes generated_json(result, "/assets/website/catalog.v1.json").fetch("notes").first.fetch("tags"), "private-code-tag"
+    refute_includes generated_json(result, "/assets/website/catalog.v1.json").fetch("notes").first.fetch("tags"), "private-quote-code-tag"
+    refute_includes generated_json(result, "/assets/website/catalog.v1.json").fetch("notes").first.fetch("tags"), "private-escaped-tag"
   end
 
   def test_block_id_does_not_merge_adjacent_list_items
@@ -263,12 +264,13 @@ class OfmRenderingTest < Minitest::Test
               ![[media/private.png]] #hidden-list-code
       MARKDOWN
       attachment("media/public.png", "PUBLIC", media_type: "image/png"),
-      attachment("media/private.png", "PRIVATE", media_type: "image/png")
+      attachment("media/private.png", "PRIVATE", media_type: "image/png"),
+      theme: "digital-garden"
     )
 
     assert result.success?, result.diagnostics.map(&:message).join("\n")
     assert_equal ["/assets/vault/media/public.png"], result.copied_assets.map(&:route)
-    tags = generated_json(result, "/assets/obsidian/catalog.v1.json").fetch("notes").first.fetch("tags")
+    tags = generated_json(result, "/assets/website/catalog.v1.json").fetch("notes").first.fetch("tags")
     assert_includes tags, "visible-list"
     refute_includes tags, "hidden-list-code"
     assert_includes page(result, "/").content, "![[media/private.png]] #hidden-list-code"
@@ -289,12 +291,13 @@ class OfmRenderingTest < Minitest::Test
         ![[media/public.png]] #visible-outside
       MARKDOWN
       attachment("media/public.png", "PUBLIC", media_type: "image/png"),
-      attachment("media/private.png", "PRIVATE", media_type: "image/png")
+      attachment("media/private.png", "PRIVATE", media_type: "image/png"),
+      theme: "digital-garden"
     )
 
     assert result.success?, result.diagnostics.map(&:message).join("\n")
     assert_equal ["/assets/vault/media/public.png"], result.copied_assets.map(&:route)
-    tags = generated_json(result, "/assets/obsidian/catalog.v1.json").fetch("notes").first.fetch("tags")
+    tags = generated_json(result, "/assets/website/catalog.v1.json").fetch("notes").first.fetch("tags")
     assert_includes tags, "visible-outside"
     refute_includes tags, "hidden-fence"
   end

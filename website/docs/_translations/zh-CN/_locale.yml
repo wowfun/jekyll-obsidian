@@ -1,0 +1,118 @@
+name: 简体中文
+hreflang: zh-Hans
+dir: ltr
+messages:
+  language: 语言
+  translation_missing: 本页尚无译文，以下显示默认语言版本。
+  skip_to_content: 跳到正文
+  overview: 概览
+  documentation: 文档
+  tags: 标签
+  graph: 关系图
+  feed: 订阅
+  search: 搜索
+  scheme: 配色
+  toggle_scheme: 切换配色
+  use_light_scheme: 使用浅色配色
+  use_dark_scheme: 使用深色配色
+  light_scheme: 浅色
+  dark_scheme: 深色
+  contents: 目录
+  view_full_index: 查看完整文档索引
+  breadcrumb: 面包屑导航
+  page_context: 页面上下文
+  mobile_actions: 移动端操作
+  browse: 浏览
+  on_this_page: 本页内容
+  context: 上下文
+  previous: 上一页
+  next: 下一页
+  manual: 手册
+  dispatch: 通讯
+  note: 笔记
+  published: 发布于
+  updated: 更新于
+  edit: 编辑
+  history: 历史
+  view_source: 查看源码
+  report_issue: 报告问题
+  contribute: 参与编辑本页
+  documentation_sequence: 文档顺序
+  manual_index: 手册索引
+  browse_handbook: 浏览手册
+  search_title: 搜索本站
+  close_search: 关闭搜索
+  search_pages: 搜索页面
+  search_placeholder: 标题、标签或正文
+  search_initial: 打开搜索时载入索引。
+  search_loading: 正在载入搜索索引…
+  search_prompt: 输入标题、标签或正文。
+  search_unavailable: 无法载入搜索，请刷新页面后重试。
+  search_no_results: 未找到与“{query}”匹配的笔记。
+  search_result_one: 找到 {count} 篇笔记。
+  search_result_many: 找到 {count} 篇笔记。
+  close_browse: 关闭浏览菜单
+  more_browse_options: 更多浏览方式
+  close_context: 关闭页面上下文
+  outgoing_links: 出站链接
+  direct_links: 直接链接
+  backlinks: 反向链接
+  embedded_by: 被嵌入于
+  no_outgoing_links: 没有出站笔记链接。
+  no_backlinks: 暂无笔记链接到这里。
+  not_embedded: 未被其他笔记嵌入。
+  outline: 本页内容
+  no_headings: 本页没有标题。
+  all_notes: 所有笔记
+  page_not_found: 找不到页面
+  page_not_found_description: 请求的页面不在此发布站点中。
+  return_home: 返回首页
+  primary_navigation: 主导航
+  home: 首页
+  archive: 归档
+  graph_loading: 正在载入关系图…
+  graph_loads_here: 交互式关系图将在此处载入。
+  graph_unavailable: 无法载入交互式关系图，请使用下方的笔记目录。
+  graph_too_large: 站点规模过大，不适合全局模拟；请浏览下方的局部关系。
+  graph_directory: 无障碍笔记目录
+  filter_notes: 筛选笔记
+  relation_one: 条关系
+  relation_many: 条关系
+  graph_summary: 共 {notes} 篇笔记、{relations} 条关系。
+  graph_node_label: "{title}，{count} 条关系"
+  graph_title: 笔记关系图
+  graph_description: 笔记链接显示为实线，嵌入关系显示为虚线。
+  diagram: 图表
+  embed_cycle: 嵌入循环
+  embedded_from: 来自 {title}
+  missing_fragment: 找不到片段：{label}
+  download_pdf: 下载 PDF
+  download: 下载
+  built_by: 构建工具
+  project_on_github: GitHub 上的 Jekyll Obsidian
+  latest: 最新文章
+  topics: 主题
+  notes: 笔记
+  note_context: 笔记上下文
+  post_sequence: 文章顺序
+  older: 较早
+  newer: 较新
+  dated_posts: 按日期排列的文章
+  chronology: 时间线
+  field_dispatches: 现场通讯
+  browse_archive: 浏览归档
+  notebook_index: 笔记索引
+  explore_garden: 探索花园
+  garden_overview: 花园概览
+  browse_every_page: 浏览所有已发布页面
+  follow_subjects: 按主题浏览
+  see_vault_links: 查看知识库链接
+  discussion: 讨论
+  comments: 评论
+  comments_loading: 正在载入评论…
+  comments_development: 评论仅在发布站点中载入。
+  comments_setup_pending: 评论暂不可用。你可以稍后完成 GitHub Discussions 配置。
+  comments_unavailable: 无法载入评论，你仍可前往 GitHub 继续讨论。
+  comments_stored: 评论存储于 GitHub Discussions。
+  open_discussions: 在 GitHub 中打开讨论
+  open_comments_repository: 在 GitHub 中打开评论仓库

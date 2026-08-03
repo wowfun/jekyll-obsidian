@@ -28,9 +28,9 @@ function Fail([string]$Message) {
 function Fail-UnmanagedConfig {
     Fail @"
 .github/jekyll-obsidian.yml is not managed by this command.
-Merge this block into the existing obsidian mapping, then run the command again:
+Merge this block into a root website mapping, then run the command again:
 
-obsidian:
+website:
   # jekyll-obsidian:managed-start
   source: 'docs'
   theme: 'docs'
@@ -106,6 +106,27 @@ function Get-ManagedValue([string]$Config, [string]$Key) {
     $matches = [Regex]::Matches($block.Groups["body"].Value, $linePattern)
     if ($matches.Count -ne 1) { Fail "the managed $Key entry is malformed." }
     return $matches[0].Groups["value"].Value.Replace("''", "'")
+}
+
+function Assert-ManagedBlockUnderRoot([string]$Config, [string]$Root) {
+    $lines = @($Config -split "`n")
+    $rootPattern = "^$([Regex]::Escape($Root)):\s*$"
+    $rootIndex = -1
+    $startIndex = -1
+    $endIndex = -1
+    for ($index = 0; $index -lt $lines.Count; $index++) {
+        if ($lines[$index] -match $rootPattern) { $rootIndex = $index }
+        if ($lines[$index] -ceq $ConfigStart) { $startIndex = $index }
+        if ($lines[$index] -ceq $ConfigEnd) { $endIndex = $index }
+    }
+    if ($rootIndex -lt 0 -or $startIndex -le $rootIndex -or $endIndex -le $startIndex) {
+        Fail "the managed configuration block must be inside the root $Root mapping."
+    }
+    for ($index = $rootIndex + 1; $index -le $endIndex; $index++) {
+        if ($index -ne $startIndex -and $index -ne $endIndex -and $lines[$index] -match '^[^\s#]') {
+            Fail "the managed configuration block must be inside the root $Root mapping."
+        }
+    }
 }
 
 function Escape-YamlSingleQuoted([string]$Value) {
@@ -199,11 +220,14 @@ try {
     if (Test-Path -LiteralPath $ConfigPath) {
         if (-not (Test-Path -LiteralPath $ConfigPath -PathType Leaf)) { Fail ".github/jekyll-obsidian.yml must be a regular file." }
         $ExistingConfig = Read-Utf8Text $ConfigPath
+        $websiteRootCount = ([Regex]::Matches($ExistingConfig, "(?m)^website:\s*$")).Count
+        if ($websiteRootCount -ne 1) { Fail-UnmanagedConfig }
         $startCount = ([Regex]::Matches($ExistingConfig, "(?m)^$([Regex]::Escape($ConfigStart))$")).Count
         $endCount = ([Regex]::Matches($ExistingConfig, "(?m)^$([Regex]::Escape($ConfigEnd))$")).Count
         if ($startCount -ne 1 -or $endCount -ne 1) {
             Fail-UnmanagedConfig
         }
+        Assert-ManagedBlockUnderRoot $ExistingConfig "website"
         $CurrentSource = Get-ManagedValue $ExistingConfig "source"
         $CurrentTheme = Get-ManagedValue $ExistingConfig "theme"
         if (-not $SourceWasSet) { $SourceValue = $CurrentSource }
@@ -232,13 +256,13 @@ try {
     $CurrentPath = $HostDir
     foreach ($segment in $SourceValue.Split('/')) {
         $CurrentPath = Join-Path $CurrentPath $segment
-        Assert-NotReparsePoint $CurrentPath "obsidian.source"
+        Assert-NotReparsePoint $CurrentPath "website.source"
         if (Test-Path -LiteralPath $CurrentPath) {
             $actualName = (Get-Item -Force -LiteralPath $CurrentPath).Name
             if ($actualName -cne $segment) { Fail "--source casing must match the repository path exactly." }
         }
     }
-    if (-not (Test-Path -LiteralPath $CurrentPath -PathType Container)) { Fail "obsidian.source does not exist: $SourceValue" }
+    if (-not (Test-Path -LiteralPath $CurrentPath -PathType Container)) { Fail "website.source does not exist: $SourceValue" }
     $IndexPath = Join-Path $CurrentPath "index.md"
     Assert-NotReparsePoint $IndexPath "the public root index"
     if (-not (Test-Path -LiteralPath $IndexPath -PathType Leaf)) { Fail "a public $SourceValue/index.md is required." }
@@ -262,10 +286,10 @@ try {
     }
     else {
         $DesiredConfig = Read-Utf8Text $ConfigTemplate
-        $DesiredConfig = $DesiredConfig.Replace("__JEKYLL_OBSIDIAN_SOURCE__", $EscapedSource)
-        $DesiredConfig = $DesiredConfig.Replace("__JEKYLL_OBSIDIAN_THEME__", $EscapedTheme)
+        $DesiredConfig = $DesiredConfig.Replace("__JEKYLL_WEBSITE_SOURCE__", $EscapedSource)
+        $DesiredConfig = $DesiredConfig.Replace("__JEKYLL_WEBSITE_THEME__", $EscapedTheme)
     }
-    $DesiredWorkflow = (Read-Utf8Text $WorkflowTemplate).Replace("__JEKYLL_OBSIDIAN_SOURCE_GLOB__", $EscapedGlob)
+    $DesiredWorkflow = (Read-Utf8Text $WorkflowTemplate).Replace("__JEKYLL_WEBSITE_SOURCE_GLOB__", $EscapedGlob)
     if (-not $DesiredConfig.EndsWith("`n")) { $DesiredConfig += "`n" }
     if (-not $DesiredWorkflow.EndsWith("`n")) { $DesiredWorkflow += "`n" }
 

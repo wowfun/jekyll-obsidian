@@ -33,6 +33,12 @@ class SiteUrlVerifier
     "connect-src" => ["'self'"],
     "frame-src" => ["'self'"]
   }.freeze
+  COMMENTS_CSP_DIRECTIVES = CSP_DIRECTIVES.merge(
+    "script-src" => ["'self'", "https://giscus.app"],
+    "style-src" => ["'self'", "'unsafe-inline'", "https://giscus.app"],
+    "frame-src" => ["'self'", "https://giscus.app"]
+  ).freeze
+  GISCUS_ORIGIN = "https://giscus.app"
 
   def initialize(site_dir, origin, baseurl)
     @site_dir = File.realpath(site_dir)
@@ -73,7 +79,7 @@ class SiteUrlVerifier
     route = route_for_output(relative)
     document = Nokogiri::HTML5.parse(File.read(path, encoding: "UTF-8"))
     @html_ids[path] = document.css("[id]").map { |node| node["id"] }.to_set
-    if relative == "assets/obsidian/docs-navigation.html"
+    if relative.match?(%r{\Aassets/website/(?:i18n/[A-Za-z]{2,8}(?:-[A-Za-z0-9]{1,8})*/)?docs-navigation\.html\z})
       document.css("a[href]").each { |node| verify_reference(node["href"], "/", relative) }
       return
     end
@@ -82,13 +88,19 @@ class SiteUrlVerifier
     end
     csp = csp_node&.[]("content").to_s
     add_error("#{relative}: missing production meta CSP") if csp.empty?
-    verify_csp(csp, relative) unless csp.empty?
+    comments = !document.at_css("[data-website-comments-load]").nil?
+    verify_csp(csp, relative, comments:) unless csp.empty?
 
     canonical = document.at_css("link[rel~='canonical']")&.[]("href")
     expected_canonical = "#{@origin}#{public_path(route)}"
     decoded_canonical = canonical && URI.decode_uri_component(canonical)
-    if !@origin.empty? && decoded_canonical != expected_canonical
-      add_error("#{relative}: canonical #{canonical.inspect} != #{expected_canonical.inspect}")
+    noindex = document.at_css("meta[name='robots']")&.[]("content").to_s.split(/[\s,]+/).include?("noindex")
+    unless @origin.empty?
+      if noindex
+        verify_noindex_canonical(canonical, relative)
+      elsif decoded_canonical != expected_canonical
+        add_error("#{relative}: canonical #{canonical.inspect} != #{expected_canonical.inspect}")
+      end
     end
 
     og_url = document.at_css("meta[property='og:url']")&.[]("content")
@@ -96,6 +108,16 @@ class SiteUrlVerifier
     if !@origin.empty? && decoded_og_url != expected_canonical
       add_error("#{relative}: og:url #{og_url.inspect} != #{expected_canonical.inspect}")
     end
+
+    if comments
+      backlink = document.at_css("meta[name='giscus:backlink']")&.[]("content")
+      decoded_backlink = backlink && URI.decode_uri_component(backlink)
+      if !@origin.empty? && decoded_backlink != expected_canonical
+        add_error("#{relative}: giscus:backlink #{backlink.inspect} != #{expected_canonical.inspect}")
+      end
+    end
+
+    verify_external_embeds(document, relative, comments:)
 
     URL_ATTRIBUTES.each do |element, attribute|
       document.css("#{element}[#{attribute}]").each do |node|
@@ -105,7 +127,7 @@ class SiteUrlVerifier
     document.css("img[srcset], source[srcset]").each do |node|
       srcset_urls(node["srcset"]).each { |value| verify_reference(value, route, relative) }
     end
-    document.css("meta[name^='obsidian:'][content]").each do |node|
+    document.css("meta[name^='website:'][content]").each do |node|
       verify_reference(node["content"], route, relative)
     end
   rescue StandardError => exception
@@ -147,6 +169,41 @@ class SiteUrlVerifier
     add_error("#{source}: invalid URL #{value.inspect}: #{exception.message}")
   end
 
+  def verify_noindex_canonical(value, source)
+    if value.nil? || value.empty?
+      add_error("#{source}: noindex page is missing canonical")
+      return
+    end
+
+    canonical = URI.parse(value)
+    origin = URI.parse(@origin)
+    same_origin = canonical.scheme == origin.scheme && canonical.host == origin.host &&
+      canonical.port == origin.port && canonical.userinfo.nil?
+    unless same_origin && canonical.query.nil? && canonical.fragment.nil?
+      add_error("#{source}: noindex canonical must use the configured origin without query or fragment")
+      return
+    end
+
+    path = URI.decode_uri_component(canonical.path.to_s)
+    path = "/" if path.empty?
+    unless baseurl_once?(path)
+      add_error("#{source}: noindex canonical has a missing or repeated baseurl")
+      return
+    end
+
+    target = output_path_for_route(strip_baseurl(path))
+    unless File.file?(target) && File.extname(target).casecmp(".html").zero?
+      add_error("#{source}: canonical target does not exist: #{value.inspect}")
+      return
+    end
+
+    target_document = Nokogiri::HTML5.parse(File.read(target, encoding: "UTF-8"))
+    target_robots = target_document.at_css("meta[name='robots']")&.[]("content").to_s.split(/[\s,]+/)
+    add_error("#{source}: canonical target must be indexable: #{value.inspect}") if target_robots.include?("noindex")
+  rescue URI::InvalidURIError, ArgumentError => exception
+    add_error("#{source}: invalid noindex canonical #{value.inspect}: #{exception.message}")
+  end
+
   def verify_fragment(source, fragment)
     return if fragment.nil? || fragment.empty?
     path = File.join(@site_dir, source)
@@ -162,16 +219,39 @@ class SiteUrlVerifier
     add_error("#{source}: invalid fragment ##{fragment}")
   end
 
-  def verify_csp(value, source)
-    directives = value.split(";").filter_map do |part|
+  def verify_csp(value, source, comments:)
+    pairs = value.split(";").filter_map do |part|
       name, *tokens = part.strip.split(/\s+/)
       [name, tokens] unless name.to_s.empty?
-    end.to_h
-    CSP_DIRECTIVES.each do |name, expected|
+    end
+    duplicates = pairs.group_by(&:first).select { |_name, items| items.length > 1 }.keys
+    duplicates.each { |name| add_error("#{source}: CSP directive #{name} must appear exactly once") }
+    directives = pairs.to_h
+    expected_directives = comments ? COMMENTS_CSP_DIRECTIVES : CSP_DIRECTIVES
+    (directives.keys - expected_directives.keys).sort.each do |name|
+      add_error("#{source}: unsupported CSP directive #{name}")
+    end
+    expected_directives.each do |name, expected|
       actual = directives[name]
       next if actual && actual.sort == expected.sort
 
       add_error("#{source}: CSP directive #{name} must be exactly #{expected.join(" ")}")
+    end
+  end
+
+  def verify_external_embeds(document, source, comments:)
+    document.css("script[src], iframe[src]").each do |node|
+      value = node["src"].to_s
+      uri = URI.parse(value)
+      next unless %w[http https].include?(uri.scheme)
+
+      default_port = uri.scheme == "https" ? 443 : 80
+      port = uri.port == default_port ? "" : ":#{uri.port}"
+      allowed = comments && "#{uri.scheme}://#{uri.host}#{port}" == GISCUS_ORIGIN
+      allowed &&= node.name == "iframe" || uri.path == "/client.js"
+      add_error("#{source}: external #{node.name} source is not allowed: #{value.inspect}") unless allowed
+    rescue URI::InvalidURIError
+      add_error("#{source}: invalid external #{node.name} source #{value.inspect}")
     end
   end
 
@@ -183,9 +263,7 @@ class SiteUrlVerifier
   end
 
   def verify_json_indexes
-    paths = %w[catalog.v1.json graph.v1.json search.v1.json]
-      .map { |name| File.join(@site_dir, "assets", "obsidian", name) }
-      .select { |path| File.file?(path) }
+    paths = Dir.glob(File.join(@site_dir, "assets", "website", "{,i18n/*/}{catalog,graph,search}.v1.json")).sort
     paths.each do |path|
       payload = JSON.parse(File.read(path, encoding: "UTF-8"))
       add_error("#{relative_path(path)}: schema_version is not 1") unless payload["schema_version"] == 1
@@ -205,9 +283,10 @@ class SiteUrlVerifier
   end
 
   def verify_xml_urls
-    %w[feed.xml sitemap.xml].each do |name|
-      path = File.join(@site_dir, name)
+    paths = [File.join(@site_dir, "sitemap.xml"), *Dir.glob(File.join(@site_dir, "{,*/}feed.xml"))].uniq.sort
+    paths.each do |path|
       next unless File.file?(path)
+      name = relative_path(path)
       document = Nokogiri::XML(File.read(path, encoding: "UTF-8")) { |config| config.strict.nonet }
       document.remove_namespaces!
       values = document.xpath("//loc/text() | //id/text() | //link/@href").map(&:text)

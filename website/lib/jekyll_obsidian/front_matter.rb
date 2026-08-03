@@ -8,7 +8,7 @@ module JekyllObsidian
     XML_INVALID_CHARACTER = /[^\u{9}\u{A}\u{D}\u{20}-\u{D7FF}\u{E000}-\u{FFFD}\u{10000}-\u{10FFFF}]/u
     SUPPORTED = %w[
       publish title aliases tags description permalink image cssclasses created updated
-      content_type date nav_order nav_exclude
+      content_type date nav_order nav_exclude comments
     ].freeze
     ARRAY_PROPERTIES = %w[aliases tags cssclasses].freeze
     STRING_PROPERTIES = %w[title description permalink image].freeze
@@ -73,11 +73,12 @@ module JekyllObsidian
         next unless SUPPORTED.include?(key)
 
         case key
-        when "publish"
+        when "publish", "comments"
           if value == true || value == false
             properties[key] = value
           else
-            error("invalid_publish", "publish must be a YAML boolean")
+            code = key == "publish" ? "invalid_publish" : "invalid_comments"
+            error(code, "#{key} must be a YAML boolean")
           end
         when *ARRAY_PROPERTIES
           if value.is_a?(Array) && value.all? { |item| self.class.valid_output_text?(item) }

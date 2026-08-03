@@ -1,8 +1,8 @@
-export type ObsidianDialogName = "search" | "browse" | "context";
+export type WebsiteDialogName = "search" | "browse" | "context";
 
 const movablePlaceholders = new WeakMap<Element, Comment>();
 
-function dialogFor(name: ObsidianDialogName): HTMLDialogElement | null {
+function dialogFor(name: WebsiteDialogName): HTMLDialogElement | null {
   return document.querySelector<HTMLDialogElement>(`dialog[data-dialog="${name}"]`);
 }
 
@@ -24,7 +24,7 @@ function moveDialogContent(dialog: HTMLDialogElement): void {
   if (!name || !target) return;
   const movable = document.querySelector<HTMLElement>(`[data-dialog-movable="${name}"]`);
   if (!movable || dialog.contains(movable)) return;
-  const placeholder = document.createComment(`jekyll-obsidian-${name}`);
+  const placeholder = document.createComment(`website-${name}`);
   movable.before(placeholder);
   movablePlaceholders.set(movable, placeholder);
   target.prepend(movable);
@@ -39,7 +39,7 @@ function restoreDialogContent(dialog: HTMLDialogElement): void {
   movablePlaceholders.delete(movable);
 }
 
-export function openObsidianDialog(name: ObsidianDialogName): HTMLDialogElement | null {
+export function openWebsiteDialog(name: WebsiteDialogName): HTMLDialogElement | null {
   const dialog = dialogFor(name);
   if (!dialog) return null;
   hydrateDialog(dialog);
@@ -52,7 +52,7 @@ export function openObsidianDialog(name: ObsidianDialogName): HTMLDialogElement 
   return dialog;
 }
 
-export function closeObsidianDialog(name: ObsidianDialogName): void {
+export function closeWebsiteDialog(name: WebsiteDialogName): void {
   const dialog = dialogFor(name);
   if (!dialog) return;
   if (dialog.open) dialog.close();
@@ -69,7 +69,7 @@ export function initialiseDialogs(): void {
       const name = opener.dataset.dialogOpen;
       if (name === "search" || name === "browse" || name === "context") {
         event.preventDefault();
-        openObsidianDialog(name);
+        openWebsiteDialog(name);
       }
       return;
     }

@@ -29,7 +29,7 @@ for (const theme of ["blog", "docs", "digital-garden"] as const) {
   test(`${theme} matches its presentation baseline`, async ({ page }) => {
     await page.emulateMedia({ colorScheme: "light", reducedMotion: "reduce" });
     await page.addInitScript(() =>
-      localStorage.setItem("jekyll-obsidian:color-scheme", "light")
+      localStorage.setItem("website:color-scheme", "light")
     );
     await page.goto(`/__site__/${theme}/`);
     await expect(page.locator("main")).toBeVisible();

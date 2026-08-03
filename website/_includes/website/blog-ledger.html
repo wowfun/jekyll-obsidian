@@ -1,0 +1,13 @@
+{% if include.posts and include.posts.size > 0 %}
+  {% assign ui = page.website.i18n.messages %}
+  {% assign archive_route = page.website.routes.archive | default: '/archive/' %}
+  <section class="blog-ledger"{% if include.compact %} aria-label="{{ ui.dated_posts | default: 'Dated posts' | escape }}"{% else %} aria-labelledby="dispatches-title"{% endif %}>
+    {% unless include.compact %}<header class="section-heading"><p>{{ ui.chronology | default: 'Chronology' | escape }}</p><h2 id="dispatches-title">{{ ui.field_dispatches | default: 'Field dispatches' | escape }}</h2></header>{% endunless %}
+    <ol>
+      {% for post in include.posts %}
+        <li><time datetime="{{ post.published_at | escape }}">{{ post.published_at | date: "%Y · %m · %d" }}</time><a href="{{ post.url | escape }}"><strong>{{ post.title | escape }}</strong>{% if post.tags and post.tags.size > 0 %}<span>{{ post.tags | join: " · " | escape }}</span>{% endif %}</a></li>
+      {% endfor %}
+    </ol>
+    {% unless include.compact %}<a class="ledger-archive-link" href="{{ archive_route | relative_url }}">{{ ui.browse_archive | default: 'Browse the archive' | escape }} <span aria-hidden="true">→</span></a>{% endunless %}
+  </section>
+{% endif %}

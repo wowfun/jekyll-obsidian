@@ -18,14 +18,14 @@ class DevWatchTest < Minitest::Test
       File.write(base_config, <<~YAML)
         metadata: &metadata
           released: 2026-08-02
-        obsidian:
+        website:
           source: website/docs
       YAML
       File.write(host_config, <<~YAML)
         host_metadata: &host_metadata
           owner: example
         inherited: *host_metadata
-        obsidian:
+        website:
           source: docs
       YAML
 

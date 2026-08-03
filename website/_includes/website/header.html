@@ -1,0 +1,46 @@
+<header class="site-header">
+  {% assign ui = page.website.i18n.messages %}
+  {% assign home_route = page.website.routes.home | default: '/' %}
+  {% assign notes_route = page.website.routes.notes | default: '/notes/' %}
+  {% assign archive_route = page.website.routes.archive | default: '/archive/' %}
+  {% assign tags_route = page.website.routes.tags | default: '/tags/' %}
+  {% assign graph_route = page.website.routes.graph | default: '/graph/' %}
+  {% assign feed_route = page.website.routes.feed | default: '/feed.xml' %}
+  <div class="site-header__inner">
+    <a class="site-mark" href="{{ home_route | relative_url }}" aria-label="{{ site.title | escape }} — {{ ui.home | default: 'Home' | escape }}">
+      <span class="site-mark__glyph" aria-hidden="true">{% if include.theme == 'blog' %}¶{% elsif include.theme == 'docs' %}⌁{% else %}φ{% endif %}</span>
+      <span class="site-mark__name">{{ site.title | escape }}</span>
+    </a>
+    <nav class="site-navigation" aria-label="{{ ui.primary_navigation | default: 'Primary navigation' | escape }}">
+      {% if include.theme == 'blog' %}
+        <a href="{{ home_route | relative_url }}">{{ ui.latest | default: 'Latest' | escape }}</a>
+        <a href="{{ archive_route | relative_url }}">{{ ui.archive | default: 'Archive' | escape }}</a>
+        {% if page.website.features.tags %}<a href="{{ tags_route | relative_url }}">{{ ui.topics | default: 'Topics' | escape }}</a>{% endif %}
+        {% if page.website.features.graph %}<a href="{{ graph_route | relative_url }}">{{ ui.graph | default: 'Graph' | escape }}</a>{% endif %}
+        {% if page.website.features.feed and site.data.website_feed_available %}<a href="{{ feed_route | relative_url }}">{{ ui.feed | default: 'Feed' | escape }}</a>{% endif %}
+      {% elsif include.theme == 'docs' %}
+        <a href="{{ home_route | relative_url }}">{{ ui.overview | default: 'Overview' | escape }}</a>
+        {% if page.website.theme_data.docs_home_url %}<a href="{{ page.website.theme_data.docs_home_url | escape }}">{{ ui.documentation | default: 'Documentation' | escape }}</a>{% endif %}
+        {% if page.website.features.tags %}<a href="{{ tags_route | relative_url }}">{{ ui.tags | default: 'Tags' | escape }}</a>{% endif %}
+        {% if page.website.features.graph %}<a href="{{ graph_route | relative_url }}">{{ ui.graph | default: 'Graph' | escape }}</a>{% endif %}
+        {% if page.website.features.feed and site.data.website_feed_available %}<a href="{{ feed_route | relative_url }}">{{ ui.feed | default: 'Feed' | escape }}</a>{% endif %}
+      {% else %}
+        <a href="{{ notes_route | relative_url }}">{{ ui.notes | default: 'Notes' | escape }}</a>
+        {% if page.website.features.tags %}<a href="{{ tags_route | relative_url }}">{{ ui.tags | default: 'Tags' | escape }}</a>{% endif %}
+        {% if page.website.features.graph %}<a href="{{ graph_route | relative_url }}">{{ ui.graph | default: 'Graph' | escape }}</a>{% endif %}
+        {% if page.website.features.feed and site.data.website_feed_available %}<a href="{{ feed_route | relative_url }}">{{ ui.feed | default: 'Feed' | escape }}</a>{% endif %}
+      {% endif %}
+    </nav>
+    <div class="site-actions">
+      {% if page.website.features.search %}
+        <button class="site-action" type="button" data-search-open aria-label="{{ ui.search | default: 'Search' | escape }}">
+          <span class="site-action__label">{{ ui.search | default: 'Search' | escape }}</span> <kbd>⌘K</kbd>
+        </button>
+      {% endif %}
+      {% include website/language-switcher.html %}
+      <button class="site-action" type="button" data-color-scheme-toggle data-scheme-use-light="{{ ui.use_light_scheme | default: 'Use light color scheme' | escape }}" data-scheme-use-dark="{{ ui.use_dark_scheme | default: 'Use dark color scheme' | escape }}" data-scheme-light="{{ ui.light_scheme | default: 'Light' | escape }}" data-scheme-dark="{{ ui.dark_scheme | default: 'Dark' | escape }}" aria-label="{{ ui.toggle_scheme | default: 'Toggle color scheme' | escape }}">
+        <span data-color-scheme-label>{{ ui.scheme | default: 'Scheme' | escape }}</span>
+      </button>
+    </div>
+  </div>
+</header>

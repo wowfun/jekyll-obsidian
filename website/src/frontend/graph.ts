@@ -33,7 +33,7 @@ function reducedMotion(): boolean {
 
 export async function renderGraph(container: HTMLElement): Promise<void> {
   const status = container.querySelector<HTMLElement>("[data-graph-status]");
-  if (status) status.textContent = "Loading graph…";
+  if (status) status.textContent = container.dataset.graphLoading || "Loading graph…";
 
   try {
     const url = container.dataset.graphUrl || requireSiteUrl("graph");
@@ -62,12 +62,12 @@ export async function renderGraph(container: HTMLElement): Promise<void> {
       .append("svg")
       .attr("viewBox", `0 0 ${width} ${height}`)
       .attr("role", "img")
-      .attr("aria-labelledby", "obsidian-graph-title obsidian-graph-description");
-    svg.append("title").attr("id", "obsidian-graph-title").text("Note relation graph");
+      .attr("aria-labelledby", "website-graph-title website-graph-description");
+    svg.append("title").attr("id", "website-graph-title").text(container.dataset.graphTitle || "Note relation graph");
     svg
       .append("desc")
-      .attr("id", "obsidian-graph-description")
-      .text("Linked notes are connected by solid lines; embedded notes use dashed lines.");
+      .attr("id", "website-graph-description")
+      .text(container.dataset.graphDescription || "Linked notes are connected by solid lines; embedded notes use dashed lines.");
 
     const viewport = svg.append("g").attr("class", "graph-viewport");
     const linkLayer = viewport.append("g").attr("class", "graph-links");
@@ -87,7 +87,9 @@ export async function renderGraph(container: HTMLElement): Promise<void> {
       .attr("class", "graph-node")
       .attr("role", "link")
       .attr("tabindex", 0)
-      .attr("aria-label", (node) => `${node.title}, ${node.degree} relations`)
+      .attr("aria-label", (node) => (container.dataset.graphNodeLabel || "{title}, {count} relations")
+        .replace("{title}", node.title)
+        .replace("{count}", String(node.degree)))
       .on("click", (_event, node) => window.location.assign(node.url))
       .on("keydown", (event: KeyboardEvent, node) => {
         if (event.key === "Enter" || event.key === " ") {
@@ -166,10 +168,12 @@ export async function renderGraph(container: HTMLElement): Promise<void> {
     } else {
       simulation.on("tick", position);
     }
-    if (status) status.textContent = `${nodes.length} notes and ${edges.length} relations.`;
+    if (status) status.textContent = (container.dataset.graphSummary || "{notes} notes and {relations} relations.")
+      .replace("{notes}", String(nodes.length))
+      .replace("{relations}", String(edges.length));
     container.dataset.graphReady = "true";
   } catch {
     container.dataset.graphError = "true";
-    if (status) status.textContent = "The interactive graph could not be loaded. Use the note list below.";
+    if (status) status.textContent = container.dataset.graphUnavailable || "The interactive graph could not be loaded. Use the note directory below.";
   }
 }

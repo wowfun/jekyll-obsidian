@@ -62,12 +62,12 @@ class UrlSecurityTest < Minitest::Test
       "/404.html/child/",
       "/feed.xml/",
       "/sitemap.xml/",
-      "/assets/obsidian/child/",
+      "/assets/website/child/",
       "/assets/vault/child/"
     ]
 
     reserved.each do |permalink|
-      result = compile(note("index.md", <<~MARKDOWN))
+      result = compile(note("index.md", <<~MARKDOWN), theme: "digital-garden")
         ---
         publish: true
         permalink: #{permalink}

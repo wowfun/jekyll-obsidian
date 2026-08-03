@@ -20,7 +20,7 @@ describe("color scheme controls", () => {
       )
     ).toBe("light");
     expect(requestedKey).toBe(COLOR_SCHEME_STORAGE_KEY);
-    expect(COLOR_SCHEME_STORAGE_KEY).toBe("jekyll-obsidian:color-scheme");
+    expect(COLOR_SCHEME_STORAGE_KEY).toBe("website:color-scheme");
     expect(preferredColorScheme({ getItem: () => null }, { matches: true })).toBe("dark");
     expect(preferredColorScheme({ getItem: () => { throw new Error("blocked"); } }, { matches: false })).toBe("light");
   });
@@ -39,5 +39,21 @@ describe("color scheme controls", () => {
     expect(button.getAttribute("aria-pressed")).toBe("true");
     expect(button.getAttribute("aria-label")).toBe("Use light color scheme");
     expect(label.textContent).toBe("Light");
+  });
+
+  it("uses locale catalog labels supplied by the page", () => {
+    const button = document.createElement("button");
+    button.dataset.colorSchemeToggle = "";
+    button.dataset.schemeUseLight = "使用浅色配色";
+    button.dataset.schemeLight = "浅色";
+    const label = document.createElement("span");
+    label.dataset.colorSchemeLabel = "";
+    button.append(label);
+    document.body.append(button);
+
+    applyColorScheme("dark");
+
+    expect(button.getAttribute("aria-label")).toBe("使用浅色配色");
+    expect(label.textContent).toBe("浅色");
   });
 });

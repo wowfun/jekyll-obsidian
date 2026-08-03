@@ -7,7 +7,7 @@ tags:
   - github-pages
 description: Add the website workspace to another repository and deploy its documentation without a local build toolchain.
 created: 2026-08-02
-updated: 2026-08-02
+updated: 2026-08-03
 ---
 
 # Host integration
@@ -89,7 +89,7 @@ The generated host configuration contains a managed block:
 ```yaml
 title: My Project Documentation
 
-obsidian:
+website:
   # jekyll-obsidian:managed-start
   source: docs
   theme: docs
@@ -103,7 +103,9 @@ obsidian:
       doc: []
 ```
 
-`integrate` updates only the marked `source` and `theme` lines. Other keys and comments remain under host ownership. The generated content defaults classify files directly below `docs/` as documentation, so a file such as `docs/guide.md` appears in the Docs navigator.
+`integrate` updates only the marked `source` and `theme` lines. Other keys and comments remain under host ownership. This includes the optional `website.comments` and `website.i18n` mappings available to every theme; repository owners configure GitHub Discussions and Giscus separately. The generated content defaults classify files directly below `docs/` as documentation, so a file such as `docs/guide.md` appears in the Docs navigator.
+
+The publishing interface is the root `website:` mapping. `integrate` requires exactly one managed `website:` root; malformed or missing managed markers fail safely.
 
 Configuration precedence is `website/_config.yml`, then `.github/jekyll-obsidian.yml`, then explicit `bin/build` and Pages values. `bin/build` pins Jekyll's source, implementation directories, caches, destination, and safety settings to `website/`; host configuration cannot move those paths or bypass the adapter.
 

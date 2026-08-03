@@ -6,7 +6,7 @@ tags:
   - guide/customization
 description: Adjust site identity, visual tokens, navigation, and repository links.
 created: 2026-07-31
-updated: 2026-08-02
+updated: 2026-08-04
 ---
 
 # Customization
@@ -20,7 +20,7 @@ lang: en
 url: ""
 baseurl: ""
 
-obsidian:
+website:
   # jekyll-obsidian:managed-start
   source: docs
   theme: docs
@@ -36,13 +36,13 @@ obsidian:
   features: {}
 ```
 
-`obsidian.source` is relative to the host repository root. The bundled defaults use `source: website/docs`; a generated host override normally uses `source: docs` or another directory outside `website/`.
+`website.source` is relative to the host repository root. The bundled defaults use `source: website/docs`; a generated host override normally uses `source: docs` or another directory outside `website/`.
 
 The canonical commands merge `website/_config.yml`, then `.github/jekyll-obsidian.yml`, then temporary command-line or Pages values. The integration command owns only the marked `source` and `theme` lines in the host file; titles, repository links, content classification, and feature overrides remain editable around that block. `bin/build` pins the Jekyll source, implementation directories, caches, destination, and safety settings to `website/`. Direct `jekyll` commands do not load the host overlay or these ownership safeguards and are not a supported entrypoint.
 
 ## Site identity
 
-`title`, `description`, and `lang` feed the shell, metadata, Atom, and accessibility labels. Set `obsidian.repository` to an `owner/repository` pair to show Edit, History, View source, and Report issue links. If it is blank, the build checks `GITHUB_REPOSITORY` and the local `origin` remote. The links stay hidden when no repository can be identified.
+`title`, `description`, and `lang` feed the shell, metadata, Atom, and accessibility labels. Set `website.repository` to an `owner/repository` pair to show Edit, History, View source, and Report issue links. If it is blank, the build checks `GITHUB_REPOSITORY` and the local `origin` remote. The links stay hidden when no repository can be identified.
 
 ## Site themes
 
@@ -55,7 +55,80 @@ website/bin/build --theme blog --url https://example.test --baseurl "" --destina
 
 The build writes the named destination below `website/`, so `_site` becomes `website/_site`.
 
-Feature keys omitted from `obsidian.features` inherit the theme defaults. Explicit YAML booleans can override `search`, `tags`, `feed`, `graph`, `relations`, `previews`, and `outline`.
+Feature keys omitted from `website.features` inherit the theme defaults. Explicit YAML booleans can override `search`, `tags`, `feed`, `graph`, `relations`, `previews`, and `outline`.
+
+## GitHub Discussions comments
+
+Every theme can attach a GitHub Discussion to each `content_type: post` through [Giscus](https://giscus.app/). Comments are disabled when `website.comments` is absent. When the mapping is present and omits `enabled`, Blog enables comments while Docs and Digital Garden keep them disabled. To use comments, first prepare a public GitHub repository:
+
+1. Enable **Settings → General → Features → Discussions**.
+2. Create a `Blog comments` category. The Announcement format is recommended because maintainers and Giscus can create discussions there while visitors can still reply.
+3. Install the [Giscus GitHub App](https://github.com/apps/giscus) for that repository.
+4. Enter the repository and category at [giscus.app](https://giscus.app/) and copy their generated IDs.
+
+Then add the values to the host configuration:
+
+```yaml
+website:
+  theme: blog
+  repository: owner/site
+  comments:
+    # Optional. Omit this to reuse website.repository.
+    repository: owner/community
+    repository_id: R_kgDOxxxxxxxx
+    category: Blog comments
+    category_id: DIC_kwDOxxxxxxxx
+```
+
+Add `enabled: true` inside `comments` when the active theme is Docs or Digital Garden; add `enabled: false` to keep a configured Blog dormant. The comments repository may be the publication repository or a separate public community repository. The build never checks whether Discussions is enabled or the Giscus App is installed. Missing provider IDs produce a warning and a non-interactive fallback instead of failing the build. Add a `giscus.json` file to the comments repository when you want to restrict embedding to the production site origin.
+
+Once enabled, every `content_type: post` has comments in any theme. Disable one article with a YAML boolean:
+
+```yaml
+---
+publish: true
+content_type: post
+comments: false
+---
+```
+
+Threads use a strict, route-independent term derived from the note path. Changing a domain, `baseurl`, or permalink keeps the thread; moving or renaming the source note creates a new identity. Reactions are enabled, the input appears above existing comments, and Giscus lazily loads its iframe near the comments area. The Giscus client itself is still requested when a published comment page initializes.
+
+Local development does not connect to Giscus. It shows a publication-only notice and a normal link to the repository's Discussions page. Published and CI builds load the widget, synchronize it with the site's light or dark scheme, and retain the GitHub link when JavaScript or the external service is unavailable. Localized pages share the post's route-independent Discussion thread, while the Giscus interface follows each page locale when supported and otherwise falls back to English.
+
+See [[Comments|Comments with GitHub Discussions]] for thread identity, origin restrictions, privacy boundaries, and troubleshooting.
+
+## Localization
+
+Every theme can opt into static localization by listing locales under `website.i18n`. The mapping enables localization by default for Docs and stays disabled by default for Blog and Digital Garden; set `enabled: true` there. The top-level `lang` is the default locale and must appear in the list when localization is enabled:
+
+```yaml
+lang: en
+
+website:
+  theme: docs
+  i18n:
+    locales:
+      - en
+      - zh-CN
+```
+
+Add `enabled: true` inside `i18n` for Blog or Digital Garden; add `enabled: false` to keep a configured Docs locale plan dormant. Keep the default language in the normal content tree. Put translated notes at the same relative path below `_translations/<locale>/`, and add `publish: true` to each translation. Every configured locale requires `_locale.yml` at its locale root; `name` is required, while `hreflang`, `dir`, and the closed `messages` catalog are optional. A missing translation does not fail the build. It keeps its localized URL, shows the default-language content with a notice, and is excluded from search-engine indexing and the sitemap.
+
+```yaml
+name: 简体中文
+hreflang: zh-Hans
+dir: ltr
+messages:
+  contents: 目录
+  search: 搜索
+```
+
+`dir` accepts only `ltr` or `rtl`. Message values must be strings and keys must belong to the closed built-in theme catalog; unknown keys fail the build. Omitted messages use the built-in English text. The locale list order is also the language-switcher order.
+
+The default locale keeps existing URLs. Other locales use their configured tag as a prefix, such as `/zh-CN/docs/Getting%20Started/`. Navigation, search, theme system pages, language switching, SEO metadata, and locale assets stay partitioned for Blog, Docs, and Digital Garden alike.
+
+See [[Localization|Localization guide]] for locale manifests, translation authority, fallback pages, SEO behavior, and troubleshooting.
 
 ## Color and type
 
@@ -73,8 +146,9 @@ The compiler accepts this fixed set of note properties:
 - `permalink`, `image`, and `cssclasses`
 - `created` and `updated`
 - `content_type`, `date`, `nav_order`, and `nav_exclude`
+- `comments`
 
-Unknown keys never flow into Liquid or generated data. `aliases`, `tags`, and `cssclasses` are string arrays. Dates use ISO 8601. A note title comes from `title`, its first level-one heading, or its filename, in that order.
+Unknown keys never flow into Liquid or generated data. `aliases`, `tags`, and `cssclasses` are string arrays. `publish`, `nav_exclude`, and `comments` use YAML booleans. Dates use ISO 8601. A note title comes from `title`, its first level-one heading, or its filename, in that order.
 
 ## Content and navigation
 

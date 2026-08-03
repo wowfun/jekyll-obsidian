@@ -4,10 +4,10 @@ lang: en
 url: ""
 baseurl: ""
 
-obsidian:
+website:
   source: website/docs
   syntax_profile: ofm@1
-  theme: digital-garden
+  theme: docs
   repository: ""
   edit_branch: main
   content:

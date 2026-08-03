@@ -14,7 +14,7 @@ require_relative "workspace_layout"
 module JekyllObsidian
   module Adapter
     BUNDLED_FEATURE_IDS = %w[search graph previews math mermaid].freeze
-    CONFIG_KEYS = %w[source syntax_profile theme repository edit_branch content features].freeze
+    CONFIG_KEYS = %w[source syntax_profile theme repository edit_branch content features i18n comments].freeze
     IGNORED_CONTENT_DIRECTORIES = %w[.obsidian .trash].freeze
     STAGING_BASENAME_PATTERN = /\Avault-assets\.[A-Za-z0-9.-]+\z/
     StagingLease = Struct.new(:parent, :path, keyword_init: true)
@@ -28,10 +28,10 @@ module JekyllObsidian
     end
 
     class GeneratedPage < Jekyll::PageWithoutAFile
-      attr_reader :obsidian_route
+      attr_reader :website_route
 
       def initialize(site, output, generated: false)
-        @obsidian_route = output.route
+        @website_route = output.route
         directory, filename = self.class.route_parts(output.route)
         super(site, site.source, directory, filename)
         self.content = output.content
@@ -39,7 +39,7 @@ module JekyllObsidian
         data["layout"] = nil if generated
         data["permalink"] = output.route
         data["render_with_liquid"] = false
-        data["obsidian_generated"] = true
+        data["website_generated"] = true
       end
 
       def self.route_parts(route)
@@ -57,11 +57,11 @@ module JekyllObsidian
     end
 
     class ProjectedStaticFile < Jekyll::StaticFile
-      attr_reader :obsidian_route, :source_path
+      attr_reader :website_route, :source_path
 
       def initialize(site, source_root, source_relative_path, route)
         @source_path = File.join(source_root, source_relative_path)
-        @obsidian_route = route
+        @website_route = route
         super(site, source_root, File.dirname(source_relative_path), File.basename(source_relative_path))
         @relative_path = route
       end
@@ -71,19 +71,19 @@ module JekyllObsidian
       end
 
       def url
-        @obsidian_route
+        @website_route
       end
 
       def destination(destination_root)
-        @obsidian_destinations ||= {}
-        @obsidian_destinations[destination_root] ||= @site.in_dest_dir(
+        @website_destinations ||= {}
+        @website_destinations[destination_root] ||= @site.in_dest_dir(
           destination_root,
-          Jekyll::URL.unescape_path(@obsidian_route.delete_prefix("/"))
+          Jekyll::URL.unescape_path(@website_route.delete_prefix("/"))
         )
       end
 
       def destination_rel_dir
-        File.dirname(@obsidian_route)
+        File.dirname(@website_route)
       end
     end
 
@@ -91,13 +91,13 @@ module JekyllObsidian
 
     def prepare_site(site)
       site.singleton_class.prepend(SiteProcessCleanup) unless site.singleton_class < SiteProcessCleanup
-      obsidian, _layout = normalize_obsidian_configuration(site)
+      website, _layout = normalize_website_configuration(site)
       exclude_bundled_source(site)
-      site.config["obsidian"] = obsidian
+      site.config["website"] = website
     end
 
     def generate(site)
-      source = site.config.fetch("obsidian").fetch("source")
+      source = site.config.fetch("website").fetch("source")
       layout = resolve_workspace_layout(site, source)
       assert_vault_was_not_read(site, layout)
       result = compile(site, layout)
@@ -106,12 +106,12 @@ module JekyllObsidian
         summary = result.diagnostics.select { |item| item.severity == :error }
           .map { |item| "#{[item.path, item.code].compact.join(":")} (#{item.message})" }
           .join(", ")
-        fatal("obsidian compilation failed: #{summary}")
+        fatal("website compilation failed: #{summary}")
       end
 
       staging_root = stage_vault_assets(site, layout, result)
       begin
-        site.data["obsidian_feed_available"] = result.generated_files.any? { |output| output.route == "/feed.xml" }
+        site.data["website_feed_available"] = result.generated_files.any? { |output| output.route == "/feed.xml" }
         site.data.merge!(result.site_data)
         pages, vault_assets = generated_objects(site, result, staging_root)
         app_assets = app_asset_objects(site, layout:, theme: result.theme, features: result.features)
@@ -125,7 +125,7 @@ module JekyllObsidian
     end
 
     def cleanup_staging(site)
-      lease = site.remove_instance_variable(:@jekyll_obsidian_staging_lease)
+      lease = site.remove_instance_variable(:@jekyll_website_staging_lease)
       return unless lease.is_a?(StagingLease)
       return unless File.dirname(lease.path) == lease.parent
       return unless File.basename(lease.path).match?(STAGING_BASENAME_PATTERN)
@@ -137,25 +137,30 @@ module JekyllObsidian
 
     private
 
-    def normalize_obsidian_configuration(site)
-      raw = site.config["obsidian"]
-      fatal("obsidian must be a mapping") unless raw.nil? || raw.is_a?(Hash)
+    def normalize_website_configuration(site)
+      if site.config.key?("obsidian")
+        fatal("obsidian configuration is no longer supported; rename the root mapping to website")
+      end
+      raw = site.config["website"]
+      fatal("website must be a mapping") unless raw.nil? || raw.is_a?(Hash)
       configured = raw || {}
       unknown = configured.keys.map(&:to_s) - CONFIG_KEYS
-      fatal("obsidian contains unsupported key: #{unknown.sort.first}") unless unknown.empty?
+      fatal("website contains unsupported key: #{unknown.sort.first}") unless unknown.empty?
 
       source = configured.key?("source") ? configured["source"] : WorkspaceLayout::DEFAULT_SOURCE
       layout = resolve_workspace_layout(site, source)
-      obsidian = {
+      website = {
         "source" => layout.source,
         "syntax_profile" => configured.fetch("syntax_profile", "ofm@1"),
-        "theme" => configured.fetch("theme", "digital-garden"),
+        "theme" => configured.fetch("theme", "docs"),
         "repository" => configured.fetch("repository", ""),
         "edit_branch" => configured.fetch("edit_branch", "main"),
         "content" => configured["content"],
-        "features" => configured["features"]
+        "features" => configured["features"],
+        "i18n" => configured["i18n"],
+        "comments" => configured["comments"]
       }
-      [obsidian, layout]
+      [website, layout]
     end
 
     def resolve_workspace_layout(site, source)
@@ -180,7 +185,7 @@ module JekyllObsidian
       end
       return if leaked.empty?
 
-      fatal("obsidian.source entered Jekyll Reader despite exclusion: #{leaked.sort.first}")
+      fatal("website.source entered Jekyll Reader despite exclusion: #{leaked.sort.first}")
     end
 
     def path_inside?(candidate, root, site_source)
@@ -223,7 +228,13 @@ module JekyllObsidian
         fatal("vault contains a non-regular file: #{relative}") unless stat.file?
 
         normalized = relative.tr(File::SEPARATOR, "/")
-        kind = File.extname(normalized).downcase == ".md" ? :note : :attachment
+        kind = if File.extname(normalized).downcase == ".md"
+          :note
+        elsif File.basename(normalized) == LocalizedCompiler::LOCALE_MANIFEST
+          :locale_manifest
+        else
+          :attachment
+        end
         times = git_times.fetch(normalized, {})
         flags = File::RDONLY | (File.const_defined?(:NOFOLLOW) ? File::NOFOLLOW : 0)
         File.open(absolute, flags) do |file|
@@ -231,7 +242,7 @@ module JekyllObsidian
           fatal("vault file changed during snapshot: #{relative}") unless pinned.file? && pinned.dev == stat.dev && pinned.ino == stat.ino
           entries << SnapshotEntry.new(
             path: normalized,
-            bytes: kind == :note ? file.read : nil,
+            bytes: %i[note locale_manifest].include?(kind) ? file.read : nil,
             kind: kind,
             media_type: kind == :note ? "text/markdown" : MediaPolicy.media_type(normalized),
             size: pinned.size,
@@ -335,7 +346,7 @@ module JekyllObsidian
     end
 
     def repository_identity(site, layout)
-      explicit = site.config.dig("obsidian", "repository").to_s.strip
+      explicit = site.config.dig("website", "repository").to_s.strip
       return explicit unless explicit.empty?
       environment = ENV.fetch("GITHUB_REPOSITORY", "").strip
       return environment unless environment.empty?
@@ -353,8 +364,8 @@ module JekyllObsidian
 
     def compile(site, layout)
       repository = repository_identity(site, layout)
-      Jekyll.logger.warn("Obsidian:", "repository identity unavailable; GitHub collaboration links are hidden") unless repository
-      obsidian = site.config.fetch("obsidian")
+      Jekyll.logger.warn("Website:", "repository identity unavailable; GitHub collaboration links are hidden") unless repository
+      website = site.config.fetch("website")
       request = BuildRequest.new(
         snapshot: build_snapshot(layout),
         config: BuildConfig.new(
@@ -364,12 +375,14 @@ module JekyllObsidian
           url: site.config["url"].to_s,
           baseurl: site.config["baseurl"].to_s,
           source: layout.source,
-          syntax_profile: obsidian.fetch("syntax_profile"),
-          theme: obsidian.fetch("theme"),
-          content: obsidian.fetch("content"),
-          features: obsidian.fetch("features"),
+          syntax_profile: website.fetch("syntax_profile"),
+          theme: website.fetch("theme"),
+          content: website.fetch("content"),
+          features: website.fetch("features"),
+          i18n: website.fetch("i18n"),
+          comments: website.fetch("comments"),
           repository: repository.to_s,
-          edit_branch: obsidian.fetch("edit_branch"),
+          edit_branch: website.fetch("edit_branch"),
           environment: ENV.fetch("JEKYLL_ENV", "development")
         )
       )
@@ -397,7 +410,7 @@ module JekyllObsidian
         end
       end
       site.instance_variable_set(
-        :@jekyll_obsidian_staging_lease,
+        :@jekyll_website_staging_lease,
         StagingLease.new(parent: layout.application_cache_root, path: staging_root).freeze
       )
       staging_root
@@ -425,7 +438,7 @@ module JekyllObsidian
       unless File.file?(manifest_path)
         fatal("application asset manifest is missing: #{manifest_path}") unless Jekyll.env == "development"
 
-        Jekyll.logger.warn("Obsidian:", "application asset manifest is missing; frontend assets are unavailable")
+        Jekyll.logger.warn("Website:", "application asset manifest is missing; frontend assets are unavailable")
         return []
       end
       validate_application_asset_file!(
@@ -462,7 +475,7 @@ module JekyllObsidian
         fatal("active asset is absent from manifest files: #{outside_allowlist.first}") unless outside_allowlist.empty?
       end
 
-      site.data["obsidian_assets"] = manifest
+      site.data["website_assets"] = manifest
       files.map do |relative|
         validate_manifest_path!(relative)
         absolute = File.join(root, relative)
@@ -471,7 +484,7 @@ module JekyllObsidian
           cache_root: root,
           label: "application asset #{relative}"
         )
-        ProjectedStaticFile.new(site, root, relative, "/assets/obsidian/#{relative}")
+        ProjectedStaticFile.new(site, root, relative, "/assets/website/#{relative}")
       end
     rescue JSON::ParserError => exception
       fatal("invalid asset manifest: #{exception.message}")
@@ -572,8 +585,8 @@ module JekyllObsidian
           register_output!(registry, site, document, document.url, "Jekyll document #{document.path}")
         end
       end
-      pages.each { |page| register_output!(registry, site, page, page.obsidian_route, "obsidian output") }
-      static_files.each { |file| register_output!(registry, site, file, file.obsidian_route, "obsidian asset") }
+      pages.each { |page| register_output!(registry, site, page, page.website_route, "website output") }
+      static_files.each { |file| register_output!(registry, site, file, file.website_route, "website asset") }
     end
 
     def register_output!(registry, site, output, route, owner)
@@ -608,9 +621,9 @@ module JekyllObsidian
       result.diagnostics.each do |diagnostic|
         label = [diagnostic.path, diagnostic.code].compact.join(":")
         if diagnostic.severity == :error
-          Jekyll.logger.error("Obsidian #{label}:", diagnostic.message)
+          Jekyll.logger.error("Website #{label}:", diagnostic.message)
         else
-          Jekyll.logger.warn("Obsidian #{label}:", diagnostic.message)
+          Jekyll.logger.warn("Website #{label}:", diagnostic.message)
         end
       end
     end

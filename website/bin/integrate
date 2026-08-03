@@ -44,9 +44,9 @@ fail() {
 fail_unmanaged_config() {
   cat >&2 <<'MESSAGE'
 Integration error: .github/jekyll-obsidian.yml is not managed by this command.
-Merge this block into the existing obsidian mapping, then run the command again:
+Merge this block into a root website mapping, then run the command again:
 
-obsidian:
+website:
   # jekyll-obsidian:managed-start
   source: 'docs'
   theme: 'docs'
@@ -123,15 +123,21 @@ assert_not_link "$WORKFLOW_PATH" ".github/workflows/pages.yml"
 managed_value() {
   key=$1
   awk -v start="$CONFIG_START" -v finish="$CONFIG_END" -v key="$key" '
-    BEGIN { inside = 0; found = 0; started = 0; finished = 0; quote = sprintf("%c", 39) }
+    BEGIN { inside = 0; in_root = 0; found = 0; started = 0; finished = 0; roots = 0; quote = sprintf("%c", 39) }
+    $0 ~ /^website:[[:space:]]*$/ {
+      roots++
+      in_root = 1
+      next
+    }
+    in_root && $0 ~ /^[^[:space:]#]/ { in_root = 0 }
     $0 == start {
-      if (started || finished) invalid = 1
+      if (started || finished || !in_root) invalid = 1
       started = 1
       inside = 1
       next
     }
     $0 == finish {
-      if (!inside || finished) invalid = 1
+      if (!inside || finished || !in_root) invalid = 1
       finished = 1
       inside = 0
       next
@@ -146,12 +152,14 @@ managed_value() {
         found++
       }
     }
-    END { if (invalid || !started || !finished || inside || found != 1) exit 1 }
+    END { if (invalid || roots != 1 || !started || !finished || inside || found != 1) exit 1 }
   ' "$CONFIG_PATH"
 }
 
 if [ -e "$CONFIG_PATH" ]; then
   [ -f "$CONFIG_PATH" ] || fail ".github/jekyll-obsidian.yml must be a regular file."
+  website_root_count=$(grep -Ec '^website:[[:space:]]*$' "$CONFIG_PATH" || true)
+  [ "$website_root_count" -eq 1 ] || fail_unmanaged_config
   start_count=$(grep -Fxc "$CONFIG_START" "$CONFIG_PATH" || true)
   end_count=$(grep -Fxc "$CONFIG_END" "$CONFIG_PATH" || true)
   if [ "$start_count" -ne 1 ] || [ "$end_count" -ne 1 ]; then
@@ -190,11 +198,11 @@ IFS=/
 set -f
 for segment in $source_value; do
   current_path=$current_path/$segment
-  assert_not_link "$current_path" "obsidian.source"
+  assert_not_link "$current_path" "website.source"
 done
 set +f
 IFS=$old_ifs
-[ -d "$current_path" ] || fail "obsidian.source does not exist: $source_value"
+[ -d "$current_path" ] || fail "website.source does not exist: $source_value"
 resolved_source=$(CDPATH= cd -- "$current_path" && pwd -P)
 [ "$resolved_source" = "$HOST_DIR/$source_value" ] || fail "--source casing must match the repository path exactly."
 
@@ -275,11 +283,11 @@ render_config() {
     ' "$CONFIG_PATH" > "$destination"
   else
     awk -v source="$escaped_source" -v theme="$escaped_theme" '
-      /__JEKYLL_OBSIDIAN_SOURCE__/ {
+      /__JEKYLL_WEBSITE_SOURCE__/ {
         print "  source: " sprintf("%c", 39) source sprintf("%c", 39)
         next
       }
-      /__JEKYLL_OBSIDIAN_THEME__/ {
+      /__JEKYLL_WEBSITE_THEME__/ {
         print "  theme: " sprintf("%c", 39) theme sprintf("%c", 39)
         next
       }
@@ -291,7 +299,7 @@ render_config() {
 render_workflow() {
   destination=$1
   awk -v glob="$escaped_glob_for_awk" '
-    /__JEKYLL_OBSIDIAN_SOURCE_GLOB__/ {
+    /__JEKYLL_WEBSITE_SOURCE_GLOB__/ {
       print "      - " sprintf("%c", 39) glob sprintf("%c", 39)
       next
     }

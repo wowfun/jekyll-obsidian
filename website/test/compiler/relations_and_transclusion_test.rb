@@ -6,7 +6,8 @@ class RelationsAndTransclusionTest < Minitest::Test
   def test_links_and_embeds_share_one_typed_relation_model
     result = compile(
       note("index.md", "---\npublish: true\nupdated: 2026-07-30\n---\n# Home\n[[target]]\n![[target#Section]]"),
-      note("target.md", "---\npublish: true\nupdated: 2026-07-30\n---\n# Target\n## Section\nEmbedded text.")
+      note("target.md", "---\npublish: true\nupdated: 2026-07-30\n---\n# Target\n## Section\nEmbedded text."),
+      theme: "digital-garden"
     )
 
     assert result.success?, result.diagnostics.map(&:message).join("\n")
@@ -16,8 +17,8 @@ class RelationsAndTransclusionTest < Minitest::Test
     assert_equal "Section", relations.find { |item| item.kind == :embed }.fragment
 
     target = page(result, "/target/")
-    assert_includes target.data.dig("obsidian", "backlinks").map { |item| item.fetch("id") }, "index.md"
-    assert_includes target.data.dig("obsidian", "embedded_by").map { |item| item.fetch("id") }, "index.md"
+    assert_includes target.data.dig("website", "backlinks").map { |item| item.fetch("id") }, "index.md"
+    assert_includes target.data.dig("website", "embedded_by").map { |item| item.fetch("id") }, "index.md"
   end
 
   def test_repeated_transclusions_have_unique_ids_and_source_links
@@ -29,7 +30,7 @@ class RelationsAndTransclusionTest < Minitest::Test
     html = page(result, "/").content
     ids = html.scan(/\sid="([^"]+)"/).flatten
     assert_equal ids.uniq, ids
-    assert_equal 2, html.scan(/class="obsidian-transclusion obsidian-embed"/).length
+    assert_equal 2, html.scan(/class="website-transclusion website-embed"/).length
     assert_equal 2, html.scan('data-source-id="target.md"').length
     refute_includes html, "<p><section"
   end
@@ -42,7 +43,7 @@ class RelationsAndTransclusionTest < Minitest::Test
 
     assert result.success?
     assert result.diagnostics.any? { |item| item.code == "unresolved_link" }
-    assert_includes page(result, "/").content, "obsidian-link--unresolved"
+    assert_includes page(result, "/").content, "website-link--unresolved"
   end
 
   def test_ambiguous_basename_fails_in_production
@@ -69,7 +70,7 @@ class RelationsAndTransclusionTest < Minitest::Test
 
     development = compile(*entries, environment: "development")
     assert development.success?
-    assert_includes page(development, "/").content, "obsidian-embed--unresolved"
+    assert_includes page(development, "/").content, "website-embed--unresolved"
     assert_empty development.copied_assets
   end
 
@@ -82,7 +83,7 @@ class RelationsAndTransclusionTest < Minitest::Test
 
     development = compile(source, environment: "development")
     assert development.success?
-    assert_includes page(development, "/").content, "obsidian-embed--unresolved"
+    assert_includes page(development, "/").content, "website-embed--unresolved"
   end
 
   def test_embed_cycles_fail_in_production
@@ -153,7 +154,7 @@ class RelationsAndTransclusionTest < Minitest::Test
 
     development = compile(*entries, environment: "development")
     assert development.success?
-    assert_includes page(development, "/").content, "obsidian-embed--unresolved"
+    assert_includes page(development, "/").content, "website-embed--unresolved"
   end
 
   def test_heading_and_block_id_collision_is_fatal
@@ -204,7 +205,7 @@ class RelationsAndTransclusionTest < Minitest::Test
     target = Nokogiri::HTML5.fragment(page(result, "/target/").content)
     assert_equal "ul", target.at_css("#reading-list")&.name
     embedded = Nokogiri::HTML5.fragment(page(result, "/").content)
-    assert_equal %w[First\ item Second\ item], embedded.css(".obsidian-transclusion__content li").map { |item| item.text.strip }
+    assert_equal %w[First\ item Second\ item], embedded.css(".website-transclusion__content li").map { |item| item.text.strip }
   end
 
   def test_standalone_block_id_preserves_a_heading_anchor_and_heading_section
@@ -243,7 +244,7 @@ class RelationsAndTransclusionTest < Minitest::Test
     assert_equal heading, block_anchor.next_element
 
     embedded = Nokogiri::HTML5.fragment(page(result, "/").content)
-    transclusions = embedded.css(".obsidian-transclusion__content")
+    transclusions = embedded.css(".website-transclusion__content")
     assert_equal 2, transclusions.length
     assert_includes transclusions[0].text, "Section body."
     assert_equal "Section", transclusions[1].text.strip
@@ -294,7 +295,7 @@ class RelationsAndTransclusionTest < Minitest::Test
     assert_equal "section", target.at_css("#embedded-block")&.name
 
     embedded = Nokogiri::HTML5.fragment(page(result, "/").content)
-    text = embedded.css(".obsidian-transclusion__content").map(&:text).join(" ")
+    text = embedded.css(".website-transclusion__content").map(&:text).join(" ")
     assert_includes text, "Outer body."
     assert_includes text, "Nested body."
     assert_includes text, "Folded body."
@@ -318,7 +319,7 @@ class RelationsAndTransclusionTest < Minitest::Test
 
     assert result.success?, result.diagnostics.map(&:message).join("\n")
     embedded = Nokogiri::HTML5.fragment(page(result, "/").content)
-    content = embedded.at_css(".obsidian-transclusion__content")
+    content = embedded.at_css(".website-transclusion__content")
     list = content.at_xpath("./ul")
     refute_nil list
     assert_equal ["First"], list.xpath("./li").map { |item| item.text.strip }
@@ -338,7 +339,7 @@ class RelationsAndTransclusionTest < Minitest::Test
 
     development = compile(*entries, environment: "development")
     assert development.success?, development.diagnostics.map(&:message).join("\n")
-    assert_includes page(development, "/").content, "obsidian-embed--limited"
+    assert_includes page(development, "/").content, "website-embed--limited"
   end
 
   def test_transclusion_instance_budget_bounds_wide_fan_out
@@ -355,8 +356,8 @@ class RelationsAndTransclusionTest < Minitest::Test
     development = compile(*entries, environment: "development")
     assert development.success?, development.diagnostics.map(&:message).join("\n")
     html = page(development, "/").content
-    assert_equal 256, html.scan("obsidian-transclusion obsidian-embed").length
-    assert_includes html, "obsidian-embed--limited"
+    assert_equal 256, html.scan("website-transclusion website-embed").length
+    assert_includes html, "website-embed--limited"
   end
 
   def test_transclusion_rewrites_html_aria_svg_and_css_id_references
@@ -377,7 +378,7 @@ class RelationsAndTransclusionTest < Minitest::Test
     )
 
     assert result.success?, result.diagnostics.map(&:message).join("\n")
-    embedded = Nokogiri::HTML5.fragment(page(result, "/").content).at_css(".obsidian-transclusion__content")
+    embedded = Nokogiri::HTML5.fragment(page(result, "/").content).at_css(".website-transclusion__content")
     field = embedded.at_css("input")
     prefix = field["id"].delete_suffix("field")
     assert_equal "#{prefix}field", embedded.at_css("label")["for"]

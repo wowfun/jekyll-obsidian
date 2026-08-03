@@ -7,7 +7,7 @@ require "pathname"
 MAX_BYTES = 1_073_741_824
 EXACT_FILES = %w[
   index.html 404.html feed.xml sitemap.xml
-  assets/obsidian/catalog.v1.json assets/obsidian/graph.v1.json assets/obsidian/search.v1.json
+  assets/website/catalog.v1.json assets/website/graph.v1.json assets/website/search.v1.json
   robots.txt site.webmanifest favicon.ico .nojekyll
 ].freeze
 ALLOWED_EXTENSIONS = %w[
@@ -43,7 +43,9 @@ Find.find(site_dir) do |path|
   next if stat.directory?
   fail_audit("non-regular output found: #{relative}") unless stat.file?
 
-  allowed = EXACT_FILES.include?(relative) || relative.end_with?("/index.html") || ALLOWED_EXTENSIONS.include?(File.extname(relative).downcase)
+  localized_artifact = relative.match?(%r{\Aassets/website/i18n/[A-Za-z]{2,8}(?:-[A-Za-z0-9]{1,8})*/(?:catalog|graph|search)\.v1\.json\z}) ||
+    relative.match?(%r{\A[A-Za-z]{2,8}(?:-[A-Za-z0-9]{1,8})*/feed\.xml\z})
+  allowed = EXACT_FILES.include?(relative) || localized_artifact || relative.end_with?("/index.html") || ALLOWED_EXTENSIONS.include?(File.extname(relative).downcase)
   fail_audit("output is not on the extension allowlist: #{relative}") unless allowed
 
   total += stat.size

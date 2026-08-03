@@ -15,7 +15,9 @@ module CompilerTestHelpers
     syntax_profile: "ofm@1",
     repository: "example/garden",
     edit_branch: "main",
-    environment: "production"
+    environment: "production",
+    i18n: nil,
+    comments: nil
   }.freeze
 
   def note(path, body, first_committed_at: nil, last_committed_at: nil)
@@ -37,6 +39,16 @@ module CompilerTestHelpers
       kind: :attachment,
       media_type: media_type,
       size: bytes.bytesize
+    )
+  end
+
+  def locale_manifest(path, body)
+    JekyllObsidian::SnapshotEntry.new(
+      path: path,
+      bytes: body,
+      kind: :locale_manifest,
+      media_type: "application/yaml",
+      size: body.bytesize
     )
   end
 

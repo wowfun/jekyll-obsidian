@@ -126,7 +126,7 @@ module JekyllObsidian
         elsif line[cursor] == "^" && block_id_boundary?(line, cursor) && (match = line[cursor..].match(/\A\^([\p{L}\p{N}_-]+)[ \t]*(\r?\n)?\z/u))
           block_id = match[1].unicode_normalize(:nfc)
           @block_ids << [block_id, line_number]
-          output << %(<span data-obsidian-block-id="#{block_id}"></span>)
+          output << %(<span data-website-block-id="#{block_id}"></span>)
           output << match[2].to_s
           cursor = line.length
         else
@@ -186,7 +186,7 @@ module JekyllObsidian
         ),
         token: token
       )
-      output << %(<obsidian-ofm-embed data-token="#{token}"></obsidian-ofm-embed>)
+      output << %(<website-ofm-embed data-token="#{token}"></website-ofm-embed>)
       ending + 2
     end
 
@@ -212,7 +212,7 @@ module JekyllObsidian
         token: token
       )
       label = display || target
-      output << %(<a data-obsidian-wikilink-token="#{token}">#{CGI.escapeHTML(label.to_s)}</a>)
+      output << %(<a data-website-wikilink-token="#{token}">#{CGI.escapeHTML(label.to_s)}</a>)
       ending + 2
     end
 

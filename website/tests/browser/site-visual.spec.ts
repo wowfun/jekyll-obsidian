@@ -11,7 +11,7 @@ const pages = [
 
 test.beforeEach(async ({ page }) => {
   await page.emulateMedia({ colorScheme: "light", reducedMotion: "reduce" });
-  await page.addInitScript(() => localStorage.setItem("jekyll-obsidian:color-scheme", "light"));
+  await page.addInitScript(() => localStorage.setItem("website:color-scheme", "light"));
 });
 
 for (const pageUnderTest of pages) {

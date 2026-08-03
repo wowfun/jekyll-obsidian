@@ -1,0 +1,13 @@
+<section class="relation-section" aria-labelledby="outline-title-{{ include.location }}">
+  {% assign ui = page.website.i18n.messages %}
+  <h2 class="relation-section__title" id="outline-title-{{ include.location }}">{{ ui.outline | default: 'On this page' | escape }}</h2>
+  {% if page.website.outline and page.website.outline.size > 0 %}
+    <ol class="outline-list">
+      {% for item in page.website.outline %}
+        <li class="outline-level-{{ item.level }}"><a href="#{{ item.id | escape }}" data-outline-link>{{ item.label | escape }}</a></li>
+      {% endfor %}
+    </ol>
+  {% else %}
+    <p class="relation-empty">{{ ui.no_headings | default: 'No headings on this page.' | escape }}</p>
+  {% endif %}
+</section>

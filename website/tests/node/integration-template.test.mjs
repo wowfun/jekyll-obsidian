@@ -37,7 +37,7 @@ test("checked-in host integration follows the distributed contract", async () =>
   const source = managedValue(config, "source");
   const theme = managedValue(config, "theme");
   const expectedWorkflow = workflowTemplate.replaceAll(
-    "__JEKYLL_OBSIDIAN_SOURCE_GLOB__",
+    "__JEKYLL_WEBSITE_SOURCE_GLOB__",
     yamlSingleQuoted(workflowGlob(source)),
   );
 
@@ -47,8 +47,8 @@ test("checked-in host integration follows the distributed contract", async () =>
   assert.ok(restoreExecutables >= 0, "workflow must restore shell executable bits after Windows copies");
   assert.ok(restoreExecutables < checkIntegration, "workflow must restore executable bits before invoking scripts");
   assert.match(configTemplate, /^title: My Project Documentation$/m);
-  assert.match(configTemplate, /source: '__JEKYLL_OBSIDIAN_SOURCE__'/);
-  assert.match(configTemplate, /theme: '__JEKYLL_OBSIDIAN_THEME__'/);
+  assert.match(configTemplate, /source: '__JEKYLL_WEBSITE_SOURCE__'/);
+  assert.match(configTemplate, /theme: '__JEKYLL_WEBSITE_THEME__'/);
   assert.equal(config.charCodeAt(0), "#".charCodeAt(0), "host config must not contain a BOM");
   assert.equal(workflow.charCodeAt(0), "#".charCodeAt(0), "workflow must not contain a BOM");
   assert.ok(!config.includes("\r"));

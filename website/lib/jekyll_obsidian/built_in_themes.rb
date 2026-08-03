@@ -10,7 +10,7 @@ module JekyllObsidian
   module BuiltInThemes
     IDS = %w[blog docs digital-garden].freeze
     ALWAYS_RESERVED_NAMESPACES = %w[
-      /404.html /sitemap.xml /assets/obsidian /assets/vault
+      /404.html /sitemap.xml /assets/website /assets/vault
     ].freeze
     INTERACTIVE_GRAPH_MAX_NODES = 250
     INTERACTIVE_GRAPH_MAX_EDGES = 1_000
@@ -61,8 +61,8 @@ module JekyllObsidian
           artifacts: artifacts,
           shared_files: shared_files,
           site_data: {
-            "obsidian_graph_interactive" => graph_interactive,
-            "obsidian_repository_url" => repository_url(config)
+            "website_graph_interactive" => graph_interactive,
+            "website_repository_url" => repository_url(config)
           }.compact,
           feed_note_ids: feed_notes.sort_by(&:id).map(&:id),
           reserved_namespaces: namespaces
@@ -71,7 +71,8 @@ module JekyllObsidian
 
       def note_page(note, config, theme_data, tag_anchors)
         properties = note.properties
-        obsidian = {
+        comments = page_comments(note, config)
+        website = {
           "kind" => "note",
           "id" => note.id,
           "content_type" => note.content_type,
@@ -98,12 +99,13 @@ module JekyllObsidian
           "backlinks" => config.features.fetch("relations") ? note.backlinks : [],
           "embedded_by" => config.features.fetch("relations") ? note.embedded_by : []
         }
+        website["comments"] = comments if comments
         data = {
           "title" => note.title,
           "description" => properties["description"] || note.preview,
           "image" => note.image_url,
-          "layout" => "obsidian-#{config.theme}",
-          "obsidian" => obsidian
+          "layout" => "website-#{config.theme}",
+          "website" => website
         }.compact
         PageOutput.new(route: note.route, content: note.content, data: data)
       end
@@ -113,10 +115,10 @@ module JekyllObsidian
           route: route,
           content: "",
           data: {
-            "layout" => "obsidian-#{config.theme}",
+            "layout" => "website-#{config.theme}",
             "title" => title,
             "description" => config.site.description.to_s,
-            "obsidian" => {
+            "website" => {
               "kind" => kind,
               "theme" => config.theme,
               "features" => config.features,
@@ -185,6 +187,25 @@ module JekyllObsidian
         return unless repository.match?(/\A[\w.-]+\/[\w.-]+\z/)
 
         "https://github.com/#{repository}"
+      end
+
+      def page_comments(note, config)
+        comments = config.comments
+        return unless comments.enabled && note.content_type == "post"
+        return if note.properties["comments"] == false
+
+        {
+          "configured" => comments.configured,
+          "repository" => comments.repository,
+          "repository_id" => comments.repository_id,
+          "category" => comments.category,
+          "category_id" => comments.category_id,
+          "term" => "website:post:#{note.id.delete_suffix('.md')}",
+          "language" => comments.language,
+          "load" => comments.load,
+          "repository_url" => "https://github.com/#{comments.repository}",
+          "discussion_url" => "https://github.com/#{comments.repository}/discussions"
+        }
       end
 
       def not_found_page(config, system_theme_data)
@@ -309,7 +330,7 @@ module JekyllObsidian
             note.id,
             {
               "docs_tree" => note.id == "index.md" ? navigation.fetch("tree") : docs_branch(navigation.fetch("tree"), note.id),
-              "docs_tree_url" => config.url_builder.href("/assets/obsidian/docs-navigation.html"),
+              "docs_tree_url" => config.url_builder.href("/assets/website/docs-navigation.html"),
               "docs_index_url" => config.url_builder.href("/"),
               "docs_home_url" => docs_home_url,
               "breadcrumbs" => note.content_type == "doc" ? docs_breadcrumbs(note, model, config) : [],
@@ -320,7 +341,7 @@ module JekyllObsidian
         end
         system_theme_data = {
           "docs_tree" => [],
-          "docs_tree_url" => config.url_builder.href("/assets/obsidian/docs-navigation.html"),
+          "docs_tree_url" => config.url_builder.href("/assets/website/docs-navigation.html"),
           "docs_index_url" => config.url_builder.href("/"),
           "docs_home_url" => docs_home_url,
           "breadcrumbs" => [],
@@ -336,7 +357,7 @@ module JekyllObsidian
           tag_notes: model.notes,
           feed_notes: model.notes,
           shared_files: [GeneratedFile.new(
-            route: "/assets/obsidian/docs-navigation.html",
+            route: "/assets/website/docs-navigation.html",
             content: docs_tree_html(navigation.fetch("tree")),
             media_type: "text/html"
           )]

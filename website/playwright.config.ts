@@ -23,7 +23,7 @@ export default defineConfig({
   ],
   webServer: {
     command: "node tests/browser/server.mjs",
-    wait: { stdout: /OBSIDIAN_BROWSER_SERVER_READY/ },
+    wait: { stdout: /WEBSITE_BROWSER_SERVER_READY/ },
     timeout: 15_000
   }
 });

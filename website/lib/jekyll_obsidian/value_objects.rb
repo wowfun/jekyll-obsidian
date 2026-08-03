@@ -73,7 +73,9 @@ module JekyllObsidian
     :environment,
     :theme,
     :content,
-    :features
+    :features,
+    :i18n,
+    :comments
   )
 
   BuildRequest = ImmutableRecord.define(:snapshot, :config)
@@ -120,10 +122,22 @@ module JekyllObsidian
     :graph_edges
   )
 
+  CommentsConfig = ImmutableRecord.define(
+    :enabled,
+    :configured,
+    :repository,
+    :repository_id,
+    :category,
+    :category_id,
+    :language,
+    :load
+  )
+
   EffectiveThemeConfig = ImmutableRecord.define(
     :theme,
     :features,
     :content,
+    :comments,
     :site,
     :url_builder
   )

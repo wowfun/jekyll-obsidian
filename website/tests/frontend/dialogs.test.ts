@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { closeObsidianDialog, openObsidianDialog } from "../../src/frontend/dialogs";
+import { closeWebsiteDialog, openWebsiteDialog } from "../../src/frontend/dialogs";
 
 describe("mobile context dialogs", () => {
   beforeEach(() => {
@@ -15,8 +15,8 @@ describe("mobile context dialogs", () => {
     const dialog = document.querySelector<HTMLDialogElement>("dialog")!;
     dialog.showModal = vi.fn(() => dialog.setAttribute("open", ""));
 
-    openObsidianDialog("context");
-    openObsidianDialog("context");
+    openWebsiteDialog("context");
+    openWebsiteDialog("context");
 
     expect(dialog.showModal).toHaveBeenCalledTimes(1);
     expect(dialog.querySelectorAll("a")).toHaveLength(1);
@@ -27,7 +27,7 @@ describe("mobile context dialogs", () => {
     const dialog = document.querySelector<HTMLDialogElement>("dialog")!;
     dialog.setAttribute("open", "");
     dialog.close = vi.fn(() => dialog.removeAttribute("open"));
-    closeObsidianDialog("context");
+    closeWebsiteDialog("context");
     expect(dialog.close).toHaveBeenCalledOnce();
   });
 
@@ -38,9 +38,9 @@ describe("mobile context dialogs", () => {
     );
     const dialog = document.querySelector<HTMLDialogElement>("dialog")!;
     dialog.showModal = vi.fn(() => dialog.setAttribute("open", ""));
-    openObsidianDialog("context");
+    openWebsiteDialog("context");
     expect(dialog.querySelectorAll("[data-dialog-movable='context']")).toHaveLength(1);
-    closeObsidianDialog("context");
+    closeWebsiteDialog("context");
     expect(document.body.firstElementChild?.matches("[data-dialog-movable='context']")).toBe(true);
   });
 });

@@ -1,13 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { activateSearch } from "../../src/frontend/search";
 
-describe("Obsidian search", () => {
+describe("website search", () => {
   beforeEach(() => {
     document.head.replaceChildren();
     document.body.replaceChildren();
     document.head.insertAdjacentHTML(
       "beforeend",
-      '<meta name="obsidian:search" content="/project/assets/obsidian/search.v1.json"><meta name="obsidian:search-worker" content="/project/assets/obsidian/search-worker.js">'
+      '<meta name="website:search" content="/project/assets/website/search.v1.json"><meta name="website:search-worker" content="/project/assets/website/search-worker.js">'
     );
   });
 
@@ -84,5 +84,30 @@ describe("Obsidian search", () => {
 
     expect(dialog.querySelectorAll("[data-search-results] a")).toHaveLength(0);
     expect(dialog.querySelector("[data-search-status]")?.textContent).toBe("Type a title, tag, or phrase.");
+  });
+
+  it("uses localized status templates from the page catalog", async () => {
+    class SearchWorker extends EventTarget {
+      postMessage(message: { type: string; id?: number }): void {
+        queueMicrotask(() => this.dispatchEvent(new MessageEvent("message", {
+          data: message.type === "init"
+            ? { type: "ready" }
+            : { type: "results", id: message.id, results: [] }
+        })));
+      }
+    }
+    vi.stubGlobal("Worker", SearchWorker);
+    document.body.insertAdjacentHTML(
+      "beforeend",
+      `<dialog data-search-loading="正在载入…" data-search-prompt="请输入关键词。" data-search-no-results="未找到“{query}”。"><input data-search-input><p data-search-status></p><ol data-search-results></ol></dialog>`
+    );
+    const dialog = document.querySelector<HTMLDialogElement>("dialog")!;
+    await activateSearch(dialog);
+    const input = dialog.querySelector<HTMLInputElement>("input")!;
+    expect(dialog.querySelector("[data-search-status]")?.textContent).toBe("请输入关键词。");
+
+    input.value = "花园";
+    input.dispatchEvent(new InputEvent("input", { bubbles: true }));
+    await vi.waitFor(() => expect(dialog.querySelector("[data-search-status]")?.textContent).toBe("未找到“花园”。"));
   });
 });

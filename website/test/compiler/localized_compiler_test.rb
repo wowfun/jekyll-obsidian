@@ -1,0 +1,333 @@
+# frozen_string_literal: true
+
+require "test_helper"
+
+class LocalizedCompilerTest < Minitest::Test
+  I18N = { "locales" => %w[en zh-CN] }.freeze
+
+  def manifests(zh_messages = "")
+    [
+      locale_manifest("_locale.yml", "name: English\n"),
+      locale_manifest(
+        "_translations/zh-CN/_locale.yml",
+        "name: 简体中文\nhreflang: zh-Hans\ndir: ltr\nmessages:\n  contents: 目录\n  search: 搜索\n#{zh_messages}"
+      )
+    ]
+  end
+
+  def default_notes
+    [
+      note("index.md", "---\npublish: true\ntitle: Home\nupdated: 2026-08-01\n---\n# Home\n[[docs/Guide]]"),
+      note("docs/Guide.md", "---\npublish: true\ncontent_type: doc\nnav_order: 1\nupdated: 2026-08-01\n---\n# Guide\n[[docs/Fallback]]"),
+      note("docs/Fallback.md", "---\npublish: true\ncontent_type: doc\nnav_order: 2\nupdated: 2026-08-01\n---\n# Default only")
+    ]
+  end
+
+  def translations
+    [
+      note("_translations/zh-CN/index.md", "---\npublish: true\ntitle: 首页\n---\n# 首页\n[[docs/Guide]]"),
+      note("_translations/zh-CN/docs/Guide.md", "---\npublish: true\ntitle: 指南\n---\n# 指南\n[[docs/Fallback]]")
+    ]
+  end
+
+  def test_missing_translations_are_nonfatal_and_locale_outputs_remain_partitioned
+    result = compile(
+      *default_notes,
+      *manifests,
+      *translations,
+      theme: "docs",
+      i18n: I18N,
+      content: { "directories" => { "doc" => ["docs"], "post" => [] } }
+    )
+
+    assert result.success?, result.diagnostics.map(&:message).join("\n")
+    assert_equal %w[/ /404.html /docs/Fallback/ /docs/Guide/ /zh-CN/ /zh-CN/404.html /zh-CN/docs/Fallback/ /zh-CN/docs/Guide/], result.pages.map(&:route)
+
+    translated = page(result, "/zh-CN/docs/Guide/")
+    assert_equal "指南", translated.data.fetch("title")
+    assert_equal "zh-CN", translated.data.dig("website", "i18n", "locale")
+    assert_equal "zh-CN", translated.data.dig("website", "i18n", "content_lang")
+    assert_includes translated.content, 'href="/zh-CN/docs/Fallback/"'
+    assert_equal "/assets/website/i18n/zh-CN/search.v1.json", translated.data.dig("website", "resources", "search")
+    assert_equal "/assets/website/i18n/zh-CN/docs-navigation.html", translated.data.dig("website", "theme_data", "docs_tree_url")
+
+    fallback = page(result, "/zh-CN/docs/Fallback/")
+    assert_equal true, fallback.data.dig("website", "i18n", "fallback")
+    assert_equal "en", fallback.data.dig("website", "i18n", "content_lang")
+    assert_equal "noindex", fallback.data.dig("website", "robots")
+    assert_equal "https://example.test/docs/Fallback/", fallback.data.dig("website", "canonical_url")
+    assert_empty fallback.data.dig("website", "alternates")
+    assert_equal "docs/Fallback.md", URI.decode_uri_component(fallback.data.dig("website", "source_links", "source").split("/blob/main/vault/").last)
+
+    source = translated.data.dig("website", "source_links", "source")
+    assert_includes URI.decode_uri_component(source), "vault/_translations/zh-CN/docs/Guide.md"
+    assert_equal %w[/assets/website/docs-navigation.html /assets/website/i18n/zh-CN/docs-navigation.html /assets/website/i18n/zh-CN/search.v1.json /assets/website/search.v1.json /sitemap.xml], result.generated_files.map(&:route)
+    assert_equal %w[en zh-CN], result.site_data.dig("website_i18n", "locales").map { |locale| locale.fetch("code") }
+  end
+
+  def test_translation_tree_is_reserved_when_i18n_is_disabled
+    result = compile(*default_notes, *manifests, *translations, theme: "docs", i18n: nil)
+
+    assert result.success?, result.diagnostics.map(&:message).join("\n")
+    refute result.pages.any? { |output| output.route.start_with?("/_translations/") }
+    refute result.notes.any? { |output| output.id.start_with?("_translations/") }
+    assert_nil page(result, "/zh-CN/")
+  end
+
+  def test_real_translations_have_reciprocal_hreflang_and_fallbacks_are_omitted_from_sitemap
+    result = compile(*default_notes, *manifests, *translations, theme: "docs", i18n: I18N)
+    assert result.success?, result.diagnostics.map(&:message).join("\n")
+
+    default = page(result, "/docs/Guide/")
+    translated = page(result, "/zh-CN/docs/Guide/")
+    assert_equal %w[en zh-Hans x-default], default.data.dig("website", "alternates").map { |item| item.fetch("hreflang") }
+    assert_equal default.data.dig("website", "alternates"), translated.data.dig("website", "alternates")
+    assert_equal "https://example.test/zh-CN/docs/Guide/", translated.data.dig("website", "canonical_url")
+
+    sitemap = result.generated_files.find { |file| file.route == "/sitemap.xml" }.content
+    assert_includes sitemap, "https://example.test/zh-CN/docs/Guide/"
+    assert_includes sitemap, 'hreflang="zh-Hans"'
+    refute_includes sitemap, "https://example.test/zh-CN/docs/Fallback/"
+  end
+
+  def test_baseurl_is_applied_once_to_locale_pages_links_and_resources
+    result = compile(*default_notes, *manifests, *translations, theme: "docs", i18n: I18N, baseurl: "/manual")
+    assert result.success?, result.diagnostics.map(&:message).join("\n")
+
+    translated = page(result, "/zh-CN/docs/Guide/")
+    assert_equal "/manual/zh-CN/docs/Guide/", translated.data.dig("website", "href")
+    assert_includes translated.content, 'href="/manual/zh-CN/docs/Fallback/"'
+    assert_equal "/manual/assets/website/i18n/zh-CN/search.v1.json", translated.data.dig("website", "resources", "search")
+    refute_includes translated.content, "/manual/manual/"
+  end
+
+  def test_locale_manifests_are_closed_and_i18n_defaults_are_theme_specific
+    unknown_message = manifests("  invented: nope\n")
+    result = compile(*default_notes, *unknown_message, theme: "docs", i18n: I18N)
+    refute result.success?
+    assert result.diagnostics.any? { |item| item.code == "invalid_locale_message" }
+
+    blog = compile(*default_notes, *manifests, theme: "blog", i18n: I18N)
+    assert blog.success?, blog.diagnostics.map(&:message).join("\n")
+    assert_nil page(blog, "/zh-CN/")
+
+    garden = compile(*default_notes, *manifests, theme: "digital-garden", i18n: I18N)
+    assert garden.success?, garden.diagnostics.map(&:message).join("\n")
+    assert_nil page(garden, "/zh-CN/")
+
+    %w[blog digital-garden].each do |theme|
+      localized = compile(*default_notes, *manifests, *translations, theme: theme, i18n: I18N.merge("enabled" => true))
+      assert localized.success?, localized.diagnostics.map(&:message).join("\n")
+      assert_equal "指南", page(localized, "/zh-CN/docs/Guide/").data.fetch("title"), theme
+    end
+
+    disabled_docs = compile(*default_notes, *manifests, *translations, theme: "docs", i18n: { "enabled" => false })
+    assert disabled_docs.success?, disabled_docs.diagnostics.map(&:message).join("\n")
+    assert_nil page(disabled_docs, "/zh-CN/")
+
+    invalid_enabled = compile(*default_notes, theme: "blog", i18n: { "enabled" => "true" })
+    refute invalid_enabled.success?
+    assert invalid_enabled.diagnostics.any? { |item| item.code == "invalid_i18n_config" && item.message.include?("YAML boolean") }
+
+    missing_default = compile(*default_notes, *manifests, theme: "docs", lang: "fr", i18n: I18N)
+    refute missing_default.success?
+    assert missing_default.diagnostics.any? { |item| item.code == "missing_default_locale" }
+
+    duplicate = compile(*default_notes, locale_manifest("_locale.yml", "name: English\n"), theme: "docs", i18n: { "locales" => %w[en EN] })
+    refute duplicate.success?
+    assert duplicate.diagnostics.any? { |item| item.code == "duplicate_locale" }
+
+    reserved = compile(*default_notes, locale_manifest("_locale.yml", "name: English\n"), theme: "docs", i18n: { "locales" => %w[en assets] })
+    refute reserved.success?
+    assert reserved.diagnostics.any? { |item| item.code == "reserved_locale" }
+  end
+
+  def test_manifest_direction_controls_page_direction_and_rejects_invalid_values
+    rtl_manifests = [
+      locale_manifest("_locale.yml", "name: English\n"),
+      locale_manifest("_translations/zh-CN/_locale.yml", "name: 简体中文\ndir: rtl\n")
+    ]
+    result = compile(*default_notes, *rtl_manifests, *translations, theme: "docs", i18n: I18N)
+    assert result.success?, result.diagnostics.map(&:message).join("\n")
+    assert_equal "rtl", page(result, "/zh-CN/docs/Guide/").data.dig("website", "i18n", "dir")
+
+    invalid = [
+      locale_manifest("_locale.yml", "name: English\n"),
+      locale_manifest("_translations/zh-CN/_locale.yml", "name: 简体中文\ndir: sideways\n")
+    ]
+    failed = compile(*default_notes, *invalid, theme: "docs", i18n: I18N)
+    refute failed.success?
+    assert failed.diagnostics.any? { |item| item.code == "invalid_locale_manifest" }
+  end
+
+  def test_translations_cannot_create_or_change_structure_or_add_private_assets
+    structure = note("_translations/zh-CN/docs/Guide.md", "---\npublish: true\npermalink: /different/\n---\n# 指南")
+    orphan = note("_translations/zh-CN/docs/Orphan.md", "---\npublish: true\n---\n# 孤儿")
+    asset = attachment("_translations/zh-CN/image.png")
+    result = compile(*default_notes, *manifests, structure, orphan, asset, theme: "docs", i18n: I18N)
+
+    refute result.success?
+    codes = result.diagnostics.map(&:code)
+    assert_includes codes, "localized_structure_override"
+    assert_includes codes, "orphan_translation"
+    assert_includes codes, "localized_asset_unsupported"
+  end
+
+  def test_translation_must_explicitly_publish_and_paths_must_be_normalized
+    unpublished = note("_translations/zh-CN/docs/Guide.md", "---\ntitle: 指南\n---\n# 指南")
+    invalid_path = note("_translations/zh-CN/docs/../Fallback.md", "---\npublish: true\n---\n# 错误")
+    result = compile(*default_notes, *manifests, unpublished, invalid_path, theme: "docs", i18n: I18N)
+
+    refute result.success?
+    assert result.diagnostics.any? { |item| item.code == "unpublished_translation" }
+    assert result.diagnostics.any? { |item| item.code == "invalid_translation_path" }
+  end
+
+  def test_locale_routes_are_checked_against_default_routes
+    collision = note("collision.md", "---\npublish: true\npermalink: /zh-CN/docs/Guide/\n---\n# Collision")
+    result = compile(*default_notes, collision, *manifests, *translations, theme: "docs", i18n: I18N)
+
+    refute result.success?
+    assert result.diagnostics.any? { |item| item.code == "route_collision" }
+  end
+
+  def test_translation_overlay_inherits_default_git_dates
+    first_committed_at = "2025-02-03T04:05:06Z"
+    last_committed_at = "2025-03-04T05:06:07Z"
+    translated_first_committed_at = "2026-06-07T08:09:10Z"
+    translated_last_committed_at = "2026-07-08T09:10:11Z"
+    notes = [
+      note("index.md", "---\npublish: true\n---\n# Home"),
+      note(
+        "posts/git-dated.md",
+        "---\npublish: true\ncontent_type: post\n---\n# Git dated",
+        first_committed_at: first_committed_at,
+        last_committed_at: last_committed_at
+      )
+    ]
+    localized = note(
+      "_translations/zh-CN/posts/git-dated.md",
+      "---\npublish: true\n---\n# Git 日期",
+      first_committed_at: translated_first_committed_at,
+      last_committed_at: translated_last_committed_at
+    )
+
+    result = compile(
+      *notes,
+      *manifests,
+      localized,
+      theme: "blog",
+      i18n: I18N.merge("enabled" => true),
+      content: { "directories" => { "doc" => [], "post" => ["posts"] } }
+    )
+
+    assert result.success?, result.diagnostics.map(&:message).join("\n")
+    translated = page(result, "/zh-CN/posts/git-dated/")
+    assert_equal first_committed_at, translated.data.dig("website", "published_at")
+    assert_equal first_committed_at, translated.data.dig("website", "created")
+    assert_equal last_committed_at, translated.data.dig("website", "updated")
+  end
+
+  def test_locale_routes_reject_file_and_directory_ancestor_conflicts
+    collision = note(
+      "localized-feed.md",
+      "---\npublish: true\ncontent_type: post\ndate: 2026-08-01\npermalink: /zh-CN/feed.xml/\n---\n# Collision"
+    )
+    result = compile(
+      *default_notes,
+      collision,
+      *manifests,
+      theme: "blog",
+      i18n: I18N.merge("enabled" => true)
+    )
+
+    refute result.success?
+    assert result.diagnostics.any? { |item| item.code == "route_collision" }
+  end
+
+  def test_localization_only_rewrites_schema_url_fields
+    notes = [
+      note(
+        "index.md",
+        "---\npublish: true\ntitle: /literal-title\ndescription: /literal-description\ntags:\n  - /literal-tag\n---\n# Home\n/literal-body"
+      )
+    ]
+    localized = note(
+      "_translations/zh-CN/index.md",
+      "---\npublish: true\ntitle: /translated-title\ndescription: /translated-description\ntags:\n  - /translated-tag\n---\n# 首页\n/translated-body"
+    )
+    result = compile(*notes, *manifests, localized, theme: "docs", i18n: I18N)
+
+    assert result.success?, result.diagnostics.map(&:message).join("\n")
+    translated = page(result, "/zh-CN/")
+    assert_equal "/translated-title", translated.data.fetch("title")
+    assert_equal "/translated-description", translated.data.fetch("description")
+    assert_equal ["/translated-tag"], translated.data.dig("website", "tags")
+    assert_includes translated.content, "/translated-body"
+
+    search_entry = generated_json(result, "/assets/website/i18n/zh-CN/search.v1.json").fetch("documents").first
+    assert_equal "/translated-title", search_entry.fetch("title")
+    assert_equal ["/translated-tag"], search_entry.fetch("tags")
+    assert_equal "/zh-CN/", search_entry.fetch("url")
+  end
+
+  def test_fallback_content_uses_default_locale_direction
+    locale_manifests = [
+      locale_manifest("_locale.yml", "name: English\ndir: ltr\n"),
+      locale_manifest("_translations/ar/_locale.yml", "name: العربية\ndir: rtl\n")
+    ]
+    result = compile(
+      *default_notes,
+      *locale_manifests,
+      theme: "docs",
+      i18n: { "locales" => %w[en ar] }
+    )
+
+    assert result.success?, result.diagnostics.map(&:message).join("\n")
+    fallback = page(result, "/ar/docs/Guide/")
+    assert_equal "rtl", fallback.data.dig("website", "i18n", "dir")
+    assert_equal "en", fallback.data.dig("website", "i18n", "content_lang")
+    assert_equal "ltr", fallback.data.dig("website", "i18n", "content_dir")
+  end
+
+  def test_translated_embeds_resolve_locale_first_while_attachments_remain_shared
+    notes = [
+      note("index.md", "---\npublish: true\n---\n# Home\n![[docs/Target]]\n![[shared.png]]"),
+      note("docs/Target.md", "---\npublish: true\n---\n# Default target")
+    ]
+    localized = [
+      note("_translations/zh-CN/index.md", "---\npublish: true\n---\n# 首页\n![[docs/Target]]\n![[shared.png]]"),
+      note("_translations/zh-CN/docs/Target.md", "---\npublish: true\n---\n# 中文目标")
+    ]
+    result = compile(
+      *notes,
+      attachment("shared.png", "png", media_type: "image/png"),
+      *manifests("  embedded_from: 来自 {title}\n"),
+      *localized,
+      theme: "docs",
+      i18n: I18N
+    )
+
+    assert result.success?, result.diagnostics.map(&:message).join("\n")
+    translated = page(result, "/zh-CN/")
+    assert_includes translated.content, "中文目标"
+    assert_includes translated.content, 'lang="zh-CN">来自 中文目标'
+    assert_includes translated.content, 'src="/assets/vault/shared.png"'
+    assert_equal ["/assets/vault/shared.png"], result.copied_assets.map(&:route)
+  end
+
+  def test_localized_compile_is_deterministic_across_snapshot_order
+    entries = [*default_notes, *manifests, *translations]
+    first = compile(*entries, theme: "docs", i18n: I18N)
+    second = compile(*entries.reverse, theme: "docs", i18n: I18N)
+
+    assert first.success?, first.diagnostics.map(&:message).join("\n")
+    assert second.success?, second.diagnostics.map(&:message).join("\n")
+    assert_equal first.pages, second.pages
+    assert_equal first.generated_files, second.generated_files
+    assert_equal first.copied_assets, second.copied_assets
+    assert_equal first.notes, second.notes
+    assert_equal first.relations, second.relations
+    assert_equal first.site_data, second.site_data
+  end
+end

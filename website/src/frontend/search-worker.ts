@@ -1,6 +1,6 @@
 import MiniSearch from "minisearch";
 import { fetchJson, parseSearchPayload } from "./data";
-import { obsidianTokenizer } from "./tokenize";
+import { websiteTokenizer } from "./tokenize";
 import type { SearchDocument } from "./types";
 import type { SearchWorkerRequest, SearchWorkerResponse, SearchWorkerResult } from "./search-protocol";
 
@@ -26,7 +26,7 @@ scope.onmessage = (event) => {
           idField: "id",
           fields: ["title", "aliasesText", "tagsText", "text"],
           storeFields: ["title", "url", "tags"],
-          tokenize: obsidianTokenizer,
+          tokenize: websiteTokenizer,
           processTerm: (term) => term.normalize("NFKC").toLocaleLowerCase("und"),
           searchOptions: {
             boost: { title: 4, aliasesText: 2.5, tagsText: 1.8, text: 1 },

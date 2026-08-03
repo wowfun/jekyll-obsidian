@@ -1,0 +1,23 @@
+{% assign comments = page.website.comments %}
+{% if comments %}
+  {% assign ui = page.website.i18n.messages %}
+  <section class="website-comments" aria-labelledby="website-comments-title"{% if comments.load %} data-website-comments-load data-website-comments-repository="{{ comments.repository | escape }}" data-website-comments-repository-id="{{ comments.repository_id | escape }}" data-website-comments-category="{{ comments.category | escape }}" data-website-comments-category-id="{{ comments.category_id | escape }}" data-website-comments-term="{{ comments.term | escape }}" data-website-comments-language="{{ comments.language | escape }}" data-website-comments-unavailable="{{ ui.comments_unavailable | default: 'Comments could not be loaded. You can continue the conversation on GitHub.' | escape }}"{% endif %}>
+    <header class="website-comments__header">
+      <p class="website-comments__eyebrow">{{ ui.discussion | default: 'Discussion' | escape }}</p>
+      <h2 id="website-comments-title">{{ ui.comments | default: 'Comments' | escape }}</h2>
+    </header>
+    {% if comments.load %}
+      <p class="website-comments__status" data-website-comments-status aria-live="polite">{{ ui.comments_loading | default: 'Loading comments…' | escape }}</p>
+      <div class="giscus website-comments__embed" data-website-comments-container></div>
+    {% elsif comments.configured %}
+      <p class="website-comments__status">{{ ui.comments_development | default: 'Comments load only on the published site.' | escape }}</p>
+    {% else %}
+      <p class="website-comments__status">{{ ui.comments_setup_pending | default: 'Comments are not available yet. You can finish the GitHub Discussions setup later.' | escape }}</p>
+    {% endif %}
+    {% if comments.configured %}
+      <p class="website-comments__fallback">{{ ui.comments_stored | default: 'Comments are stored in GitHub Discussions.' | escape }} <a href="{{ comments.discussion_url | escape }}">{{ ui.open_discussions | default: 'Open discussions on GitHub' | escape }}</a>.</p>
+    {% else %}
+      <p class="website-comments__fallback"><a href="{{ comments.repository_url | escape }}">{{ ui.open_comments_repository | default: 'Open the comments repository on GitHub' | escape }}</a>.</p>
+    {% endif %}
+  </section>
+{% endif %}

@@ -7,7 +7,7 @@ describe("note previews", () => {
     document.body.replaceChildren();
     document.head.insertAdjacentHTML(
       "beforeend",
-      '<meta name="obsidian:preview" content="/base/assets/obsidian/catalog.v1.json">'
+      '<meta name="website:preview" content="/base/assets/website/catalog.v1.json">'
     );
   });
 
@@ -38,7 +38,7 @@ describe("note previews", () => {
       )
     );
     const anchor = document.createElement("a");
-    anchor.className = "obsidian-link";
+    anchor.className = "website-link";
     anchor.dataset.noteId = "safe.md";
     document.body.append(anchor);
     initialisePreviews();
@@ -58,7 +58,7 @@ describe("note previews", () => {
       notes: [{ id: "safe.md", title: "Safe", url: "/safe/", aliases: [], tags: [], description: null, preview: "Preview", updated: null, content_type: "page", published_at: null }]
     }), { status: 200 })));
     const anchor = document.createElement("a");
-    anchor.className = "obsidian-link";
+    anchor.className = "website-link";
     anchor.dataset.noteId = "safe.md";
     const child = document.createElement("span");
     anchor.append(child);

@@ -1,10 +1,10 @@
 # Host-repository overrides. The integration command only updates the marked lines.
 title: My Project Documentation
 
-obsidian:
+website:
   # jekyll-obsidian:managed-start
-  source: '__JEKYLL_OBSIDIAN_SOURCE__'
-  theme: '__JEKYLL_OBSIDIAN_THEME__'
+  source: '__JEKYLL_WEBSITE_SOURCE__'
+  theme: '__JEKYLL_WEBSITE_THEME__'
   # jekyll-obsidian:managed-end
   repository: ""
   edit_branch: main

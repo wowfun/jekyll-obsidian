@@ -6,11 +6,14 @@ Live preview: [sinputer.top/jekyll-obsidian](https://sinputer.top/jekyll-obsidia
 
 Choose one built-in theme for each build:
 
-- `blog` provides recent posts, an archive, tags, and an Atom feed.
+- `blog` provides recent posts, an archive, tags, an Atom feed, and defaults configured GitHub Discussions comments on.
 - `docs` provides a document tree, breadcrumbs, an outline, and previous or next links.
 - `digital-garden` provides note previews, backlinks, a relation rail, and a graph.
 
 Switching themes does not change note URLs.
+The default theme is `docs`. Every theme can publish locale overlays from `_translations/<locale>/` and attach GitHub Discussions comments to posts. When the corresponding mapping is present and omits `enabled`, localization defaults on only for `docs`, while comments default on only for `blog`.
+
+See [Localization](website/docs/docs/Localization.md) for locale manifests, translation authority, fallback pages, and SEO behavior.
 
 ## Before you publish
 
@@ -70,7 +73,11 @@ If you configure a custom domain, use the URL shown in **Settings → Pages**. T
 
 ## Configure and publish
 
-The generated `.github/jekyll-obsidian.yml` is the host repository's configuration. Edit it to set the site title, description, language, repository links, content types, and feature overrides. Keep the managed markers around `obsidian.source` and `obsidian.theme`; change those values by running `website/bin/integrate` again with the desired options.
+The generated `.github/jekyll-obsidian.yml` is the host repository's configuration. Edit it to set the site title, description, language, repository links, content types, and feature overrides. Keep the managed markers around `website.source` and `website.theme`; change those values by running `website/bin/integrate` again with the desired options.
+
+The configuration interface is the root `website:` mapping.
+
+Every theme can store post comments in GitHub Discussions through Giscus. Comments use the publication repository by default and can point at a separate public repository. A configured `blog` enables them by default; `docs` and `digital-garden` require `website.comments.enabled: true`. Enabling comments before Discussions or the Giscus App is ready does not fail the build; incomplete provider values produce a warning and a non-interactive fallback. See [Comments](website/docs/docs/Comments.md) for repository setup, thread identity, privacy boundaries, and troubleshooting.
 
 Open your content directory directly in Obsidian. A note enters the site only when its frontmatter contains the YAML boolean `publish: true`:
 

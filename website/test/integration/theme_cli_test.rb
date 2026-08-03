@@ -39,8 +39,8 @@ class ThemeCliTest < Minitest::Test
       assert status.success?, "#{stdout}\n#{stderr}"
       overlay = YAML.safe_load_file(capture, permitted_classes: [], aliases: false)
       assert_equal true, overlay["disable_disk_cache"]
-      assert_equal "website/docs", overlay.dig("obsidian", "source")
-      assert_equal "docs", overlay.dig("obsidian", "theme")
+      assert_equal "website/docs", overlay.dig("website", "source")
+      assert_equal "docs", overlay.dig("website", "theme")
     end
 
     assert_equal before, Digest::SHA256.file(config_path).hexdigest

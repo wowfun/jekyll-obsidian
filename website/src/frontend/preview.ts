@@ -79,13 +79,13 @@ export function initialisePreviews(): void {
     if (event.pointerType === "touch") return;
     const target = event.target;
     if (!(target instanceof Element)) return;
-    const anchor = target.closest<HTMLElement>(".obsidian-link[data-note-id]");
+    const anchor = target.closest<HTMLElement>(".website-link[data-note-id]");
     if (anchor) void show(anchor);
   });
   document.addEventListener("pointerout", (event) => {
     const target = event.target;
     if (!(target instanceof Element)) return;
-    const anchor = target.closest(".obsidian-link[data-note-id]");
+    const anchor = target.closest(".website-link[data-note-id]");
     const related = event.relatedTarget;
     if (anchor && related instanceof Node && anchor.contains(related)) return;
     if (anchor) hide();
@@ -93,13 +93,13 @@ export function initialisePreviews(): void {
   document.addEventListener("focusin", (event) => {
     const target = event.target;
     if (!(target instanceof Element)) return;
-    const anchor = target.closest<HTMLElement>(".obsidian-link[data-note-id]");
+    const anchor = target.closest<HTMLElement>(".website-link[data-note-id]");
     if (anchor) void show(anchor);
   });
   document.addEventListener("focusout", (event) => {
     const target = event.target;
     if (!(target instanceof Element)) return;
-    const anchor = target.closest(".obsidian-link[data-note-id]");
+    const anchor = target.closest(".website-link[data-note-id]");
     const related = event.relatedTarget;
     if (anchor && related instanceof Node && anchor.contains(related)) return;
     if (anchor) hide();

@@ -10,9 +10,9 @@ tags:
 description: One Obsidian vault, three intentional ways to publish it.
 image: assets/research-folio.svg
 cssclasses:
-  - obsidian-home
+  - website-home
 created: 2026-07-31
-updated: 2026-08-02
+updated: 2026-08-04
 ---
 
 # One vault, three ways to publish
@@ -30,6 +30,8 @@ This site is both starter content and the manual for `jekyll-obsidian`. Every pa
 - [[Getting Started]] covers local authoring and the publication boundary.
 - [[Syntax]] lists the Obsidian-flavored Markdown supported in v1.
 - [[Customization]] explains type, color, navigation, and repository links.
+- [[Comments]] explains GitHub Discussions setup and comment-thread behavior.
+- [[Localization]] explains locale manifests, translation overlays, fallback pages, and SEO behavior.
 - [[Deployment]] follows the GitHub Pages workflow from pull request to release.
 - [[docs/development/index|Developer Guide]] covers contributor setup, architecture, and the OFM contract.
 - [[中文示例|CJK showcase]] demonstrates Chinese, Japanese, and mixed-script search.
@@ -38,4 +40,4 @@ This site is both starter content and the manual for `jekyll-obsidian`. Every pa
 
 The repository is public source material. `publish: true` controls generated site output, not access to committed files. Keep truly private notes in another vault or an uncommitted location.
 
-With the default digital-garden theme, the relation rail beside this page is derived from authored links. Blog and Docs use the same relationships and routes without forcing garden navigation into their reading models.
+The project now defaults to the Docs theme. Blog and Digital Garden remain available as explicit theme choices and use the same content routes without forcing their navigation models into the handbook.

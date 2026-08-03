@@ -53,8 +53,8 @@ class RoutingAndIndexesTest < Minitest::Test
     refute_nil cafe
     assert_equal "/Notes/Caf%C3%A9/", cafe.route
     assert_includes home.content, 'href="/project/Notes/Caf%C3%A9/"'
-    assert_equal "/project/Notes/Caf%C3%A9/", cafe.data.dig("obsidian", "href")
-    assert_equal "https://example.test/project/Notes/Caf%C3%A9/", cafe.data.dig("obsidian", "absolute_url")
+    assert_equal "/project/Notes/Caf%C3%A9/", cafe.data.dig("website", "href")
+    assert_equal "https://example.test/project/Notes/Caf%C3%A9/", cafe.data.dig("website", "absolute_url")
   end
 
   def test_permalink_is_strict_and_cannot_contain_baseurl_or_placeholders
@@ -84,12 +84,13 @@ class RoutingAndIndexesTest < Minitest::Test
   def test_versioned_indexes_are_stable_and_note_level
     result = compile(
       note("index.md", "---\npublish: true\naliases: [Start]\ntags: [garden, cjk/中文]\ndescription: Intro\nupdated: 2026-07-30\n---\n# Home\nAuthored words."),
-      note("other.md", "---\npublish: true\nupdated: 2026-07-29\n---\n# Other\n![[index]]")
+      note("other.md", "---\npublish: true\nupdated: 2026-07-29\n---\n# Other\n![[index]]"),
+      theme: "digital-garden"
     )
 
-    catalog = generated_json(result, "/assets/obsidian/catalog.v1.json")
-    graph = generated_json(result, "/assets/obsidian/graph.v1.json")
-    search = generated_json(result, "/assets/obsidian/search.v1.json")
+    catalog = generated_json(result, "/assets/website/catalog.v1.json")
+    graph = generated_json(result, "/assets/website/graph.v1.json")
+    search = generated_json(result, "/assets/website/search.v1.json")
     assert_equal 1, catalog.fetch("schema_version")
     assert_equal 1, graph.fetch("schema_version")
     assert_equal 1, search.fetch("schema_version")
@@ -102,7 +103,7 @@ class RoutingAndIndexesTest < Minitest::Test
   end
 
   def test_tag_anchors_are_stable_when_slug_forms_collide
-    result = compile(note("index.md", <<~MARKDOWN))
+    result = compile(note("index.md", <<~MARKDOWN), theme: "digital-garden")
       ---
       publish: true
       tags: ["a b", "a-b"]
@@ -112,11 +113,11 @@ class RoutingAndIndexesTest < Minitest::Test
     MARKDOWN
 
     assert result.success?, result.diagnostics.map(&:message).join("\n")
-    anchors = page(result, "/tags/").data.dig("obsidian", "theme_data", "tag_groups")
+    anchors = page(result, "/tags/").data.dig("website", "theme_data", "tag_groups")
       .map { |group| group.fetch("anchor") }
     assert_includes anchors, "a-b"
     assert_includes anchors, "a-b-2"
-    tag_links = page(result, "/").data.dig("obsidian", "tag_links")
+    tag_links = page(result, "/").data.dig("website", "tag_links")
     assert_equal ["a-b", "a-b-2"], tag_links.map { |item| item.fetch("anchor") }
   end
 end

@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 const assetsRoot = path.join(projectRoot, ".jekyll-obsidian-cache", "assets");
 const siteRoots = Object.fromEntries(
-  ["blog", "docs", "digital-garden"].map((theme) => [
+  ["blog", "docs", "digital-garden", "docs-i18n"].map((theme) => [
     theme,
     path.join(projectRoot, `_site-browser-${theme}`)
   ])
@@ -48,16 +48,21 @@ function featureFixture(theme, feature) {
       ? `<div class="docs-shell"><aside class="docs-sidebar"><nav aria-label="Documentation"><a href="/docs/">Documentation</a></nav></aside><main class="docs-main" id="main">${article}</main>${panel}</div>`
       : `<main class="blog-shell" id="main"><div class="blog-reading-frame">${article}${panel}</div></main>`;
   const contextUi = hasContext
-    ? `<nav class="mobile-toolbar" aria-label="Mobile actions"><button type="button" data-dialog-open="context">${feature === "outline" ? "On this page" : "Context"}</button></nav><template data-dialog-template="context">${contextSections(feature, "dialog")}</template><dialog class="obsidian-dialog" data-dialog="context" aria-labelledby="feature-context-title"><div class="obsidian-dialog__sheet"><header class="obsidian-dialog__header"><h2 class="obsidian-dialog__title" id="feature-context-title">${feature === "outline" ? "On this page" : "Context"}</h2><button class="obsidian-dialog__close" type="button" data-dialog-close aria-label="Close page context">×</button></header><div class="obsidian-dialog__body" data-dialog-content></div></div></dialog>`
+    ? `<nav class="mobile-toolbar" aria-label="Mobile actions"><button type="button" data-dialog-open="context">${feature === "outline" ? "On this page" : "Context"}</button></nav><template data-dialog-template="context">${contextSections(feature, "dialog")}</template><dialog class="website-dialog" data-dialog="context" aria-labelledby="feature-context-title"><div class="website-dialog__sheet"><header class="website-dialog__header"><h2 class="website-dialog__title" id="feature-context-title">${feature === "outline" ? "On this page" : "Context"}</h2><button class="website-dialog__close" type="button" data-dialog-close aria-label="Close page context">×</button></header><div class="website-dialog__body" data-dialog-content></div></div></dialog>`
     : "";
   const browseContents = theme === "docs"
     ? `<nav class="docs-tree" aria-label="Documentation"><ul class="docs-tree__list"><li class="docs-tree__item"><a href="/docs/">Getting started</a></li></ul></nav><nav aria-label="More ways to browse"><ul class="relation-list"><li><a href="/tags/">Tags</a></li><li><a href="/graph/">Graph</a></li><li><a href="/feed.xml">Feed</a></li></ul></nav>`
     : `<nav aria-label="Browse"><ul class="relation-list"><li><a href="/">Home</a></li><li><a href="/tags/">Tags</a></li><li><a href="/graph/">Graph</a></li><li><a href="/feed.xml">Feed</a></li></ul></nav>`;
   const navigationUi = hasNavigation
-    ? `<nav class="mobile-toolbar" aria-label="Mobile actions"><button type="button" data-dialog-open="browse">Browse</button></nav><template data-dialog-template="browse">${browseContents}</template><dialog class="obsidian-dialog" data-dialog="browse" aria-labelledby="feature-browse-title"><div class="obsidian-dialog__sheet"><header class="obsidian-dialog__header"><h2 class="obsidian-dialog__title" id="feature-browse-title">Browse</h2><button class="obsidian-dialog__close" type="button" data-dialog-close aria-label="Close browse menu">×</button></header><div class="obsidian-dialog__body" data-dialog-content></div></div></dialog>`
+    ? `<nav class="mobile-toolbar" aria-label="Mobile actions"><button type="button" data-dialog-open="browse">Browse</button></nav><template data-dialog-template="browse">${browseContents}</template><dialog class="website-dialog" data-dialog="browse" aria-labelledby="feature-browse-title"><div class="website-dialog__sheet"><header class="website-dialog__header"><h2 class="website-dialog__title" id="feature-browse-title">Browse</h2><button class="website-dialog__close" type="button" data-dialog-close aria-label="Close browse menu">×</button></header><div class="website-dialog__body" data-dialog-content></div></div></dialog>`
     : "";
 
-  return `<!doctype html><html class="no-js" lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Feature overrides</title>${feedDiscovery}<link rel="stylesheet" href="/assets/obsidian/${entry.css}"><script type="module" src="/assets/obsidian/${entry.js}"></script></head><body class="theme-${theme}"><header class="site-header"><div class="site-header__inner"><a class="site-mark" href="/">Obsidian</a><nav class="site-navigation" aria-label="Primary navigation"><a href="/">Home</a>${featureLinks}</nav></div></header>${shell}${contextUi}${navigationUi}</body></html>`;
+  return `<!doctype html><html class="no-js" lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Feature overrides</title>${feedDiscovery}<link rel="stylesheet" href="/assets/website/${entry.css}"><script type="module" src="/assets/website/${entry.js}"></script></head><body class="theme-${theme}"><header class="site-header"><div class="site-header__inner"><a class="site-mark" href="/">Obsidian</a><nav class="site-navigation" aria-label="Primary navigation"><a href="/">Home</a>${featureLinks}</nav></div></header>${shell}${contextUi}${navigationUi}</body></html>`;
+}
+
+function commentsFixture() {
+  const comments = `<section class="website-comments" aria-labelledby="website-comments-title" data-website-comments-load data-website-comments-repository="example/community" data-website-comments-repository-id="R_kgDOExample" data-website-comments-category="Blog comments" data-website-comments-category-id="DIC_kwDOExample" data-website-comments-term="website:post:blog/post" data-website-comments-language="en" data-website-comments-unavailable="Comments could not be loaded. You can continue the conversation on GitHub."><header class="website-comments__header"><p class="website-comments__eyebrow">Discussion</p><h2 id="website-comments-title">Comments</h2></header><p class="website-comments__status" data-website-comments-status aria-live="polite">Loading comments…</p><div class="giscus website-comments__embed" data-website-comments-container></div><p class="website-comments__fallback">Comments are stored in GitHub Discussions. <a href="https://github.com/example/community/discussions">Open discussions on GitHub</a>.</p></section>`;
+  return featureFixture("blog", "none").replace("</article>", `${comments}</article>`);
 }
 
 const json = {
@@ -158,7 +163,7 @@ async function serveFile(response, root, relative) {
 
 const server = createServer(async (request, response) => {
   const pathname = new URL(request.url ?? "/", "http://127.0.0.1").pathname;
-  const siteMatch = pathname.match(/^\/__site__\/(blog|docs|digital-garden)(\/.*)?$/);
+  const siteMatch = pathname.match(/^\/__site__\/(blog|docs-i18n|docs|digital-garden)(\/.*)?$/);
   if (siteMatch) {
     const root = siteRoots[siteMatch[1]];
     const sitePath = siteMatch[2] || "/";
@@ -187,13 +192,18 @@ const server = createServer(async (request, response) => {
     response.end(featureFixture(featureMatch[1], featureMatch[2]));
     return;
   }
+  if (pathname === "/__fixture__/comments/") {
+    response.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+    response.end(commentsFixture());
+    return;
+  }
   if (pathname in json) {
     response.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
     response.end(JSON.stringify(json[pathname]));
     return;
   }
-  if (pathname.startsWith("/assets/obsidian/")) {
-    const relative = decodeURIComponent(pathname.slice("/assets/obsidian/".length));
+  if (pathname.startsWith("/assets/website/")) {
+    const relative = decodeURIComponent(pathname.slice("/assets/website/".length));
     if (await serveFile(response, assetsRoot, relative)) return;
     response.writeHead(404).end();
     return;
@@ -203,5 +213,5 @@ const server = createServer(async (request, response) => {
 });
 
 server.listen(4173, "127.0.0.1", () => {
-  process.stdout.write("OBSIDIAN_BROWSER_SERVER_READY\n");
+  process.stdout.write("WEBSITE_BROWSER_SERVER_READY\n");
 });

@@ -8,7 +8,7 @@ tags:
   - guide/architecture
 description: How the pure vault compiler and the filesystem-facing Jekyll adapter divide responsibility.
 created: 2026-07-31
-updated: 2026-08-02
+updated: 2026-08-03
 ---
 
 # Architecture
@@ -21,18 +21,19 @@ The project has three cooperating modules behind one compiler interface: the pur
 
 ## Compiler boundary
 
-The compiler receives an immutable snapshot of public-source bytes, attachment metadata, normalized paths, configuration, and optional Git dates. It does not read the filesystem, ask Jekyll for state, use the network, inspect environment variables, or read the current clock. Its sorted result contains pages, generated files, copied assets, and diagnostics. ^compiler-contract
+The compiler receives an immutable snapshot of public-source bytes, attachment metadata, normalized paths, configuration, and optional Git dates. It does not read the filesystem, ask Jekyll for state, use the network, inspect environment variables, or read the current clock. Its sorted result contains pages, generated files, copied assets, and diagnostics. Localization stays behind this same `VaultCompiler.compile(BuildRequest)` interface: one locale plan creates default-authoritative overlay snapshots and combines their immutable outputs before Jekyll receives them. ^compiler-contract
 
 The fixed pipeline is:
 
-1. Validate paths and frontmatter.
-2. Select notes with `publish: true`.
-3. Scan Obsidian-specific syntax with lexical state.
-4. Parse every public note body once with Commonmarker.
-5. Build identity, anchor, and relation indexes.
-6. Resolve links, embeds, and attachment closure.
+1. Validate the build configuration and, when i18n is enabled, its locale plan and manifests.
+2. Build the default snapshot and same-path translation overlays.
+3. In each locale partition, validate paths and frontmatter and select notes with `publish: true`.
+4. Scan Obsidian-specific syntax with lexical state and parse each partition's public note bodies with Commonmarker.
+5. Build locale-local identity, anchor, and relation indexes.
+6. Resolve links, embeds, and attachment closure within that partition.
 7. Resolve the selected built-in theme and feature defaults.
-8. Produce themed HTML and deterministic JSON or XML files.
+8. Produce themed HTML and deterministic locale-specific JSON or XML files.
+9. Combine the immutable partitions, shared attachments, routes, and reciprocal SEO metadata.
 
 ## Identity and relations
 
@@ -50,8 +51,10 @@ The adapter also loads only the selected theme and feature closure from the hash
 
 `blog`, `docs`, and `digital-garden` consume the same published model. They select layouts, navigation, homepage additions, and system pages; they never parse Markdown, discover attachments, or recalculate relations. Theme IDs are closed in v1 rather than exposed through a speculative third-party registry.
 
+Structured comment settings are validated once into an immutable `CommentsConfig`. The shared presenter projects only the small `page.website.comments` interface needed by eligible post pages; Liquid never interprets raw configuration. Giscus is one external implementation owned by the shared frontend, so the project does not expose a hypothetical multi-provider adapter seam. Development output keeps a server-rendered Discussions link without loading the external client, while production pages receive a narrowly scoped CSP profile. Theme defaults are resolved at this boundary: a present i18n mapping defaults on for Docs, and a present comments mapping defaults on for Blog; explicit YAML booleans override either default for every built-in theme.
+
 ## Determinism
 
-Generated data is UTF-8, schema-versioned, and stably sorted. No build timestamp is added. Explicit note dates win over Git dates, and the compiler never falls back to the current time. If one public note lacks a deterministic update time, the compiler skips the entire Atom feed and emits a warning.
+Generated data is UTF-8, schema-versioned, and stably sorted. No build timestamp is added. Explicit note dates win over Git dates, and the compiler never falls back to the current time. The Atom feed omits public notes without a deterministic update time and is skipped only when no dated entries remain.
 
 See [[docs/Syntax|Syntax]] for the authoring contract and [[docs/Deployment|Deployment]] for the hosted pipeline.

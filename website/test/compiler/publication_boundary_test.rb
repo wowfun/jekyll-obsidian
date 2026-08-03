@@ -76,7 +76,7 @@ class PublicationBoundaryTest < Minitest::Test
     refute_empty first.notes
     assert_raises(FrozenError) { first.pages << :mutation }
     assert_raises(FrozenError) { first.pages.first.content << "mutation" }
-    assert_raises(FrozenError) { first.pages.first.data["obsidian"] = {} }
+    assert_raises(FrozenError) { first.pages.first.data["website"] = {} }
     assert_raises(FrozenError) { first.notes.first.properties["tags"] << "mutation" }
   end
 

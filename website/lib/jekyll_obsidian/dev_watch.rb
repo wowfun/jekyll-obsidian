@@ -13,10 +13,10 @@ module JekyllObsidian
         "config" => configuration_paths,
         "quiet" => true
       )
-      obsidian = config["obsidian"]
-      return WorkspaceLayout::DEFAULT_SOURCE unless obsidian.is_a?(Hash) && obsidian.key?("source")
+      website = config["website"]
+      return WorkspaceLayout::DEFAULT_SOURCE unless website.is_a?(Hash) && website.key?("source")
 
-      obsidian["source"]
+      website["source"]
     rescue LoadError, Psych::Exception, SystemCallError
       WorkspaceLayout::DEFAULT_SOURCE
     end

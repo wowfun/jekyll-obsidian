@@ -63,7 +63,7 @@ collections_dir: ../docs/collections
 cache_dir: ../host-cache
 safe: true
 
-obsidian:
+website:
   source: docs
   theme: docs
 YAML
@@ -86,7 +86,7 @@ new_host
 example_host=$new_host_path
 cat > "$example_host/.github/jekyll-obsidian.yml" <<'YAML'
 title: Host customization must not enter template tests
-obsidian:
+website:
   source: docs
   theme: docs
   content:

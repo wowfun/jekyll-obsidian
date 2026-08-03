@@ -34,13 +34,13 @@ test("distributed integration test accepts a standard generated host", async () 
       writeFile(
         path.join(hostRoot, ".github/jekyll-obsidian.yml"),
         configTemplate
-          .replace("__JEKYLL_OBSIDIAN_SOURCE__", "docs")
-          .replace("__JEKYLL_OBSIDIAN_THEME__", "docs"),
+          .replace("__JEKYLL_WEBSITE_SOURCE__", "docs")
+          .replace("__JEKYLL_WEBSITE_THEME__", "docs"),
         "utf8",
       ),
       writeFile(
         path.join(hostRoot, ".github/workflows/pages.yml"),
-        workflowTemplate.replaceAll("__JEKYLL_OBSIDIAN_SOURCE_GLOB__", "docs/**"),
+        workflowTemplate.replaceAll("__JEKYLL_WEBSITE_SOURCE_GLOB__", "docs/**"),
         "utf8",
       ),
     ]);

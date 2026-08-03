@@ -20,9 +20,9 @@ class JekyllAdapterTest < Minitest::Test
     FileUtils.mkdir_p(File.join(@temporary_root, "src"))
     File.write(File.join(@temporary_root, "src", "private.rb"), "Host source leak marker")
     File.write(File.join(@site_root, "docs", "private.md"), "Bundled example leak marker")
-    %w[obsidian-blog obsidian-docs obsidian-digital-garden].each do |layout|
+    %w[website-blog website-docs website-digital-garden].each do |layout|
       File.write(File.join(@site_root, "_layouts", "#{layout}.html"), <<~LIQUID)
-        <!doctype html><html data-theme="#{layout.delete_prefix("obsidian-")}"><body><div data-layout="once">{{ content }}</div></body></html>
+        <!doctype html><html data-theme="#{layout.delete_prefix("website-")}"><body><div data-layout="once">{{ content }}</div></body></html>
       LIQUID
     end
     File.write(File.join(@temporary_root, "vault", "index.md"), <<~MARKDOWN)
@@ -66,14 +66,14 @@ class JekyllAdapterTest < Minitest::Test
     refute_includes generated, "Bundled example leak marker"
     refute_includes generated, "unused-private-image"
 
-    catalog = File.read(File.join(destination, "assets", "obsidian", "catalog.v1.json"))
+    catalog = File.read(File.join(destination, "assets", "website", "catalog.v1.json"))
     assert catalog.start_with?("{\"schema_version\":1")
     refute_includes catalog, "<!doctype html>"
 
-    homepage = site.pages.find { |page| page.respond_to?(:obsidian_route) && page.obsidian_route == "/" }
+    homepage = site.pages.find { |page| page.respond_to?(:website_route) && page.website_route == "/" }
     assert_equal(
       "https://github.com/example/obsidian/edit/main/vault/index.md",
-      homepage.data.dig("obsidian", "source_links", "edit")
+      homepage.data.dig("website", "source_links", "edit")
     )
   end
 
@@ -86,7 +86,8 @@ class JekyllAdapterTest < Minitest::Test
     index = File.read(File.join(destination, "index.html"))
     assert_includes index, 'class="site-footer__github"'
     assert_includes index, 'href="https://github.com/example/obsidian"'
-    assert_includes index, 'aria-label="View this project on GitHub"'
+    assert_includes index, 'aria-label="Jekyll Obsidian on GitHub"'
+    assert_match(/Built by.*Jekyll Obsidian.*·.*MIT License.*·.*#{site.time.strftime("%Y")}/m, index)
   end
 
   def test_obsidian_trash_is_not_compiled_as_public_content
@@ -113,7 +114,7 @@ class JekyllAdapterTest < Minitest::Test
 
   def test_render_failure_cleans_staged_vault_assets
     File.write(
-      File.join(@site_root, "_layouts", "obsidian-digital-garden.html"),
+      File.join(@site_root, "_layouts", "website-digital-garden.html"),
       "{% include missing-staging-cleanup-fixture.html %}"
     )
     site = build_site
@@ -148,11 +149,11 @@ class JekyllAdapterTest < Minitest::Test
       ---
       # One dispatch
     MARKDOWN
-    File.write(File.join(@site_root, "_layouts", "obsidian-blog.html"), <<~LIQUID)
-      <!doctype html><html><body>{{ content }}{% if page.obsidian.kind == 'archive' %}{% for group in page.obsidian.theme_data.archive_groups %}{% for post in group.posts %}<a data-archive-entry href="{{ post.url }}">{{ post.title }}</a>{% endfor %}{% endfor %}{% endif %}</body></html>
+    File.write(File.join(@site_root, "_layouts", "website-blog.html"), <<~LIQUID)
+      <!doctype html><html><body>{{ content }}{% if page.website.kind == 'archive' %}{% for group in page.website.theme_data.archive_groups %}{% for post in group.posts %}<a data-archive-entry href="{{ post.url }}">{{ post.title }}</a>{% endfor %}{% endfor %}{% endif %}</body></html>
     LIQUID
 
-    site = build_site("obsidian" => obsidian_config.merge("theme" => "blog"))
+    site = build_site("website" => website_config.merge("theme" => "blog"))
     site.process
 
     archive = File.read(File.join(destination, "archive", "index.html"))
@@ -161,7 +162,7 @@ class JekyllAdapterTest < Minitest::Test
 
   def test_host_docs_source_is_compiled_without_entering_the_reader
     FileUtils.mv(File.join(@temporary_root, "vault"), File.join(@temporary_root, "docs"))
-    site = build_site("obsidian" => obsidian_config.merge("source" => "docs"))
+    site = build_site("website" => website_config.merge("source" => "docs"))
     site.process
 
     assert File.file?(File.join(destination, "index.html"))
@@ -174,7 +175,7 @@ class JekyllAdapterTest < Minitest::Test
     FileUtils.mv(File.join(@temporary_root, "vault"), File.join(@site_root, "docs"))
     site = build_site(
       "exclude" => [],
-      "obsidian" => obsidian_config.merge("source" => "website/docs")
+      "website" => website_config.merge("source" => "website/docs")
     )
 
     assert_includes site.config.fetch("exclude"), "docs"
@@ -184,23 +185,186 @@ class JekyllAdapterTest < Minitest::Test
     assert File.file?(File.join(destination, "index.html"))
     refute File.exist?(File.join(destination, "private.md"))
     refute File.exist?(File.join(destination, "media", "unused.png"))
-    assert_empty site.pages.reject { |page| page.respond_to?(:obsidian_route) }
+    assert_empty site.pages.reject { |page| page.respond_to?(:website_route) }
     assert_empty site.static_files.select { |file| file.path.to_s.start_with?(File.join(@site_root, "docs")) }
 
-    homepage = site.pages.find { |page| page.respond_to?(:obsidian_route) && page.obsidian_route == "/" }
+    homepage = site.pages.find { |page| page.respond_to?(:website_route) && page.website_route == "/" }
     assert_equal(
       "https://github.com/example/obsidian/edit/main/website/docs/index.md",
-      homepage.data.dig("obsidian", "source_links", "edit")
+      homepage.data.dig("website", "source_links", "edit")
     )
   end
 
-  def test_missing_obsidian_configuration_uses_public_defaults
-    site = build_site("obsidian" => nil)
+  def test_missing_website_configuration_uses_public_defaults
+    site = build_site("website" => nil)
 
-    assert_equal "website/docs", site.config.dig("obsidian", "source")
-    assert_equal "digital-garden", site.config.dig("obsidian", "theme")
-    assert_nil site.config.dig("obsidian", "content")
-    assert_nil site.config.dig("obsidian", "features")
+    assert_equal "website/docs", site.config.dig("website", "source")
+    assert_equal "docs", site.config.dig("website", "theme")
+    assert_nil site.config.dig("website", "content")
+    assert_nil site.config.dig("website", "features")
+    assert_nil site.config.dig("website", "comments")
+  end
+
+  def test_legacy_obsidian_configuration_is_rejected_instead_of_using_bundled_defaults
+    error = assert_raises(Jekyll::Errors::FatalException) do
+      build_site("website" => nil, "obsidian" => website_config)
+    end
+
+    assert_includes error.message, "obsidian"
+    assert_includes error.message, "website"
+  end
+
+  def test_blog_renders_comments_hook_backlink_and_conditional_csp
+    install_project_layout
+    FileUtils.mkdir_p(File.join(@temporary_root, "vault", "blog"))
+    File.write(File.join(@temporary_root, "vault", "blog", "open.md"), <<~MARKDOWN)
+      ---
+      publish: true
+      content_type: post
+      date: 2026-08-01
+      ---
+      # Open post
+    MARKDOWN
+    File.write(File.join(@temporary_root, "vault", "blog", "closed.md"), <<~MARKDOWN)
+      ---
+      publish: true
+      content_type: post
+      date: 2026-08-02
+      comments: false
+      ---
+      # Closed post
+    MARKDOWN
+    comments = {
+      "repository" => "example/community",
+      "repository_id" => "R_kgDOExample",
+      "category" => "Blog comments",
+      "category_id" => "DIC_kwDOExample"
+    }
+    site = build_site("website" => website_config.merge("theme" => "blog", "comments" => comments))
+
+    site.process
+
+    open_post = File.read(File.join(destination, "blog", "open", "index.html"))
+    assert_includes open_post, "data-website-comments-load"
+    assert_includes open_post, 'data-website-comments-term="website:post:blog/open"'
+    assert_includes open_post, 'meta name="giscus:backlink" content="https://example.test/blog/open/"'
+    assert_includes open_post, "script-src 'self' https://giscus.app"
+    assert_includes open_post, "style-src 'self' 'unsafe-inline' https://giscus.app"
+    assert_includes open_post, "frame-src 'self' https://giscus.app"
+    refute_includes open_post, '<script src="https://giscus.app/client.js"'
+
+    closed_post = File.read(File.join(destination, "blog", "closed", "index.html"))
+    refute_includes closed_post, "data-website-comments-load"
+    refute_includes closed_post, "giscus:backlink"
+    refute_includes closed_post, "https://giscus.app"
+
+    homepage = File.read(File.join(destination, "index.html"))
+    refute_includes homepage, "data-website-comments-load"
+    refute_includes homepage, "https://giscus.app"
+
+    ENV["JEKYLL_ENV"] = "development"
+    build_site("website" => website_config.merge("theme" => "blog", "comments" => comments)).process
+    development_post = File.read(File.join(destination, "blog", "open", "index.html"))
+    assert_includes development_post, "Comments load only on the published site."
+    refute_includes development_post, "data-website-comments-load"
+    refute_includes development_post, "https://giscus.app"
+  end
+
+  def test_incomplete_giscus_setup_renders_a_noninteractive_fallback
+    install_project_layout
+    FileUtils.mkdir_p(File.join(@temporary_root, "vault", "blog"))
+    File.write(File.join(@temporary_root, "vault", "blog", "post.md"), <<~MARKDOWN)
+      ---
+      publish: true
+      content_type: post
+      date: 2026-08-01
+      ---
+      # Post
+    MARKDOWN
+
+    build_site(
+      "website" => website_config.merge("theme" => "blog", "comments" => { "enabled" => true })
+    ).process
+
+    html = File.read(File.join(destination, "blog", "post", "index.html"))
+    assert_includes html, "Comments are not available yet. You can finish the GitHub Discussions setup later."
+    assert_includes html, 'href="https://github.com/example/obsidian"'
+    assert_includes html, "Open the comments repository on GitHub"
+    refute_includes html, "data-website-comments-load"
+    refute_includes html, "giscus:backlink"
+    refute_includes html, "https://giscus.app"
+  end
+
+  def test_non_blog_themes_can_render_explicitly_enabled_comments
+    install_project_layout
+    FileUtils.mkdir_p(File.join(@temporary_root, "vault", "blog"))
+    File.write(File.join(@temporary_root, "vault", "blog", "post.md"), <<~MARKDOWN)
+      ---
+      publish: true
+      content_type: post
+      date: 2026-08-01
+      ---
+      # Post
+    MARKDOWN
+    comments = {
+      "enabled" => true,
+      "repository" => "example/community",
+      "repository_id" => "R_kgDOExample",
+      "category" => "Comments",
+      "category_id" => "DIC_kwDOExample"
+    }
+
+    %w[docs digital-garden].each do |theme|
+      build_site("website" => website_config.merge("theme" => theme, "comments" => comments)).process
+      html = File.read(File.join(destination, "blog", "post", "index.html"))
+      assert_includes html, "data-website-comments-load", theme
+      assert_includes html, "website:post:blog/post", theme
+    end
+  end
+
+  def test_blog_and_digital_garden_render_explicit_i18n
+    install_project_layout
+    FileUtils.mkdir_p(File.join(@temporary_root, "vault", "_translations", "zh-CN"))
+    File.write(File.join(@temporary_root, "vault", "_locale.yml"), "name: English\n")
+    File.write(
+      File.join(@temporary_root, "vault", "_translations", "zh-CN", "_locale.yml"),
+      "name: 简体中文\nmessages:\n  latest: 最新\n  notes: 笔记\n"
+    )
+    File.write(File.join(@temporary_root, "vault", "_translations", "zh-CN", "index.md"), <<~MARKDOWN)
+      ---
+      publish: true
+      title: 首页
+      ---
+      # 首页
+    MARKDOWN
+    i18n = { "enabled" => true, "locales" => %w[en zh-CN] }
+
+    { "blog" => "最新", "digital-garden" => "笔记" }.each do |theme, localized_label|
+      build_site("website" => website_config.merge("theme" => theme, "i18n" => i18n)).process
+      html = File.read(File.join(destination, "zh-CN", "index.html"))
+      assert_includes html, '<html class="no-js" lang="zh-CN" dir="ltr">', theme
+      assert_includes html, "data-language-switcher", theme
+      assert_includes html, localized_label, theme
+    end
+  end
+
+  def test_fallback_note_header_and_body_use_the_default_language_direction
+    install_project_layout
+    File.write(File.join(@temporary_root, "vault", "_locale.yml"), "name: English\ndir: ltr\n")
+    FileUtils.mkdir_p(File.join(@temporary_root, "vault", "_translations", "ar"))
+    File.write(
+      File.join(@temporary_root, "vault", "_translations", "ar", "_locale.yml"),
+      "name: العربية\ndir: rtl\n"
+    )
+
+    build_site(
+      "website" => website_config.merge("theme" => "docs", "i18n" => { "locales" => %w[en ar] })
+    ).process
+
+    fallback = File.read(File.join(destination, "ar", "index.html"))
+    assert_includes fallback, '<html class="no-js" lang="ar" dir="rtl">'
+    assert_includes fallback, '<header class="note-header" lang="en" dir="ltr">'
+    assert_includes fallback, '<div class="note-content" lang="en" dir="ltr">'
   end
 
   def test_reader_rejects_public_symlink_that_resolves_into_private_vault_content
@@ -211,7 +375,7 @@ class JekyllAdapterTest < Minitest::Test
     site = build_site
 
     error = assert_raises(Jekyll::Errors::FatalException) { site.process }
-    assert_includes error.message, "obsidian.source entered Jekyll Reader"
+    assert_includes error.message, "website.source entered Jekyll Reader"
     refute site.pages.any? { |page| page.class.name.include?("GeneratedPage") }
     refute File.exist?(File.join(destination, "public-alias.html"))
   end
@@ -223,7 +387,7 @@ class JekyllAdapterTest < Minitest::Test
     site = build_site
 
     error = assert_raises(Jekyll::Errors::FatalException) { site.process }
-    assert_includes error.message, "obsidian.source entered Jekyll Reader"
+    assert_includes error.message, "website.source entered Jekyll Reader"
     refute site.pages.any? { |page| page.class.name.include?("GeneratedPage") }
     refute File.exist?(File.join(destination, "public-page.html"))
   end
@@ -236,7 +400,7 @@ class JekyllAdapterTest < Minitest::Test
     site = build_site("collections" => { "docs" => { "output" => true } })
 
     error = assert_raises(Jekyll::Errors::FatalException) { site.process }
-    assert_includes error.message, "obsidian.source entered Jekyll Reader"
+    assert_includes error.message, "website.source entered Jekyll Reader"
     refute site.pages.any? { |page| page.class.name.include?("GeneratedPage") }
     refute File.exist?(File.join(destination, "docs"))
   end
@@ -246,7 +410,7 @@ class JekyllAdapterTest < Minitest::Test
     site = build_site
 
     error = assert_raises(Jekyll::Errors::FatalException) { site.process }
-    assert_includes error.message, "obsidian.source entered Jekyll Reader"
+    assert_includes error.message, "website.source entered Jekyll Reader"
     refute site.pages.any? { |page| page.class.name.include?("GeneratedPage") }
     refute File.exist?(File.join(destination, "public-copy"))
   end
@@ -254,7 +418,7 @@ class JekyllAdapterTest < Minitest::Test
   def test_source_overlapping_the_jekyll_site_is_rejected_during_initialization
     FileUtils.mkdir_p(File.join(@site_root, "content"))
     error = assert_raises(Jekyll::Errors::FatalException) do
-      build_site("obsidian" => obsidian_config.merge("source" => "website/content"))
+      build_site("website" => website_config.merge("source" => "website/content"))
     end
     assert_includes error.message, "must not overlap the Jekyll source"
   end
@@ -487,30 +651,30 @@ class JekyllAdapterTest < Minitest::Test
   end
 
   def test_unknown_theme_is_rejected_before_reader
-    site = build_site("obsidian" => obsidian_config.merge("theme" => "magazine"))
+    site = build_site("website" => website_config.merge("theme" => "magazine"))
     error = assert_raises(Jekyll::Errors::FatalException) { site.process }
 
     assert_includes error.message, "invalid_theme"
   end
 
-  def test_unknown_obsidian_configuration_keys_are_rejected
+  def test_unknown_website_configuration_keys_are_rejected
     error = assert_raises(Jekyll::Errors::FatalException) do
-      build_site("obsidian" => obsidian_config.merge("parser_registry" => "plugins"))
+      build_site("website" => website_config.merge("parser_registry" => "plugins"))
     end
 
-    assert_includes error.message, "obsidian contains unsupported key"
+    assert_includes error.message, "website contains unsupported key"
     assert_includes error.message, "parser_registry"
   end
 
   def test_feature_overrides_must_be_yaml_booleans
-    site = build_site("obsidian" => obsidian_config.merge("features" => { "search" => "yes" }))
+    site = build_site("website" => website_config.merge("features" => { "search" => "yes" }))
     error = assert_raises(Jekyll::Errors::FatalException) { site.process }
 
     assert_includes error.message, "invalid_feature"
   end
 
   def test_unknown_feature_override_is_rejected
-    site = build_site("obsidian" => obsidian_config.merge("features" => { "unknown" => true }))
+    site = build_site("website" => website_config.merge("features" => { "unknown" => true }))
     error = assert_raises(Jekyll::Errors::FatalException) { site.process }
 
     assert_includes error.message, "invalid_feature"
@@ -519,7 +683,7 @@ class JekyllAdapterTest < Minitest::Test
 
   def test_content_directories_must_not_overlap_across_types
     site = build_site(
-      "obsidian" => obsidian_config.merge(
+      "website" => website_config.merge(
         "content" => {
           "default_type" => "page",
           "directories" => { "post" => ["writing"], "doc" => ["writing/reference"] }
@@ -559,7 +723,7 @@ class JekyllAdapterTest < Minitest::Test
     )
     File.open(File.join(@temporary_root, "vault", "index.md"), "a") { |file| file.write("\nInline math: $x^2$.\n") }
     site = build_site(
-      "obsidian" => obsidian_config.merge(
+      "website" => website_config.merge(
         "theme" => "blog",
         "features" => { "graph" => true, "previews" => true, "search" => false }
       )
@@ -567,30 +731,30 @@ class JekyllAdapterTest < Minitest::Test
 
     site.process
 
-    assert File.file?(File.join(destination, "assets", "obsidian", "blog.js"))
-    assert File.file?(File.join(destination, "assets", "obsidian", "shared.js"))
-    assert File.file?(File.join(destination, "assets", "obsidian", "features", "graph.js"))
-    assert File.file?(File.join(destination, "assets", "obsidian", "features", "previews.js"))
-    assert File.file?(File.join(destination, "assets", "obsidian", "features", "math.js"))
-    refute File.exist?(File.join(destination, "assets", "obsidian", "docs.js"))
-    refute File.exist?(File.join(destination, "assets", "obsidian", "digital-garden.js"))
-    refute File.exist?(File.join(destination, "assets", "obsidian", "features", "search.js"))
-    assert_equal "blog.js", site.data.dig("obsidian_assets", "entries", "blog", "js")
+    assert File.file?(File.join(destination, "assets", "website", "blog.js"))
+    assert File.file?(File.join(destination, "assets", "website", "shared.js"))
+    assert File.file?(File.join(destination, "assets", "website", "features", "graph.js"))
+    assert File.file?(File.join(destination, "assets", "website", "features", "previews.js"))
+    assert File.file?(File.join(destination, "assets", "website", "features", "math.js"))
+    refute File.exist?(File.join(destination, "assets", "website", "docs.js"))
+    refute File.exist?(File.join(destination, "assets", "website", "digital-garden.js"))
+    refute File.exist?(File.join(destination, "assets", "website", "features", "search.js"))
+    assert_equal "blog.js", site.data.dig("website_assets", "entries", "blog", "js")
   end
 
   def test_switching_themes_removes_stale_application_assets
     build_site(
-      "obsidian" => obsidian_config.merge("theme" => "blog")
+      "website" => website_config.merge("theme" => "blog")
     ).process
-    assert File.file?(File.join(destination, "assets", "obsidian", "blog.js"))
-    refute File.exist?(File.join(destination, "assets", "obsidian", "docs.js"))
+    assert File.file?(File.join(destination, "assets", "website", "blog.js"))
+    refute File.exist?(File.join(destination, "assets", "website", "docs.js"))
 
     build_site(
-      "obsidian" => obsidian_config.merge("theme" => "docs")
+      "website" => website_config.merge("theme" => "docs")
     ).process
 
-    refute File.exist?(File.join(destination, "assets", "obsidian", "blog.js"))
-    assert File.file?(File.join(destination, "assets", "obsidian", "docs.js"))
+    refute File.exist?(File.join(destination, "assets", "website", "blog.js"))
+    assert File.file?(File.join(destination, "assets", "website", "docs.js"))
   end
 
   def test_git_times_are_discovered_for_non_ascii_vault_paths
@@ -618,7 +782,7 @@ class JekyllAdapterTest < Minitest::Test
     site = build_site
     site.process
 
-    refute site.data["obsidian_feed_available"]
+    refute site.data["website_feed_available"]
     refute File.exist?(File.join(destination, "feed.xml"))
     refute_includes File.read(File.join(destination, "index.html")), "/feed.xml"
 
@@ -736,7 +900,7 @@ class JekyllAdapterTest < Minitest::Test
     File.join(@site_root, "_site")
   end
 
-  def obsidian_config
+  def website_config
     {
       "source" => "vault",
       "syntax_profile" => "ofm@1",
@@ -765,7 +929,7 @@ class JekyllAdapterTest < Minitest::Test
         "url" => "https://example.test",
         "baseurl" => "",
         "exclude" => [".jekyll-obsidian-cache"],
-        "obsidian" => obsidian_config
+        "website" => website_config
       }.merge(overrides)
     )
     Jekyll::Site.new(config)
@@ -807,7 +971,7 @@ class JekyllAdapterTest < Minitest::Test
 
   def install_project_layout
     project_root = File.expand_path("../..", __dir__)
-    %w[obsidian-blog obsidian-docs obsidian-digital-garden].each do |layout|
+    %w[website-blog website-docs website-digital-garden].each do |layout|
       FileUtils.cp(File.join(project_root, "_layouts", "#{layout}.html"), File.join(@site_root, "_layouts", "#{layout}.html"))
     end
     FileUtils.mkdir_p(File.join(@site_root, "_includes"))

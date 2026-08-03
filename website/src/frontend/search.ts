@@ -9,6 +9,12 @@ interface SearchSession {
 
 const sessions = new WeakMap<HTMLDialogElement, SearchSession>();
 
+function formatMessage(template: string, values: Record<string, string | number>): string {
+  return template.replace(/\{([a-z]+)\}/g, (match, key: string) =>
+    Object.prototype.hasOwnProperty.call(values, key) ? String(values[key]) : match
+  );
+}
+
 function resultLink(result: SearchWorkerResult): HTMLLIElement {
   const item = document.createElement("li");
   item.className = "search-result";
@@ -58,7 +64,7 @@ export async function activateSearch(dialog: HTMLDialogElement): Promise<void> {
     return;
   }
 
-  status.textContent = "Loading notebook index…";
+  status.textContent = dialog.dataset.searchLoading || "Loading notebook index…";
   const session = createSession();
   sessions.set(dialog, session);
   await session.ready;
@@ -70,8 +76,13 @@ export async function activateSearch(dialog: HTMLDialogElement): Promise<void> {
     if (message.type !== "results" || message.id !== latestQueryId) return;
     results.replaceChildren(...message.results.map(resultLink));
     status.textContent = message.results.length === 0
-      ? `No notes found for “${input.value.trim()}”.`
-      : `${message.results.length} ${message.results.length === 1 ? "note" : "notes"} found.`;
+      ? formatMessage(dialog.dataset.searchNoResults || "No notes found for “{query}”.", { query: input.value.trim() })
+      : formatMessage(
+          message.results.length === 1
+            ? dialog.dataset.searchResultOne || "{count} note found."
+            : dialog.dataset.searchResultMany || "{count} notes found.",
+          { count: message.results.length }
+        );
   });
 
   const query = () => {
@@ -79,7 +90,7 @@ export async function activateSearch(dialog: HTMLDialogElement): Promise<void> {
     const value = input.value.trim();
     results.replaceChildren();
     if (!value) {
-      status.textContent = "Type a title, tag, or phrase.";
+      status.textContent = dialog.dataset.searchPrompt || "Type a title, tag, or phrase.";
       return;
     }
     session.worker.postMessage({ type: "query", id: latestQueryId, query: value } satisfies SearchWorkerRequest);

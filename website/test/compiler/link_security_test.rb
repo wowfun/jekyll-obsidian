@@ -32,7 +32,7 @@ class LinkSecurityTest < Minitest::Test
     diagnostic = result.diagnostics.find { |item| item.code == "path_escape" }
     refute_nil diagnostic
     assert_equal :warning, diagnostic.severity
-    assert_includes page(result, "/").content, "obsidian-link--unresolved"
+    assert_includes page(result, "/").content, "website-link--unresolved"
   end
 
   def test_missing_markdown_link_remains_distinct_from_path_escape
@@ -43,7 +43,7 @@ class LinkSecurityTest < Minitest::Test
     assert result.success?, result.diagnostics.map(&:message).join("\n")
     assert result.diagnostics.any? { |item| item.code == "unresolved_link" && item.severity == :warning }
     refute result.diagnostics.any? { |item| item.code == "path_escape" }
-    assert_includes page(result, "/").content, "obsidian-link--unresolved"
+    assert_includes page(result, "/").content, "website-link--unresolved"
   end
 
   def test_relative_markdown_link_can_move_up_without_escaping_the_vault

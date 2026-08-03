@@ -1,0 +1,19 @@
+{% if page.website.kind == 'note' %}
+  {% assign ui = page.website.i18n.messages %}
+  <header class="note-header" lang="{{ page.website.i18n.content_lang | default: page.website.i18n.locale | default: site.lang | default: 'en' | escape }}" dir="{{ page.website.i18n.content_dir | default: page.website.i18n.dir | default: 'ltr' | escape }}">
+    <p class="note-kicker">
+      {% if page.website.content_type == 'post' %}{{ ui.dispatch | default: 'Dispatch' | escape }}{% elsif page.website.content_type == 'doc' %}{{ ui.manual | default: 'Manual' | escape }}{% else %}{{ ui.note | default: 'Note' | escape }}{% endif %}
+      <span aria-hidden="true">·</span> {{ page.website.id | escape }}
+    </p>
+    {% unless page.website.has_h1 %}<h1 class="note-title">{{ page.title | escape }}</h1>{% endunless %}
+    {% if page.description %}<p class="note-description">{{ page.description | escape }}</p>{% endif %}
+    <div class="note-meta">
+      {% if page.website.content_type == 'post' and page.website.published_at %}<time datetime="{{ page.website.published_at | escape }}">{{ ui.published | default: 'Published' | escape }} {{ page.website.published_at | date: "%Y-%m-%d" }}</time>{% endif %}
+      {% if page.website.updated %}<time datetime="{{ page.website.updated | escape }}">{{ ui.updated | default: 'Updated' | escape }} {{ page.website.updated | date: "%Y-%m-%d" }}</time>{% endif %}
+      {% if page.website.features.tags %}
+        {% assign tags_route = page.website.routes.tags | default: '/tags/' %}
+        {% for tag in page.website.tag_links %}<a class="tag-chip" href="{{ tags_route | relative_url }}#{{ tag.anchor | escape }}">#{{ tag.name | escape }}</a>{% endfor %}
+      {% endif %}
+    </div>
+  </header>
+{% endif %}

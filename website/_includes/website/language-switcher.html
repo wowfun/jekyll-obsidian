@@ -1,0 +1,17 @@
+{% if page.website.i18n.localizations and page.website.i18n.localizations.size > 1 %}
+  {% assign ui = page.website.i18n.messages %}
+  <details class="language-switcher" data-language-switcher>
+    <summary class="site-action" aria-label="{{ ui.language | default: 'Language' | escape }}: {{ page.website.i18n.name | escape }}">
+      <span aria-hidden="true">◎</span>
+      <span>{{ page.website.i18n.name | escape }}</span>
+      <span aria-hidden="true">⌄</span>
+    </summary>
+    <nav class="language-switcher__panel" aria-label="{{ ui.language | default: 'Language' | escape }}">
+      <ul>
+        {% for localization in page.website.i18n.localizations %}
+          <li><a href="{{ localization.href | escape }}" lang="{{ localization.locale | escape }}" hreflang="{{ localization.hreflang | escape }}" dir="{{ localization.dir | escape }}"{% if localization.locale == page.website.i18n.locale %} aria-current="page"{% endif %}>{{ localization.name | escape }}{% if localization.fallback %}<span class="visually-hidden"> — {{ ui.translation_missing | default: 'Translation unavailable' | escape }}</span>{% endif %}</a></li>
+        {% endfor %}
+      </ul>
+    </nav>
+  </details>
+{% endif %}

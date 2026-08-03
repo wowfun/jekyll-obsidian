@@ -71,7 +71,7 @@ class OfmScannerTest < Minitest::Test
   def test_block_id_replacement_preserves_the_line_ending
     result = JekyllObsidian::OfmScanner.prepare("- First ^first\n- Second\n")
 
-    assert_equal "- First <span data-obsidian-block-id=\"first\"></span>\n- Second\n", result.markdown
+    assert_equal "- First <span data-website-block-id=\"first\"></span>\n- Second\n", result.markdown
     assert_equal 2, result.markdown.lines.length
   end
 

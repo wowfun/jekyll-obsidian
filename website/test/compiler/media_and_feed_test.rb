@@ -20,7 +20,7 @@ class MediaAndFeedTest < Minitest::Test
       "/assets/vault/media/song.mp3"
     ], routes
     refute routes.any? { |route| route.include?("private") }
-    assert_includes page(result, "/").content, "obsidian-download-card"
+    assert_includes page(result, "/").content, "website-download-card"
     assert_includes page(result, "/").content, "<audio"
     assert_equal "https://example.test/assets/vault/media/cover.png", page(result, "/").data.fetch("image")
   end
@@ -36,7 +36,7 @@ class MediaAndFeedTest < Minitest::Test
       environment: "development"
     )
     assert development.success?, development.diagnostics.map(&:message).join("\n")
-    assert_nil page(development, "/").data.dig("obsidian", "absolute_url")
+    assert_nil page(development, "/").data.dig("website", "absolute_url")
   end
 
   def test_media_options_and_dangerous_schemes
@@ -102,7 +102,8 @@ class MediaAndFeedTest < Minitest::Test
   def test_feed_omits_only_notes_without_a_deterministic_time
     result = compile(
       note("index.md", "---\npublish: true\nupdated: 2026-07-30\n---\n# Home"),
-      note("timeless.md", "---\npublish: true\n---\n# Timeless")
+      note("timeless.md", "---\npublish: true\n---\n# Timeless"),
+      theme: "digital-garden"
     )
 
     assert result.success?
@@ -120,7 +121,8 @@ class MediaAndFeedTest < Minitest::Test
         "---\npublish: true\n---\n# Home",
         first_committed_at: "2026-07-01T01:02:03Z",
         last_committed_at: "2026-07-30T04:05:06Z"
-      )
+      ),
+      theme: "digital-garden"
     )
 
     feed = result.generated_files.find { |item| item.route == "/feed.xml" }
@@ -132,7 +134,8 @@ class MediaAndFeedTest < Minitest::Test
   def test_yaml_date_is_rfc3339_utc_midnight_and_datetime_keeps_its_offset
     result = compile(
       note("index.md", "---\npublish: true\nupdated: 2026-07-30\n---\n# Home"),
-      note("timed.md", "---\npublish: true\nupdated: '2026-07-30T04:05:06+08:00'\n---\n# Timed")
+      note("timed.md", "---\npublish: true\nupdated: '2026-07-30T04:05:06+08:00'\n---\n# Timed"),
+      theme: "digital-garden"
     )
 
     assert result.success?, result.diagnostics.map(&:message).join("\n")

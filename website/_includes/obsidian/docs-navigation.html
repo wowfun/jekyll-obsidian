@@ -1,6 +1,0 @@
-{% if page.obsidian.theme_data.previous or page.obsidian.theme_data.next %}
-  <nav class="sequence-navigation" aria-label="Documentation sequence">
-    {% if page.obsidian.theme_data.previous %}<a rel="prev" href="{{ page.obsidian.theme_data.previous.url | escape }}"><span>Previous</span><strong>{{ page.obsidian.theme_data.previous.title | escape }}</strong></a>{% endif %}
-    {% if page.obsidian.theme_data.next %}<a rel="next" href="{{ page.obsidian.theme_data.next.url | escape }}"><span>Next</span><strong>{{ page.obsidian.theme_data.next.title | escape }}</strong></a>{% endif %}
-  </nav>
-{% endif %}

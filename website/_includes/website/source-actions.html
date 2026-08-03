@@ -1,0 +1,9 @@
+{% if page.website.source_links and page.website.source_links.size > 0 %}
+  {% assign ui = page.website.i18n.messages %}
+  <nav class="source-actions" aria-label="{{ ui.contribute | default: 'Contribute to this page' | escape }}">
+    <a href="{{ page.website.source_links.edit | escape }}">{{ ui.edit | default: 'Edit' | escape }}</a>
+    <a href="{{ page.website.source_links.history | escape }}">{{ ui.history | default: 'History' | escape }}</a>
+    <a href="{{ page.website.source_links.source | escape }}">{{ ui.view_source | default: 'View source' | escape }}</a>
+    <a href="{{ page.website.source_links.issue | escape }}">{{ ui.report_issue | default: 'Report issue' | escape }}</a>
+  </nav>
+{% endif %}

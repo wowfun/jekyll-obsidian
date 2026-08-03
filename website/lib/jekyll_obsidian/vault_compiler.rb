@@ -41,8 +41,14 @@ module JekyllObsidian
     DANGEROUS_SCHEMES = %w[data file javascript vbscript].freeze
     EXTERNAL_SCHEMES = %w[http https mailto tel].freeze
     NOTE_EXTENSION = ".md"
+    TRANSLATIONS_DIRECTORY = "_translations/"
     THEMES = BuiltInThemes::IDS
     FEATURE_KEYS = %w[search tags feed graph relations previews outline].freeze
+    COMMENT_KEYS = %w[enabled repository repository_id category category_id].freeze
+    GISCUS_LANGUAGES = Set.new(%w[
+      ar be bg ca cs da de en eo es eu fa fr gr hbs he hu id it ja kh ko nl pl
+      pt ro ru th tr uk uz vi zh-CN zh-HK zh-TW
+    ]).freeze
     THEME_FEATURE_DEFAULTS = {
       "blog" => {
         "search" => true, "tags" => true, "feed" => true,
@@ -113,7 +119,17 @@ module JekyllObsidian
     MAX_TRANSCLUSION_BYTES = 2 * 1024 * 1024
 
     def self.compile(request)
+      return LocalizedCompiler.compile(request) unless request.config.i18n.nil?
+
+      compile_single(request)
+    end
+
+    def self.compile_single(request)
       new(request).compile
+    end
+
+    def self.giscus_language(locale)
+      GISCUS_LANGUAGES.include?(locale.to_s) ? locale.to_s : "en"
     end
 
     def initialize(request)
@@ -129,9 +145,10 @@ module JekyllObsidian
       @copied_asset_paths = Set.new
       @transclusion_selection_cache = {}
       @url_builder = nil
-      @theme = "digital-garden"
+      @theme = "docs"
       @features = THEME_FEATURE_DEFAULTS.fetch(@theme)
       @content = DEFAULT_CONTENT
+      @comments = disabled_comments_config
     end
 
     def compile
@@ -150,6 +167,7 @@ module JekyllObsidian
         theme: @theme,
         features: @features,
         content: @content,
+        comments: @comments,
         site: @config,
         url_builder: @url_builder
       )
@@ -196,6 +214,7 @@ module JekyllObsidian
       end
       resolve_theme_config
       resolve_content_config
+      resolve_comments_config
       @url_builder = UrlBuilder.new(origin: @config.url, baseurl: @config.baseurl)
       error("missing_origin", "production builds require a non-empty url origin") if production? && @url_builder.origin.empty?
     rescue ArgumentError => exception
@@ -205,12 +224,12 @@ module JekyllObsidian
 
     def resolve_theme_config
       requested = @config.theme.to_s
-      requested = "digital-garden" if requested.empty?
+      requested = "docs" if requested.empty?
       if THEMES.include?(requested)
         @theme = requested
       else
         error("invalid_theme", "theme must be one of: #{THEMES.join(', ')}")
-        @theme = "digital-garden"
+        @theme = "docs"
       end
 
       overrides = @config.features
@@ -233,6 +252,82 @@ module JekyllObsidian
         normalized[name] = value
       end
       @features = THEME_FEATURE_DEFAULTS.fetch(@theme).merge(normalized).sort.to_h.freeze
+    end
+
+    def resolve_comments_config
+      raw = @config.comments
+      if raw.nil?
+        @comments = disabled_comments_config
+        return
+      end
+      unless raw.is_a?(Hash) && raw.keys.all? { |key| key.is_a?(String) }
+        error("invalid_comments", "website.comments must be a mapping with string keys")
+        @comments = disabled_comments_config
+        return
+      end
+
+      unknown = raw.keys - COMMENT_KEYS
+      unknown.sort.each { |key| error("invalid_comments", "unknown comments setting #{key.inspect}") }
+      enabled = raw.fetch("enabled", @theme == "blog")
+      unless enabled == true || enabled == false
+        error("invalid_comments", "comments.enabled must be a YAML boolean")
+        enabled = false
+      end
+
+      repository = raw.key?("repository") ? raw["repository"] : @config.repository
+      repository = validate_comment_text("repository", repository)
+      repository_id = validate_comment_text("repository_id", raw["repository_id"])
+      category = validate_comment_text("category", raw["category"])
+      category_id = validate_comment_text("category_id", raw["category_id"])
+
+      repository_valid = repository&.match?(/\A[\w.-]+\/[\w.-]+\z/)
+      error("invalid_comments", "comments.repository must be an owner/repository pair") if enabled && !repository_valid
+      missing_provider_fields = {
+        "repository_id" => repository_id,
+        "category" => category,
+        "category_id" => category_id
+      }.filter_map { |key, value| "comments.#{key}" if value.to_s.empty? }
+      configured = enabled && repository_valid && missing_provider_fields.empty?
+      if enabled && repository_valid && missing_provider_fields.any?
+        warning(
+          "comments_unconfigured",
+          "comments are enabled but Giscus setup is incomplete; missing #{missing_provider_fields.join(', ')}"
+        )
+      end
+
+      @comments = CommentsConfig.new(
+        enabled: enabled,
+        configured: configured,
+        repository: repository.to_s,
+        repository_id: repository_id.to_s,
+        category: category.to_s,
+        category_id: category_id.to_s,
+        language: self.class.giscus_language(@config.lang),
+        load: configured && production?
+      )
+    end
+
+    def validate_comment_text(key, value)
+      return nil if value.nil?
+      unless value.is_a?(String) && FrontMatter.valid_output_text?(value) && value.length <= 256
+        error("invalid_comments", "comments.#{key} must be a string of at most 256 output-safe characters")
+        return nil
+      end
+
+      value.strip
+    end
+
+    def disabled_comments_config
+      CommentsConfig.new(
+        enabled: false,
+        configured: false,
+        repository: "",
+        repository_id: "",
+        category: "",
+        category_id: "",
+        language: "en",
+        load: false
+      )
     end
 
     def resolve_content_config
@@ -321,6 +416,7 @@ module JekyllObsidian
       Array(@request.snapshot&.entries).sort_by { |entry| entry.path.to_s.b }.each do |entry|
         path = validated_path(entry)
         next unless path
+        next if path.start_with?(TRANSLATIONS_DIRECTORY)
 
         collision = path.unicode_normalize(:nfc).downcase(:fold)
         if seen.key?(collision)
@@ -358,10 +454,12 @@ module JekyllObsidian
           @attachments[path] = entry
           basename = File.basename(path).unicode_normalize(:nfc).downcase(:fold)
           @attachment_basename_index[basename] << path
+        when :locale_manifest
+          # Locale manifests are compiler metadata, never public vault assets.
         when :symlink
           error("symlink_rejected", "symlinks are not accepted in a vault snapshot", path)
         else
-          error("invalid_entry_kind", "snapshot entry kind must be note or attachment", path)
+          error("invalid_entry_kind", "snapshot entry kind must be note, attachment, or locale_manifest", path)
         end
       end
     end
@@ -745,7 +843,7 @@ module JekyllObsidian
         note.base_fragment = fragment
 
         authored = fragment.dup
-        authored.css("obsidian-embed").remove
+        authored.css("website-embed").remove
         note.authored_text = visible_text(authored)
         note.preview = truncate(note.properties["description"] || note.authored_text, 240)
         note.feature_flags = {
@@ -765,23 +863,23 @@ module JekyllObsidian
 
     def bind_occurrence_nodes(note, fragment)
       note.occurrences.select { |occurrence| occurrence.syntax == :wikilink }.each do |occurrence|
-        node = fragment.at_css("a[data-obsidian-wikilink-token='#{occurrence.scanner_token}']")
-        node["data-obsidian-occurrence"] = occurrence.index.to_s if node
+        node = fragment.at_css("a[data-website-wikilink-token='#{occurrence.scanner_token}']")
+        node["data-website-occurrence"] = occurrence.index.to_s if node
       end
 
       note.occurrences.select { |occurrence| occurrence.syntax == :ofm_embed }.each do |occurrence|
-        node = fragment.at_css("obsidian-ofm-embed[data-token='#{occurrence.scanner_token}']")
-        node["data-obsidian-occurrence"] = occurrence.index.to_s if node
+        node = fragment.at_css("website-ofm-embed[data-token='#{occurrence.scanner_token}']")
+        node["data-website-occurrence"] = occurrence.index.to_s if node
       end
 
       note.occurrences.select { |occurrence| %i[markdown_link markdown_image].include?(occurrence.syntax) }.each do |occurrence|
         selector = occurrence.syntax == :markdown_image ? "img[src='#{token_url(occurrence.index)}']" : "a[href='#{token_url(occurrence.index)}']"
         node = fragment.at_css(selector)
-        node["data-obsidian-occurrence"] = occurrence.index.to_s if node
+        node["data-website-occurrence"] = occurrence.index.to_s if node
       end
 
       note.occurrences.each do |occurrence|
-        node = fragment.at_css("[data-obsidian-occurrence='#{occurrence.index}']")
+        node = fragment.at_css("[data-website-occurrence='#{occurrence.index}']")
         next unless node
 
         transform_reference_node(note, occurrence, node)
@@ -791,13 +889,13 @@ module JekyllObsidian
 
     def promote_embed_placeholders(fragment)
       fragment.css("p").to_a.each do |paragraph|
-        next if paragraph.xpath("./obsidian-embed").empty?
+        next if paragraph.xpath("./website-embed").empty?
 
         replacement = Nokogiri::HTML5.fragment("")
         inline = new_paragraph_like(paragraph)
         discard_break = false
         paragraph.children.to_a.each do |child|
-          if child.element? && child.name == "obsidian-embed"
+          if child.element? && child.name == "website-embed"
             replacement.add_child(inline) if meaningful_paragraph?(inline)
             inline = new_paragraph_like(paragraph)
             replacement.add_child(child.unlink)
@@ -827,7 +925,7 @@ module JekyllObsidian
     def transform_reference_node(note, occurrence, node)
       if occurrence.unresolved
         replacement = Nokogiri::XML::Node.new("span", node.document)
-        replacement["class"] = occurrence.kind == :embed ? "obsidian-embed obsidian-embed--unresolved obsidian-unresolved" : "obsidian-link obsidian-link--unresolved obsidian-unresolved"
+        replacement["class"] = occurrence.kind == :embed ? "website-embed website-embed--unresolved website-unresolved" : "website-link website-link--unresolved website-unresolved"
         replacement["role"] = "status"
         replacement.content = occurrence.display || occurrence.raw_target
         node.replace(replacement)
@@ -839,7 +937,7 @@ module JekyllObsidian
         anchor = occurrence.anchor_id ? "^#{occurrence.anchor_id}" : occurrence.fragment
         href = @url_builder.href(target.route) + @url_builder.fragment(anchor)
         if occurrence.kind == :embed
-          placeholder = Nokogiri::XML::Node.new("obsidian-embed", node.document)
+          placeholder = Nokogiri::XML::Node.new("website-embed", node.document)
           placeholder["data-source-id"] = target.id
           placeholder["data-fragment"] = occurrence.fragment.to_s
           placeholder["data-anchor-id"] = occurrence.anchor_id.to_s if occurrence.anchor_id
@@ -848,9 +946,9 @@ module JekyllObsidian
         else
           node.name = "a"
           node["href"] = href
-          node["class"] = [node["class"], "obsidian-link"].compact.join(" ")
+          node["class"] = [node["class"], "website-link"].compact.join(" ")
           node["data-note-id"] = target.id
-          node.remove_attribute("data-obsidian-occurrence")
+          node.remove_attribute("data-website-occurrence")
         end
       elsif occurrence.resolved_type == :attachment
         transform_attachment_node(occurrence, node)
@@ -887,7 +985,7 @@ module JekyllObsidian
       annotate_task_states(note, fragment)
       annotate_code_blocks(note, fragment)
       transform_callouts(fragment)
-      fragment.css("pre code.language-mermaid").each { |node| node.parent["data-obsidian-mermaid"] = "true" }
+      fragment.css("pre code.language-mermaid").each { |node| node.parent["data-website-mermaid"] = "true" }
       fragment.css("a[href]").each do |link|
         next unless link["href"].match?(%r{\Ahttps?://}i)
 
@@ -914,9 +1012,9 @@ module JekyllObsidian
 
     def assign_block_ids(note, fragment)
       block_ids = note.anchors.select { |anchor| anchor.kind == :block }.map(&:id)
-      fragment.css("[data-obsidian-block-id]").each do |marker|
+      fragment.css("[data-website-block-id]").each do |marker|
         parent = marker.parent
-        identifier = marker["data-obsidian-block-id"]
+        identifier = marker["data-website-block-id"]
         if parent&.element? && block_ids.include?(identifier)
           standalone = parent.children.all? do |child|
             child == marker || (child.text? && child.text.strip.empty?)
@@ -931,7 +1029,7 @@ module JekyllObsidian
               # overwriting the heading ID would break its outline and links.
               anchor = Nokogiri::XML::Node.new("span", previous.document)
               anchor["id"] = identifier
-              anchor["class"] = "obsidian-block-anchor"
+              anchor["class"] = "website-block-anchor"
               anchor["aria-hidden"] = "true"
               previous.add_previous_sibling(anchor)
             end
@@ -991,17 +1089,17 @@ module JekyllObsidian
         text_node.content = text_node.text.sub(match[0], "").sub(/\A\s+/, "")
 
         wrapper = Nokogiri::XML::Node.new(fold ? "details" : "aside", blockquote.document)
-        wrapper["class"] = "obsidian-callout obsidian-callout--#{type} callout"
+        wrapper["class"] = "website-callout website-callout--#{type} callout"
         wrapper["data-callout"] = type
         wrapper["role"] = "note" unless fold
         wrapper["open"] = "open" if fold == "+"
         transfer_replacement_identity(blockquote, wrapper)
         header = Nokogiri::XML::Node.new(fold ? "summary" : "header", blockquote.document)
-        header["class"] = "obsidian-callout__title callout__title"
+        header["class"] = "website-callout__title callout__title"
         header.content = title
         wrapper.add_child(header)
         content = Nokogiri::XML::Node.new("div", blockquote.document)
-        content["class"] = "obsidian-callout__content callout__content"
+        content["class"] = "website-callout__content callout__content"
         blockquote.children.to_a.each { |child| content.add_child(child.unlink) }
         content.css("p").first.remove if content.css("p").first&.text.to_s.strip.empty?
         first_paragraph = content.css("p").first
@@ -1023,7 +1121,7 @@ module JekyllObsidian
         code = pre.at_css("code")
         code["class"] = [code["class"], "language-#{language}"].compact.join(" ") if code
         pre["lang"] = language
-        pre["data-obsidian-mermaid"] = "true" if language == "mermaid"
+        pre["data-website-mermaid"] = "true" if language == "mermaid"
       end
     end
 
@@ -1101,11 +1199,11 @@ module JekyllObsidian
         return transclusion_limit_fragment(fragment.document, "expanded HTML exceeds #{MAX_TRANSCLUSION_BYTES} bytes")
       end
 
-      fragment.css("obsidian-embed").to_a.each do |placeholder|
+      fragment.css("website-embed").to_a.each do |placeholder|
         target_id = placeholder["data-source-id"]
         if stack.include?(target_id) || target_id == note_id
           replacement = Nokogiri::XML::Node.new("span", fragment.document)
-          replacement["class"] = "obsidian-embed obsidian-embed--cycle"
+          replacement["class"] = "website-embed website-embed--cycle"
           replacement.content = "Embed cycle"
           transfer_replacement_identity(placeholder, replacement)
           placeholder.replace(replacement)
@@ -1130,16 +1228,16 @@ module JekyllObsidian
         rewrite_fragment_ids(selected, prefix)
 
         wrapper = Nokogiri::XML::Node.new("section", fragment.document)
-        wrapper["class"] = "obsidian-transclusion obsidian-embed"
+        wrapper["class"] = "website-transclusion website-embed"
         wrapper["data-source-id"] = target_id
         transfer_replacement_identity(placeholder, wrapper)
         source = Nokogiri::XML::Node.new("a", fragment.document)
-        source["class"] = "obsidian-transclusion__source obsidian-embed__source"
+        source["class"] = "website-transclusion__source website-embed__source"
         source["href"] = placeholder["data-href"]
         source.content = "From #{@notes.fetch(target_id).title}"
         wrapper.add_child(source)
         embedded_content = Nokogiri::XML::Node.new("div", fragment.document)
-        embedded_content["class"] = "obsidian-transclusion__content obsidian-embed__content"
+        embedded_content["class"] = "website-transclusion__content website-embed__content"
         selected.children.to_a.each { |child| embedded_content.add_child(child.unlink) }
         wrapper.add_child(embedded_content)
         placeholder.replace(wrapper)
@@ -1187,7 +1285,7 @@ module JekyllObsidian
 
     def transclusion_limit_node(document, message)
       node = Nokogiri::XML::Node.new("span", document)
-      node["class"] = "obsidian-embed obsidian-embed--limited"
+      node["class"] = "website-embed website-embed--limited"
       node["role"] = "status"
       node.content = message
       node
@@ -1221,7 +1319,7 @@ module JekyllObsidian
       # digits, while HTML fragment IDs do not.
       target = fragment.css("[id]").find { |candidate| candidate["id"] == identifier }
       return empty_embed_fragment(fragment, raw_fragment) unless target
-      if target["class"].to_s.split.include?("obsidian-block-anchor") && target.next_element
+      if target["class"].to_s.split.include?("website-block-anchor") && target.next_element
         return fragment_for_node(target.next_element)
       end
       return fragment_for_node(target) unless target.name.match?(/\Ah[1-6]\z/)
@@ -1255,7 +1353,7 @@ module JekyllObsidian
     def empty_embed_fragment(fragment, label)
       selected = Nokogiri::HTML5.fragment("")
       span = Nokogiri::XML::Node.new("span", fragment.document)
-      span["class"] = "obsidian-embed obsidian-embed--unresolved"
+      span["class"] = "website-embed website-embed--unresolved"
       span.content = "Missing fragment: #{label}"
       selected.add_child(span)
       selected
@@ -1325,11 +1423,11 @@ module JekyllObsidian
       theme_output.artifacts.filter_map do |artifact|
         case artifact
         when "catalog"
-          json_file("/assets/obsidian/catalog.v1.json", catalog_payload(model))
+          json_file("/assets/website/catalog.v1.json", catalog_payload(model))
         when "graph"
-          json_file("/assets/obsidian/graph.v1.json", graph_payload(model))
+          json_file("/assets/website/graph.v1.json", graph_payload(model))
         when "search"
-          json_file("/assets/obsidian/search.v1.json", search_payload(model))
+          json_file("/assets/website/search.v1.json", search_payload(model))
         when "sitemap"
           GeneratedFile.new(route: "/sitemap.xml", content: sitemap_xml(pages), media_type: "application/xml")
         when "feed"
@@ -1484,7 +1582,7 @@ module JekyllObsidian
       namespace_keys = reserved_namespaces.map do |namespace|
         @url_builder.collision_key(namespace).delete_suffix("/")
       end
-      pages.select { |page| page.data.dig("obsidian", "kind") == "note" }.each do |page|
+      pages.select { |page| page.data.dig("website", "kind") == "note" }.each do |page|
         page_key = @url_builder.collision_key(page.route).delete_suffix("/")
         next unless namespace_keys.any? { |namespace| page_key == namespace || page_key.start_with?("#{namespace}/") }
 
@@ -1661,7 +1759,7 @@ module JekyllObsidian
 
     def visible_text(fragment)
       copy = fragment.dup
-      copy.css("script, style, template, obsidian-embed, .obsidian-transclusion__source").remove
+      copy.css("script, style, template, website-embed, .website-transclusion__source").remove
       copy.text.gsub(/\s+/, " ").strip
     end
 
@@ -1710,14 +1808,14 @@ module JekyllObsidian
 
     def download_card(document, path, href, media_type)
       node = Nokogiri::XML::Node.new("a", document)
-      node["class"] = "obsidian-download-card attachment-card"
+      node["class"] = "website-download-card attachment-card"
       node["href"] = href
       node["download"] = ""
       title = Nokogiri::XML::Node.new("span", document)
-      title["class"] = "obsidian-download-card__title attachment-card__title"
+      title["class"] = "website-download-card__title attachment-card__title"
       title.content = File.basename(path)
       meta = Nokogiri::XML::Node.new("span", document)
-      meta["class"] = "obsidian-download-card__meta attachment-card__type"
+      meta["class"] = "website-download-card__meta attachment-card__type"
       meta.content = media_type.to_s.empty? ? "Download" : media_type.to_s
       node.add_child(title)
       node.add_child(meta)

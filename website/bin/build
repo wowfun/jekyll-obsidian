@@ -231,7 +231,7 @@ yaml_string() {
   printf '\ndestination: '
   yaml_string "$staging_destination"
   if [ -n "$source_override" ] || [ -n "$theme" ]; then
-    printf '\nobsidian:'
+    printf '\nwebsite:'
     if [ -n "$source_override" ]; then
       printf '\n  source: '
       yaml_string "$source_override"

@@ -3,15 +3,15 @@
 require "test_helper"
 
 class ThemeContractTest < Minitest::Test
-  def test_default_theme_is_digital_garden_and_unknown_themes_fail_closed
+  def test_default_theme_is_docs_and_unknown_themes_fail_closed
     home = note("index.md", "---\npublish: true\nupdated: 2026-07-30\n---\n# Home")
 
     default_result = compile(home)
     assert default_result.success?, default_result.diagnostics.map(&:message).join("\n")
-    assert_equal "digital-garden", default_result.theme
-    assert_equal "obsidian-digital-garden", page(default_result, "/").data.fetch("layout")
-    assert_equal "digital-garden", page(default_result, "/").data.dig("obsidian", "theme")
-    assert_equal "https://github.com/example/garden", default_result.site_data.fetch("obsidian_repository_url")
+    assert_equal "docs", default_result.theme
+    assert_equal "website-docs", page(default_result, "/").data.fetch("layout")
+    assert_equal "docs", page(default_result, "/").data.dig("website", "theme")
+    assert_equal "https://github.com/example/garden", default_result.site_data.fetch("website_repository_url")
 
     invalid_result = compile(home, theme: "magazine")
     refute invalid_result.success?
@@ -25,7 +25,7 @@ class ThemeContractTest < Minitest::Test
     )
 
     assert result.success?, result.diagnostics.map(&:message).join("\n")
-    refute result.site_data.key?("obsidian_repository_url")
+    refute result.site_data.key?("website_repository_url")
   end
 
   def test_public_root_index_is_required_in_development_too
@@ -71,14 +71,14 @@ class ThemeContractTest < Minitest::Test
     )
 
     assert result.success?, result.diagnostics.map(&:message).join("\n")
-    assert_equal "page", page(result, "/").data.dig("obsidian", "content_type")
-    assert_equal "post", page(result, "/blog/from-folder/").data.dig("obsidian", "content_type")
-    assert_equal "doc", page(result, "/blog/explicit-doc/").data.dig("obsidian", "content_type")
-    assert_equal "page", page(result, "/misc/").data.dig("obsidian", "content_type")
+    assert_equal "page", page(result, "/").data.dig("website", "content_type")
+    assert_equal "post", page(result, "/blog/from-folder/").data.dig("website", "content_type")
+    assert_equal "doc", page(result, "/blog/explicit-doc/").data.dig("website", "content_type")
+    assert_equal "page", page(result, "/misc/").data.dig("website", "content_type")
 
-    assert_equal "2026-07-01T00:00:00Z", page(result, "/blog/from-folder/").data.dig("obsidian", "published_at")
-    assert_nil page(result, "/blog/explicit-doc/").data.dig("obsidian", "published_at")
-    assert_nil page(result, "/misc/").data.dig("obsidian", "published_at")
+    assert_equal "2026-07-01T00:00:00Z", page(result, "/blog/from-folder/").data.dig("website", "published_at")
+    assert_nil page(result, "/blog/explicit-doc/").data.dig("website", "published_at")
+    assert_nil page(result, "/misc/").data.dig("website", "published_at")
   end
 
   def test_post_published_at_precedence_and_missing_date_mode_behavior
@@ -91,9 +91,9 @@ class ThemeContractTest < Minitest::Test
     result = compile(*entries, theme: "blog")
 
     assert result.success?, result.diagnostics.map(&:message).join("\n")
-    assert_equal "2026-07-03T00:00:00Z", page(result, "/posts/dated/").data.dig("obsidian", "published_at")
-    assert_equal "2026-07-04T00:00:00Z", page(result, "/posts/created/").data.dig("obsidian", "published_at")
-    assert_equal "2026-07-05T12:00:00Z", page(result, "/posts/git/").data.dig("obsidian", "published_at")
+    assert_equal "2026-07-03T00:00:00Z", page(result, "/posts/dated/").data.dig("website", "published_at")
+    assert_equal "2026-07-04T00:00:00Z", page(result, "/posts/created/").data.dig("website", "published_at")
+    assert_equal "2026-07-05T12:00:00Z", page(result, "/posts/git/").data.dig("website", "published_at")
     feed = result.generated_files.find { |file| file.route == "/feed.xml" }
     refute_nil feed
     assert_includes feed.content, "<published>2026-07-03T00:00:00Z</published>"
@@ -115,22 +115,22 @@ class ThemeContractTest < Minitest::Test
       note("docs/guide.md", "---\npublish: true\ncontent_type: doc\nupdated: 2026-07-30\n---\n# Guide")
     ]
 
-    garden = compile(*entries)
+    garden = compile(*entries, theme: "digital-garden")
     assert_equal %w[/ /404.html /blog/post/ /docs/guide/ /graph/ /notes/ /tags/], garden.pages.map(&:route)
-    assert_equal %w[/assets/obsidian/catalog.v1.json /assets/obsidian/graph.v1.json /assets/obsidian/search.v1.json /feed.xml /sitemap.xml], garden.generated_files.map(&:route)
+    assert_equal %w[/assets/website/catalog.v1.json /assets/website/graph.v1.json /assets/website/search.v1.json /feed.xml /sitemap.xml], garden.generated_files.map(&:route)
 
     blog = compile(*entries, theme: "blog")
     assert blog.success?, blog.diagnostics.map(&:message).join("\n")
     assert_equal %w[/ /404.html /archive/ /blog/post/ /docs/guide/ /tags/], blog.pages.map(&:route)
-    assert_equal %w[/assets/obsidian/search.v1.json /feed.xml /sitemap.xml], blog.generated_files.map(&:route)
-    assert_equal "obsidian-blog", page(blog, "/archive/").data.fetch("layout")
+    assert_equal %w[/assets/website/search.v1.json /feed.xml /sitemap.xml], blog.generated_files.map(&:route)
+    assert_equal "website-blog", page(blog, "/archive/").data.fetch("layout")
 
     docs = compile(*entries, theme: "docs")
     assert docs.success?, docs.diagnostics.map(&:message).join("\n")
     assert_equal %w[/ /404.html /blog/post/ /docs/guide/], docs.pages.map(&:route)
-    assert_equal %w[/assets/obsidian/docs-navigation.html /assets/obsidian/search.v1.json /sitemap.xml], docs.generated_files.map(&:route)
-    assert_equal "obsidian-docs", page(docs, "/").data.fetch("layout")
-    assert_equal "/docs/guide/", page(docs, "/").data.dig("obsidian", "theme_data", "docs_home_url")
+    assert_equal %w[/assets/website/docs-navigation.html /assets/website/search.v1.json /sitemap.xml], docs.generated_files.map(&:route)
+    assert_equal "website-docs", page(docs, "/").data.fetch("layout")
+    assert_equal "/docs/guide/", page(docs, "/").data.dig("website", "theme_data", "docs_home_url")
 
     stripped = compile(*entries, theme: "docs", features: { "search" => false, "graph" => true })
     assert_equal false, stripped.features.fetch("search")
@@ -150,19 +150,19 @@ class ThemeContractTest < Minitest::Test
     )
 
     assert result.success?, result.diagnostics.map(&:message).join("\n")
-    recent = page(result, "/").data.dig("obsidian", "theme_data", "recent_posts")
+    recent = page(result, "/").data.dig("website", "theme_data", "recent_posts")
     assert_equal %w[blog/newer.md blog/older.md], recent.map { |item| item.fetch("id") }
 
-    older = page(result, "/blog/older/").data.dig("obsidian", "theme_data")
+    older = page(result, "/blog/older/").data.dig("website", "theme_data")
     assert_nil older.fetch("previous")
     assert_equal "blog/newer.md", older.fetch("next").fetch("id")
-    newer = page(result, "/blog/newer/").data.dig("obsidian", "theme_data")
+    newer = page(result, "/blog/newer/").data.dig("website", "theme_data")
     assert_equal "blog/older.md", newer.fetch("previous").fetch("id")
     assert_nil newer.fetch("next")
 
     archive = page(result, "/archive/")
-    assert_equal %w[2026], archive.data.dig("obsidian", "theme_data", "archive_groups").map { |group| group.fetch("label") }
-    tag_names = page(result, "/tags/").data.dig("obsidian", "theme_data", "tag_groups")
+    assert_equal %w[2026], archive.data.dig("website", "theme_data", "archive_groups").map { |group| group.fetch("label") }
+    tag_names = page(result, "/tags/").data.dig("website", "theme_data", "tag_groups")
       .map { |group| group.fetch("name") }
     refute_includes tag_names, "private-page-tag"
     feed = result.generated_files.find { |file| file.route == "/feed.xml" }.content
@@ -183,10 +183,10 @@ class ThemeContractTest < Minitest::Test
     result = compile(*entries.reverse, theme: "blog", environment: "development")
 
     assert result.success?, result.diagnostics.map(&:message).join("\n")
-    recent = page(result, "/").data.dig("obsidian", "theme_data", "recent_posts")
+    recent = page(result, "/").data.dig("website", "theme_data", "recent_posts")
     assert_equal %w[blog/zulu.md blog/alpha.md blog/undated.md], recent.map { |post| post.fetch("id") }
 
-    archive = page(result, "/archive/").data.dig("obsidian", "theme_data", "archive_groups")
+    archive = page(result, "/archive/").data.dig("website", "theme_data", "archive_groups")
     assert_equal %w[2026 Undated], archive.map { |group| group.fetch("label") }
     assert_equal %w[blog/zulu.md blog/alpha.md], archive.first.fetch("posts").map { |post| post.fetch("id") }
     assert_equal ["blog/undated.md"], archive.last.fetch("posts").map { |post| post.fetch("id") }
@@ -203,7 +203,7 @@ class ThemeContractTest < Minitest::Test
 
     assert_equal first, second
     assert_raises(FrozenError) do
-      page(first, "/").data.dig("obsidian", "theme_data", "recent_posts") << { "id" => "mutated.md" }
+      page(first, "/").data.dig("website", "theme_data", "recent_posts") << { "id" => "mutated.md" }
     end
     assert_raises(FrozenError) { first.relations.first.source_id.replace("mutated.md") }
   end
@@ -220,17 +220,17 @@ class ThemeContractTest < Minitest::Test
     )
 
     assert result.success?, result.diagnostics.map(&:message).join("\n")
-    tree = page(result, "/").data.dig("obsidian", "theme_data", "docs_tree")
+    tree = page(result, "/").data.dig("website", "theme_data", "docs_tree")
     assert_equal ["docs/index.md"], tree.map { |node| node.fetch("id") }
     assert_equal %w[docs/install.md docs/reference.md], tree.first.fetch("children").map { |node| node.fetch("id") }
-    assert_equal "/docs/", page(result, "/").data.dig("obsidian", "theme_data", "docs_home_url")
+    assert_equal "/docs/", page(result, "/").data.dig("website", "theme_data", "docs_home_url")
 
-    reference_data = page(result, "/docs/reference/").data.dig("obsidian", "theme_data")
+    reference_data = page(result, "/docs/reference/").data.dig("website", "theme_data")
     assert_equal %w[docs/index.md docs/reference.md], reference_data.fetch("breadcrumbs").map { |item| item.fetch("id") }
     assert_equal "docs/install.md", reference_data.fetch("previous").fetch("id")
     assert_nil reference_data.fetch("next")
 
-    manual_data = page(result, "/docs/").data.dig("obsidian", "theme_data")
+    manual_data = page(result, "/docs/").data.dig("website", "theme_data")
     assert_nil manual_data.fetch("previous")
     assert_equal "docs/install.md", manual_data.fetch("next").fetch("id")
   end
@@ -241,10 +241,10 @@ class ThemeContractTest < Minitest::Test
       note("docs/guides/install.md", "---\npublish: true\nupdated: 2026-07-30\n---\n# Install"),
       theme: "docs"
     )
-    tree = page(missing, "/").data.dig("obsidian", "theme_data", "docs_tree")
+    tree = page(missing, "/").data.dig("website", "theme_data", "docs_tree")
     assert_nil tree.first.fetch("url")
     assert_nil tree.first.fetch("children").first.fetch("url")
-    assert_equal "/docs/guides/install/", page(missing, "/").data.dig("obsidian", "theme_data", "docs_home_url")
+    assert_equal "/docs/guides/install/", page(missing, "/").data.dig("website", "theme_data", "docs_home_url")
 
     hidden = compile(
       note("index.md", "---\npublish: true\nupdated: 2026-07-30\n---\n# Home"),
@@ -252,14 +252,14 @@ class ThemeContractTest < Minitest::Test
       note("docs/child.md", "---\npublish: true\nupdated: 2026-07-30\n---\n# Child"),
       theme: "docs"
     )
-    hidden_root = page(hidden, "/").data.dig("obsidian", "theme_data", "docs_tree").first
+    hidden_root = page(hidden, "/").data.dig("website", "theme_data", "docs_tree").first
     assert_equal "docs/index.md", hidden_root.fetch("id")
     assert_nil hidden_root.fetch("url")
     assert_equal ["docs/child.md"], hidden_root.fetch("children").map { |node| node.fetch("id") }
-    assert_equal "/docs/child/", page(hidden, "/").data.dig("obsidian", "theme_data", "docs_home_url")
+    assert_equal "/docs/child/", page(hidden, "/").data.dig("website", "theme_data", "docs_home_url")
 
     no_docs = compile(note("index.md", "---\npublish: true\nupdated: 2026-07-30\n---\n# Home"), theme: "docs")
-    assert_nil page(no_docs, "/").data.dig("obsidian", "theme_data", "docs_home_url")
+    assert_nil page(no_docs, "/").data.dig("website", "theme_data", "docs_home_url")
   end
 
   def test_theme_content_and_feature_configuration_is_fail_closed
@@ -324,9 +324,9 @@ class ThemeContractTest < Minitest::Test
     assert_equal true, result.features.fetch("math")
     assert_equal true, result.features.fetch("mermaid")
     html = result.pages.map(&:content).join("\n")
-    assert_includes html, "obsidian-link"
-    assert_includes html, "obsidian-transclusion"
-    assert_includes html, "obsidian-callout"
+    assert_includes html, "website-link"
+    assert_includes html, "website-transclusion"
+    assert_includes html, "website-callout"
     refute_match(/(?:class|data-[a-z-]+)=["'][^"']*garden-/, html)
   end
 
@@ -370,7 +370,7 @@ class ThemeContractTest < Minitest::Test
     )
 
     assert result.success?, result.diagnostics.map(&:message).join("\n")
-    branch = page(result, "/docs/a/one/").data.dig("obsidian", "theme_data", "docs_tree")
+    branch = page(result, "/docs/a/one/").data.dig("website", "theme_data", "docs_tree")
     ids = []
     collect_ids = lambda do |nodes|
       nodes.each do |node|
@@ -381,7 +381,7 @@ class ThemeContractTest < Minitest::Test
     collect_ids.call(branch)
     assert_includes ids, "docs/a/one.md"
     refute_includes ids, "docs/b/two.md"
-    shared = result.generated_files.select { |file| file.route == "/assets/obsidian/docs-navigation.html" }
+    shared = result.generated_files.select { |file| file.route == "/assets/website/docs-navigation.html" }
     assert_equal 1, shared.length
     assert_includes shared.first.content, "One"
     assert_includes shared.first.content, "Two"
@@ -393,11 +393,11 @@ class ThemeContractTest < Minitest::Test
       entries << note("notes/#{index}.md", "---\npublish: true\nupdated: 2026-07-30\n---\n# Note #{index}")
     end
 
-    result = compile(*entries)
+    result = compile(*entries, theme: "digital-garden")
     assert result.success?, result.diagnostics.map(&:message).join("\n")
-    assert_equal false, result.site_data.fetch("obsidian_graph_interactive")
-    refute result.generated_files.any? { |file| file.route == "/assets/obsidian/graph.v1.json" }
-    graph_data = page(result, "/graph/").data.dig("obsidian", "theme_data")
+    assert_equal false, result.site_data.fetch("website_graph_interactive")
+    refute result.generated_files.any? { |file| file.route == "/assets/website/graph.v1.json" }
+    graph_data = page(result, "/graph/").data.dig("website", "theme_data")
     assert_equal false, graph_data.fetch("graph_interactive")
     assert_equal 251, graph_data.fetch("graph_notes").length
   end
@@ -414,7 +414,7 @@ class ThemeContractTest < Minitest::Test
     refute feed_enabled.success?
     assert feed_enabled.diagnostics.any? { |item| item.code == "route_collision" }
 
-    %w[404.html sitemap.xml assets/obsidian/private assets/vault/private].each do |path|
+    %w[404.html sitemap.xml assets/website/private assets/vault/private].each do |path|
       result = compile(home, note("#{path}.md", "---\npublish: true\nupdated: 2026-07-30\n---\n# Reserved"), theme: "docs")
       refute result.success?, "expected /#{path}/ to remain reserved"
       assert result.diagnostics.any? { |item| item.code == "route_collision" }

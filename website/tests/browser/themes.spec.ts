@@ -3,6 +3,7 @@ import AxeBuilder from "@axe-core/playwright";
 
 const site = (theme: "blog" | "docs" | "digital-garden", route = "/") =>
   `/__site__/${theme}${route}`;
+const localizedDocs = (route = "/") => `/__site__/docs-i18n${route}`;
 
 for (const theme of ["blog", "docs", "digital-garden"] as const) {
   test(`${theme} exposes its own accessible presentation`, async ({ page }) => {
@@ -32,6 +33,71 @@ test("docs exposes its handbook navigation and reading sequence", async ({ page 
   await expect(page.getByRole("navigation", { name: "Documentation sequence" })).toContainText(
     "Syntax"
   );
+});
+
+test("docs language switcher uses real localized routes and restores focus", async ({ page }) => {
+  await page.goto(localizedDocs("/zh-CN/docs/Getting%20Started/"));
+  await expect(page.locator("html")).toHaveAttribute("lang", "zh-CN");
+  await expect(page.locator("h1").filter({ hasText: "快速开始" })).toBeVisible();
+  const switcher = page.locator("[data-language-switcher]");
+  await switcher.locator("summary").click();
+  const currentLanguage = switcher.getByRole("link", { name: "简体中文" });
+  await expect(currentLanguage).toHaveAttribute("aria-current", "page");
+  expect(await currentLanguage.evaluate((element) => getComputedStyle(element).backgroundColor)).not.toBe("rgba(0, 0, 0, 0)");
+  await expect(switcher.getByRole("link", { name: "English" })).toHaveAttribute(
+    "href",
+    "/__site__/docs-i18n/docs/Getting%20Started/"
+  );
+  await switcher.getByRole("link", { name: "English" }).focus();
+  await page.keyboard.press("Escape");
+  await expect(switcher).not.toHaveAttribute("open", "");
+  await expect(switcher.locator("summary")).toBeFocused();
+});
+
+test("docs language controls remain usable at 320px in RTL flow", async ({ page }) => {
+  await page.setViewportSize({ width: 320, height: 760 });
+  await page.goto(localizedDocs("/zh-CN/docs/Getting%20Started/"));
+  await page.locator("html").evaluate((element) => element.setAttribute("dir", "rtl"));
+
+  const switcher = page.locator("[data-language-switcher]");
+  await expect(switcher.locator("summary")).toBeVisible();
+  await switcher.locator("summary").click();
+  await expect(switcher.getByRole("link", { name: "English" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "搜索", exact: true })).toBeVisible();
+  expect(await page.locator(".site-header__inner").evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
+});
+
+test("docs fallback pages keep locale URLs while opting out of duplicate SEO", async ({ page }) => {
+  await page.goto(localizedDocs("/zh-CN/docs/Customization/"));
+  await expect(page.locator("html")).toHaveAttribute("lang", "zh-CN");
+  await expect(page.locator(".translation-fallback")).toContainText("本页尚无译文");
+  await expect(page.locator(".note-content")).toHaveAttribute("lang", "en");
+  await expect(page.locator(".note-content")).toHaveAttribute("dir", "ltr");
+  await expect(page.locator(".note-header")).toHaveAttribute("lang", "en");
+  await expect(page.locator(".note-header")).toHaveAttribute("dir", "ltr");
+  await expect(page.locator('meta[name="robots"]')).toHaveAttribute("content", "noindex");
+  await expect(page.locator('link[rel="canonical"]')).toHaveAttribute(
+    "href",
+    "http://127.0.0.1:4173/__site__/docs-i18n/docs/Customization/"
+  );
+  await expect(page.locator('link[rel="alternate"][hreflang]')).toHaveCount(0);
+});
+
+test("localized Mermaid labels survive a color scheme redraw", async ({ page }) => {
+  await page.goto(localizedDocs("/zh-CN/docs/Syntax/"));
+  const diagram = page.locator(".mermaid-diagram svg");
+  await expect(diagram).toHaveAttribute("aria-label", "图表");
+  await page.locator("[data-color-scheme-toggle]").click();
+  await expect(diagram).toHaveAttribute("aria-label", "图表");
+});
+
+test("localized docs search loads its locale index and finds CJK content", async ({ page }) => {
+  await page.goto(localizedDocs("/zh-CN/"));
+  await page.keyboard.press("ControlOrMeta+k");
+  const dialog = page.locator('dialog[data-dialog="search"]');
+  await dialog.locator("input").fill("快速");
+  await expect(dialog.getByRole("link", { name: "快速开始" })).toBeVisible();
+  await expect(dialog.locator("[data-search-status]")).toHaveText(/找到 \d+ 篇笔记。/);
 });
 
 test("docs breadcrumb marks only its final non-link item as current", async ({ page }) => {
@@ -74,7 +140,7 @@ test("search loads on demand and finds CJK text", async ({ page }) => {
 
 test("digital garden previews use catalog text without active content", async ({ page }) => {
   await page.goto(site("digital-garden"));
-  await page.locator(".obsidian-link[data-note-id='docs/中文示例.md']").focus();
+  await page.locator(".website-link[data-note-id='docs/中文示例.md']").focus();
   const preview = page.locator("[data-note-preview]");
   await expect(preview).toContainText("CJK Showcase");
   await expect(preview).toContainText("Mixed Chinese, Japanese, Latin");
@@ -86,14 +152,51 @@ test("color scheme state uses the neutral public contract", async ({ page }) => 
   await page.locator("[data-color-scheme-toggle]").click();
   await expect(page.locator("html")).toHaveAttribute("data-color-scheme", /light|dark/);
   expect(
-    await page.evaluate(() => localStorage.getItem("jekyll-obsidian:color-scheme"))
+    await page.evaluate(() => localStorage.getItem("website:color-scheme"))
   ).toMatch(/light|dark/);
   expect(await page.evaluate(() => localStorage.getItem("garden-theme"))).toBeNull();
 });
 
+test("blog comments load the managed Giscus client without breaking narrow layouts", async ({ page }) => {
+  let requestedClient = false;
+  await page.addInitScript(() => localStorage.setItem("website:color-scheme", "dark"));
+  await page.route("https://giscus.app/client.js", async (route) => {
+    requestedClient = true;
+    await route.fulfill({ contentType: "text/javascript", body: "" });
+  });
+  await page.setViewportSize({ width: 320, height: 760 });
+  await page.goto("/__fixture__/comments/");
+
+  const comments = page.getByRole("region", { name: "Comments" });
+  await expect(comments).toBeVisible();
+  await expect.poll(() => requestedClient).toBe(true);
+  const client = comments.locator("script[data-website-comments-client]");
+  await expect(client).toHaveAttribute("src", "https://giscus.app/client.js");
+  await expect(client).toHaveAttribute("data-mapping", "specific");
+  await expect(client).toHaveAttribute("data-strict", "1");
+  await expect(client).toHaveAttribute("data-loading", "lazy");
+  await expect(client).toHaveAttribute("data-theme", "dark");
+  await expect(comments.getByRole("link", { name: "Open discussions on GitHub" })).toBeVisible();
+  expect(await comments.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
+
+  const results = await new AxeBuilder({ page }).include(".website-comments").analyze();
+  expect(results.violations).toEqual([]);
+});
+
+test("blog comments remain usable when the Giscus client is unavailable", async ({ page }) => {
+  await page.route("https://giscus.app/client.js", (route) => route.abort());
+  await page.goto("/__fixture__/comments/");
+
+  const comments = page.getByRole("region", { name: "Comments" });
+  await expect(comments).toHaveAttribute("data-website-comments-state", "unavailable");
+  await expect(comments.getByText("Comments could not be loaded.")).toBeVisible();
+  await expect(comments.getByRole("link", { name: "Open discussions on GitHub" })).toBeVisible();
+  await expect(page.locator("main")).toBeVisible();
+});
+
 test("every theme follows dark preference and supports an explicit light override", async ({ page }) => {
   await page.emulateMedia({ colorScheme: "dark" });
-  await page.addInitScript(() => localStorage.removeItem("jekyll-obsidian:color-scheme"));
+  await page.addInitScript(() => localStorage.removeItem("website:color-scheme"));
   for (const theme of ["blog", "docs", "digital-garden"] as const) {
     await page.goto(site(theme));
     await expect(page.locator("html")).toHaveAttribute("data-color-scheme", "dark");
@@ -174,11 +277,16 @@ test("digital garden home follows authored content with server-rendered ways to 
 
 test("frontend identifiers are neutral outside the garden visual shell", async ({ page }) => {
   await page.goto(site("digital-garden", "/docs/Syntax/"));
-  expect(await page.locator("meta[name^='obsidian:']").count()).toBeGreaterThan(0);
+  expect(await page.locator("meta[name^='website:']").count()).toBeGreaterThan(0);
+  await expect(page.locator("meta[name^='obsidian:'], [class*='obsidian-'], [src^='/assets/obsidian/'], [href^='/assets/obsidian/']"))
+    .toHaveCount(0);
+  expect(await page.evaluate(() => Array.from(document.querySelectorAll("*")).flatMap((element) =>
+    Array.from(element.attributes, (attribute) => attribute.name)
+  ).filter((name) => name.startsWith("data-obsidian-") || name === "data-obsidian"))).toEqual([]);
   await expect(page.locator("[data-garden-dialog], .garden-dialog, .garden-link, .garden-embed"))
     .toHaveCount(0);
-  await expect(page.locator(".obsidian-link").first()).toBeVisible();
-  await expect(page.locator(".obsidian-embed").first()).toBeVisible();
+  await expect(page.locator(".website-link").first()).toBeVisible();
+  await expect(page.locator(".website-embed").first()).toBeVisible();
 });
 
 for (const fixture of [
@@ -240,6 +348,23 @@ test.describe("without JavaScript", () => {
       await expect(page.locator(".mobile-toolbar")).toBeHidden();
     });
   }
+
+  test("docs language links remain usable", async ({ page }) => {
+    await page.goto(localizedDocs("/zh-CN/docs/Getting%20Started/"));
+    const switcher = page.locator("[data-language-switcher]");
+    await switcher.locator("summary").click();
+    await switcher.getByRole("link", { name: "English" }).click();
+    await expect(page).toHaveURL(/\/__site__\/docs-i18n\/docs\/Getting%20Started\/$/);
+    await expect(page.locator("html")).toHaveAttribute("lang", "en");
+  });
+
+  test("blog comments retain the GitHub Discussions fallback", async ({ page }) => {
+    await page.goto("/__fixture__/comments/");
+    const comments = page.getByRole("region", { name: "Comments" });
+    await expect(comments).toBeVisible();
+    await expect(comments.locator("script[data-website-comments-client]")).toHaveCount(0);
+    await expect(comments.getByRole("link", { name: "Open discussions on GitHub" })).toBeVisible();
+  });
 
   test("non-default context features have a mobile server-rendered fallback", async ({ page }, testInfo) => {
     test.skip(testInfo.project.name !== "mobile-chromium", "mobile fallback assertion");

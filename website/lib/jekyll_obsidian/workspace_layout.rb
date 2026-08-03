@@ -61,18 +61,18 @@ module JekyllObsidian
     end
 
     def normalize_source(raw)
-      raise Invalid, "obsidian.source must be a repository-relative directory" unless raw.is_a?(String)
+      raise Invalid, "website.source must be a repository-relative directory" unless raw.is_a?(String)
 
       source = raw.unicode_normalize(:nfc).tr("\\", "/")
       path = Pathname.new(source)
       invalid = source.empty? || source == "." || source.include?("\0") || source.match?(/\A[A-Za-z]:\//) ||
         path.absolute? || path.cleanpath.to_s != source ||
         source.split("/").any? { |part| part.empty? || part == "." || part == ".." }
-      raise Invalid, "obsidian.source must be a normalized repository-relative directory" if invalid
+      raise Invalid, "website.source must be a normalized repository-relative directory" if invalid
 
       source
     rescue ArgumentError => exception
-      raise Invalid, "invalid obsidian.source: #{exception.message}"
+      raise Invalid, "invalid website.source: #{exception.message}"
     end
 
     def bundled_source
@@ -81,7 +81,7 @@ module JekyllObsidian
         .to_s
         .tr(File::SEPARATOR, "/")
     rescue ArgumentError => exception
-      raise Invalid, "cannot resolve bundled obsidian.source: #{exception.message}"
+      raise Invalid, "cannot resolve bundled website.source: #{exception.message}"
     end
 
     def validate_site_root!
@@ -94,23 +94,23 @@ module JekyllObsidian
 
     def validate_source_root!
       unless strict_descendant?(@source_root, @workspace_root)
-        raise Invalid, "obsidian.source escapes the repository"
+        raise Invalid, "website.source escapes the repository"
       end
       unless File.directory?(@source_root)
-        raise Invalid, "obsidian.source does not exist: #{@source}"
+        raise Invalid, "website.source does not exist: #{@source}"
       end
 
-      assert_no_symlink_components!(@workspace_root, @source_root, "obsidian.source", missing: false)
+      assert_no_symlink_components!(@workspace_root, @source_root, "website.source", missing: false)
       real_source = File.realpath(@source_root)
       unless real_source == @source_root
-        raise Invalid, "obsidian.source cannot contain symlink path components"
+        raise Invalid, "website.source cannot contain symlink path components"
       end
       bundled_source_root = File.join(@site_root, BUNDLED_SOURCE_BASENAME)
       if paths_overlap?(@source_root, @site_root) && @source_root != bundled_source_root
-        raise Invalid, "obsidian.source must not overlap the Jekyll source"
+        raise Invalid, "website.source must not overlap the Jekyll source"
       end
     rescue SystemCallError => exception
-      raise Invalid, "invalid obsidian.source: #{exception.message}"
+      raise Invalid, "invalid website.source: #{exception.message}"
     end
 
     def validate_owned_path!(path, label)

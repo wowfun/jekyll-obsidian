@@ -23,7 +23,8 @@ export async function renderMermaid(): Promise<void> {
         const source = figure.querySelector<HTMLTemplateElement>("template[data-mermaid-source]")?.content.textContent;
         if (!source) continue;
         const pre = document.createElement("pre");
-        pre.dataset.obsidianMermaid = "true";
+        pre.dataset.websiteMermaid = "true";
+        pre.dataset.diagramLabel = figure.dataset.diagramLabel || "Diagram";
         const code = document.createElement("code");
         code.className = "language-mermaid";
         code.textContent = source;
@@ -61,7 +62,7 @@ export async function renderMermaid(): Promise<void> {
         : source.textContent ?? "";
       if (!code.trim()) return;
       try {
-        const id = `obsidian-mermaid-${index}`;
+        const id = `website-mermaid-${index}`;
         const rendered = await mermaid.render(id, code);
         const parsed = new DOMParser().parseFromString(rendered.svg, "image/svg+xml");
         if (parsed.querySelector("parsererror")) throw new Error("Invalid Mermaid SVG");
@@ -69,9 +70,11 @@ export async function renderMermaid(): Promise<void> {
         const figure = document.createElement("figure");
         figure.className = "mermaid-diagram";
         figure.dataset.mermaidRendered = "";
+        const diagramLabel = source.dataset.diagramLabel || "Diagram";
+        figure.dataset.diagramLabel = diagramLabel;
         const svg = document.importNode(parsed.documentElement, true);
         svg.setAttribute("role", "img");
-        svg.setAttribute("aria-label", source.dataset.diagramLabel || "Diagram");
+        svg.setAttribute("aria-label", diagramLabel);
         const sourceTemplate = document.createElement("template");
         sourceTemplate.dataset.mermaidSource = "";
         sourceTemplate.content.textContent = code;

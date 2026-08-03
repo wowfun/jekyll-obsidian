@@ -10,7 +10,7 @@ function isCjk(value: string): boolean {
  * individual code points and adjacent bigrams, so indexing and queries use the
  * same terms in every browser.
  */
-export function obsidianTokenizer(input: string): string[] {
+export function websiteTokenizer(input: string): string[] {
   const normalized = input.normalize("NFKC").toLocaleLowerCase("und");
   const output: string[] = [];
 
