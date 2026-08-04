@@ -70,14 +70,17 @@ messages:
   primary_navigation: 主导航
   home: 首页
   archive: 归档
+  interactive_graph: 交互式关系图
+  open_full_graph: 打开完整关系图
+  open_local_graph: 放大当前页面的局部关系图
+  full_graph: 完整关系图
+  local_graph: 局部关系图
+  close_full_graph: 关闭完整关系图
+  close_local_graph: 关闭局部关系图
+  isolated_graph: 此笔记暂时没有关联笔记。
   graph_loading: 正在载入关系图…
-  graph_loads_here: 交互式关系图将在此处载入。
-  graph_unavailable: 无法载入交互式关系图，请使用下方的笔记目录。
-  graph_too_large: 站点规模过大，不适合全局模拟；请浏览下方的局部关系。
-  graph_directory: 无障碍笔记目录
-  filter_notes: 筛选笔记
-  relation_one: 条关系
-  relation_many: 条关系
+  graph_unavailable: 无法载入交互式关系图，请使用下方的关联笔记列表。
+  graph_too_large: 完整关系图规模过大，无法交互渲染；请改用局部关系图或搜索。
   graph_summary: 共 {notes} 篇笔记、{relations} 条关系。
   graph_node_label: "{title}，{count} 条关系"
   graph_title: 笔记关系图

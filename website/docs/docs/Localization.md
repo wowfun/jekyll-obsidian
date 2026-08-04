@@ -110,7 +110,7 @@ _translations/zh-CN/guide/Start.md
 
 The site's `baseurl` still prefixes both forms. Locale tags are preserved as configured in public paths.
 
-Each locale receives its own instances of the active theme's navigation, breadcrumbs, previous and next links, tags, graph, relations, search index, feed, and system pages. Default-locale resources stay below `/assets/website/`; another locale uses `/assets/website/i18n/<locale>/`. This keeps navigation and search data from different languages separate.
+Each locale receives its own instances of the active theme's navigation, breadcrumbs, previous and next links, tags, note-local graph and relations, search index, feed, and system pages. Its complete graph is a locale-specific resource opened from note pages rather than a generated `/graph/` page. Default-locale resources stay below `/assets/website/`; another locale uses `/assets/website/i18n/<locale>/`. This keeps navigation, previews, search, and graph data from different languages separate.
 
 ## Link notes and share attachments
 

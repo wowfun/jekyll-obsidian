@@ -18,7 +18,7 @@ Visitors can read the public discussion in the page. Posting a comment or reacti
 
 ## Where comments appear
 
-Comments are available in every built-in theme, but only pages classified as `content_type: post` are eligible. Pages, documentation notes, archive pages, tags, graphs, and other generated pages never receive a comment widget.
+Comments are available in every built-in theme, but only pages classified as `content_type: post` are eligible. Pages, documentation notes, archive pages, tags, and other generated pages never receive a comment widget.
 
 The `website.comments` mapping must exist before comments can be enabled. If it is absent, comments are off for every theme. When the mapping exists and omits `enabled`, the theme decides the default:
 

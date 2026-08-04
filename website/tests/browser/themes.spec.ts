@@ -114,7 +114,7 @@ test("docs puts browse and outline into mobile sheets", async ({ page }, testInf
   await page.goto(site("docs", "/docs/Getting%20Started/"));
   await expect(page.locator(".docs-sidebar")).toBeHidden();
   await expect(page.locator(".docs-context")).toBeHidden();
-  await page.getByRole("button", { name: "On this page" }).tap();
+  await page.getByRole("button", { name: "Context" }).tap();
   const dialog = page.locator('dialog[data-dialog="context"]');
   await expect(dialog).toBeVisible();
   await expect(dialog.getByRole("link", { name: "Install the toolchain" })).toBeVisible();
@@ -144,7 +144,229 @@ test("digital garden previews use catalog text without active content", async ({
   const preview = page.locator("[data-note-preview]");
   await expect(preview).toContainText("CJK Showcase");
   await expect(preview).toContainText("Mixed Chinese, Japanese, Latin");
+  await expect(preview.locator(".note-preview__body")).toHaveAttribute("data-preview-body-ready", "true");
+  await expect(preview).toContainText("中文、日文和拉丁字母可以写在同一个知识库里");
   await expect(preview.locator("iframe, script")).toHaveCount(0);
+  const previewBox = await preview.boundingBox();
+  const viewport = page.viewportSize()!;
+  expect(previewBox!.x).toBeGreaterThanOrEqual(11);
+  expect(previewBox!.y).toBeGreaterThanOrEqual(11);
+  expect(previewBox!.x + previewBox!.width).toBeLessThanOrEqual(viewport.width - 11);
+  expect(previewBox!.y + previewBox!.height).toBeLessThanOrEqual(viewport.height - 11);
+});
+
+test("keyboard users can enter a preview body and continue to the next link", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "desktop-chromium", "desktop keyboard preview assertion");
+  await page.goto(site("docs"));
+  const customization = page.locator(".website-link[data-note-id='docs/Customization.md']").first();
+  await customization.evaluate((element) => element.scrollIntoView({ block: "center", behavior: "instant" as ScrollBehavior }));
+  await customization.focus();
+  const previewBody = page.locator("[data-note-preview] .note-preview__body");
+  await expect(previewBody).toHaveAttribute("data-preview-body-ready", "true");
+
+  await page.keyboard.press("Tab");
+  await expect(previewBody).toBeFocused();
+  await page.keyboard.press("Tab");
+  await expect(page.locator(".website-link[data-note-id='docs/Comments.md']").first()).toBeFocused();
+});
+
+test("every theme places the local graph first in note context", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "desktop-chromium", "desktop context rail assertion");
+  for (const theme of ["blog", "docs", "digital-garden"] as const) {
+    await page.goto(site(theme, "/docs/Getting%20Started/"));
+    const context = page.locator("[data-context-panel]");
+    await expect(context).toBeVisible();
+    await expect(context.locator(":scope > .local-graph")).toHaveCount(1);
+    await expect(context.locator(":scope > section").first()).toHaveClass(/local-graph/);
+    await expect(context.getByRole("button", { name: "Open full graph" })).toBeVisible();
+    await expect(context.getByRole("button", { name: "Expand local graph" })).toBeVisible();
+    await expect(context.locator("[data-graph-view]")).toHaveAttribute("data-graph-ready", "true");
+  }
+});
+
+test("graph buttons open cached full and expanded local dialogs", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "desktop-chromium", "desktop graph dialog assertion");
+  let graphRequests = 0;
+  page.on("request", (request) => {
+    if (new URL(request.url()).pathname.endsWith("/assets/website/graph.v1.json")) graphRequests += 1;
+  });
+  await page.goto(site("docs", "/docs/Getting%20Started/"));
+  const context = page.locator("[data-context-panel]");
+
+  await context.getByRole("button", { name: "Open full graph" }).click();
+  const full = page.locator('dialog[data-dialog="graph-global"]');
+  await expect(full).toBeVisible();
+  await expect(full.locator("[data-graph-dialog-view]")).toHaveAttribute("data-graph-ready", "true");
+  await full.getByRole("button", { name: "Close full graph" }).click();
+  await context.getByRole("button", { name: "Open full graph" }).click();
+  await expect(full.locator("[data-graph-dialog-view]")).toHaveAttribute("data-graph-ready", "true");
+  expect(graphRequests).toBe(1);
+  await page.keyboard.press("Escape");
+  await expect(full).toBeHidden();
+
+  await context.getByRole("button", { name: "Expand local graph" }).click();
+  const local = page.locator('dialog[data-dialog="graph-local"]');
+  await expect(local).toBeVisible();
+  await expect(local.locator(".graph-node")).not.toHaveCount(0);
+  await local.getByRole("button", { name: "Close local graph" }).click();
+  await expect(local.locator("[data-graph-dialog-view]")).toHaveAttribute("data-graph-disposed", "true");
+});
+
+test("oversized complete graphs use the bounded browser fallback", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "desktop-chromium", "desktop graph fallback assertion");
+  const nodes = Array.from({ length: 5_000 }, (_, index) => ({
+    id: `large-${index}`,
+    title: `Large ${index}`,
+    url: `/large-${index}/`,
+    degree: 0
+  }));
+  await page.route("**/assets/website/graph.v1.json", (route) => route.fulfill({
+    contentType: "application/json",
+    body: JSON.stringify({ schema_version: 1, nodes, edges: [] })
+  }));
+  await page.goto(site("docs", "/docs/Getting%20Started/"));
+  await page.locator("[data-context-panel]").getByRole("button", { name: "Open full graph" }).click();
+
+  const view = page.locator('dialog[data-dialog="graph-global"] [data-graph-dialog-view]');
+  await expect(view).toHaveAttribute("data-graph-ready", "fallback");
+  await expect(view.locator("[data-graph-status]")).toContainText("too large");
+  await expect(view.locator("[data-graph-canvas], .graph-node")).toHaveCount(0);
+});
+
+test("local graph zooms, pans, drags nodes without accidental navigation, and scales node area by degree", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "desktop-chromium", "desktop pointer graph assertion");
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.goto(site("digital-garden", "/docs/Getting%20Started/"));
+  const view = page.locator("[data-context-panel] [data-graph-view]");
+  const svg = view.locator("svg");
+  await expect(view).toHaveAttribute("data-graph-ready", "true");
+  const radiiByDegree = await view.evaluate((container) => {
+    const section = container.closest("[data-local-graph-section]")!;
+    const template = section.querySelector<HTMLTemplateElement>("template[data-local-graph-data]")!;
+    return [...template.content.querySelectorAll<HTMLElement>("[data-graph-node]")].map((source) => {
+      const rendered = container.querySelector<SVGGElement>(`.graph-node[data-node-id="${CSS.escape(source.dataset.nodeId || "")}"]`);
+      return [Number(source.dataset.nodeDegree), Number(rendered?.querySelector("circle")?.getAttribute("r"))] as const;
+    }).sort((left, right) => left[0] - right[0]);
+  });
+  for (let index = 1; index < radiiByDegree.length; index += 1) {
+    if (radiiByDegree[index]![0] > radiiByDegree[index - 1]![0]) {
+      expect(radiiByDegree[index]![1]).toBeGreaterThan(radiiByDegree[index - 1]![1]);
+    }
+  }
+
+  const box = await svg.boundingBox();
+  expect(box).not.toBeNull();
+  const pageScroll = await page.evaluate(() => scrollY);
+  await page.mouse.move(box!.x + box!.width * 0.75, box!.y + box!.height * 0.75);
+  await page.mouse.wheel(0, -220);
+  await expect.poll(async () => Number(await view.getAttribute("data-graph-scale"))).toBeGreaterThan(1);
+  expect(await page.evaluate(() => scrollY)).toBe(pageScroll);
+
+  const viewport = view.locator(".graph-viewport");
+  const transformBeforePan = await viewport.getAttribute("transform");
+  await page.mouse.move(box!.x + 8, box!.y + box!.height - 8);
+  await page.mouse.down();
+  await page.mouse.move(box!.x + 48, box!.y + box!.height - 38, { steps: 4 });
+  await page.mouse.up();
+  await expect.poll(async () => viewport.getAttribute("transform")).not.toBe(transformBeforePan);
+
+  const currentNode = view.locator(".graph-node--current");
+  const currentTransform = await currentNode.getAttribute("transform");
+  const currentBox = await currentNode.boundingBox();
+  await page.mouse.move(currentBox!.x + currentBox!.width / 2, currentBox!.y + currentBox!.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(currentBox!.x + currentBox!.width / 2 + 24, currentBox!.y + currentBox!.height / 2 + 18, { steps: 4 });
+  await page.mouse.up();
+  expect(await currentNode.getAttribute("transform")).toBe(currentTransform);
+
+  const target = view.locator(".graph-node[role='link']").first();
+  const targetUrl = new URL((await target.getAttribute("data-node-url"))!, page.url()).href;
+  const targetBox = await target.boundingBox();
+  const urlBeforeDrag = page.url();
+  await page.mouse.move(targetBox!.x + targetBox!.width / 2, targetBox!.y + targetBox!.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(targetBox!.x + targetBox!.width / 2 + 24, targetBox!.y + targetBox!.height / 2 + 18, { steps: 4 });
+  await page.mouse.up();
+  await page.waitForTimeout(50);
+  expect(page.url()).toBe(urlBeforeDrag);
+
+  await page.reload();
+  const resetView = page.locator("[data-context-panel] [data-graph-view]");
+  await expect(resetView).toHaveAttribute("data-graph-ready", "true");
+  const clickableTarget = resetView.locator(".graph-node[role='link']").first();
+  expect(new URL((await clickableTarget.getAttribute("data-node-url"))!, page.url()).href).toBe(targetUrl);
+  await clickableTarget.click();
+  await expect(page).toHaveURL(targetUrl);
+});
+
+test("graph nodes support keyboard navigation and preview bodies scroll to the end", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "desktop-chromium", "desktop keyboard and wheel assertion");
+  await page.goto(site("docs"));
+  const previewLink = page.locator(".website-link[data-note-id='docs/Customization.md']").first();
+  await previewLink.evaluate((element) => element.scrollIntoView({ block: "center", behavior: "instant" as ScrollBehavior }));
+  await expect(previewLink).toBeInViewport();
+  await previewLink.focus();
+  const previewBody = page.locator("[data-note-preview] .note-preview__body");
+  await expect(previewBody).toHaveAttribute("data-preview-body-ready", "true");
+  expect(await previewBody.evaluate((element) => element.scrollHeight)).toBeGreaterThan(
+    await previewBody.evaluate((element) => element.clientHeight)
+  );
+  await previewBody.hover();
+  for (let index = 0; index < 20; index += 1) {
+    await page.mouse.wheel(0, 1000);
+    await page.waitForTimeout(20);
+  }
+  const previewScroll = await previewBody.evaluate((element) => ({
+    maximum: element.scrollHeight - element.clientHeight,
+    scrollTop: element.scrollTop
+  }));
+  expect(previewScroll.scrollTop).toBe(previewScroll.maximum);
+
+  await page.goto(site("docs", "/docs/Getting%20Started/"));
+  const target = page.locator("[data-context-panel] .graph-node[role='link']").first();
+  const id = await target.getAttribute("data-node-id");
+  const expectedPath = await page.locator("[data-local-graph-section]").evaluate((section, nodeId) =>
+    section.querySelector<HTMLTemplateElement>("template[data-local-graph-data]")?.content
+      .querySelector<HTMLElement>(`[data-node-id="${CSS.escape(nodeId || "")}"]`)?.dataset.nodeUrl,
+  id);
+  await target.focus();
+  await page.keyboard.press("Enter");
+  await expect(page).toHaveURL(new RegExp(`${expectedPath!.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`));
+});
+
+test("expanded graph supports touch panning and pinch zoom", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "mobile-chromium", "mobile touch graph assertion");
+  await page.goto(site("docs", "/docs/Getting%20Started/"));
+  await page.getByRole("button", { name: "Context" }).tap();
+  await page.getByRole("button", { name: "Expand local graph" }).tap();
+  const view = page.locator('[data-graph-dialog-view="local"]');
+  await expect(view).toHaveAttribute("data-graph-ready", "true");
+  const result = await view.locator("svg").evaluate(async (svg) => {
+    const point = (id: number, x: number, y: number) => new Touch({ identifier: id, target: svg, clientX: x, clientY: y });
+    const fire = (type: string, touches: Touch[], changedTouches = touches) => svg.dispatchEvent(new TouchEvent(type, {
+      bubbles: true,
+      cancelable: true,
+      touches,
+      targetTouches: touches,
+      changedTouches
+    }));
+    const viewport = svg.querySelector(".graph-viewport")!;
+    const beforePan = viewport.getAttribute("transform");
+    fire("touchstart", [point(1, 50, 50)]);
+    fire("touchmove", [point(1, 90, 80)]);
+    fire("touchend", [], [point(1, 90, 80)]);
+    const afterPan = viewport.getAttribute("transform");
+    await new Promise((resolve) => setTimeout(resolve, 550));
+    const beforeScale = Number(svg.closest<HTMLElement>("[data-graph-dialog-view]")?.dataset.graphScale);
+    fire("touchstart", [point(1, 90, 90), point(2, 150, 90)]);
+    fire("touchmove", [point(1, 60, 90), point(2, 180, 90)]);
+    fire("touchend", [], [point(1, 60, 90), point(2, 180, 90)]);
+    const afterScale = Number(svg.closest<HTMLElement>("[data-graph-dialog-view]")?.dataset.graphScale);
+    return { beforePan, afterPan, beforeScale, afterScale };
+  });
+  expect(result.afterPan).not.toBe(result.beforePan);
+  expect(result.afterScale).toBeGreaterThan(result.beforeScale);
+  expect(await page.locator('dialog[data-dialog="graph-local"]').evaluate((dialog) => dialog.scrollWidth <= dialog.clientWidth)).toBe(true);
 });
 
 test("color scheme state uses the neutral public contract", async ({ page }) => {
@@ -205,14 +427,15 @@ test("every theme follows dark preference and supports an explicit light overrid
   }
 });
 
-test("enabled taxonomy, graph, and feed routes stay discoverable once per theme", async ({ page }, testInfo) => {
+test("enabled taxonomy and feed routes stay discoverable without a graph tab", async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== "desktop-chromium", "desktop primary navigation assertion");
   for (const theme of ["blog", "docs", "digital-garden"] as const) {
     await page.goto(`/__fixture__/features/${theme}/navigation/`);
     const primary = page.getByRole("navigation", { name: "Primary navigation" });
-    for (const route of ["/tags/", "/graph/", "/feed.xml"] as const) {
+    for (const route of ["/tags/", "/feed.xml"] as const) {
       await expect(primary.locator(`a[href="${route}"]`)).toHaveCount(1);
     }
+    await expect(primary.locator('a[href="/graph/"]')).toHaveCount(0);
     await expect(page.locator('head link[rel="alternate"][type="application/atom+xml"]'))
       .toHaveAttribute("href", "/feed.xml");
   }
@@ -225,9 +448,10 @@ test("docs Browse keeps enabled feature routes beside the documentation tree", a
   const dialog = page.locator('dialog[data-dialog="browse"]');
   await expect(dialog).toBeVisible();
   await expect(dialog.getByRole("navigation", { name: "Documentation" })).toBeVisible();
-  for (const route of ["/tags/", "/graph/", "/feed.xml"] as const) {
+  for (const route of ["/tags/", "/feed.xml"] as const) {
     await expect(dialog.locator(`a[href="${route}"]`)).toHaveCount(1);
   }
+  await expect(dialog.locator('a[href="/graph/"]')).toHaveCount(0);
 });
 
 test("search-disabled pages leave Cmd/Ctrl-K to the browser", async ({ page }) => {
@@ -269,9 +493,10 @@ test("digital garden home follows authored content with server-rendered ways to 
   const overview = page.locator("main > .garden-home-overview");
   await expect(article).toContainText("One Obsidian vault, three intentional ways to publish it");
   await expect(overview.getByRole("heading", { name: "Explore the garden" })).toBeVisible();
-  for (const name of ["Notes", "Tags", "Graph"] as const) {
+  for (const name of ["Notes", "Tags"] as const) {
     await expect(overview.getByRole("link", { name: new RegExp(`^${name}`) })).toBeVisible();
   }
+  await expect(overview.getByRole("link", { name: /^Graph/ })).toHaveCount(0);
   await expect(page.locator("main > article + .garden-home-overview")).toHaveCount(1);
 });
 

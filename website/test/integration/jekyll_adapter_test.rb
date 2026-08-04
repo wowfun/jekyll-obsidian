@@ -441,7 +441,7 @@ class JekyllAdapterTest < Minitest::Test
   end
 
   def test_existing_jekyll_route_collision_fails_before_atomic_append
-    File.write(File.join(@site_root, "graph.html"), "---\npermalink: /graph/\n---\nExisting")
+    File.write(File.join(@site_root, "tags.html"), "---\npermalink: /tags/\n---\nExisting")
     site = build_site
     error = assert_raises(Jekyll::Errors::FatalException) { site.process }
     assert_includes error.message, "collision"

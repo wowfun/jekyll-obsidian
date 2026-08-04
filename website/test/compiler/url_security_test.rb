@@ -56,7 +56,6 @@ class UrlSecurityTest < Minitest::Test
 
   def test_notes_cannot_claim_generated_or_asset_namespaces
     reserved = [
-      "/graph/",
       "/tags/",
       "/notes/",
       "/404.html/child/",

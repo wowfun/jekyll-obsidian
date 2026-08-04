@@ -1,13 +1,13 @@
 {% assign ui = page.website.i18n.messages %}
-<section class="relation-section" aria-labelledby="links-title-{{ include.location }}">
+{% if page.website.links and page.website.links.size > 0 %}<section class="relation-section" aria-labelledby="links-title-{{ include.location }}">
   <h2 class="relation-section__title" id="links-title-{{ include.location }}">{{ ui.direct_links | default: 'Direct links' | escape }}</h2>
-  {% if page.website.links and page.website.links.size > 0 %}<ul class="relation-list">{% for relation in page.website.links %}<li><a href="{{ relation.url | escape }}">{{ relation.title | escape }}</a></li>{% endfor %}</ul>{% else %}<p class="relation-empty">{{ ui.no_outgoing_links | default: 'No outgoing note links.' | escape }}</p>{% endif %}
-</section>
-<section class="relation-section" aria-labelledby="backlinks-title-{{ include.location }}">
+  <ul class="relation-list">{% for relation in page.website.links %}<li><a href="{{ relation.url | escape }}">{{ relation.title | escape }}</a></li>{% endfor %}</ul>
+</section>{% endif %}
+{% if page.website.backlinks and page.website.backlinks.size > 0 %}<section class="relation-section" aria-labelledby="backlinks-title-{{ include.location }}">
   <h2 class="relation-section__title" id="backlinks-title-{{ include.location }}">{{ ui.backlinks | default: 'Backlinks' | escape }}</h2>
-  {% if page.website.backlinks and page.website.backlinks.size > 0 %}<ul class="relation-list">{% for relation in page.website.backlinks %}<li><a href="{{ relation.url | escape }}">{{ relation.title | escape }}</a></li>{% endfor %}</ul>{% else %}<p class="relation-empty">{{ ui.no_backlinks | default: 'No notes link here yet.' | escape }}</p>{% endif %}
-</section>
-<section class="relation-section" aria-labelledby="embedded-title-{{ include.location }}">
+  <ul class="relation-list">{% for relation in page.website.backlinks %}<li><a href="{{ relation.url | escape }}">{{ relation.title | escape }}</a></li>{% endfor %}</ul>
+</section>{% endif %}
+{% if page.website.embedded_by and page.website.embedded_by.size > 0 %}<section class="relation-section" aria-labelledby="embedded-title-{{ include.location }}">
   <h2 class="relation-section__title" id="embedded-title-{{ include.location }}">{{ ui.embedded_by | default: 'Embedded by' | escape }}</h2>
-  {% if page.website.embedded_by and page.website.embedded_by.size > 0 %}<ul class="relation-list">{% for relation in page.website.embedded_by %}<li><a href="{{ relation.url | escape }}">{{ relation.title | escape }}</a></li>{% endfor %}</ul>{% else %}<p class="relation-empty">{{ ui.not_embedded | default: 'Not embedded elsewhere.' | escape }}</p>{% endif %}
-</section>
+  <ul class="relation-list">{% for relation in page.website.embedded_by %}<li><a href="{{ relation.url | escape }}">{{ relation.title | escape }}</a></li>{% endfor %}</ul>
+</section>{% endif %}

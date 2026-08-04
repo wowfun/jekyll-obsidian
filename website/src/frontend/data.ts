@@ -52,6 +52,9 @@ function isGraphNode(value: unknown): value is GraphNode {
     typeof value.id === "string" &&
     typeof value.title === "string" &&
     typeof value.url === "string" &&
+    (value.degree === undefined || (
+      typeof value.degree === "number" && Number.isSafeInteger(value.degree) && value.degree >= 0
+    )) &&
     (value.tags === undefined || isStringArray(value.tags))
   );
 }

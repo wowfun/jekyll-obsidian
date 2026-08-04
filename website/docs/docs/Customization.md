@@ -46,7 +46,7 @@ The canonical commands merge `website/_config.yml`, then `.github/jekyll-obsidia
 
 ## Site themes
 
-Each build selects one complete presentation preset. `blog` adds chronology and archive, `docs` adds a hierarchical handbook navigator, and `digital-garden` adds relation context and graph exploration. A command-line override is useful for comparing the same content without editing configuration:
+Each build selects one complete presentation preset. `blog` adds chronology and archive, `docs` adds a hierarchical handbook navigator, and `digital-garden` adds a folio-style reading surface and note index. Search, wiki-link previews, page outlines, note relations, and the interactive graph are shared capabilities in all three themes. A command-line override is useful for comparing the same content without editing configuration:
 
 ```sh
 website/bin/dev --theme docs
@@ -56,6 +56,28 @@ website/bin/build --theme blog --url https://example.test --baseurl "" --destina
 The build writes the named destination below `website/`, so `_site` becomes `website/_site`.
 
 Feature keys omitted from `website.features` inherit the theme defaults. Explicit YAML booleans can override `search`, `tags`, `feed`, `graph`, `relations`, `previews`, and `outline`.
+
+| Feature | Blog | Docs | Digital Garden |
+| --- | --- | --- | --- |
+| `search`, `previews`, `outline`, `relations`, `graph` | on | on | on |
+| `tags`, `feed` | on | off | on |
+
+Set any shared feature to the YAML boolean `false` to remove it. For example:
+
+```yaml
+website:
+  features:
+    graph: false
+    previews: false
+```
+
+## Graph and wiki-link previews
+
+Every published note places its one-hop graph above Outline and Relations in the right-hand context rail. The graph contains the current note and every directly linked or embedded public note in the current language partition. An isolated note still shows its own node. Node area grows with its degree in the complete public graph.
+
+Use the graph's left button to open the complete graph and its right button to enlarge the current note's local graph. In either view, scroll the mouse wheel over the canvas to zoom around the pointer, drag empty canvas space to pan, and drag a neighbouring node to reposition it; the current node stays fixed at the visual centre. Click a node to visit that note, or focus it and press Enter or Space. The complete graph JSON loads only when its dialog is opened and always contains every public node and relation. To keep the page responsive, the SVG viewer declines to render complete graphs above 250 nodes or 1,000 relations and directs readers to local graphs or search instead. There is no generated `/graph/` page or navigation tab, so a published note may use that route.
+
+Hover or keyboard-focus a wiki link to open its reading preview. Catalog metadata appears first, followed by the target note's sanitized body. The header and summary stay fixed while the body scrolls independently; links inside the preview are plain text. Touch taps continue directly to the target page. Set `previews: false` to disable this behavior.
 
 ## GitHub Discussions comments
 
@@ -154,6 +176,6 @@ Unknown keys never flow into Liquid or generated data. `aliases`, `tags`, and `c
 
 An explicit `content_type: post | doc | page` wins over directory defaults. Post publication dates use `date`, then `created`, then the first Git commit. A production build rejects a post with no deterministic date.
 
-Docs navigation follows vault directories. `nav_order` sorts sibling documents and `nav_exclude: true` removes only that note link; children remain reachable. Each non-root page initially renders its current branch, then loads the shared full navigation when JavaScript is available. Search builds its index in a Web Worker. Graphs above 250 notes or 1,000 aggregated edges use the accessible note directory instead of a global force simulation.
+Docs navigation follows vault directories. `nav_order` sorts sibling documents and `nav_exclude: true` removes only that note link; children remain reachable. Each non-root page initially renders its current branch, then loads the shared full navigation when JavaScript is available. Search builds its index in a Web Worker. Local graphs are projected by the compiler; the browser fetches the complete graph only after its dialog opens.
 
 See [[docs/development/architecture|Architecture]] before changing compiler or adapter seams.

@@ -1,4 +1,12 @@
-export type WebsiteDialogName = "search" | "browse" | "context";
+export type WebsiteDialogName = "search" | "browse" | "context" | "graph-global" | "graph-local";
+
+const DIALOG_NAMES = new Set<WebsiteDialogName>([
+  "search",
+  "browse",
+  "context",
+  "graph-global",
+  "graph-local"
+]);
 
 const movablePlaceholders = new WeakMap<Element, Comment>();
 
@@ -67,9 +75,9 @@ export function initialiseDialogs(): void {
     const opener = target.closest<HTMLElement>("[data-dialog-open]");
     if (opener) {
       const name = opener.dataset.dialogOpen;
-      if (name === "search" || name === "browse" || name === "context") {
+      if (name && DIALOG_NAMES.has(name as WebsiteDialogName)) {
         event.preventDefault();
-        openWebsiteDialog(name);
+        openWebsiteDialog(name as WebsiteDialogName);
       }
       return;
     }

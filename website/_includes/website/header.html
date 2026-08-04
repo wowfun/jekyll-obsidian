@@ -4,7 +4,6 @@
   {% assign notes_route = page.website.routes.notes | default: '/notes/' %}
   {% assign archive_route = page.website.routes.archive | default: '/archive/' %}
   {% assign tags_route = page.website.routes.tags | default: '/tags/' %}
-  {% assign graph_route = page.website.routes.graph | default: '/graph/' %}
   {% assign feed_route = page.website.routes.feed | default: '/feed.xml' %}
   <div class="site-header__inner">
     <a class="site-mark" href="{{ home_route | relative_url }}" aria-label="{{ site.title | escape }} — {{ ui.home | default: 'Home' | escape }}">
@@ -16,18 +15,15 @@
         <a href="{{ home_route | relative_url }}">{{ ui.latest | default: 'Latest' | escape }}</a>
         <a href="{{ archive_route | relative_url }}">{{ ui.archive | default: 'Archive' | escape }}</a>
         {% if page.website.features.tags %}<a href="{{ tags_route | relative_url }}">{{ ui.topics | default: 'Topics' | escape }}</a>{% endif %}
-        {% if page.website.features.graph %}<a href="{{ graph_route | relative_url }}">{{ ui.graph | default: 'Graph' | escape }}</a>{% endif %}
         {% if page.website.features.feed and site.data.website_feed_available %}<a href="{{ feed_route | relative_url }}">{{ ui.feed | default: 'Feed' | escape }}</a>{% endif %}
       {% elsif include.theme == 'docs' %}
         <a href="{{ home_route | relative_url }}">{{ ui.overview | default: 'Overview' | escape }}</a>
         {% if page.website.theme_data.docs_home_url %}<a href="{{ page.website.theme_data.docs_home_url | escape }}">{{ ui.documentation | default: 'Documentation' | escape }}</a>{% endif %}
         {% if page.website.features.tags %}<a href="{{ tags_route | relative_url }}">{{ ui.tags | default: 'Tags' | escape }}</a>{% endif %}
-        {% if page.website.features.graph %}<a href="{{ graph_route | relative_url }}">{{ ui.graph | default: 'Graph' | escape }}</a>{% endif %}
         {% if page.website.features.feed and site.data.website_feed_available %}<a href="{{ feed_route | relative_url }}">{{ ui.feed | default: 'Feed' | escape }}</a>{% endif %}
       {% else %}
         <a href="{{ notes_route | relative_url }}">{{ ui.notes | default: 'Notes' | escape }}</a>
         {% if page.website.features.tags %}<a href="{{ tags_route | relative_url }}">{{ ui.tags | default: 'Tags' | escape }}</a>{% endif %}
-        {% if page.website.features.graph %}<a href="{{ graph_route | relative_url }}">{{ ui.graph | default: 'Graph' | escape }}</a>{% endif %}
         {% if page.website.features.feed and site.data.website_feed_available %}<a href="{{ feed_route | relative_url }}">{{ ui.feed | default: 'Feed' | escape }}</a>{% endif %}
       {% endif %}
     </nav>

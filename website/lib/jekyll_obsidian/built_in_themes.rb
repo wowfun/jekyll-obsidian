@@ -12,9 +12,6 @@ module JekyllObsidian
     ALWAYS_RESERVED_NAMESPACES = %w[
       /404.html /sitemap.xml /assets/website /assets/vault
     ].freeze
-    INTERACTIVE_GRAPH_MAX_NODES = 250
-    INTERACTIVE_GRAPH_MAX_EDGES = 1_000
-
     module_function
 
     def resolve(id)
@@ -32,23 +29,23 @@ module JekyllObsidian
 
       def project(model:, config:, note_theme_data:, theme_pages:, system_theme_data:, tag_notes:, feed_notes:, shared_files: [])
         tag_anchors = config.features.fetch("tags") ? tag_anchor_map(tag_notes, config.url_builder) : {}
+        local_graphs = config.features.fetch("graph") ? local_graphs(model, config) : {}
         pages = model.notes.map do |note|
           note_page(
             note,
             config,
             note_theme_data.fetch(note.id),
-            tag_anchors
+            tag_anchors,
+            local_graphs[note.id]
           )
         end
         pages.concat(theme_pages)
         pages << tags_page(tag_notes, tag_anchors, config, system_theme_data) if config.features.fetch("tags")
-        pages << graph_page(model, config, system_theme_data) if config.features.fetch("graph")
         pages << not_found_page(config, system_theme_data)
 
         artifacts = []
         artifacts << "catalog" if config.features.fetch("previews")
-        graph_interactive = interactive_graph?(model, config)
-        artifacts << "graph" if graph_interactive
+        artifacts << "graph" if config.features.fetch("graph")
         artifacts << "search" if config.features.fetch("search")
         artifacts << "sitemap"
         artifacts << "feed" if config.features.fetch("feed")
@@ -61,7 +58,6 @@ module JekyllObsidian
           artifacts: artifacts,
           shared_files: shared_files,
           site_data: {
-            "website_graph_interactive" => graph_interactive,
             "website_repository_url" => repository_url(config)
           }.compact,
           feed_note_ids: feed_notes.sort_by(&:id).map(&:id),
@@ -69,7 +65,7 @@ module JekyllObsidian
         )
       end
 
-      def note_page(note, config, theme_data, tag_anchors)
+      def note_page(note, config, theme_data, tag_anchors, local_graph)
         properties = note.properties
         comments = page_comments(note, config)
         website = {
@@ -99,6 +95,8 @@ module JekyllObsidian
           "backlinks" => config.features.fetch("relations") ? note.backlinks : [],
           "embedded_by" => config.features.fetch("relations") ? note.embedded_by : []
         }
+        website["local_graph"] = local_graph if local_graph
+        website["has_context"] = context_present?(website)
         website["comments"] = comments if comments
         data = {
           "title" => note.title,
@@ -144,42 +142,42 @@ module JekyllObsidian
         system_page(config, "/tags/", "Tags", "tags", system_theme_data, "tag_groups" => tag_groups)
       end
 
-      def graph_page(model, config, system_theme_data)
-        adjacency = Hash.new { |hash, key| hash[key] = Hash.new(0) }
+      def local_graphs(model, config)
+        edges_by_note = Hash.new { |hash, id| hash[id] = [] }
+        neighbours_by_note = Hash.new { |hash, id| hash[id] = {} }
         model.graph_edges.each do |edge|
-          adjacency[edge.fetch("source")][edge.fetch("target")] += edge.fetch("count")
-          adjacency[edge.fetch("target")][edge.fetch("source")] += edge.fetch("count")
+          source = edge.fetch("source")
+          target = edge.fetch("target")
+          edges_by_note[source] << edge
+          edges_by_note[target] << edge unless source == target
+          neighbours_by_note[source][target] = true
+          neighbours_by_note[target][source] = true
         end
-        graph_notes = model.notes.map do |note|
-          neighbours = adjacency[note.id].sort_by do |id, count|
+
+        model.notes.to_h do |note|
+          node_ids = [note.id, *neighbours_by_note[note.id].keys].uniq.sort
+          nodes = node_ids.map do |id|
             target = model.notes_by_id.fetch(id)
-            [-count, target.title.downcase, id]
-          end.first(8).map do |id, _count|
-            system_note_card(model.notes_by_id.fetch(id), config)
+            {
+              "id" => id,
+              "title" => target.title,
+              "url" => config.url_builder.href(target.route),
+              "degree" => model.graph_degrees.fetch(id)
+            }
           end
-          {
-            "id" => note.id,
-            "title" => note.title,
-            "url" => config.url_builder.href(note.route),
-            "relation_count" => adjacency[note.id].values.sum,
-            "neighbours" => neighbours,
-            "filter_text" => [note.title, *Array(note.properties["tags"])].join(" ").downcase
-          }
+          edges = edges_by_note[note.id].sort_by do |edge|
+            [edge.fetch("source"), edge.fetch("target"), edge.fetch("kind")]
+          end
+          [note.id, { "current_id" => note.id, "nodes" => nodes, "edges" => edges }]
         end
-        system_page(
-          config,
-          "/graph/",
-          "Graph",
-          "graph",
-          system_theme_data,
-          "graph_interactive" => interactive_graph?(model, config),
-          "graph_notes" => graph_notes
-        )
       end
 
-      def interactive_graph?(model, config)
-        config.features.fetch("graph") && model.notes.length <= INTERACTIVE_GRAPH_MAX_NODES &&
-          model.graph_edges.length <= INTERACTIVE_GRAPH_MAX_EDGES
+      def context_present?(website)
+        return true if website["local_graph"]
+        return true if website.fetch("features").fetch("outline") && !website.fetch("outline").empty?
+
+        website.fetch("features").fetch("relations") &&
+          %w[links backlinks embedded_by].any? { |key| !website.fetch(key).empty? }
       end
 
       def repository_url(config)

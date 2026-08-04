@@ -7,8 +7,10 @@ Live preview: [sinputer.top/jekyll-obsidian](https://sinputer.top/jekyll-obsidia
 Choose one built-in theme for each build:
 
 - `blog` provides recent posts, an archive, tags, an Atom feed, and defaults configured GitHub Discussions comments on.
-- `docs` provides a document tree, breadcrumbs, an outline, and previous or next links.
-- `digital-garden` provides note previews, backlinks, a relation rail, and a graph.
+- `docs` provides a document tree, breadcrumbs, and previous or next links.
+- `digital-garden` provides a folio-style reading surface, note index, tags, and an Atom feed.
+
+All three themes enable search, wiki-link reading previews, the page outline, note relations, and an interactive local graph by default. Each note keeps its local graph at the top of the right-hand context rail. Its two controls open the complete public graph or an expanded view of the current note's neighbourhood; `/graph/` is not a generated route.
 
 Switching themes does not change note URLs.
 The default theme is `docs`. Every theme can publish locale overlays from `_translations/<locale>/` and attach GitHub Discussions comments to posts. When the corresponding mapping is present and omits `enabled`, localization defaults on only for `docs`, while comments default on only for `blog`.

@@ -50,6 +50,8 @@ class LocalizedCompilerTest < Minitest::Test
     assert_includes translated.content, 'href="/zh-CN/docs/Fallback/"'
     assert_equal "/assets/website/i18n/zh-CN/search.v1.json", translated.data.dig("website", "resources", "search")
     assert_equal "/assets/website/i18n/zh-CN/docs-navigation.html", translated.data.dig("website", "theme_data", "docs_tree_url")
+    assert_equal %w[docs/Fallback.md docs/Guide.md index.md], translated.data.dig("website", "local_graph", "nodes").map { |node| node.fetch("id") }
+    assert translated.data.dig("website", "local_graph", "nodes").all? { |node| node.fetch("url").start_with?("/zh-CN/") }
 
     fallback = page(result, "/zh-CN/docs/Fallback/")
     assert_equal true, fallback.data.dig("website", "i18n", "fallback")
@@ -61,7 +63,9 @@ class LocalizedCompilerTest < Minitest::Test
 
     source = translated.data.dig("website", "source_links", "source")
     assert_includes URI.decode_uri_component(source), "vault/_translations/zh-CN/docs/Guide.md"
-    assert_equal %w[/assets/website/docs-navigation.html /assets/website/i18n/zh-CN/docs-navigation.html /assets/website/i18n/zh-CN/search.v1.json /assets/website/search.v1.json /sitemap.xml], result.generated_files.map(&:route)
+    assert_equal %w[/assets/website/catalog.v1.json /assets/website/docs-navigation.html /assets/website/graph.v1.json /assets/website/i18n/zh-CN/catalog.v1.json /assets/website/i18n/zh-CN/docs-navigation.html /assets/website/i18n/zh-CN/graph.v1.json /assets/website/i18n/zh-CN/search.v1.json /assets/website/search.v1.json /sitemap.xml], result.generated_files.map(&:route)
+    localized_graph = generated_json(result, "/assets/website/i18n/zh-CN/graph.v1.json")
+    assert localized_graph.fetch("nodes").all? { |node| node.fetch("url").start_with?("/zh-CN/") }
     assert_equal %w[en zh-CN], result.site_data.dig("website_i18n", "locales").map { |locale| locale.fetch("code") }
   end
 

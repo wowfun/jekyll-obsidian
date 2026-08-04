@@ -1,0 +1,26 @@
+{% assign ui = page.website.i18n.messages %}
+{% assign local_graph = page.website.local_graph %}
+<section class="local-graph" data-local-graph-section aria-labelledby="local-graph-title-{{ include.location }}">
+  <header class="local-graph__header">
+    <h2 class="relation-section__title" id="local-graph-title-{{ include.location }}">{{ ui.interactive_graph | default: 'Interactive graph' | escape }}</h2>
+    <div class="local-graph__actions">
+      <button type="button" data-graph-open="global" aria-label="{{ ui.open_full_graph | default: 'Open full graph' | escape }}" title="{{ ui.open_full_graph | default: 'Open full graph' | escape }}">
+        <svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="5" cy="5" r="2"></circle><circle cx="15" cy="4" r="2"></circle><circle cx="10" cy="15" r="2"></circle><path d="M6.8 5.2 13 4.4M6.1 6.7 9 13.2m4.8-7.4-2.7 7.4"></path></svg>
+      </button>
+      <button type="button" data-graph-open="local" aria-label="{{ ui.open_local_graph | default: 'Expand local graph' | escape }}" title="{{ ui.open_local_graph | default: 'Expand local graph' | escape }}">
+        <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M8 4H4v4m8-4h4v4M8 16H4v-4m8 4h4v-4M4.5 7.5 8 4m4 0 3.5 3.5M4.5 12.5 8 16m4 0 3.5-3.5"></path></svg>
+      </button>
+    </div>
+  </header>
+  <div class="graph-view graph-view--compact" data-graph-view data-graph-mode="compact" data-current-note-id="{{ local_graph.current_id | escape }}"{% if ui.graph_loading %} data-graph-loading="{{ ui.graph_loading | escape }}"{% endif %}{% if ui.graph_unavailable %} data-graph-unavailable="{{ ui.graph_unavailable | escape }}"{% endif %}{% if ui.graph_summary %} data-graph-summary="{{ ui.graph_summary | escape }}"{% endif %}{% if ui.graph_node_label %} data-graph-node-label="{{ ui.graph_node_label | escape }}"{% endif %}{% if ui.graph_title %} data-graph-title="{{ ui.graph_title | escape }}"{% endif %}{% if ui.graph_description %} data-graph-description="{{ ui.graph_description | escape }}"{% endif %}>
+    <p class="graph-status" data-graph-status aria-live="polite">{{ ui.graph_loading | default: 'Loading graph…' | escape }}</p>
+  </div>
+  <template data-local-graph-data>
+    {% for node in local_graph.nodes %}<i data-graph-node data-node-id="{{ node.id | escape }}" data-node-title="{{ node.title | escape }}" data-node-url="{{ node.url | escape }}" data-node-degree="{{ node.degree }}"></i>{% endfor %}
+    {% for edge in local_graph.edges %}<i data-graph-edge data-edge-source="{{ edge.source | escape }}" data-edge-target="{{ edge.target | escape }}" data-edge-kind="{{ edge.kind | escape }}" data-edge-count="{{ edge.count }}"></i>{% endfor %}
+  </template>
+  <div class="local-graph__fallback" data-graph-fallback>
+    {% assign neighbour_count = local_graph.nodes.size | minus: 1 %}
+    {% if neighbour_count > 0 %}<ul class="relation-list">{% for node in local_graph.nodes %}{% unless node.id == local_graph.current_id %}<li><a href="{{ node.url | escape }}">{{ node.title | escape }}</a></li>{% endunless %}{% endfor %}</ul>{% else %}<p class="relation-empty">{{ ui.isolated_graph | default: 'This note has no linked neighbours yet.' | escape }}</p>{% endif %}
+  </div>
+</section>

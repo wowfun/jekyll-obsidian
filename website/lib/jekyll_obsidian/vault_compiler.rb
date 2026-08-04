@@ -52,11 +52,11 @@ module JekyllObsidian
     THEME_FEATURE_DEFAULTS = {
       "blog" => {
         "search" => true, "tags" => true, "feed" => true,
-        "graph" => false, "relations" => false, "previews" => false, "outline" => false
+        "graph" => true, "relations" => true, "previews" => true, "outline" => true
       },
       "docs" => {
         "search" => true, "tags" => false, "feed" => false,
-        "graph" => false, "relations" => false, "previews" => false, "outline" => true
+        "graph" => true, "relations" => true, "previews" => true, "outline" => true
       },
       "digital-garden" => {
         "search" => true, "tags" => true, "feed" => true,
@@ -1185,11 +1185,13 @@ module JekyllObsidian
           embedded_by: relation_cards(embedded_by.fetch(note.id, []), source: true)
         )
       end
+      graph_edges = graph_edges_for(relations)
       PublishedSiteModel.new(
         notes: notes,
         notes_by_id: notes.to_h { |note| [note.id, note] },
         relations: relations,
-        graph_edges: graph_edges_for(relations)
+        graph_edges: graph_edges,
+        graph_degrees: graph_degrees_for(notes, graph_edges)
       )
     end
 
@@ -1464,7 +1466,13 @@ module JekyllObsidian
       {
         "schema_version" => 1,
         "nodes" => model.notes.map do |note|
-          { "id" => note.id, "title" => note.title, "url" => @url_builder.href(note.route), "tags" => Array(note.properties["tags"]) }
+          {
+            "id" => note.id,
+            "title" => note.title,
+            "url" => @url_builder.href(note.route),
+            "tags" => Array(note.properties["tags"]),
+            "degree" => model.graph_degrees.fetch(note.id)
+          }
         end,
         "edges" => model.graph_edges
       }
@@ -1492,6 +1500,17 @@ module JekyllObsidian
       counts.keys.sort.map do |source, target, kind|
         { "source" => source, "target" => target, "kind" => kind, "count" => counts[[source, target, kind]] }
       end
+    end
+
+    def graph_degrees_for(notes, edges)
+      neighbours = notes.to_h { |note| [note.id, {}] }
+      edges.each do |edge|
+        source = edge.fetch("source")
+        target = edge.fetch("target")
+        neighbours.fetch(source)[target] = true
+        neighbours.fetch(target)[source] = true
+      end
+      neighbours.transform_values(&:length)
     end
 
     def json_file(route, payload)

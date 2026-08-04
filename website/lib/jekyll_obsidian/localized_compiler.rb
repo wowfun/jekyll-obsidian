@@ -91,14 +91,17 @@ module JekyllObsidian
       "primary_navigation" => "Primary navigation",
       "home" => "Home",
       "archive" => "Archive",
+      "interactive_graph" => "Interactive graph",
+      "open_full_graph" => "Open full graph",
+      "open_local_graph" => "Expand local graph",
+      "full_graph" => "Full graph",
+      "local_graph" => "Local graph",
+      "close_full_graph" => "Close full graph",
+      "close_local_graph" => "Close local graph",
+      "isolated_graph" => "This note has no linked neighbours yet.",
       "graph_loading" => "Loading graph…",
-      "graph_loads_here" => "The interactive graph loads on this page.",
-      "graph_unavailable" => "The interactive graph could not be loaded. Use the note directory below.",
-      "graph_too_large" => "This site is too large for a useful global simulation. Browse local relations below.",
-      "graph_directory" => "Accessible note directory",
-      "filter_notes" => "Filter notes",
-      "relation_one" => "relation",
-      "relation_many" => "relations",
+      "graph_unavailable" => "The interactive graph could not be loaded. Use the linked notes below.",
+      "graph_too_large" => "This complete graph is too large to render interactively. Use local graphs or search instead.",
       "graph_summary" => "{notes} notes and {relations} relations.",
       "graph_node_label" => "{title}, {count} relations",
       "graph_title" => "Note relation graph",
@@ -460,7 +463,7 @@ module JekyllObsidian
       website["alternates"] = alternates
       website["robots"] = "noindex" unless actual
       website["resources"] = resource_urls(locale)
-      website["routes"] = %w[home tags graph notes archive].to_h do |name|
+      website["routes"] = %w[home tags notes archive].to_h do |name|
         base = name == "home" ? "/" : "/#{name}/"
         [name, prefixed_route(base, locale)]
       end.merge("feed" => prefixed_route("/feed.xml", locale))

@@ -46,10 +46,11 @@ describe("versioned data contracts", () => {
     expect(
       parseGraphPayload({
         schema_version: 1,
-        nodes: [{ id: "index.md", title: "Index", url: "/" }],
+        nodes: [{ id: "index.md", title: "Index", url: "/", degree: 1 }],
         edges: [{ source: "index.md", target: "note.md", kind: "link", count: 2 }]
       }).edges[0]?.kind
     ).toBe("link");
+    expect(parseGraphPayload({ schema_version: 1, nodes: [{ id: "legacy.md", title: "Legacy", url: "/legacy/" }], edges: [] }).nodes[0]?.degree).toBeUndefined();
   });
 
   it("fails closed on unknown schema versions and malformed records", () => {
@@ -65,6 +66,13 @@ describe("versioned data contracts", () => {
         schema_version: 1,
         nodes: [],
         edges: [{ source: "a", target: "b", kind: "other", count: 1 }]
+      })
+    ).toThrow(/schema/);
+    expect(() =>
+      parseGraphPayload({
+        schema_version: 1,
+        nodes: [{ id: "a", title: "A", url: "/a/", degree: -1 }],
+        edges: []
       })
     ).toThrow(/schema/);
   });

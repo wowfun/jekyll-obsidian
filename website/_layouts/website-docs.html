@@ -14,10 +14,10 @@
         {% if page.website.route == home_route %}{% include website/docs-home.html %}{% endif %}
         {% include website/docs-navigation.html %}
       </main>
-      {% if page.website.kind == 'note' %}{% if page.website.features.outline or page.website.features.relations %}<aside class="docs-context" data-context-panel data-dialog-movable="context" aria-label="{{ ui.page_context | default: 'Page context' | escape }}">{% include website/context.html location='rail' %}</aside>{% endif %}{% endif %}
+      {% if page.website.kind == 'note' and page.website.has_context %}<aside class="docs-context" data-context-panel data-dialog-movable="context" aria-label="{{ ui.page_context | default: 'Page context' | escape }}">{% include website/context.html location='rail' %}</aside>{% endif %}
     </div>
     {% include website/footer.html %}
-    <nav class="mobile-toolbar" aria-label="{{ ui.mobile_actions | default: 'Mobile actions' | escape }}"><button type="button" data-dialog-open="browse">{{ ui.browse | default: 'Browse' | escape }}</button>{% if page.website.features.search %}<button type="button" data-search-open>{{ ui.search | default: 'Search' | escape }}</button>{% endif %}{% if page.website.kind == 'note' %}{% if page.website.features.outline or page.website.features.relations %}<button type="button" data-dialog-open="context">{% if page.website.features.outline and page.website.features.relations == false %}{{ ui.on_this_page | default: 'On this page' | escape }}{% else %}{{ ui.context | default: 'Context' | escape }}{% endif %}</button>{% endif %}{% endif %}</nav>
+    <nav class="mobile-toolbar" aria-label="{{ ui.mobile_actions | default: 'Mobile actions' | escape }}"><button type="button" data-dialog-open="browse">{{ ui.browse | default: 'Browse' | escape }}</button>{% if page.website.features.search %}<button type="button" data-search-open>{{ ui.search | default: 'Search' | escape }}</button>{% endif %}{% if page.website.kind == 'note' and page.website.has_context %}<button type="button" data-dialog-open="context">{% if page.website.features.outline and page.website.features.relations == false and page.website.local_graph == nil %}{{ ui.on_this_page | default: 'On this page' | escape }}{% else %}{{ ui.context | default: 'Context' | escape }}{% endif %}</button>{% endif %}</nav>
     {% include website/dialogs.html theme='docs' %}
   </body>
 </html>

@@ -119,7 +119,8 @@ module JekyllObsidian
     :notes,
     :notes_by_id,
     :relations,
-    :graph_edges
+    :graph_edges,
+    :graph_degrees
   )
 
   CommentsConfig = ImmutableRecord.define(

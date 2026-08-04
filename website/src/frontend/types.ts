@@ -35,6 +35,7 @@ export interface GraphNode {
   title: string;
   url: string;
   tags?: string[];
+  degree?: number;
 }
 
 export interface GraphEdge {
@@ -46,6 +47,12 @@ export interface GraphEdge {
 
 export interface GraphPayload {
   schema_version: 1;
+  nodes: GraphNode[];
+  edges: GraphEdge[];
+}
+
+export interface LocalGraphPayload {
+  current_id: string;
   nodes: GraphNode[];
   edges: GraphEdge[];
 }

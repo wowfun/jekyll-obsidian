@@ -116,28 +116,51 @@ class ThemeContractTest < Minitest::Test
     ]
 
     garden = compile(*entries, theme: "digital-garden")
-    assert_equal %w[/ /404.html /blog/post/ /docs/guide/ /graph/ /notes/ /tags/], garden.pages.map(&:route)
+    assert_equal %w[/ /404.html /blog/post/ /docs/guide/ /notes/ /tags/], garden.pages.map(&:route)
     assert_equal %w[/assets/website/catalog.v1.json /assets/website/graph.v1.json /assets/website/search.v1.json /feed.xml /sitemap.xml], garden.generated_files.map(&:route)
+    assert_equal true, garden.features.fetch("previews")
+    assert_equal true, garden.features.fetch("outline")
+    assert_equal true, garden.features.fetch("relations")
+    assert_equal true, garden.features.fetch("graph")
 
     blog = compile(*entries, theme: "blog")
     assert blog.success?, blog.diagnostics.map(&:message).join("\n")
     assert_equal %w[/ /404.html /archive/ /blog/post/ /docs/guide/ /tags/], blog.pages.map(&:route)
-    assert_equal %w[/assets/website/search.v1.json /feed.xml /sitemap.xml], blog.generated_files.map(&:route)
+    assert_equal %w[/assets/website/catalog.v1.json /assets/website/graph.v1.json /assets/website/search.v1.json /feed.xml /sitemap.xml], blog.generated_files.map(&:route)
+    assert_equal true, blog.features.fetch("previews")
+    assert_equal true, blog.features.fetch("outline")
+    assert_equal true, blog.features.fetch("relations")
+    assert_equal true, blog.features.fetch("graph")
     assert_equal "website-blog", page(blog, "/archive/").data.fetch("layout")
 
     docs = compile(*entries, theme: "docs")
     assert docs.success?, docs.diagnostics.map(&:message).join("\n")
     assert_equal %w[/ /404.html /blog/post/ /docs/guide/], docs.pages.map(&:route)
-    assert_equal %w[/assets/website/docs-navigation.html /assets/website/search.v1.json /sitemap.xml], docs.generated_files.map(&:route)
+    assert_equal %w[/assets/website/catalog.v1.json /assets/website/docs-navigation.html /assets/website/graph.v1.json /assets/website/search.v1.json /sitemap.xml], docs.generated_files.map(&:route)
+    assert_equal true, docs.features.fetch("previews")
+    assert_equal true, docs.features.fetch("outline")
+    assert_equal true, docs.features.fetch("relations")
+    assert_equal true, docs.features.fetch("graph")
     assert_equal "website-docs", page(docs, "/").data.fetch("layout")
     assert_equal "/docs/guide/", page(docs, "/").data.dig("website", "theme_data", "docs_home_url")
 
-    stripped = compile(*entries, theme: "docs", features: { "search" => false, "graph" => true })
+    stripped = compile(*entries, theme: "docs", features: {
+      "search" => false,
+      "graph" => false,
+      "previews" => false,
+      "outline" => false,
+      "relations" => false
+    })
     assert_equal false, stripped.features.fetch("search")
-    assert_equal true, stripped.features.fetch("graph")
+    assert_equal false, stripped.features.fetch("graph")
+    assert_equal false, stripped.features.fetch("previews")
+    assert_equal false, stripped.features.fetch("outline")
+    assert_equal false, stripped.features.fetch("relations")
     refute stripped.generated_files.any? { |file| file.route.end_with?("search.v1.json") }
-    assert stripped.generated_files.any? { |file| file.route.end_with?("graph.v1.json") }
-    refute_nil page(stripped, "/graph/")
+    refute stripped.generated_files.any? { |file| file.route.end_with?("graph.v1.json") }
+    refute stripped.generated_files.any? { |file| file.route.end_with?("catalog.v1.json") }
+    assert_nil page(stripped, "/").data.dig("website", "local_graph")
+    assert_equal false, page(stripped, "/").data.dig("website", "has_context")
   end
 
   def test_blog_aggregates_only_posts_and_exposes_stable_chronology
@@ -353,11 +376,15 @@ class ThemeContractTest < Minitest::Test
     garden_archive = compile(home, candidates[0], theme: "digital-garden")
     assert garden_archive.success?, garden_archive.diagnostics.map(&:message).join("\n")
     assert page(garden_archive, "/archive/")
-    %w[notes tags graph].each do |reserved|
+    %w[notes tags].each do |reserved|
       result = compile(home, note("#{reserved}.md", "---\npublish: true\nupdated: 2026-07-30\n---\n# Reserved"), theme: "digital-garden")
       refute result.success?, "expected digital-garden to reserve /#{reserved}/"
       assert result.diagnostics.any? { |item| item.code == "route_collision" }
     end
+
+    garden_graph = compile(home, candidates[1], theme: "digital-garden")
+    assert garden_graph.success?, garden_graph.diagnostics.map(&:message).join("\n")
+    assert page(garden_graph, "/graph/")
   end
 
   def test_docs_pages_keep_only_the_current_branch_and_share_one_full_navigation_fragment
@@ -387,19 +414,34 @@ class ThemeContractTest < Minitest::Test
     assert_includes shared.first.content, "Two"
   end
 
-  def test_graph_switches_to_bounded_directory_above_the_interactive_node_budget
-    entries = [note("index.md", "---\npublish: true\nupdated: 2026-07-30\n---\n# Home")]
-    250.times do |index|
-      entries << note("notes/#{index}.md", "---\npublish: true\nupdated: 2026-07-30\n---\n# Note #{index}")
-    end
-
-    result = compile(*entries, theme: "digital-garden")
+  def test_graph_projects_complete_global_data_and_one_hop_local_graphs
+    result = compile(
+      note("index.md", "---\npublish: true\nupdated: 2026-07-30\n---\n# Home\n[[a]]\n[[b]]"),
+      note("a.md", "---\npublish: true\nupdated: 2026-07-30\n---\n# Alpha\n[[b]]"),
+      note("b.md", "---\npublish: true\nupdated: 2026-07-30\n---\n# Beta"),
+      note("isolated.md", "---\npublish: true\nupdated: 2026-07-30\n---\n# Isolated"),
+      note("private.md", "---\npublish: false\n---\n# Private\n[[index]]"),
+      theme: "docs"
+    )
     assert result.success?, result.diagnostics.map(&:message).join("\n")
-    assert_equal false, result.site_data.fetch("website_graph_interactive")
-    refute result.generated_files.any? { |file| file.route == "/assets/website/graph.v1.json" }
-    graph_data = page(result, "/graph/").data.dig("website", "theme_data")
-    assert_equal false, graph_data.fetch("graph_interactive")
-    assert_equal 251, graph_data.fetch("graph_notes").length
+    assert_nil page(result, "/graph/")
+
+    graph = generated_json(result, "/assets/website/graph.v1.json")
+    assert_equal %w[a.md b.md index.md isolated.md], graph.fetch("nodes").map { |node| node.fetch("id") }
+    assert_equal({ "a.md" => 2, "b.md" => 2, "index.md" => 2, "isolated.md" => 0 }, graph.fetch("nodes").to_h { |node| [node.fetch("id"), node.fetch("degree")] })
+
+    home_graph = page(result, "/").data.dig("website", "local_graph")
+    assert_equal "index.md", home_graph.fetch("current_id")
+    assert_equal %w[a.md b.md index.md], home_graph.fetch("nodes").map { |node| node.fetch("id") }
+    assert_equal 2, home_graph.fetch("edges").length
+
+    alpha_graph = page(result, "/a/").data.dig("website", "local_graph")
+    assert_equal %w[a.md b.md index.md], alpha_graph.fetch("nodes").map { |node| node.fetch("id") }
+    assert_equal 2, alpha_graph.fetch("edges").length
+
+    isolated_graph = page(result, "/isolated/").data.dig("website", "local_graph")
+    assert_equal ["isolated.md"], isolated_graph.fetch("nodes").map { |node| node.fetch("id") }
+    assert_empty isolated_graph.fetch("edges")
   end
 
   def test_feature_and_always_generated_namespaces_reserve_matching_directory_routes

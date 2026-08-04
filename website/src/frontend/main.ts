@@ -77,22 +77,11 @@ export function initialiseWebsite(): void {
       });
   }
 
-  const graph = document.querySelector<HTMLElement>("[data-graph]");
-  if (graph) {
+  if (document.querySelector("[data-local-graph-section]")) {
     void import("./graph")
-      .then(({ renderGraph }) => renderGraph(graph))
+      .then(({ initialiseGraphs }) => initialiseGraphs())
       .catch(() => {
-        graph.dataset.graphError = "true";
-        const status = graph.querySelector<HTMLElement>("[data-graph-status]");
-        if (status) status.textContent = graph.dataset.graphUnavailable || "The interactive graph could not be loaded. Use the note directory below.";
+        document.documentElement.dataset.graphError = "true";
       });
   }
-
-  const graphFilter = document.querySelector<HTMLInputElement>("[data-graph-directory-filter]");
-  graphFilter?.addEventListener("input", () => {
-    const query = graphFilter.value.normalize("NFKC").toLocaleLowerCase("und").trim();
-    for (const item of document.querySelectorAll<HTMLElement>("[data-graph-directory-item]")) {
-      item.hidden = query !== "" && !item.dataset.graphFilterText?.includes(query);
-    }
-  });
 }

@@ -28,7 +28,7 @@ function featureFixture(theme, feature) {
   const hasContext = feature === "outline" || feature === "relations";
   const hasNavigation = feature === "navigation";
   const featureLinks = hasNavigation
-    ? '<a href="/tags/">Tags</a><a href="/graph/">Graph</a><a href="/feed.xml">Feed</a>'
+    ? '<a href="/tags/">Tags</a><a href="/feed.xml">Feed</a>'
     : "";
   const feedDiscovery = hasNavigation
     ? '<link rel="alternate" type="application/atom+xml" title="Obsidian feed" href="/feed.xml">'
@@ -51,8 +51,8 @@ function featureFixture(theme, feature) {
     ? `<nav class="mobile-toolbar" aria-label="Mobile actions"><button type="button" data-dialog-open="context">${feature === "outline" ? "On this page" : "Context"}</button></nav><template data-dialog-template="context">${contextSections(feature, "dialog")}</template><dialog class="website-dialog" data-dialog="context" aria-labelledby="feature-context-title"><div class="website-dialog__sheet"><header class="website-dialog__header"><h2 class="website-dialog__title" id="feature-context-title">${feature === "outline" ? "On this page" : "Context"}</h2><button class="website-dialog__close" type="button" data-dialog-close aria-label="Close page context">×</button></header><div class="website-dialog__body" data-dialog-content></div></div></dialog>`
     : "";
   const browseContents = theme === "docs"
-    ? `<nav class="docs-tree" aria-label="Documentation"><ul class="docs-tree__list"><li class="docs-tree__item"><a href="/docs/">Getting started</a></li></ul></nav><nav aria-label="More ways to browse"><ul class="relation-list"><li><a href="/tags/">Tags</a></li><li><a href="/graph/">Graph</a></li><li><a href="/feed.xml">Feed</a></li></ul></nav>`
-    : `<nav aria-label="Browse"><ul class="relation-list"><li><a href="/">Home</a></li><li><a href="/tags/">Tags</a></li><li><a href="/graph/">Graph</a></li><li><a href="/feed.xml">Feed</a></li></ul></nav>`;
+    ? `<nav class="docs-tree" aria-label="Documentation"><ul class="docs-tree__list"><li class="docs-tree__item"><a href="/docs/">Getting started</a></li></ul></nav><nav aria-label="More ways to browse"><ul class="relation-list"><li><a href="/tags/">Tags</a></li><li><a href="/feed.xml">Feed</a></li></ul></nav>`
+    : `<nav aria-label="Browse"><ul class="relation-list"><li><a href="/">Home</a></li><li><a href="/tags/">Tags</a></li><li><a href="/feed.xml">Feed</a></li></ul></nav>`;
   const navigationUi = hasNavigation
     ? `<nav class="mobile-toolbar" aria-label="Mobile actions"><button type="button" data-dialog-open="browse">Browse</button></nav><template data-dialog-template="browse">${browseContents}</template><dialog class="website-dialog" data-dialog="browse" aria-labelledby="feature-browse-title"><div class="website-dialog__sheet"><header class="website-dialog__header"><h2 class="website-dialog__title" id="feature-browse-title">Browse</h2><button class="website-dialog__close" type="button" data-dialog-close aria-label="Close browse menu">×</button></header><div class="website-dialog__body" data-dialog-content></div></div></dialog>`
     : "";
