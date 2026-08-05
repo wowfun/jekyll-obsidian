@@ -28,15 +28,50 @@ class ThemeContractTest < Minitest::Test
     refute result.site_data.key?("website_repository_url")
   end
 
-  def test_public_root_index_is_required_in_development_too
-    result = compile(
-      note("docs/guide.md", "---\npublish: true\nupdated: 2026-07-30\n---\n# Guide"),
+  def test_missing_root_index_keeps_recent_posts_home_or_redirects_to_first_visible_section
+    docs = compile(
+      note("later.md", "---\npublish: true\nnav_order: 20\nupdated: 2026-07-30\n---\n# Later"),
+      note("first.md", "---\npublish: true\nnav_order: 10\nupdated: 2026-07-30\n---\n# First"),
       theme: "docs",
-      environment: "development"
+      environment: "development",
+      content: { "default_type" => "doc", "directories" => { "doc" => [], "post" => [] } }
     )
+    assert docs.success?, docs.diagnostics.map(&:message).join("\n")
+    docs_redirect = page(docs, "/")
+    assert_equal "redirect", docs_redirect.data.dig("website", "kind")
+    assert_equal "website-redirect", docs_redirect.data.fetch("layout")
+    assert_equal "/first/", docs_redirect.data.dig("website", "redirect_url")
+    assert_equal "https://example.test/first/", docs_redirect.data.dig("website", "canonical_url")
+    assert_equal "/first/", page(docs, "/later/").data.dig("website", "routes", "home")
+    sitemap = docs.generated_files.find { |file| file.route == "/sitemap.xml" }.content
+    refute_includes sitemap, "<loc>https://example.test/</loc>"
+    assert_includes sitemap, "<loc>https://example.test/first/</loc>"
+
+    minimal = compile(
+      note("posts/older.md", "---\npublish: true\ncontent_type: post\ndate: 2026-07-01\n---\n# Older"),
+      note("posts/newer.md", "---\npublish: true\ncontent_type: post\ndate: 2026-08-01\n---\n# Newer"),
+      theme: "minimal"
+    )
+    assert minimal.success?, minimal.diagnostics.map(&:message).join("\n")
+    assert_equal "home", page(minimal, "/").data.dig("website", "kind")
+    assert_equal %w[posts/newer.md posts/older.md], page(minimal, "/").data.dig("website", "theme_data", "recent_posts").map { |post| post.fetch("id") }
+    assert_equal "/", page(minimal, "/posts/newer/").data.dig("website", "routes", "home")
+
+    custom = compile(
+      note("zulu.md", "---\npublish: true\nnavigation:\n  order: 20\n---\n# Zulu"),
+      note("alpha.md", "---\npublish: true\nnavigation:\n  order: 10\n---\n# Alpha"),
+      theme: "minimal"
+    )
+    assert custom.success?, custom.diagnostics.map(&:message).join("\n")
+    assert_equal "/alpha/", page(custom, "/").data.dig("website", "redirect_url")
+  end
+
+  def test_content_directory_without_public_notes_fails_once
+    result = compile(note("private.md", "---\npublish: false\n---\n# Private"), theme: "docs")
 
     refute result.success?
-    assert result.diagnostics.any? { |item| item.code == "missing_index" && item.path == "index.md" }
+    assert_equal 1, result.diagnostics.count { |item| item.code == "missing_public_notes" }
+    refute result.diagnostics.any? { |item| item.code == "invalid_index_count" }
   end
 
   def test_note_routes_are_identical_across_all_built_in_themes
@@ -47,14 +82,13 @@ class ThemeContractTest < Minitest::Test
       note("notes/Café.md", "---\npublish: true\nupdated: 2026-07-30\n---\n# Café")
     ]
 
-    route_sets = %w[blog docs digital-garden].to_h do |theme|
+    route_sets = %w[minimal docs].to_h do |theme|
       result = compile(*entries, theme: theme)
       assert result.success?, result.diagnostics.map(&:message).join("\n")
       [theme, result.notes.map { |published_note| [published_note.id, published_note.route] }]
     end
 
-    assert_equal route_sets.fetch("blog"), route_sets.fetch("docs")
-    assert_equal route_sets.fetch("blog"), route_sets.fetch("digital-garden")
+    assert_equal route_sets.fetch("minimal"), route_sets.fetch("docs")
   end
 
   def test_content_type_uses_explicit_property_then_directory_then_default
@@ -63,7 +97,7 @@ class ThemeContractTest < Minitest::Test
       note("blog/from-folder.md", "---\npublish: true\ndate: 2026-07-01\n---\n# Folder post"),
       note("blog/explicit-doc.md", "---\npublish: true\ncontent_type: doc\ncreated: 2026-07-02\nupdated: 2026-07-30\n---\n# Explicit doc"),
       note("misc.md", "---\npublish: true\ncreated: 2026-07-03\nupdated: 2026-07-30\n---\n# Default page"),
-      theme: "blog",
+      theme: "minimal",
       content: {
         "default_type" => "page",
         "directories" => { "post" => ["blog"], "doc" => ["docs"] }
@@ -71,7 +105,7 @@ class ThemeContractTest < Minitest::Test
     )
 
     assert result.success?, result.diagnostics.map(&:message).join("\n")
-    assert_equal "page", page(result, "/").data.dig("website", "content_type")
+    assert_equal "home", page(result, "/").data.dig("website", "kind")
     assert_equal "post", page(result, "/blog/from-folder/").data.dig("website", "content_type")
     assert_equal "doc", page(result, "/blog/explicit-doc/").data.dig("website", "content_type")
     assert_equal "page", page(result, "/misc/").data.dig("website", "content_type")
@@ -88,7 +122,7 @@ class ThemeContractTest < Minitest::Test
       note("posts/created.md", "---\npublish: true\ncontent_type: post\ncreated: 2026-07-04\n---\n# Created", first_committed_at: "2026-07-01T00:00:00Z"),
       note("posts/git.md", "---\npublish: true\ncontent_type: post\n---\n# Git", first_committed_at: "2026-07-05T12:00:00Z")
     ]
-    result = compile(*entries, theme: "blog")
+    result = compile(*entries, theme: "minimal")
 
     assert result.success?, result.diagnostics.map(&:message).join("\n")
     assert_equal "2026-07-03T00:00:00Z", page(result, "/posts/dated/").data.dig("website", "published_at")
@@ -99,11 +133,11 @@ class ThemeContractTest < Minitest::Test
     assert_includes feed.content, "<published>2026-07-03T00:00:00Z</published>"
 
     timeless = entries + [note("posts/timeless.md", "---\npublish: true\ncontent_type: post\n---\n# Timeless")]
-    production = compile(*timeless, theme: "blog")
+    production = compile(*timeless, theme: "minimal")
     refute production.success?
     assert production.diagnostics.any? { |item| item.code == "missing_post_date" && item.severity == :error }
 
-    development = compile(*timeless, theme: "blog", environment: "development")
+    development = compile(*timeless, theme: "minimal", environment: "development")
     assert development.success?
     assert development.diagnostics.any? { |item| item.code == "missing_post_date" && item.severity == :warning }
   end
@@ -115,28 +149,21 @@ class ThemeContractTest < Minitest::Test
       note("docs/guide.md", "---\npublish: true\ncontent_type: doc\nupdated: 2026-07-30\n---\n# Guide")
     ]
 
-    garden = compile(*entries, theme: "digital-garden")
-    assert_equal %w[/ /404.html /blog/post/ /docs/guide/ /notes/ /tags/], garden.pages.map(&:route)
-    assert_equal %w[/assets/website/catalog.v1.json /assets/website/graph.v1.json /assets/website/search.v1.json /feed.xml /sitemap.xml], garden.generated_files.map(&:route)
-    assert_equal true, garden.features.fetch("previews")
-    assert_equal true, garden.features.fetch("outline")
-    assert_equal true, garden.features.fetch("relations")
-    assert_equal true, garden.features.fetch("graph")
-
-    blog = compile(*entries, theme: "blog")
-    assert blog.success?, blog.diagnostics.map(&:message).join("\n")
-    assert_equal %w[/ /404.html /archive/ /blog/post/ /docs/guide/ /tags/], blog.pages.map(&:route)
-    assert_equal %w[/assets/website/catalog.v1.json /assets/website/graph.v1.json /assets/website/search.v1.json /feed.xml /sitemap.xml], blog.generated_files.map(&:route)
-    assert_equal true, blog.features.fetch("previews")
-    assert_equal true, blog.features.fetch("outline")
-    assert_equal true, blog.features.fetch("relations")
-    assert_equal true, blog.features.fetch("graph")
-    assert_equal "website-blog", page(blog, "/archive/").data.fetch("layout")
+    minimal = compile(*entries, theme: "minimal")
+    assert minimal.success?, minimal.diagnostics.map(&:message).join("\n")
+    assert_equal %w[/ /404.html /blog/ /blog/post/ /docs/guide/], minimal.pages.map(&:route)
+    assert_equal %w[/assets/website/catalog.v1.json /assets/website/graph.v1.json /assets/website/search.v1.json /feed.xml /sitemap.xml], minimal.generated_files.map(&:route)
+    assert_equal true, minimal.features.fetch("previews")
+    assert_equal true, minimal.features.fetch("outline")
+    assert_equal true, minimal.features.fetch("relations")
+    assert_equal true, minimal.features.fetch("graph")
+    assert_equal "website-minimal", page(minimal, "/blog/").data.fetch("layout")
+    assert_nil page(minimal, "/tags/")
 
     docs = compile(*entries, theme: "docs")
     assert docs.success?, docs.diagnostics.map(&:message).join("\n")
     assert_equal %w[/ /404.html /blog/post/ /docs/guide/], docs.pages.map(&:route)
-    assert_equal %w[/assets/website/catalog.v1.json /assets/website/docs-navigation.html /assets/website/graph.v1.json /assets/website/search.v1.json /sitemap.xml], docs.generated_files.map(&:route)
+    assert_equal %w[/assets/website/catalog.v1.json /assets/website/graph.v1.json /assets/website/search.v1.json /sitemap.xml], docs.generated_files.map(&:route)
     assert_equal true, docs.features.fetch("previews")
     assert_equal true, docs.features.fetch("outline")
     assert_equal true, docs.features.fetch("relations")
@@ -169,7 +196,7 @@ class ThemeContractTest < Minitest::Test
       note("blog/older.md", "---\npublish: true\ncontent_type: post\ndate: 2026-06-01\nupdated: 2026-06-03\ntags: [journal]\n---\n# Older"),
       note("blog/newer.md", "---\npublish: true\ncontent_type: post\ndate: 2026-07-01\nupdated: 2026-07-03\ntags: [journal]\n---\n# Newer"),
       note("about.md", "---\npublish: true\nupdated: 2026-07-30\ntags: [private-page-tag]\n---\n# About"),
-      theme: "blog"
+      theme: "minimal"
     )
 
     assert result.success?, result.diagnostics.map(&:message).join("\n")
@@ -183,16 +210,103 @@ class ThemeContractTest < Minitest::Test
     assert_equal "blog/older.md", newer.fetch("previous").fetch("id")
     assert_nil newer.fetch("next")
 
-    archive = page(result, "/archive/")
+    archive = page(result, "/blog/")
     assert_equal %w[2026], archive.data.dig("website", "theme_data", "archive_groups").map { |group| group.fetch("label") }
-    tag_names = page(result, "/tags/").data.dig("website", "theme_data", "tag_groups")
-      .map { |group| group.fetch("name") }
-    refute_includes tag_names, "private-page-tag"
+    assert_equal [
+      {
+        "year" => "2026",
+        "count" => 2,
+        "months" => [
+          { "key" => "2026-07", "label" => "07", "count" => 1 },
+          { "key" => "2026-06", "label" => "06", "count" => 1 }
+        ]
+      }
+    ], archive.data.dig("website", "theme_data", "timeline")
+    assert_equal ["journal"], archive.data.dig("website", "theme_data", "archive_groups", 0, "posts", 0, "topic_anchors")
+    assert_equal "2026-07", archive.data.dig("website", "theme_data", "archive_groups", 0, "posts", 0, "filter_month")
+    assert_equal [
+      { "name" => "journal", "anchor" => "journal", "count" => 2 }
+    ], page(result, "/").data.dig("website", "theme_data", "topic_summaries")
+    refute_includes page(result, "/blog/").data.dig("website", "theme_data", "topic_summaries").map { |topic| topic.fetch("name") }, "private-page-tag"
+    assert_nil page(result, "/tags/")
+    refute page(result, "/blog/newer/").data.fetch("website").key?("tag_summaries")
+    assert_equal true, page(result, "/blog/newer/").data.dig("website", "has_context")
     feed = result.generated_files.find { |file| file.route == "/feed.xml" }.content
     assert_includes feed, "Older"
     assert_includes feed, "Newer"
     refute_includes feed, "About"
     refute_includes feed, ">Home<"
+  end
+
+  def test_blog_topics_support_author_categories_and_quoted_frontmatter_wiki_links
+    result = compile(
+      note("AI.md", "---\npublish: true\ntitle: Artificial Intelligence\n---\n# Artificial Intelligence"),
+      note("people/Ada.md", "---\npublish: true\ntitle: Ada Lovelace\n---\n# Ada Lovelace"),
+      note("blog/post.md", <<~MARKDOWN),
+        ---
+        publish: true
+        title: Dreamers among programmers
+        subtitle: A field note about software
+        content_type: post
+        date: 2026-08-05
+        author:
+          - "[[people/Ada|Ada]]"
+          - Editorial team
+        categories:
+          - "[[AI]]"
+          - Engineering
+        tags:
+          - essays
+        ---
+        The opening paragraph becomes the Home excerpt when description is omitted.
+      MARKDOWN
+      theme: "minimal"
+    )
+
+    assert result.success?, result.diagnostics.map(&:message).join("\n")
+    output = result.notes.find { |note_output| note_output.id == "blog/post.md" }
+    assert_equal ["[[people/Ada|Ada]]", "Editorial team"], output.properties.fetch("author")
+    assert_equal ["[[AI]]", "Engineering"], output.properties.fetch("categories")
+    assert_equal "A field note about software", output.properties.fetch("subtitle")
+
+    post = page(result, "/").data.dig("website", "theme_data", "recent_posts", 0)
+    assert_equal "A field note about software", post.fetch("subtitle")
+    assert_includes post.fetch("summary"), "opening paragraph"
+    assert_equal [
+      { "kind" => "author", "name" => "Ada", "url" => "/people/Ada/" },
+      { "kind" => "author", "name" => "Editorial team" }
+    ], post.fetch("authors")
+
+    topics = page(result, "/").data.dig("website", "theme_data", "topic_summaries")
+    assert_equal ["Ada", "Artificial Intelligence", "Editorial team", "Engineering", "essays"].sort,
+      topics.map { |topic| topic.fetch("name") }.sort
+    assert_equal "/people/Ada/", topics.find { |topic| topic.fetch("name") == "Ada" }.fetch("url")
+    assert_equal "/AI/", topics.find { |topic| topic.fetch("name") == "Artificial Intelligence" }.fetch("url")
+    assert_equal %w[AI.md people/Ada.md], result.relations
+      .select { |relation| relation.source_id == "blog/post.md" }
+      .map(&:target_id)
+      .sort
+
+    note_page = page(result, "/blog/post/").data.fetch("website")
+    assert_equal "A field note about software", note_page.fetch("subtitle")
+    assert_equal ["[[people/Ada|Ada]]", "Editorial team"], note_page.fetch("author")
+    assert_equal ["[[AI]]", "Engineering"], note_page.fetch("categories")
+  end
+
+  def test_frontmatter_topic_fields_are_arrays_and_wiki_links_require_double_quotes
+    scalar = compile(note("index.md", "---\npublish: true\nauthor: Ada\ncategories: Engineering\n---\n# Home"))
+    refute scalar.success?
+    assert_equal 2, scalar.diagnostics.count { |item| item.code == "invalid_property" }
+
+    single_quoted = compile(note("index.md", "---\npublish: true\nauthor:\n  - '[[Ada]]'\n---\n# Home"))
+    refute single_quoted.success?
+    assert(single_quoted.diagnostics.any? do |item|
+      item.code == "invalid_property" && item.message == "author wiki link entries must use double-quoted YAML strings"
+    end)
+
+    malformed = compile(note("index.md", "---\npublish: true\ncategories:\n  - \"[[AI|]]\"\n---\n# Home"))
+    refute malformed.success?
+    assert malformed.diagnostics.any? { |item| item.message == "categories wiki links must use [[target]] or [[target|label]] syntax" }
   end
 
   def test_blog_uses_note_id_to_break_equal_dates_and_archives_undated_development_posts
@@ -203,16 +317,70 @@ class ThemeContractTest < Minitest::Test
       note("blog/undated.md", "---\npublish: true\ncontent_type: post\n---\n# Undated")
     ]
 
-    result = compile(*entries.reverse, theme: "blog", environment: "development")
+    result = compile(*entries.reverse, theme: "minimal", environment: "development")
 
     assert result.success?, result.diagnostics.map(&:message).join("\n")
     recent = page(result, "/").data.dig("website", "theme_data", "recent_posts")
     assert_equal %w[blog/zulu.md blog/alpha.md blog/undated.md], recent.map { |post| post.fetch("id") }
 
-    archive = page(result, "/archive/").data.dig("website", "theme_data", "archive_groups")
+    archive = page(result, "/blog/").data.dig("website", "theme_data", "archive_groups")
     assert_equal %w[2026 Undated], archive.map { |group| group.fetch("label") }
     assert_equal %w[blog/zulu.md blog/alpha.md], archive.first.fetch("posts").map { |post| post.fetch("id") }
     assert_equal ["blog/undated.md"], archive.last.fetch("posts").map { |post| post.fetch("id") }
+  end
+
+  def test_minimal_home_combines_authored_content_six_recent_posts_and_contacts
+    entries = [
+      note(
+        "index.md",
+        "---\npublish: true\nupdated: 2026-07-30\nimage: media/cover.png\ncssclasses: [authored-home]\n---\n# Hidden landing copy\n\n## Start here\n\n[[blog/post-12]]"
+      ),
+      attachment("media/cover.png", "cover", media_type: "image/png")
+    ]
+    entries.concat((1..12).map do |day|
+      note(
+        "blog/post-#{day}.md",
+        "---\npublish: true\ncontent_type: post\ndate: 2026-07-#{format('%02d', day)}\ndescription: Summary #{day}\n---\n# Post #{day}"
+      )
+    end)
+    contacts = [
+      { "label" => "GitHub", "url" => "https://github.com/example" },
+      { "label" => "Email", "url" => "mailto:hello@example.test" }
+    ]
+
+    result = compile(*entries, theme: "minimal", contacts: contacts)
+
+    assert result.success?, result.diagnostics.map(&:message).join("\n")
+    home = page(result, "/")
+    assert_equal "home", home.data.dig("website", "kind")
+    assert_includes home.content, "Hidden landing copy"
+    assert_equal 6, home.data.dig("website", "theme_data", "recent_posts").length
+    assert_equal %w[blog/post-12.md blog/post-11.md], home.data.dig("website", "theme_data", "recent_posts").first(2).map { |post| post.fetch("id") }
+    assert_equal "Summary 12", home.data.dig("website", "theme_data", "recent_posts", 0, "summary")
+    assert_equal contacts, home.data.dig("website", "theme_data", "contacts")
+    assert_equal "https://example.test/assets/vault/media/cover.png", home.data.fetch("image")
+    assert_equal ["authored-home"], home.data.dig("website", "cssclasses")
+    assert_equal "index.md", home.data.dig("website", "local_graph", "current_id")
+    assert home.data.dig("website", "outline").any? { |item| item.fetch("label") == "Start here" }
+    assert home.data.dig("website", "links").any? { |item| item.fetch("id") == "blog/post-12.md" }
+    assert_equal true, home.data.dig("website", "has_context")
+    assert_includes home.data.dig("website", "source_links", "source"), "vault/index.md"
+    assert_equal 12, page(result, "/blog/").data.dig("website", "theme_data", "archive_groups", 0, "posts").length
+    assert_nil page(result, "/page/2/")
+    assert_nil page(result, "/archive/")
+    refute_includes result.pages.map(&:route), "/index/"
+  end
+
+  def test_contacts_reject_unknown_shapes_and_unsafe_urls
+    home = note("index.md", "---\npublish: true\nupdated: 2026-07-30\n---\n# Home")
+
+    invalid_list = compile(home, theme: "minimal", contacts: "https://example.test")
+    refute invalid_list.success?
+    assert invalid_list.diagnostics.any? { |item| item.code == "invalid_contacts" }
+
+    unsafe_url = compile(home, theme: "minimal", contacts: [{ "label" => "Run", "url" => "javascript:alert(1)" }])
+    refute unsafe_url.success?
+    assert unsafe_url.diagnostics.any? { |item| item.code == "invalid_contacts" }
   end
 
   def test_theme_projection_is_deeply_immutable_and_deterministic_through_compile
@@ -221,8 +389,8 @@ class ThemeContractTest < Minitest::Test
       note("blog/post.md", "---\npublish: true\ncontent_type: post\ndate: 2026-07-01\nupdated: 2026-07-02\n---\n# Post")
     ]
 
-    first = compile(*entries, theme: "blog")
-    second = compile(*entries.reverse, theme: "blog")
+    first = compile(*entries, theme: "minimal")
+    second = compile(*entries.reverse, theme: "minimal")
 
     assert_equal first, second
     assert_raises(FrozenError) do
@@ -231,7 +399,7 @@ class ThemeContractTest < Minitest::Test
     assert_raises(FrozenError) { first.relations.first.source_id.replace("mutated.md") }
   end
 
-  def test_docs_builds_tree_breadcrumbs_and_navigation_from_visible_docs
+  def test_docs_builds_flat_root_tree_and_navigation_from_visible_docs
     result = compile(
       note("index.md", "---\npublish: true\nupdated: 2026-07-30\n---\n# Home"),
       note("docs/index.md", "---\npublish: true\nnav_order: 1\nupdated: 2026-07-30\n---\n# Manual"),
@@ -244,12 +412,11 @@ class ThemeContractTest < Minitest::Test
 
     assert result.success?, result.diagnostics.map(&:message).join("\n")
     tree = page(result, "/").data.dig("website", "theme_data", "docs_tree")
-    assert_equal ["docs/index.md"], tree.map { |node| node.fetch("id") }
-    assert_equal %w[docs/install.md docs/reference.md], tree.first.fetch("children").map { |node| node.fetch("id") }
+    assert_equal %w[docs/install.md docs/reference.md], tree.map { |node| node.fetch("id") }
     assert_equal "/docs/", page(result, "/").data.dig("website", "theme_data", "docs_home_url")
 
     reference_data = page(result, "/docs/reference/").data.dig("website", "theme_data")
-    assert_equal %w[docs/index.md docs/reference.md], reference_data.fetch("breadcrumbs").map { |item| item.fetch("id") }
+    refute reference_data.key?("breadcrumbs")
     assert_equal "docs/install.md", reference_data.fetch("previous").fetch("id")
     assert_nil reference_data.fetch("next")
 
@@ -258,16 +425,18 @@ class ThemeContractTest < Minitest::Test
     assert_equal "docs/install.md", manual_data.fetch("next").fetch("id")
   end
 
-  def test_docs_folders_without_landings_are_text_groups_and_hidden_landings_keep_children
+  def test_docs_folders_without_landings_link_to_their_first_ordered_page
     missing = compile(
       note("index.md", "---\npublish: true\nupdated: 2026-07-30\n---\n# Home"),
-      note("docs/guides/install.md", "---\npublish: true\nupdated: 2026-07-30\n---\n# Install"),
+      note("docs/guides/later.md", "---\npublish: true\nnav_order: 20\nupdated: 2026-07-30\n---\n# Later"),
+      note("docs/guides/first.md", "---\npublish: true\nnav_order: 10\nupdated: 2026-07-30\n---\n# First"),
       theme: "docs"
     )
     tree = page(missing, "/").data.dig("website", "theme_data", "docs_tree")
-    assert_nil tree.first.fetch("url")
-    assert_nil tree.first.fetch("children").first.fetch("url")
-    assert_equal "/docs/guides/install/", page(missing, "/").data.dig("website", "theme_data", "docs_home_url")
+    assert_equal "folder:guides", tree.first.fetch("id")
+    assert_equal "/docs/guides/first/", tree.first.fetch("url")
+    assert_equal %w[docs/guides/first.md docs/guides/later.md], tree.first.fetch("children").map { |node| node.fetch("id") }
+    assert_equal "/docs/guides/first/", page(missing, "/").data.dig("website", "theme_data", "docs_home_url")
 
     hidden = compile(
       note("index.md", "---\npublish: true\nupdated: 2026-07-30\n---\n# Home"),
@@ -276,9 +445,8 @@ class ThemeContractTest < Minitest::Test
       theme: "docs"
     )
     hidden_root = page(hidden, "/").data.dig("website", "theme_data", "docs_tree").first
-    assert_equal "docs/index.md", hidden_root.fetch("id")
-    assert_nil hidden_root.fetch("url")
-    assert_equal ["docs/child.md"], hidden_root.fetch("children").map { |node| node.fetch("id") }
+    assert_equal "docs/child.md", hidden_root.fetch("id")
+    assert_equal "/docs/child/", hidden_root.fetch("url")
     assert_equal "/docs/child/", page(hidden, "/").data.dig("website", "theme_data", "docs_home_url")
 
     no_docs = compile(note("index.md", "---\npublish: true\nupdated: 2026-07-30\n---\n# Home"), theme: "docs")
@@ -363,31 +531,28 @@ class ThemeContractTest < Minitest::Test
     assert docs.success?, docs.diagnostics.map(&:message).join("\n")
     assert_equal %w[/archive/ /graph/ /notes/ /tags/], candidates.map { |entry| page(docs, "/#{File.basename(entry.path, '.md')}/").route }
 
-    blog_available = compile(home, candidates[1], candidates[2], theme: "blog")
-    assert blog_available.success?, blog_available.diagnostics.map(&:message).join("\n")
-    assert page(blog_available, "/graph/")
-    assert page(blog_available, "/notes/")
-    %w[archive tags].each do |reserved|
-      result = compile(home, note("#{reserved}.md", "---\npublish: true\nupdated: 2026-07-30\n---\n# Reserved"), theme: "blog")
-      refute result.success?, "expected blog to reserve /#{reserved}/"
-      assert result.diagnostics.any? { |item| item.code == "route_collision" }
-    end
+    minimal = compile(
+      home,
+      *candidates,
+      note("page/3.md", "---\npublish: true\nupdated: 2026-07-30\n---\n# Page three"),
+      theme: "minimal"
+    )
+    assert minimal.success?, minimal.diagnostics.map(&:message).join("\n")
+    assert_equal %w[/archive/ /graph/ /notes/ /tags/], candidates.map { |entry| page(minimal, "/#{File.basename(entry.path, '.md')}/").route }
+    assert page(minimal, "/page/3/")
+    assert_nil page(minimal, "/blog/")
 
-    garden_archive = compile(home, candidates[0], theme: "digital-garden")
-    assert garden_archive.success?, garden_archive.diagnostics.map(&:message).join("\n")
-    assert page(garden_archive, "/archive/")
-    %w[notes tags].each do |reserved|
-      result = compile(home, note("#{reserved}.md", "---\npublish: true\nupdated: 2026-07-30\n---\n# Reserved"), theme: "digital-garden")
-      refute result.success?, "expected digital-garden to reserve /#{reserved}/"
-      assert result.diagnostics.any? { |item| item.code == "route_collision" }
-    end
-
-    garden_graph = compile(home, candidates[1], theme: "digital-garden")
-    assert garden_graph.success?, garden_graph.diagnostics.map(&:message).join("\n")
-    assert page(garden_graph, "/graph/")
+    collision = compile(
+      home,
+      note("blog.md", "---\npublish: true\nupdated: 2026-07-30\n---\n# Authored blog"),
+      note("posts/entry.md", "---\npublish: true\ncontent_type: post\ndate: 2026-07-30\n---\n# Entry"),
+      theme: "minimal"
+    )
+    refute collision.success?
+    assert collision.diagnostics.any? { |item| item.code == "route_collision" }
   end
 
-  def test_docs_pages_keep_only_the_current_branch_and_share_one_full_navigation_fragment
+  def test_docs_pages_embed_the_complete_navigation_tree
     result = compile(
       note("index.md", "---\npublish: true\nupdated: 2026-07-30\n---\n# Home"),
       note("docs/index.md", "---\npublish: true\nupdated: 2026-07-30\n---\n# Docs"),
@@ -407,11 +572,8 @@ class ThemeContractTest < Minitest::Test
     end
     collect_ids.call(branch)
     assert_includes ids, "docs/a/one.md"
-    refute_includes ids, "docs/b/two.md"
-    shared = result.generated_files.select { |file| file.route == "/assets/website/docs-navigation.html" }
-    assert_equal 1, shared.length
-    assert_includes shared.first.content, "One"
-    assert_includes shared.first.content, "Two"
+    assert_includes ids, "docs/b/two.md"
+    refute result.generated_files.any? { |file| file.route.end_with?("/docs-navigation.html") }
   end
 
   def test_graph_projects_complete_global_data_and_one_hop_local_graphs

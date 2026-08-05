@@ -20,7 +20,7 @@ class JekyllAdapterTest < Minitest::Test
     FileUtils.mkdir_p(File.join(@temporary_root, "src"))
     File.write(File.join(@temporary_root, "src", "private.rb"), "Host source leak marker")
     File.write(File.join(@site_root, "docs", "private.md"), "Bundled example leak marker")
-    %w[website-blog website-docs website-digital-garden].each do |layout|
+    %w[website-minimal website-docs].each do |layout|
       File.write(File.join(@site_root, "_layouts", "#{layout}.html"), <<~LIQUID)
         <!doctype html><html data-theme="#{layout.delete_prefix("website-")}"><body><div data-layout="once">{{ content }}</div></body></html>
       LIQUID
@@ -77,6 +77,33 @@ class JekyllAdapterTest < Minitest::Test
     )
   end
 
+  def test_indexless_source_renders_a_verified_root_redirect_to_the_first_page
+    FileUtils.rm(File.join(@temporary_root, "vault", "index.md"))
+    File.write(File.join(@temporary_root, "vault", "Later.md"), "---\npublish: true\nnav_order: 20\n---\n# Later")
+    File.write(File.join(@temporary_root, "vault", "Start.md"), "---\npublish: true\nnav_order: 10\n---\n# Start")
+    install_project_layout
+    content = {
+      "default_type" => "doc",
+      "directories" => { "post" => [], "doc" => [] }
+    }
+
+    build_site(
+      "baseurl" => "/manual",
+      "website" => website_config.merge("theme" => "docs", "content" => content)
+    ).process
+
+    redirect = File.read(File.join(destination, "index.html"))
+    assert_includes redirect, 'http-equiv="refresh"'
+    assert_includes redirect, 'content="0; url=/manual/Start/"'
+    assert_includes redirect, 'rel="canonical" href="https://example.test/manual/Start/"'
+    assert File.file?(File.join(destination, "Start", "index.html"))
+    assert_includes File.read(File.join(destination, "Later", "index.html")), 'class="site-mark" href="/manual/Start/"'
+
+    verifier = File.expand_path("../../scripts/verify-site-urls.rb", __dir__)
+    stdout, stderr, status = Open3.capture3(Gem.ruby, verifier, destination, "https://example.test", "/manual")
+    assert status.success?, "#{stdout}\n#{stderr}"
+  end
+
   def test_real_footer_links_to_the_configured_github_repository
     install_project_layout
     site = build_site
@@ -114,7 +141,7 @@ class JekyllAdapterTest < Minitest::Test
 
   def test_render_failure_cleans_staged_vault_assets
     File.write(
-      File.join(@site_root, "_layouts", "website-digital-garden.html"),
+      File.join(@site_root, "_layouts", "website-minimal.html"),
       "{% include missing-staging-cleanup-fixture.html %}"
     )
     site = build_site
@@ -139,7 +166,7 @@ class JekyllAdapterTest < Minitest::Test
     assert_empty staging
   end
 
-  def test_blog_archive_renders_each_entry_once
+  def test_minimal_blog_index_renders_each_entry_once
     FileUtils.mkdir_p(File.join(@temporary_root, "vault", "blog"))
     File.write(File.join(@temporary_root, "vault", "blog", "dispatch.md"), <<~MARKDOWN)
       ---
@@ -150,15 +177,77 @@ class JekyllAdapterTest < Minitest::Test
       ---
       # One dispatch
     MARKDOWN
-    File.write(File.join(@site_root, "_layouts", "website-blog.html"), <<~LIQUID)
-      <!doctype html><html><body>{{ content }}{% if page.website.kind == 'archive' %}{% for group in page.website.theme_data.archive_groups %}{% for post in group.posts %}<a data-archive-entry href="{{ post.url }}">{{ post.title }}</a>{% endfor %}{% endfor %}{% endif %}</body></html>
+    File.write(File.join(@site_root, "_layouts", "website-minimal.html"), <<~LIQUID)
+      <!doctype html><html><body>{{ content }}{% if page.website.kind == 'blog-index' %}{% for group in page.website.theme_data.archive_groups %}{% for post in group.posts %}<a data-blog-entry href="{{ post.url }}">{{ post.title }}</a>{% endfor %}{% endfor %}{% endif %}</body></html>
     LIQUID
 
-    site = build_site("website" => website_config.merge("theme" => "blog"))
+    site = build_site("website" => website_config.merge("theme" => "minimal"))
     site.process
 
-    archive = File.read(File.join(destination, "archive", "index.html"))
-    assert_equal 1, archive.scan(">One dispatch<").length
+    blog = File.read(File.join(destination, "blog", "index.html"))
+    assert_equal 1, blog.scan(">One dispatch<").length
+  end
+
+  def test_blog_home_renders_post_summaries_and_configured_contacts
+    FileUtils.mkdir_p(File.join(@temporary_root, "vault", "blog"))
+    File.write(File.join(@temporary_root, "vault", "blog", "dispatch.md"), <<~MARKDOWN)
+      ---
+      publish: true
+      title: One dispatch
+      subtitle: A field note
+      date: 2026-07-01
+      author:
+        - Ada
+      ---
+      # One dispatch
+      A concise dispatch summary from the authored body.
+    MARKDOWN
+    install_project_layout
+    contacts = [
+      { "label" => "GitHub", "url" => "https://github.com/example" },
+      { "label" => "Email", "url" => "mailto:hello@example.test" }
+    ]
+
+    build_site("website" => website_config.merge("theme" => "minimal", "contacts" => contacts)).process
+
+    home = File.read(File.join(destination, "index.html"))
+    assert_includes home, 'class="minimal-recent__grid"'
+    assert_includes home, 'class="minimal-post-card__subtitle">A field note'
+    assert_includes home, "A concise dispatch summary from the authored body."
+    assert_includes home, "Posted by Ada on"
+    assert_includes home, 'class="minimal-contacts"'
+    assert_includes home, 'href="https://github.com/example"'
+    assert_includes home, 'href="mailto:hello@example.test"'
+    assert_includes home, "Literal {{ site.secret }}."
+    refute_includes home, '<header class="note-header"'
+  end
+
+  def test_search_navigation_uses_the_same_compiler_owned_items_as_the_header
+    File.write(File.join(@temporary_root, "vault", "about.md"), <<~MARKDOWN)
+      ---
+      publish: true
+      navigation:
+        label: Company
+        order: 15
+      ---
+      # About
+    MARKDOWN
+    install_project_layout
+
+    build_site("website" => website_config.merge("theme" => "minimal")).process
+
+    document = Nokogiri::HTML(File.read(File.join(destination, "index.html")))
+    header = document.css(".site-navigation [data-navigation-id]").map do |item|
+      link = item.at_css("a")
+      [item["data-navigation-id"], link["href"], link.text, link["aria-current"]]
+    end
+    search = document.css("[data-search-navigation] [data-navigation-id]").map do |item|
+      link = item.at_css("a")
+      [item["data-navigation-id"], link["href"], link.text, link["aria-current"]]
+    end
+
+    assert_equal header, search
+    assert_includes search, ["page:about.md", "/about/", "Company", nil]
   end
 
   def test_host_docs_source_is_compiled_without_entering_the_reader
@@ -241,7 +330,7 @@ class JekyllAdapterTest < Minitest::Test
       "category" => "Blog comments",
       "category_id" => "DIC_kwDOExample"
     }
-    site = build_site("website" => website_config.merge("theme" => "blog", "comments" => comments))
+    site = build_site("website" => website_config.merge("theme" => "minimal", "comments" => comments))
 
     site.process
 
@@ -264,7 +353,7 @@ class JekyllAdapterTest < Minitest::Test
     refute_includes homepage, "https://giscus.app"
 
     ENV["JEKYLL_ENV"] = "development"
-    build_site("website" => website_config.merge("theme" => "blog", "comments" => comments)).process
+    build_site("website" => website_config.merge("theme" => "minimal", "comments" => comments)).process
     development_post = File.read(File.join(destination, "blog", "open", "index.html"))
     assert_includes development_post, "Comments load only on the published site."
     refute_includes development_post, "data-website-comments-load"
@@ -284,7 +373,7 @@ class JekyllAdapterTest < Minitest::Test
     MARKDOWN
 
     build_site(
-      "website" => website_config.merge("theme" => "blog", "comments" => { "enabled" => true })
+      "website" => website_config.merge("theme" => "minimal", "comments" => { "enabled" => true })
     ).process
 
     html = File.read(File.join(destination, "blog", "post", "index.html"))
@@ -315,7 +404,7 @@ class JekyllAdapterTest < Minitest::Test
       "category_id" => "DIC_kwDOExample"
     }
 
-    %w[docs digital-garden].each do |theme|
+    %w[docs].each do |theme|
       build_site("website" => website_config.merge("theme" => theme, "comments" => comments)).process
       html = File.read(File.join(destination, "blog", "post", "index.html"))
       assert_includes html, "data-website-comments-load", theme
@@ -323,13 +412,13 @@ class JekyllAdapterTest < Minitest::Test
     end
   end
 
-  def test_blog_and_digital_garden_render_explicit_i18n
+  def test_minimal_renders_explicit_i18n
     install_project_layout
     FileUtils.mkdir_p(File.join(@temporary_root, "vault", "_translations", "zh-CN"))
     File.write(File.join(@temporary_root, "vault", "_locale.yml"), "name: English\n")
     File.write(
       File.join(@temporary_root, "vault", "_translations", "zh-CN", "_locale.yml"),
-      "name: 简体中文\nmessages:\n  latest: 最新\n  notes: 笔记\n"
+      "name: 简体中文\nmessages:\n  home: 首页\n  notes: 笔记\n"
     )
     File.write(File.join(@temporary_root, "vault", "_translations", "zh-CN", "index.md"), <<~MARKDOWN)
       ---
@@ -340,7 +429,7 @@ class JekyllAdapterTest < Minitest::Test
     MARKDOWN
     i18n = { "enabled" => true, "locales" => %w[en zh-CN] }
 
-    { "blog" => "最新", "digital-garden" => "笔记" }.each do |theme, localized_label|
+    { "minimal" => "首页" }.each do |theme, localized_label|
       build_site("website" => website_config.merge("theme" => theme, "i18n" => i18n)).process
       html = File.read(File.join(destination, "zh-CN", "index.html"))
       assert_includes html, '<html class="no-js" lang="zh-CN" dir="ltr">', theme
@@ -441,7 +530,9 @@ class JekyllAdapterTest < Minitest::Test
   end
 
   def test_existing_jekyll_route_collision_fails_before_atomic_append
-    File.write(File.join(@site_root, "tags.html"), "---\npermalink: /tags/\n---\nExisting")
+    FileUtils.mkdir_p(File.join(@temporary_root, "vault", "blog"))
+    File.write(File.join(@temporary_root, "vault", "blog", "post.md"), "---\npublish: true\ndate: 2026-07-30\n---\n# Post")
+    File.write(File.join(@site_root, "blog.html"), "---\npermalink: /blog/\n---\nExisting")
     site = build_site
     error = assert_raises(Jekyll::Errors::FatalException) { site.process }
     assert_includes error.message, "collision"
@@ -459,14 +550,16 @@ class JekyllAdapterTest < Minitest::Test
   end
 
   def test_nested_static_index_collision_uses_final_destination
-    FileUtils.mkdir_p(File.join(@site_root, "notes"))
-    File.write(File.join(@site_root, "notes", "index.html"), "Existing notes index")
+    FileUtils.mkdir_p(File.join(@temporary_root, "vault", "blog"))
+    File.write(File.join(@temporary_root, "vault", "blog", "post.md"), "---\npublish: true\ndate: 2026-07-30\n---\n# Post")
+    FileUtils.mkdir_p(File.join(@site_root, "blog"))
+    File.write(File.join(@site_root, "blog", "index.html"), "Existing blog index")
     site = build_site
 
     error = assert_raises(Jekyll::Errors::FatalException) { site.process }
     assert_includes error.message, "collision"
     refute site.pages.any? { |page| page.class.name.include?("GeneratedPage") }
-    refute File.exist?(File.join(destination, "notes", "index.html"))
+    refute File.exist?(File.join(destination, "blog", "index.html"))
   end
 
   def test_output_collection_document_collision_is_atomic
@@ -596,7 +689,7 @@ class JekyllAdapterTest < Minitest::Test
   end
 
   def test_missing_active_theme_asset_fails_before_atomic_append
-    FileUtils.rm(File.join(@site_root, ".jekyll-obsidian-cache", "assets", "digital-garden.js"))
+    FileUtils.rm(File.join(@site_root, ".jekyll-obsidian-cache", "assets", "minimal.js"))
     site = build_site
 
     error = assert_raises(Jekyll::Errors::FatalException) { site.process }
@@ -711,9 +804,8 @@ class JekyllAdapterTest < Minitest::Test
   def test_application_assets_are_pruned_to_the_active_theme_and_enabled_features
     write_asset_manifest(
       "entries" => {
-        "blog" => { "js" => "blog.js", "files" => ["blog.js", "shared.js"] },
-        "docs" => { "js" => "docs.js", "files" => ["docs.js", "shared.js"] },
-        "digital-garden" => { "js" => "digital-garden.js", "files" => ["digital-garden.js", "shared.js"] }
+        "minimal" => { "js" => "minimal.js", "color_scheme" => "shared.js", "files" => ["minimal.js", "shared.js"] },
+        "docs" => { "js" => "docs.js", "color_scheme" => "shared.js", "files" => ["docs.js", "shared.js"] },
       },
       "features" => {
         "graph" => { "files" => ["features/graph.js", "shared.js"] },
@@ -725,41 +817,41 @@ class JekyllAdapterTest < Minitest::Test
     File.open(File.join(@temporary_root, "vault", "index.md"), "a") { |file| file.write("\nInline math: $x^2$.\n") }
     site = build_site(
       "website" => website_config.merge(
-        "theme" => "blog",
+        "theme" => "minimal",
         "features" => { "graph" => true, "previews" => true, "search" => false }
       )
     )
 
     site.process
 
-    assert File.file?(File.join(destination, "assets", "website", "blog.js"))
+    assert File.file?(File.join(destination, "assets", "website", "minimal.js"))
     assert File.file?(File.join(destination, "assets", "website", "shared.js"))
     assert File.file?(File.join(destination, "assets", "website", "features", "graph.js"))
     assert File.file?(File.join(destination, "assets", "website", "features", "previews.js"))
     assert File.file?(File.join(destination, "assets", "website", "features", "math.js"))
     refute File.exist?(File.join(destination, "assets", "website", "docs.js"))
-    refute File.exist?(File.join(destination, "assets", "website", "digital-garden.js"))
     refute File.exist?(File.join(destination, "assets", "website", "features", "search.js"))
-    assert_equal "blog.js", site.data.dig("website_assets", "entries", "blog", "js")
+    assert_equal "minimal.js", site.data.dig("website_assets", "entries", "minimal", "js")
   end
 
   def test_switching_themes_removes_stale_application_assets
     build_site(
-      "website" => website_config.merge("theme" => "blog")
+      "website" => website_config.merge("theme" => "minimal")
     ).process
-    assert File.file?(File.join(destination, "assets", "website", "blog.js"))
+    assert File.file?(File.join(destination, "assets", "website", "minimal.js"))
     refute File.exist?(File.join(destination, "assets", "website", "docs.js"))
 
     build_site(
       "website" => website_config.merge("theme" => "docs")
     ).process
 
-    refute File.exist?(File.join(destination, "assets", "website", "blog.js"))
+    refute File.exist?(File.join(destination, "assets", "website", "minimal.js"))
     assert File.file?(File.join(destination, "assets", "website", "docs.js"))
   end
 
   def test_git_times_are_discovered_for_non_ascii_vault_paths
-    File.write(File.join(@temporary_root, "vault", "中文.md"), "---\npublish: true\n---\n# 中文")
+    FileUtils.mkdir_p(File.join(@temporary_root, "vault", "blog"))
+    File.write(File.join(@temporary_root, "vault", "blog", "中文.md"), "---\npublish: true\n---\n# 中文")
     run_git("init", "--quiet")
     run_git("config", "user.name", "Obsidian Test")
     run_git("config", "user.email", "obsidian@example.test")
@@ -817,7 +909,7 @@ class JekyllAdapterTest < Minitest::Test
 
     File.write(File.join(@temporary_root, "vault", "index.md"), "---\npublish: false\n---\nStale marker")
     error = assert_expected_failure(Jekyll::Errors::FatalException) { site.process }
-    assert_includes error.message, "index"
+    assert_includes error.message, "content directory must contain at least one public note"
     # A failed build never appends a new output set. The previous destination is
     # intentionally left intact because cleanup/write were never reached.
     assert File.file?(File.join(destination, "index.html"))
@@ -918,7 +1010,7 @@ class JekyllAdapterTest < Minitest::Test
     {
       "source" => "vault",
       "syntax_profile" => "ofm@1",
-      "theme" => "digital-garden",
+      "theme" => "minimal",
       "repository" => "example/obsidian",
       "edit_branch" => "main",
       "content" => {
@@ -961,10 +1053,10 @@ class JekyllAdapterTest < Minitest::Test
   end
 
   def theme_manifest_entries
+    bootstrap = "color-scheme.js"
     {
-      "blog" => { "js" => "blog.js", "files" => ["blog.js"] },
-      "docs" => { "js" => "docs.js", "files" => ["docs.js"] },
-      "digital-garden" => { "js" => "digital-garden.js", "files" => ["digital-garden.js"] }
+      "minimal" => { "js" => "minimal.js", "color_scheme" => bootstrap, "files" => ["minimal.js", bootstrap] },
+      "docs" => { "js" => "docs.js", "color_scheme" => bootstrap, "files" => ["docs.js", bootstrap] },
     }
   end
 
@@ -985,7 +1077,7 @@ class JekyllAdapterTest < Minitest::Test
 
   def install_project_layout
     project_root = File.expand_path("../..", __dir__)
-    %w[website-blog website-docs website-digital-garden].each do |layout|
+    %w[website-minimal website-docs website-redirect].each do |layout|
       FileUtils.cp(File.join(project_root, "_layouts", "#{layout}.html"), File.join(@site_root, "_layouts", "#{layout}.html"))
     end
     FileUtils.mkdir_p(File.join(@site_root, "_includes"))

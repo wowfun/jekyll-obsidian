@@ -87,6 +87,20 @@ class ThemeCliTest < Minitest::Test
     assert_includes "#{stdout}\n#{stderr}", "--theme"
   end
 
+  def test_build_rejects_removed_theme_identifiers
+    %w[blog digital-garden].each do |theme|
+      stdout, stderr, status = Open3.capture3(
+        { "PATH" => "#{@ruby_bin}:#{ENV.fetch("PATH")}" },
+        File.join(@project_root, "bin", "build"),
+        "--theme", theme,
+        chdir: File.dirname(@project_root)
+      )
+
+      refute status.success?
+      assert_includes "#{stdout}\n#{stderr}", "--theme must be one of: minimal, docs."
+    end
+  end
+
   def test_production_build_rejects_a_missing_origin_before_running_tooling
     stdout, stderr, status = Open3.capture3(
       {
@@ -147,7 +161,9 @@ class ThemeCliTest < Minitest::Test
 
       assert status.success?, stderr
       assert_includes stdout, "--theme"
-      assert_includes stdout, "digital-garden"
+      assert_includes stdout, "minimal|docs"
+      refute_includes stdout, "blog"
+      refute_includes stdout, "digital-garden"
     end
   end
 
@@ -161,6 +177,20 @@ class ThemeCliTest < Minitest::Test
 
     refute status.success?
     assert_includes "#{stdout}\n#{stderr}", "invalid argument"
+  end
+
+  def test_dev_rejects_removed_theme_identifiers_before_starting_the_watcher
+    %w[blog digital-garden].each do |theme|
+      stdout, stderr, status = Open3.capture3(
+        { "PATH" => "#{@ruby_bin}:#{ENV.fetch("PATH")}" },
+        File.join(@project_root, "bin", "dev"),
+        "--theme", theme,
+        chdir: @project_root
+      )
+
+      refute status.success?
+      assert_includes "#{stdout}\n#{stderr}", "invalid argument"
+    end
   end
 
   private

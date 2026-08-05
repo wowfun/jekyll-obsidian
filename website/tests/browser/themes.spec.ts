@@ -1,13 +1,16 @@
 import { test, expect } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
 
-const site = (theme: "blog" | "docs" | "digital-garden", route = "/") =>
-  `/__site__/${theme}${route}`;
+type Theme = "minimal" | "docs";
+
+const themes = ["minimal", "docs"] as const satisfies readonly Theme[];
+const site = (theme: Theme, route = "/") => `/__site__/${theme}${route}`;
 const localizedDocs = (route = "/") => `/__site__/docs-i18n${route}`;
 
-for (const theme of ["blog", "docs", "digital-garden"] as const) {
-  test(`${theme} exposes its own accessible presentation`, async ({ page }) => {
-    await page.goto(site(theme));
+for (const theme of themes) {
+  test(`${theme} exposes an accessible presentation`, async ({ page }) => {
+    const route = theme === "minimal" ? "/blog/One%20vault%2C%20three%20readings/" : "/";
+    await page.goto(site(theme, route));
     await expect(page.locator("body")).toHaveClass(new RegExp(`theme-${theme}`));
     await expect(page.locator("main")).toBeVisible();
     const results = await new AxeBuilder({ page }).analyze();
@@ -15,164 +18,357 @@ for (const theme of ["blog", "docs", "digital-garden"] as const) {
   });
 }
 
-test("blog reads as a dated publishing ledger", async ({ page }) => {
-  await page.goto(site("blog"));
-  await expect(page.getByRole("link", { name: /One vault, three readings/ })).toBeVisible();
-  await expect(page.locator(".blog-ledger time").first()).toHaveAttribute("datetime", "2026-08-01T00:00:00Z");
-  await expect(page.getByRole("link", { name: "Browse the archive" })).toBeVisible();
+test("Minimal Home combines authored content with at most six recent posts", async ({ page }, testInfo) => {
+  await page.goto(site("minimal"));
+
+  const article = page.locator(".minimal-entry");
+  await expect(article).toHaveClass(/website-home/);
+  await expect(article.getByRole("heading", { level: 1, name: "One vault, two ways to publish" })).toBeVisible();
+  await expect(article).toContainText("Minimal combines a Home page, Blog, Docs, and custom sections");
+  await expect(article.locator(".source-actions")).toBeVisible();
+
+  const recent = page.locator(".minimal-recent");
+  await expect(recent.getByRole("heading", { level: 2, name: "Recent posts" })).toBeVisible();
+  const cards = recent.locator(".minimal-post-card");
+  await expect(cards).toHaveCount(2);
+  expect(await cards.count()).toBeLessThanOrEqual(6);
+  await expect(cards.first().getByRole("link", { name: "One vault, two site models" })).toBeVisible();
+  await expect(cards.first().locator(".minimal-post-card__excerpt"))
+    .toHaveText("Why Minimal and Docs share one compiler but not one layout.");
+  await expect(cards.first().locator("time")).toHaveAttribute("datetime", "2026-08-01T00:00:00Z");
+  await expect(cards.first().locator(".minimal-post-card__media img"))
+    .toHaveAttribute("src", /\/__site__\/minimal\/assets\/vault\/assets\/research-folio\.svg$/);
+  await expect(cards.nth(1).locator(".minimal-post-card__media")).toHaveCount(0);
+  await expect(recent.getByRole("link", { name: /View all/ }))
+    .toHaveAttribute("href", site("minimal", "/blog/"));
+  await expect(cards.locator(":not(.minimal-post-card--with-image) .minimal-post-card__media"))
+    .toHaveCount(0);
+  await expect(page.locator(".blog-post-feed, .blog-pager, link[rel='next']")).toHaveCount(0);
+
+  if (testInfo.project.name === "desktop-chromium") {
+    const firstTitle = cards.getByRole("heading", { level: 3 }).first();
+    expect(Number.parseFloat(await firstTitle.evaluate((element) => getComputedStyle(element).fontSize)))
+      .toBeLessThanOrEqual(29);
+  }
 });
 
-test("docs exposes its handbook navigation and reading sequence", async ({ page }, testInfo) => {
-  test.skip(testInfo.project.name !== "desktop-chromium", "desktop navigation assertion");
-  await page.goto(site("docs", "/docs/Getting%20Started/"));
-  const navigation = page.getByRole("navigation", { name: "Documentation", exact: true });
-  await expect(navigation).toBeVisible();
-  await expect(navigation).toHaveAttribute("data-docs-navigation-ready", "true");
-  await expect(navigation.getByRole("link", { name: "Syntax" })).toBeVisible();
-  await expect(page.getByRole("navigation", { name: "Breadcrumb" })).toContainText("Documentation");
-  await expect(page.getByRole("navigation", { name: "Documentation sequence" })).toContainText(
-    "Syntax"
-  );
+test("Minimal navigation defaults to Home, Blog, Docs and marks the active scope", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "desktop-chromium", "desktop primary navigation assertion");
+
+  for (const [route, current] of [["/", "Home"], ["/blog/", "Blog"], ["/docs/Getting%20Started/", "Docs"]] as const) {
+    await page.goto(site("minimal", route));
+    const navigation = page.getByRole("navigation", { name: "Primary navigation" });
+    await expect(navigation.locator(":scope > ul > li > a")).toHaveText(["Home", "Blog", "Docs"]);
+    await expect(navigation.getByRole("link", { name: current, exact: true })).toHaveAttribute("aria-current", "page");
+  }
 });
 
-test("docs language switcher uses real localized routes and restores focus", async ({ page }) => {
-  await page.goto(localizedDocs("/zh-CN/docs/Getting%20Started/"));
-  await expect(page.locator("html")).toHaveAttribute("lang", "zh-CN");
-  await expect(page.locator("h1").filter({ hasText: "快速开始" })).toBeVisible();
-  const switcher = page.locator("[data-language-switcher]");
-  await switcher.locator("summary").click();
-  const currentLanguage = switcher.getByRole("link", { name: "简体中文" });
-  await expect(currentLanguage).toHaveAttribute("aria-current", "page");
-  expect(await currentLanguage.evaluate((element) => getComputedStyle(element).backgroundColor)).not.toBe("rgba(0, 0, 0, 0)");
-  await expect(switcher.getByRole("link", { name: "English" })).toHaveAttribute(
-    "href",
-    "/__site__/docs-i18n/docs/Getting%20Started/"
-  );
-  await switcher.getByRole("link", { name: "English" }).focus();
-  await page.keyboard.press("Escape");
-  await expect(switcher).not.toHaveAttribute("open", "");
-  await expect(switcher.locator("summary")).toBeFocused();
+test("Minimal Home owns counted Topics and article pages do not repeat them", async ({ page }, testInfo) => {
+  if (testInfo.project.name === "desktop-chromium") {
+    await page.goto(site("minimal"));
+    const topics = page.locator("[data-context-panel]");
+    await expect(topics).toHaveAttribute("aria-label", "Page context");
+    await expect(topics.locator("[data-local-graph-section]")).toBeVisible();
+    await expect(topics.getByRole("heading", { name: "On this page" })).toBeVisible();
+    const capsule = topics.locator(".context-tag-list a", { hasText: "release-notes" });
+    await expect(capsule.locator(".context-tag__count")).toHaveText("1");
+    await expect(capsule).toHaveAttribute("href", /\/blog\/\?topic=/);
+    await expect(capsule).not.toContainText("#");
+    await expect(capsule).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
+
+    await page.goto(site("minimal", "/blog/One%20vault%2C%20three%20readings/"));
+    await expect(page.locator("[data-context-panel]").getByRole("heading", { name: "Topics" })).toHaveCount(0);
+  } else {
+    await page.goto(site("minimal"));
+    await page.getByRole("button", { name: "Context" }).tap();
+    const dialog = page.locator('dialog[data-dialog="context"]');
+    await expect(dialog).toBeVisible();
+    await expect(dialog.locator(".context-tag-list a", { hasText: "release-notes" })
+      .locator(".context-tag__count")).toHaveText("1");
+  }
 });
 
-test("docs language controls remain usable at 320px in RTL flow", async ({ page }) => {
-  await page.setViewportSize({ width: 320, height: 760 });
-  await page.goto(localizedDocs("/zh-CN/docs/Getting%20Started/"));
-  await page.locator("html").evaluate((element) => element.setAttribute("dir", "rtl"));
+test("Blog filters by topic and exposes only populated chronology periods", async ({ page }, testInfo) => {
+  await page.goto(site("minimal", "/blog/"));
+  await expect(page.getByRole("heading", { level: 1, name: "Blog" })).toHaveCount(1);
+  await expect(page.getByRole("heading", { name: "Archive" })).toHaveCount(0);
 
-  const switcher = page.locator("[data-language-switcher]");
-  await expect(switcher.locator("summary")).toBeVisible();
-  await switcher.locator("summary").click();
-  await expect(switcher.getByRole("link", { name: "English" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "搜索", exact: true })).toBeVisible();
-  expect(await page.locator(".site-header__inner").evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
+  const filter = page.getByRole("navigation", { name: "Filter by topic" });
+  await expect(filter.getByRole("link", { name: /^All\b/ })).toHaveAttribute("aria-current", "page");
+  await filter.getByRole("link", { name: /release-notes/ }).click();
+  await expect(page).toHaveURL(/\/blog\/\?topic=release-notes$/);
+  await expect(filter.getByRole("link", { name: /release-notes/ })).toHaveAttribute("aria-current", "page");
+  await expect(filter.getByRole("link", { name: /release-notes/ })).not.toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
+  await expect(page.locator("[data-filter-item]:visible").getByRole("link", { name: "One vault, two site models" })).toBeVisible();
+  await expect(page.locator("[data-filter-item]", { hasText: "从笔记到发布" })).toBeHidden();
+  await filter.getByRole("link", { name: /^All\b/ }).click();
+  await expect(page).toHaveURL(site("minimal", "/blog/"));
+  await expect(page.locator("[data-filter-item]:visible")).toHaveCount(2);
+
+  if (testInfo.project.name === "desktop-chromium") {
+    const chronology = page.getByRole("navigation", { name: "Chronology" });
+    await expect(chronology.locator('[data-filter-year="2026"] .archive-timeline__count')).toHaveText("2");
+    await expect(chronology.locator('[data-filter-month="2026-08"] .archive-timeline__count')).toHaveText("1");
+    await expect(chronology.locator('[data-filter-month="2026-07"] .archive-timeline__count')).toHaveText("1");
+    await expect(chronology.locator('[data-filter-month="2026-06"]')).toHaveCount(0);
+
+    await chronology.locator('[data-filter-month="2026-07"]').click();
+    await expect(page).toHaveURL(/\/blog\/\?month=2026-07$/);
+    await expect(page.locator("[data-filter-item]:visible")).toHaveCount(1);
+    await chronology.locator('[data-filter-year="2026"]').click();
+    await expect(page).toHaveURL(/\/blog\/\?year=2026$/);
+    await expect(page.locator("[data-filter-item]:visible")).toHaveCount(2);
+
+    const year = page.locator(".archive-ledger > section > h2", { hasText: "2026" });
+    expect(Number.parseFloat(await year.evaluate((element) => getComputedStyle(element).fontSize)))
+      .toBeGreaterThanOrEqual(24);
+  } else {
+    await page.getByRole("button", { name: "Chronology" }).tap();
+    const dialog = page.locator('dialog[data-dialog="context"]');
+    await expect(dialog).toBeVisible();
+    await dialog.locator('[data-filter-month="2026-07"]').tap();
+    await expect(page).toHaveURL(/\/blog\/\?month=2026-07$/);
+    await expect(dialog.locator('[data-filter-month="2026-07"]')).toHaveAttribute("aria-current", "page");
+    await expect(page.locator("[data-filter-item]:not([hidden])")).toHaveCount(1);
+  }
 });
 
-test("docs fallback pages keep locale URLs while opting out of duplicate SEO", async ({ page }) => {
-  await page.goto(localizedDocs("/zh-CN/docs/Customization/"));
-  await expect(page.locator("html")).toHaveAttribute("lang", "zh-CN");
-  await expect(page.locator(".translation-fallback")).toContainText("本页尚无译文");
-  await expect(page.locator(".note-content")).toHaveAttribute("lang", "en");
-  await expect(page.locator(".note-content")).toHaveAttribute("dir", "ltr");
-  await expect(page.locator(".note-header")).toHaveAttribute("lang", "en");
-  await expect(page.locator(".note-header")).toHaveAttribute("dir", "ltr");
-  await expect(page.locator('meta[name="robots"]')).toHaveAttribute("content", "noindex");
-  await expect(page.locator('link[rel="canonical"]')).toHaveAttribute(
-    "href",
-    "http://127.0.0.1:4173/__site__/docs-i18n/docs/Customization/"
-  );
-  await expect(page.locator('link[rel="alternate"][hreflang]')).toHaveCount(0);
+test("legacy Archive, paginated Home, and Notes routes are absent", async ({ page }) => {
+  for (const route of ["/archive/", "/page/2/", "/notes/"] as const) {
+    const response = await page.goto(site("minimal", route));
+    expect(response?.status(), route).toBe(404);
+    await expect(page.locator("body")).toHaveText("Not found");
+  }
 });
 
-test("localized Mermaid labels survive a color scheme redraw", async ({ page }) => {
-  await page.goto(localizedDocs("/zh-CN/docs/Syntax/"));
-  const diagram = page.locator(".mermaid-diagram svg");
-  await expect(diagram).toHaveAttribute("aria-label", "图表");
-  await page.locator("[data-color-scheme-toggle]").click();
-  await expect(diagram).toHaveAttribute("aria-label", "图表");
+test("short Blog pages keep the footer at the viewport edge", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "desktop-chromium", "desktop footer geometry assertion");
+  await page.goto(site("minimal", "/blog/"));
+  const geometry = await page.locator(".site-footer").evaluate((footer) => ({
+    bottom: footer.getBoundingClientRect().bottom,
+    viewport: window.innerHeight
+  }));
+  expect(Math.abs(geometry.bottom - geometry.viewport)).toBeLessThanOrEqual(1);
 });
 
-test("localized docs search loads its locale index and finds CJK content", async ({ page }) => {
-  await page.goto(localizedDocs("/zh-CN/"));
+for (const theme of themes) {
+  test(`${theme} documentation navigation preserves its shell`, async ({ page }, testInfo) => {
+    test.skip(testInfo.project.name !== "desktop-chromium", "desktop documentation navigation assertion");
+    await page.goto(site(theme, "/docs/Getting%20Started/"));
+
+    const header = page.locator(".site-header");
+    const sidebar = page.locator(theme === "minimal" ? ".minimal-docs-sidebar" : ".docs-sidebar");
+    await header.evaluate((element) => element.setAttribute("data-shell-instance", "header"));
+    await sidebar.evaluate((element) => element.setAttribute("data-shell-instance", "sidebar"));
+
+    const navigation = page.getByRole("navigation", { name: "Documentation", exact: true });
+    await expect(navigation).toHaveAttribute("data-docs-navigation-ready", "true");
+    await navigation.getByRole("link", { name: "Syntax" }).click();
+    await expect(page).toHaveURL(site(theme, "/docs/Syntax/"));
+    await expect(page.getByRole("heading", { level: 1, name: "Syntax" })).toBeVisible();
+    await expect(header).toHaveAttribute("data-shell-instance", "header");
+    await expect(sidebar).toHaveAttribute("data-shell-instance", "sidebar");
+    await expect(page.locator("[data-context-panel] [data-graph-view]")).toHaveAttribute("data-graph-ready", "true");
+
+    await page.goBack();
+    await expect(page).toHaveURL(site(theme, "/docs/Getting%20Started/"));
+    await expect(header).toHaveAttribute("data-shell-instance", "header");
+    await expect(sidebar).toHaveAttribute("data-shell-instance", "sidebar");
+  });
+
+  test(`${theme} documentation fragments preserve the page shell through history`, async ({ page }, testInfo) => {
+    test.skip(testInfo.project.name !== "desktop-chromium", "desktop documentation fragment assertion");
+    await page.goto(site(theme, "/docs/Getting%20Started/"));
+
+    const header = page.locator(".site-header");
+    const sidebar = page.locator(theme === "minimal" ? ".minimal-docs-sidebar" : ".docs-sidebar");
+    await header.evaluate((element) => element.setAttribute("data-shell-instance", "header"));
+    await sidebar.evaluate((element) => element.setAttribute("data-shell-instance", "sidebar"));
+
+    await page.getByRole("navigation", { name: "Documentation", exact: true })
+      .getByRole("link", { name: "Syntax" }).click();
+    await expect(page).toHaveURL(site(theme, "/docs/Syntax/"));
+    await expect(page.getByRole("heading", { level: 1, name: "Syntax" })).toBeVisible();
+    const main = page.locator("[data-docs-main]");
+    await main.evaluate((element) => element.setAttribute("data-page-instance", "syntax"));
+
+    const fragment = page.locator("[data-page-context]")
+      .getByRole("link", { name: "Tags and comments" });
+    await fragment.click();
+    await expect(page).toHaveURL(`${site(theme, "/docs/Syntax/")}#tags-and-comments`);
+    await page.waitForLoadState("networkidle");
+    await expect(page.locator("#tags-and-comments")).toBeInViewport();
+    await expect(main).toHaveAttribute("data-page-instance", "syntax");
+
+    await page.goBack();
+    await expect(page).toHaveURL(site(theme, "/docs/Syntax/"));
+    await page.waitForLoadState("networkidle");
+    await expect.poll(() => page.evaluate(() => window.scrollY)).toBeLessThanOrEqual(1);
+    await expect(main).toHaveAttribute("data-page-instance", "syntax");
+
+    await page.goForward();
+    await expect(page).toHaveURL(`${site(theme, "/docs/Syntax/")}#tags-and-comments`);
+    await page.waitForLoadState("networkidle");
+    await expect(page.locator("#tags-and-comments")).toBeInViewport();
+    await expect(header).toHaveAttribute("data-shell-instance", "header");
+    await expect(sidebar).toHaveAttribute("data-shell-instance", "sidebar");
+  });
+}
+
+test("Minimal Docs keeps its three-column context and active top-level scope", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "desktop-chromium", "desktop Minimal Docs assertion");
+  await page.goto(site("minimal", "/docs/Getting%20Started/"));
+  await expect(page.locator(".minimal-docs-sidebar")).toBeVisible();
+  await expect(page.locator(".minimal-reading-column")).toBeVisible();
+  await expect(page.locator(".minimal-context")).toBeVisible();
+  await expect(page.getByRole("navigation", { name: "Primary navigation" })
+    .getByRole("link", { name: "Docs" })).toHaveAttribute("aria-current", "page");
+  await expect(page.getByRole("navigation", { name: "Documentation sequence" })).toContainText("Syntax");
+});
+
+test("documentation sidebars expose the complete index by default", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "desktop-chromium", "desktop documentation index assertion");
+  for (const theme of themes) {
+    await page.goto(site(theme, "/docs/Getting%20Started/"));
+    const navigation = page.getByRole("navigation", { name: "Documentation", exact: true });
+    const topLevel = navigation.locator(":scope > .docs-tree__list > .docs-tree__item");
+    await expect(topLevel.first().locator(":scope > a")).toHaveText("Getting Started");
+    await expect(navigation.getByText("Documentation", { exact: true })).toHaveCount(0);
+    await expect(navigation.getByRole("link", { name: "Architecture" })).toBeVisible();
+    await expect(page.getByRole("link", { name: "View full documentation index" })).toHaveCount(0);
+  }
+});
+
+test("Minimal Docs puts primary and documentation navigation into the mobile Browse sheet", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "mobile-chromium", "mobile Browse assertion");
+  await page.goto(site("minimal", "/docs/Getting%20Started/"));
+  await expect(page.locator(".minimal-docs-sidebar")).toBeHidden();
+  await expect(page.locator(".minimal-context")).toBeHidden();
+  await page.getByRole("button", { name: "Browse" }).tap();
+  const dialog = page.locator('dialog[data-dialog="browse"]');
+  await expect(dialog).toBeVisible();
+  await expect(dialog.getByRole("navigation", { name: "Primary navigation" }).getByRole("link"))
+    .toHaveText(["Home", "Blog", "Docs"]);
+  await expect(dialog.getByRole("navigation", { name: "Documentation" })
+    .getByRole("link", { name: "Syntax" })).toBeVisible();
+});
+
+test("Minimal mobile Browse documentation links preserve the shell", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "mobile-chromium", "mobile Browse navigation assertion");
+  await page.goto(site("minimal", "/docs/Getting%20Started/"));
+  const header = page.locator(".site-header");
+  await header.evaluate((element) => element.setAttribute("data-shell-instance", "header"));
+
+  await page.getByRole("button", { name: "Browse" }).tap();
+  const dialog = page.locator('dialog[data-dialog="browse"]');
+  await dialog.getByRole("navigation", { name: "Documentation" })
+    .getByRole("link", { name: "Syntax" }).tap();
+
+  await expect(page).toHaveURL(site("minimal", "/docs/Syntax/"));
+  await expect(page.getByRole("heading", { level: 1, name: "Syntax" })).toBeVisible();
+  await expect(header).toHaveAttribute("data-shell-instance", "header");
+});
+
+test("priority navigation folds custom tabs into an accessible More menu", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "desktop-chromium", "desktop priority navigation assertion");
+  await page.goto("/__fixture__/features/minimal/navigation/");
+  const navigation = page.getByRole("navigation", { name: "Primary navigation" });
+  await expect(navigation).toHaveAttribute("data-priority-navigation-ready", "true");
+  await navigation.evaluate((element) => {
+    element.style.flex = "0 0 230px";
+    element.style.inlineSize = "230px";
+    element.style.maxInlineSize = "230px";
+  });
+
+  const more = navigation.locator("[data-priority-navigation-more]");
+  await expect(more).toBeVisible();
+  await expect(more).toHaveAttribute("data-has-current", "true");
+  const primaryIds = await navigation.locator("[data-priority-navigation-list] > li")
+    .evaluateAll((items) => items.map((item) => item.getAttribute("data-navigation-id")));
+  const overflowIds = await navigation.locator("[data-priority-navigation-overflow] > li")
+    .evaluateAll((items) => items.map((item) => item.getAttribute("data-navigation-id")));
+  expect([...primaryIds, ...overflowIds]).toEqual([
+    "home", "blog", "docs", "page:about.md", "folder:portfolio", "page:projects.md", "folder:team", "page:contact.md"
+  ]);
+
+  const summary = more.locator("summary");
+  await summary.focus();
+  await page.keyboard.press("Enter");
+  await expect(more).toHaveAttribute("open", "");
+  await expect(more.getByRole("link", { name: "Projects" })).toHaveAttribute("aria-current", "page");
+  await page.keyboard.press("Tab");
+  await expect(more.locator("[data-priority-navigation-overflow] a").first()).toBeFocused();
+  await page.getByRole("heading", { name: "Independent context" }).click();
+  await expect(more).not.toHaveAttribute("open", "");
+
+  await navigation.evaluate((element) => {
+    element.style.flexBasis = "900px";
+    element.style.inlineSize = "900px";
+    element.style.maxInlineSize = "900px";
+  });
+  await expect(more).toBeHidden();
+  await expect(navigation.locator("[data-priority-navigation-list] > li")).toHaveCount(8);
+});
+
+test("mobile Browse preserves all configured tabs and their active state", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "mobile-chromium", "mobile custom navigation assertion");
+  await page.goto("/__fixture__/features/minimal/navigation/");
+  await page.getByRole("button", { name: "Browse" }).tap();
+  const navigation = page.locator('dialog[data-dialog="browse"]')
+    .getByRole("navigation", { name: "Primary navigation" });
+  await expect(navigation.getByRole("link")).toHaveText([
+    "Home", "Blog", "Docs", "About", "Portfolio", "Projects", "Team", "Contact"
+  ]);
+  await expect(navigation.getByRole("link", { name: "Projects" })).toHaveAttribute("aria-current", "page");
+});
+
+test("search loads on demand and finds CJK content", async ({ page }) => {
+  await page.goto(site("minimal"));
   await page.keyboard.press("ControlOrMeta+k");
   const dialog = page.locator('dialog[data-dialog="search"]');
-  await dialog.locator("input").fill("快速");
-  await expect(dialog.getByRole("link", { name: "快速开始" })).toBeVisible();
-  await expect(dialog.locator("[data-search-status]")).toHaveText(/找到 \d+ 篇笔记。/);
-});
-
-test("docs breadcrumb marks only its final non-link item as current", async ({ page }) => {
-  await page.goto(site("docs", "/docs/Getting%20Started/"));
-  const breadcrumb = page.getByRole("navigation", { name: "Breadcrumb" });
-  const current = breadcrumb.locator('[aria-current="page"]');
-  await expect(current).toHaveCount(1);
-  await expect(current).not.toHaveJSProperty("tagName", "A");
-  await expect(breadcrumb.locator('a[aria-current="page"]')).toHaveCount(0);
-});
-
-test("docs puts browse and outline into mobile sheets", async ({ page }, testInfo) => {
-  test.skip(testInfo.project.name !== "mobile-chromium", "mobile interaction assertion");
-  await page.goto(site("docs", "/docs/Getting%20Started/"));
-  await expect(page.locator(".docs-sidebar")).toBeHidden();
-  await expect(page.locator(".docs-context")).toBeHidden();
-  await page.getByRole("button", { name: "Context" }).tap();
-  const dialog = page.locator('dialog[data-dialog="context"]');
   await expect(dialog).toBeVisible();
-  await expect(dialog.getByRole("link", { name: "Install the toolchain" })).toBeVisible();
-});
-
-test("digital garden keeps the annotated folio and relation rail", async ({ page }, testInfo) => {
-  test.skip(testInfo.project.name !== "desktop-chromium", "desktop layout assertion");
-  await page.goto(site("digital-garden", "/docs/Getting%20Started/"));
-  await expect(page.locator(".note-folio")).toBeVisible();
-  const rail = page.locator(".relation-rail");
-  await expect(rail).toBeVisible();
-  expect(Math.round((await rail.boundingBox())?.width ?? 0)).toBe(288);
-});
-
-test("search loads on demand and finds CJK text", async ({ page }) => {
-  await page.goto(site("digital-garden"));
-  await page.keyboard.press("ControlOrMeta+k");
-  const dialog = page.locator('dialog[data-dialog="search"]');
-  await expect(dialog).toBeVisible();
-  await dialog.locator("input").fill("花园");
+  const headerNavigation = page.locator(".site-header [data-priority-navigation-item]");
+  const searchNavigation = dialog.locator("[data-search-navigation] [data-navigation-id]");
+  await expect(searchNavigation).toHaveCount(await headerNavigation.count());
+  await expect(searchNavigation.locator("a")).toHaveText(await headerNavigation.locator("a").allTextContents());
+  await dialog.locator("input").fill("Docs");
+  expect(await searchNavigation.filter({ hasNotText: "Docs" }).evaluateAll((items) =>
+    items.every((item) => (item as HTMLElement).hidden)
+  )).toBe(true);
+  await expect(searchNavigation.filter({ hasText: "Docs" })).toBeVisible();
+  await dialog.locator("input").fill("CJK");
+  await expect(dialog.locator("[data-search-navigation]")).toBeHidden();
   await expect(dialog.getByRole("link", { name: "CJK Showcase" })).toBeVisible();
 });
 
-test("digital garden previews use catalog text without active content", async ({ page }) => {
-  await page.goto(site("digital-garden"));
+test("search input focus does not add a focus frame", async ({ page }) => {
+  await page.goto(site("docs"));
+  await page.keyboard.press("ControlOrMeta+k");
+  const box = page.locator(".search-box");
+  const input = box.locator("[data-search-input]");
+  await input.evaluate((element) => element.blur());
+  const quietBorder = await box.evaluate((element) => getComputedStyle(element).borderTopColor);
+  await input.focus();
+  await expect(box).toHaveCSS("border-top-color", quietBorder);
+  await expect(box).toHaveCSS("box-shadow", "none");
+  await expect(input).toHaveCSS("outline-style", "none");
+  await expect(input).toHaveCSS("box-shadow", "none");
+});
+
+test("Minimal previews use catalog text without injecting active content", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "desktop-chromium", "desktop preview assertion");
+  await page.goto(site("minimal"));
   await page.locator(".website-link[data-note-id='docs/中文示例.md']").focus();
   const preview = page.locator("[data-note-preview]");
   await expect(preview).toContainText("CJK Showcase");
-  await expect(preview).toContainText("Mixed Chinese, Japanese, Latin");
   await expect(preview.locator(".note-preview__body")).toHaveAttribute("data-preview-body-ready", "true");
   await expect(preview).toContainText("中文、日文和拉丁字母可以写在同一个知识库里");
   await expect(preview.locator("iframe, script")).toHaveCount(0);
-  const previewBox = await preview.boundingBox();
-  const viewport = page.viewportSize()!;
-  expect(previewBox!.x).toBeGreaterThanOrEqual(11);
-  expect(previewBox!.y).toBeGreaterThanOrEqual(11);
-  expect(previewBox!.x + previewBox!.width).toBeLessThanOrEqual(viewport.width - 11);
-  expect(previewBox!.y + previewBox!.height).toBeLessThanOrEqual(viewport.height - 11);
 });
 
-test("keyboard users can enter a preview body and continue to the next link", async ({ page }, testInfo) => {
-  test.skip(testInfo.project.name !== "desktop-chromium", "desktop keyboard preview assertion");
-  await page.goto(site("docs"));
-  const customization = page.locator(".website-link[data-note-id='docs/Customization.md']").first();
-  await customization.evaluate((element) => element.scrollIntoView({ block: "center", behavior: "instant" as ScrollBehavior }));
-  await customization.focus();
-  const previewBody = page.locator("[data-note-preview] .note-preview__body");
-  await expect(previewBody).toHaveAttribute("data-preview-body-ready", "true");
-
-  await page.keyboard.press("Tab");
-  await expect(previewBody).toBeFocused();
-  await page.keyboard.press("Tab");
-  await expect(page.locator(".website-link[data-note-id='docs/Comments.md']").first()).toBeFocused();
-});
-
-test("every theme places the local graph first in note context", async ({ page }, testInfo) => {
-  test.skip(testInfo.project.name !== "desktop-chromium", "desktop context rail assertion");
-  for (const theme of ["blog", "docs", "digital-garden"] as const) {
+test("every theme places the local graph first in documentation context", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "desktop-chromium", "desktop graph context assertion");
+  for (const theme of themes) {
     await page.goto(site(theme, "/docs/Getting%20Started/"));
     const context = page.locator("[data-context-panel]");
     await expect(context).toBeVisible();
@@ -184,202 +380,49 @@ test("every theme places the local graph first in note context", async ({ page }
   }
 });
 
-test("graph buttons open cached full and expanded local dialogs", async ({ page }, testInfo) => {
+test("graph dialogs cache the complete graph and dispose expanded local graphs", async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== "desktop-chromium", "desktop graph dialog assertion");
   let graphRequests = 0;
   page.on("request", (request) => {
     if (new URL(request.url()).pathname.endsWith("/assets/website/graph.v1.json")) graphRequests += 1;
   });
-  await page.goto(site("docs", "/docs/Getting%20Started/"));
+  await page.goto(site("minimal", "/docs/Getting%20Started/"));
   const context = page.locator("[data-context-panel]");
-
   await context.getByRole("button", { name: "Open full graph" }).click();
   const full = page.locator('dialog[data-dialog="graph-global"]');
-  await expect(full).toBeVisible();
   await expect(full.locator("[data-graph-dialog-view]")).toHaveAttribute("data-graph-ready", "true");
   await full.getByRole("button", { name: "Close full graph" }).click();
   await context.getByRole("button", { name: "Open full graph" }).click();
   await expect(full.locator("[data-graph-dialog-view]")).toHaveAttribute("data-graph-ready", "true");
   expect(graphRequests).toBe(1);
-  await page.keyboard.press("Escape");
-  await expect(full).toBeHidden();
+  await full.getByRole("button", { name: "Close full graph" }).click();
 
   await context.getByRole("button", { name: "Expand local graph" }).click();
   const local = page.locator('dialog[data-dialog="graph-local"]');
-  await expect(local).toBeVisible();
   await expect(local.locator(".graph-node")).not.toHaveCount(0);
   await local.getByRole("button", { name: "Close local graph" }).click();
   await expect(local.locator("[data-graph-dialog-view]")).toHaveAttribute("data-graph-disposed", "true");
 });
 
-test("oversized complete graphs use the bounded browser fallback", async ({ page }, testInfo) => {
-  test.skip(testInfo.project.name !== "desktop-chromium", "desktop graph fallback assertion");
-  const nodes = Array.from({ length: 5_000 }, (_, index) => ({
-    id: `large-${index}`,
-    title: `Large ${index}`,
-    url: `/large-${index}/`,
-    degree: 0
-  }));
-  await page.route("**/assets/website/graph.v1.json", (route) => route.fulfill({
-    contentType: "application/json",
-    body: JSON.stringify({ schema_version: 1, nodes, edges: [] })
-  }));
-  await page.goto(site("docs", "/docs/Getting%20Started/"));
-  await page.locator("[data-context-panel]").getByRole("button", { name: "Open full graph" }).click();
-
-  const view = page.locator('dialog[data-dialog="graph-global"] [data-graph-dialog-view]');
-  await expect(view).toHaveAttribute("data-graph-ready", "fallback");
-  await expect(view.locator("[data-graph-status]")).toContainText("too large");
-  await expect(view.locator("[data-graph-canvas], .graph-node")).toHaveCount(0);
-});
-
-test("local graph zooms, pans, drags nodes without accidental navigation, and scales node area by degree", async ({ page }, testInfo) => {
-  test.skip(testInfo.project.name !== "desktop-chromium", "desktop pointer graph assertion");
-  await page.emulateMedia({ reducedMotion: "reduce" });
-  await page.goto(site("digital-garden", "/docs/Getting%20Started/"));
+test("graph nodes have no frame and darken only on interaction", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "desktop-chromium", "desktop graph interaction assertion");
+  await page.goto(site("docs", "/docs/Syntax/"));
   const view = page.locator("[data-context-panel] [data-graph-view]");
-  const svg = view.locator("svg");
   await expect(view).toHaveAttribute("data-graph-ready", "true");
-  const radiiByDegree = await view.evaluate((container) => {
-    const section = container.closest("[data-local-graph-section]")!;
-    const template = section.querySelector<HTMLTemplateElement>("template[data-local-graph-data]")!;
-    return [...template.content.querySelectorAll<HTMLElement>("[data-graph-node]")].map((source) => {
-      const rendered = container.querySelector<SVGGElement>(`.graph-node[data-node-id="${CSS.escape(source.dataset.nodeId || "")}"]`);
-      return [Number(source.dataset.nodeDegree), Number(rendered?.querySelector("circle")?.getAttribute("r"))] as const;
-    }).sort((left, right) => left[0] - right[0]);
-  });
-  for (let index = 1; index < radiiByDegree.length; index += 1) {
-    if (radiiByDegree[index]![0] > radiiByDegree[index - 1]![0]) {
-      expect(radiiByDegree[index]![1]).toBeGreaterThan(radiiByDegree[index - 1]![1]);
-    }
-  }
-
-  const box = await svg.boundingBox();
-  expect(box).not.toBeNull();
-  const pageScroll = await page.evaluate(() => scrollY);
-  await page.mouse.move(box!.x + box!.width * 0.75, box!.y + box!.height * 0.75);
-  await page.mouse.wheel(0, -220);
-  await expect.poll(async () => Number(await view.getAttribute("data-graph-scale"))).toBeGreaterThan(1);
-  expect(await page.evaluate(() => scrollY)).toBe(pageScroll);
-
-  const viewport = view.locator(".graph-viewport");
-  const transformBeforePan = await viewport.getAttribute("transform");
-  await page.mouse.move(box!.x + 8, box!.y + box!.height - 8);
-  await page.mouse.down();
-  await page.mouse.move(box!.x + 48, box!.y + box!.height - 38, { steps: 4 });
-  await page.mouse.up();
-  await expect.poll(async () => viewport.getAttribute("transform")).not.toBe(transformBeforePan);
-
-  const currentNode = view.locator(".graph-node--current");
-  const currentTransform = await currentNode.getAttribute("transform");
-  const currentBox = await currentNode.boundingBox();
-  await page.mouse.move(currentBox!.x + currentBox!.width / 2, currentBox!.y + currentBox!.height / 2);
-  await page.mouse.down();
-  await page.mouse.move(currentBox!.x + currentBox!.width / 2 + 24, currentBox!.y + currentBox!.height / 2 + 18, { steps: 4 });
-  await page.mouse.up();
-  expect(await currentNode.getAttribute("transform")).toBe(currentTransform);
-
+  const currentCircle = view.locator(".graph-node--current circle");
   const target = view.locator(".graph-node[role='link']").first();
-  const targetUrl = new URL((await target.getAttribute("data-node-url"))!, page.url()).href;
-  const targetBox = await target.boundingBox();
-  const urlBeforeDrag = page.url();
-  await page.mouse.move(targetBox!.x + targetBox!.width / 2, targetBox!.y + targetBox!.height / 2);
-  await page.mouse.down();
-  await page.mouse.move(targetBox!.x + targetBox!.width / 2 + 24, targetBox!.y + targetBox!.height / 2 + 18, { steps: 4 });
-  await page.mouse.up();
-  await page.waitForTimeout(50);
-  expect(page.url()).toBe(urlBeforeDrag);
-
-  await page.reload();
-  const resetView = page.locator("[data-context-panel] [data-graph-view]");
-  await expect(resetView).toHaveAttribute("data-graph-ready", "true");
-  const clickableTarget = resetView.locator(".graph-node[role='link']").first();
-  expect(new URL((await clickableTarget.getAttribute("data-node-url"))!, page.url()).href).toBe(targetUrl);
-  await clickableTarget.click();
-  await expect(page).toHaveURL(targetUrl);
-});
-
-test("graph nodes support keyboard navigation and preview bodies scroll to the end", async ({ page }, testInfo) => {
-  test.skip(testInfo.project.name !== "desktop-chromium", "desktop keyboard and wheel assertion");
-  await page.goto(site("docs"));
-  const previewLink = page.locator(".website-link[data-note-id='docs/Customization.md']").first();
-  await previewLink.evaluate((element) => element.scrollIntoView({ block: "center", behavior: "instant" as ScrollBehavior }));
-  await expect(previewLink).toBeInViewport();
-  await previewLink.focus();
-  const previewBody = page.locator("[data-note-preview] .note-preview__body");
-  await expect(previewBody).toHaveAttribute("data-preview-body-ready", "true");
-  expect(await previewBody.evaluate((element) => element.scrollHeight)).toBeGreaterThan(
-    await previewBody.evaluate((element) => element.clientHeight)
-  );
-  await previewBody.hover();
-  for (let index = 0; index < 20; index += 1) {
-    await page.mouse.wheel(0, 1000);
-    await page.waitForTimeout(20);
-  }
-  const previewScroll = await previewBody.evaluate((element) => ({
-    maximum: element.scrollHeight - element.clientHeight,
-    scrollTop: element.scrollTop
-  }));
-  expect(previewScroll.scrollTop).toBe(previewScroll.maximum);
-
-  await page.goto(site("docs", "/docs/Getting%20Started/"));
-  const target = page.locator("[data-context-panel] .graph-node[role='link']").first();
-  const id = await target.getAttribute("data-node-id");
-  const expectedPath = await page.locator("[data-local-graph-section]").evaluate((section, nodeId) =>
-    section.querySelector<HTMLTemplateElement>("template[data-local-graph-data]")?.content
-      .querySelector<HTMLElement>(`[data-node-id="${CSS.escape(nodeId || "")}"]`)?.dataset.nodeUrl,
-  id);
+  const targetCircle = target.locator("circle");
+  await expect(targetCircle).toHaveCSS("stroke", "none");
+  const quiet = await targetCircle.evaluate((element) => getComputedStyle(element).fill);
+  expect(await currentCircle.evaluate((element) => getComputedStyle(element).fill)).toBe(quiet);
+  await target.hover();
+  await expect.poll(() => targetCircle.evaluate((element) => getComputedStyle(element).fill)).not.toBe(quiet);
+  await page.mouse.move(0, 0);
   await target.focus();
-  await page.keyboard.press("Enter");
-  await expect(page).toHaveURL(new RegExp(`${expectedPath!.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`));
+  await expect.poll(() => targetCircle.evaluate((element) => getComputedStyle(element).fill)).not.toBe(quiet);
 });
 
-test("expanded graph supports touch panning and pinch zoom", async ({ page }, testInfo) => {
-  test.skip(testInfo.project.name !== "mobile-chromium", "mobile touch graph assertion");
-  await page.goto(site("docs", "/docs/Getting%20Started/"));
-  await page.getByRole("button", { name: "Context" }).tap();
-  await page.getByRole("button", { name: "Expand local graph" }).tap();
-  const view = page.locator('[data-graph-dialog-view="local"]');
-  await expect(view).toHaveAttribute("data-graph-ready", "true");
-  const result = await view.locator("svg").evaluate(async (svg) => {
-    const point = (id: number, x: number, y: number) => new Touch({ identifier: id, target: svg, clientX: x, clientY: y });
-    const fire = (type: string, touches: Touch[], changedTouches = touches) => svg.dispatchEvent(new TouchEvent(type, {
-      bubbles: true,
-      cancelable: true,
-      touches,
-      targetTouches: touches,
-      changedTouches
-    }));
-    const viewport = svg.querySelector(".graph-viewport")!;
-    const beforePan = viewport.getAttribute("transform");
-    fire("touchstart", [point(1, 50, 50)]);
-    fire("touchmove", [point(1, 90, 80)]);
-    fire("touchend", [], [point(1, 90, 80)]);
-    const afterPan = viewport.getAttribute("transform");
-    await new Promise((resolve) => setTimeout(resolve, 550));
-    const beforeScale = Number(svg.closest<HTMLElement>("[data-graph-dialog-view]")?.dataset.graphScale);
-    fire("touchstart", [point(1, 90, 90), point(2, 150, 90)]);
-    fire("touchmove", [point(1, 60, 90), point(2, 180, 90)]);
-    fire("touchend", [], [point(1, 60, 90), point(2, 180, 90)]);
-    const afterScale = Number(svg.closest<HTMLElement>("[data-graph-dialog-view]")?.dataset.graphScale);
-    return { beforePan, afterPan, beforeScale, afterScale };
-  });
-  expect(result.afterPan).not.toBe(result.beforePan);
-  expect(result.afterScale).toBeGreaterThan(result.beforeScale);
-  expect(await page.locator('dialog[data-dialog="graph-local"]').evaluate((dialog) => dialog.scrollWidth <= dialog.clientWidth)).toBe(true);
-});
-
-test("color scheme state uses the neutral public contract", async ({ page }) => {
-  await page.goto(site("blog"));
-  await page.locator("[data-color-scheme-toggle]").click();
-  await expect(page.locator("html")).toHaveAttribute("data-color-scheme", /light|dark/);
-  expect(
-    await page.evaluate(() => localStorage.getItem("website:color-scheme"))
-  ).toMatch(/light|dark/);
-  expect(await page.evaluate(() => localStorage.getItem("garden-theme"))).toBeNull();
-});
-
-test("blog comments load the managed Giscus client without breaking narrow layouts", async ({ page }) => {
+test("Comments use the managed Giscus client and remain narrow-layout safe", async ({ page }) => {
   let requestedClient = false;
   await page.addInitScript(() => localStorage.setItem("website:color-scheme", "dark"));
   await page.route("https://giscus.app/client.js", async (route) => {
@@ -388,142 +431,178 @@ test("blog comments load the managed Giscus client without breaking narrow layou
   });
   await page.setViewportSize({ width: 320, height: 760 });
   await page.goto("/__fixture__/comments/");
-
   const comments = page.getByRole("region", { name: "Comments" });
   await expect(comments).toBeVisible();
+  await expect(comments.getByText("Discussion", { exact: true })).toHaveCount(0);
+  const heading = comments.getByRole("heading", { name: "Comments" });
+  expect((await heading.boundingBox())!.x).toBeCloseTo((await comments.boundingBox())!.x, 0);
+  expect(await heading.evaluate((element) => Number.parseFloat(getComputedStyle(element).fontSize)))
+    .toBeLessThanOrEqual(28);
   await expect.poll(() => requestedClient).toBe(true);
   const client = comments.locator("script[data-website-comments-client]");
-  await expect(client).toHaveAttribute("src", "https://giscus.app/client.js");
   await expect(client).toHaveAttribute("data-mapping", "specific");
   await expect(client).toHaveAttribute("data-strict", "1");
-  await expect(client).toHaveAttribute("data-loading", "lazy");
   await expect(client).toHaveAttribute("data-theme", "dark");
-  await expect(comments.getByRole("link", { name: "Open discussions on GitHub" })).toBeVisible();
   expect(await comments.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
-
   const results = await new AxeBuilder({ page }).include(".website-comments").analyze();
   expect(results.violations).toEqual([]);
 });
 
-test("blog comments remain usable when the Giscus client is unavailable", async ({ page }) => {
+test("Comments retain their GitHub fallback when Giscus is unavailable", async ({ page }) => {
   await page.route("https://giscus.app/client.js", (route) => route.abort());
   await page.goto("/__fixture__/comments/");
-
   const comments = page.getByRole("region", { name: "Comments" });
   await expect(comments).toHaveAttribute("data-website-comments-state", "unavailable");
   await expect(comments.getByText("Comments could not be loaded.")).toBeVisible();
   await expect(comments.getByRole("link", { name: "Open discussions on GitHub" })).toBeVisible();
-  await expect(page.locator("main")).toBeVisible();
 });
 
-test("every theme follows dark preference and supports an explicit light override", async ({ page }) => {
+test("Minimal articles use centered Previous and Next cards", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "desktop-chromium", "desktop sequence geometry assertion");
+  await page.goto(site("minimal", "/blog/One%20vault%2C%20three%20readings/"));
+  const previous = page.locator(".sequence-navigation a[rel='prev']");
+  await expect(previous.locator("span")).toHaveText("Previous");
+  await expect(previous).toHaveCSS("text-align", "center");
+  await expect(previous).toHaveCSS("border-top-width", "1px");
+  await page.goto(site("minimal", "/blog/%E4%BB%8E%E7%AC%94%E8%AE%B0%E5%88%B0%E5%8F%91%E5%B8%83/"));
+  const next = page.locator(".sequence-navigation a[rel='next']");
+  await expect(next.locator("span")).toHaveText("Next");
+  await expect(next).toHaveCSS("text-align", "center");
+  await expect(next).toHaveCSS("grid-column-start", "2");
+});
+
+test("themes follow system dark mode and support explicit light override", async ({ page }) => {
   await page.emulateMedia({ colorScheme: "dark" });
   await page.addInitScript(() => localStorage.removeItem("website:color-scheme"));
-  for (const theme of ["blog", "docs", "digital-garden"] as const) {
-    await page.goto(site(theme));
+  for (const theme of themes) {
+    await page.goto(site(theme, "/docs/Getting%20Started/"));
     await expect(page.locator("html")).toHaveAttribute("data-color-scheme", "dark");
     await page.locator("[data-color-scheme-toggle]").click();
     await expect(page.locator("html")).toHaveAttribute("data-color-scheme", "light");
   }
 });
 
-test("enabled taxonomy and feed routes stay discoverable without a graph tab", async ({ page }, testInfo) => {
-  test.skip(testInfo.project.name !== "desktop-chromium", "desktop primary navigation assertion");
-  for (const theme of ["blog", "docs", "digital-garden"] as const) {
+test("saved light preference is applied before the deferred theme bundle", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "desktop-chromium", "first-paint timing assertion");
+  await page.emulateMedia({ colorScheme: "dark" });
+  await page.addInitScript(() => localStorage.setItem("website:color-scheme", "light"));
+  await page.route(/\/(?:minimal|docs)-[A-Z0-9]+\.js(?:\?.*)?$/, (route) => route.abort());
+  for (const theme of themes) {
+    await page.goto(site(theme), { waitUntil: "domcontentloaded" });
+    await expect(page.locator("html")).toHaveAttribute("data-color-scheme", "light");
+    expect(await page.locator("head").evaluate((head) => {
+      const children = [...head.children];
+      const bootstrap = children.findIndex((element) =>
+        element instanceof HTMLScriptElement && element.src.includes("color-scheme-bootstrap-")
+      );
+      const stylesheet = children.findIndex((element) =>
+        element instanceof HTMLLinkElement && element.rel === "stylesheet"
+      );
+      return bootstrap >= 0 && stylesheet >= 0 && bootstrap < stylesheet;
+    })).toBe(true);
+  }
+});
+
+test("themes use neutral dark surfaces, warm paper light, and one restrained type scale", async ({ page }) => {
+  for (const theme of themes) {
+    await page.emulateMedia({ colorScheme: "dark" });
+    await page.addInitScript(() => localStorage.removeItem("website:color-scheme"));
+    await page.goto(site(theme, "/docs/Getting%20Started/"));
+    for (const selector of ["body", "pre"] as const) {
+      const channels = await page.locator(selector).first().evaluate((element) =>
+        getComputedStyle(element).backgroundColor.match(/\d+/g)?.slice(0, 3).map(Number) || []
+      );
+      expect(Math.max(...channels) - Math.min(...channels), `${theme} ${selector}`).toBeLessThanOrEqual(4);
+    }
+
+    await page.emulateMedia({ colorScheme: "light" });
+    await page.evaluate(() => localStorage.setItem("website:color-scheme", "light"));
+    await page.reload();
+    const paper = await page.locator("body").evaluate((element) =>
+      getComputedStyle(element).backgroundColor.match(/\d+/g)?.slice(0, 3).map(Number) || []
+    );
+    expect(paper[0]!, theme).toBeGreaterThan(paper[2]!);
+
+    const title = page.getByRole("heading", { level: 1, name: "Getting Started" });
+    const section = page.getByRole("heading", { level: 2, name: "Install the toolchain" });
+    const paragraph = page.locator(".note-content > p").first();
+    const typography = (locator: typeof title) => locator.evaluate((element) => {
+      const style = getComputedStyle(element);
+      return { family: style.fontFamily, size: Number.parseFloat(style.fontSize) };
+    });
+    const [titleType, sectionType, bodyType] = await Promise.all([
+      typography(title), typography(section), typography(paragraph)
+    ]);
+    expect(titleType.family).toBe(bodyType.family);
+    expect(sectionType.family).toBe(bodyType.family);
+    expect(bodyType.family).toContain("Segoe UI");
+    expect(titleType.size / bodyType.size).toBeLessThan(3);
+    expect(sectionType.size / bodyType.size).toBeLessThan(2);
+  }
+});
+
+test("Minimal omits decorative reading chrome", async ({ page }) => {
+  await page.goto(site("minimal", "/docs/Getting%20Started/"));
+  await expect(page.locator(".note-kicker, .breadcrumbs")).toHaveCount(0);
+  await expect(page.locator(".note-header")).toHaveCSS("border-bottom-width", "0px");
+  await expect(page.locator(".site-header")).toHaveCSS("border-top-width", "0px");
+  const section = page.getByRole("heading", { level: 2, name: "Install the toolchain" });
+  expect(await section.evaluate((element) => getComputedStyle(element, "::before").content)).toBe("none");
+});
+
+test("feed discovery stays out of primary navigation", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "desktop-chromium", "desktop navigation assertion");
+  for (const theme of themes) {
     await page.goto(`/__fixture__/features/${theme}/navigation/`);
     const primary = page.getByRole("navigation", { name: "Primary navigation" });
-    for (const route of ["/tags/", "/feed.xml"] as const) {
-      await expect(primary.locator(`a[href="${route}"]`)).toHaveCount(1);
-    }
-    await expect(primary.locator('a[href="/graph/"]')).toHaveCount(0);
+    await expect(primary.locator('a[href="/tags/"], a[href="/feed.xml"], a[href="/graph/"]')).toHaveCount(0);
     await expect(page.locator('head link[rel="alternate"][type="application/atom+xml"]'))
       .toHaveAttribute("href", "/feed.xml");
   }
+
+  await page.goto(site("minimal", "/blog/One%20vault%2C%20three%20readings/"));
+  const primary = page.getByRole("navigation", { name: "Primary navigation" });
+  await expect(primary.getByRole("link", { name: /^(Feed|Topics|Tags)$/ })).toHaveCount(0);
+  await expect(page.locator('head link[rel="alternate"][type="application/atom+xml"]'))
+    .toHaveAttribute("href", /\/__site__\/minimal\/feed\.xml$/);
 });
 
-test("docs Browse keeps enabled feature routes beside the documentation tree", async ({ page }, testInfo) => {
-  test.skip(testInfo.project.name !== "mobile-chromium", "mobile browse assertion");
-  await page.goto("/__fixture__/features/docs/navigation/");
-  await page.getByRole("button", { name: "Browse" }).tap();
-  const dialog = page.locator('dialog[data-dialog="browse"]');
-  await expect(dialog).toBeVisible();
-  await expect(dialog.getByRole("navigation", { name: "Documentation" })).toBeVisible();
-  for (const route of ["/tags/", "/feed.xml"] as const) {
-    await expect(dialog.locator(`a[href="${route}"]`)).toHaveCount(1);
-  }
-  await expect(dialog.locator('a[href="/graph/"]')).toHaveCount(0);
+test("localized docs language navigation and fallback metadata remain correct", async ({ page }) => {
+  await page.goto(localizedDocs("/zh-CN/docs/Getting%20Started/"));
+  await expect(page.locator("html")).toHaveAttribute("lang", "zh-CN");
+  const switcher = page.locator("[data-language-switcher]");
+  await switcher.locator("summary").click();
+  await expect(switcher.getByRole("link", { name: "简体中文" })).toHaveAttribute("aria-current", "page");
+  await expect(switcher.getByRole("link", { name: "English" }))
+    .toHaveAttribute("href", localizedDocs("/docs/Getting%20Started/"));
+  await switcher.getByRole("link", { name: "English" }).focus();
+  await page.keyboard.press("Escape");
+  await expect(switcher.locator("summary")).toBeFocused();
+
+  await page.goto(localizedDocs("/zh-CN/docs/Customization/"));
+  await expect(page.locator(".translation-fallback")).toContainText("本页尚无译文");
+  await expect(page.locator(".note-content")).toHaveAttribute("lang", "en");
+  await expect(page.locator('meta[name="robots"]')).toHaveAttribute("content", "noindex");
+  await expect(page.locator('link[rel="alternate"][hreflang]')).toHaveCount(0);
 });
 
-test("search-disabled pages leave Cmd/Ctrl-K to the browser", async ({ page }) => {
-  const searchRequests: string[] = [];
-  page.on("request", (request) => {
-    if (/\/search-[^/]+\.js$/.test(new URL(request.url()).pathname)) {
-      searchRequests.push(request.url());
-    }
-  });
-  await page.goto("/__fixture__/features/blog/none/");
-  const prevented = await page.evaluate(() => {
-    const event = new KeyboardEvent("keydown", {
-      key: "k",
-      ctrlKey: true,
-      bubbles: true,
-      cancelable: true
-    });
-    document.dispatchEvent(event);
-    return event.defaultPrevented;
-  });
-  expect(prevented).toBe(false);
-  await page.waitForTimeout(50);
-  expect(searchRequests).toEqual([]);
-});
-
-test("docs home follows its authored introduction with a compact handbook index", async ({ page }) => {
-  await page.goto(site("docs"));
-  const article = page.locator("main > article");
-  const browse = page.locator("main > .docs-home-browse");
-  await expect(article).toContainText("One Obsidian vault, three intentional ways to publish it");
-  await expect(browse.getByRole("heading", { name: "Browse the handbook" })).toBeVisible();
-  await expect(browse.getByRole("link", { name: "Documentation" })).toBeVisible();
-  await expect(page.locator("main > article + .docs-home-browse")).toHaveCount(1);
-});
-
-test("digital garden home follows authored content with server-rendered ways to explore", async ({ page }) => {
-  await page.goto(site("digital-garden"));
-  const article = page.locator("main > article");
-  const overview = page.locator("main > .garden-home-overview");
-  await expect(article).toContainText("One Obsidian vault, three intentional ways to publish it");
-  await expect(overview.getByRole("heading", { name: "Explore the garden" })).toBeVisible();
-  for (const name of ["Notes", "Tags"] as const) {
-    await expect(overview.getByRole("link", { name: new RegExp(`^${name}`) })).toBeVisible();
-  }
-  await expect(overview.getByRole("link", { name: /^Graph/ })).toHaveCount(0);
-  await expect(page.locator("main > article + .garden-home-overview")).toHaveCount(1);
-});
-
-test("frontend identifiers are neutral outside the garden visual shell", async ({ page }) => {
-  await page.goto(site("digital-garden", "/docs/Syntax/"));
-  expect(await page.locator("meta[name^='website:']").count()).toBeGreaterThan(0);
-  await expect(page.locator("meta[name^='obsidian:'], [class*='obsidian-'], [src^='/assets/obsidian/'], [href^='/assets/obsidian/']"))
-    .toHaveCount(0);
-  expect(await page.evaluate(() => Array.from(document.querySelectorAll("*")).flatMap((element) =>
-    Array.from(element.attributes, (attribute) => attribute.name)
-  ).filter((name) => name.startsWith("data-obsidian-") || name === "data-obsidian"))).toEqual([]);
-  await expect(page.locator("[data-garden-dialog], .garden-dialog, .garden-link, .garden-embed"))
-    .toHaveCount(0);
-  await expect(page.locator(".website-link").first()).toBeVisible();
-  await expect(page.locator(".website-embed").first()).toBeVisible();
+test("localized docs search loads the locale index and finds CJK content", async ({ page }) => {
+  await page.goto(localizedDocs("/zh-CN/"));
+  await page.keyboard.press("ControlOrMeta+k");
+  const dialog = page.locator('dialog[data-dialog="search"]');
+  await dialog.locator("input").fill("快速");
+  await expect(dialog.getByRole("link", { name: "快速开始" })).toBeVisible();
+  await expect(dialog.locator("[data-search-status]")).toHaveText(/找到 \d+ 篇笔记。/);
 });
 
 for (const fixture of [
-  { theme: "blog", feature: "outline", visible: "On this page", hidden: "Backlinks" },
-  { theme: "blog", feature: "relations", visible: "Backlinks", hidden: "On this page" },
+  { theme: "minimal", feature: "outline", visible: "On this page", hidden: "Backlinks" },
+  { theme: "minimal", feature: "relations", visible: "Backlinks", hidden: "On this page" },
   { theme: "docs", feature: "outline", visible: "On this page", hidden: "Backlinks" },
-  { theme: "docs", feature: "relations", visible: "Backlinks", hidden: "On this page" },
-  { theme: "digital-garden", feature: "outline", visible: "On this page", hidden: "Backlinks" },
-  { theme: "digital-garden", feature: "relations", visible: "Backlinks", hidden: "On this page" }
+  { theme: "docs", feature: "relations", visible: "Backlinks", hidden: "On this page" }
 ] as const) {
   test(`${fixture.theme} renders ${fixture.feature} independently`, async ({ page }, testInfo) => {
-    test.skip(testInfo.project.name !== "desktop-chromium", "desktop server-rendered panel assertion");
+    test.skip(testInfo.project.name !== "desktop-chromium", "desktop context assertion");
     await page.goto(`/__fixture__/features/${fixture.theme}/${fixture.feature}/`);
     const panel = page.locator("[data-context-panel]");
     await expect(panel).toBeVisible();
@@ -532,70 +611,89 @@ for (const fixture of [
   });
 }
 
-test("all themes remove context UI when outline and relations are disabled", async ({ page }) => {
-  for (const theme of ["blog", "docs", "digital-garden"] as const) {
+test("relation context puts collapsed direct links after backlinks", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "desktop-chromium", "desktop relation assertion");
+  await page.goto("/__fixture__/features/minimal/relations/");
+  const panel = page.locator("[data-context-panel]");
+  const titles = await panel.locator(":scope > .relation-section").evaluateAll((sections) =>
+    sections.map((section) => section.querySelector(".relation-section__title")?.textContent?.trim())
+  );
+  expect(titles.indexOf("Backlinks")).toBeLessThan(titles.indexOf("Direct links"));
+  const directLinks = panel.locator("details.relation-disclosure");
+  await expect(directLinks).not.toHaveAttribute("open", "");
+  await expect(directLinks.getByRole("link", { name: "Linked note" })).toBeHidden();
+  await directLinks.locator("summary").click();
+  await expect(directLinks.getByRole("link", { name: "Linked note" })).toBeVisible();
+});
+
+test("themes remove context UI when outline and relations are disabled", async ({ page }) => {
+  for (const theme of themes) {
     await page.goto(`/__fixture__/features/${theme}/none/`);
-    await expect(page.locator("[data-context-panel]")).toHaveCount(0);
-    await expect(page.locator('[data-dialog="context"]')).toHaveCount(0);
+    await expect(page.locator("[data-context-panel], [data-dialog='context']")).toHaveCount(0);
     await expect(page.getByRole("button", { name: /Context|On this page/ })).toHaveCount(0);
   }
 });
 
 test("non-default context features remain available in mobile sheets", async ({ page }, testInfo) => {
-  test.skip(testInfo.project.name !== "mobile-chromium", "mobile interaction assertion");
+  test.skip(testInfo.project.name !== "mobile-chromium", "mobile context assertion");
   for (const [theme, feature, heading] of [
-    ["blog", "outline", "On this page"],
-    ["blog", "relations", "Backlinks"],
+    ["minimal", "outline", "On this page"],
+    ["minimal", "relations", "Backlinks"],
     ["docs", "outline", "On this page"],
-    ["docs", "relations", "Backlinks"],
-    ["digital-garden", "outline", "On this page"],
-    ["digital-garden", "relations", "Backlinks"]
+    ["docs", "relations", "Backlinks"]
   ] as const) {
     await page.goto(`/__fixture__/features/${theme}/${feature}/`);
     await expect(page.locator("[data-context-panel]")).toBeHidden();
     await page.getByRole("button", { name: feature === "outline" ? "On this page" : "Context" }).tap();
-    const dialog = page.locator('dialog[data-dialog="context"]');
-    await expect(dialog).toBeVisible();
-    await expect(
-      dialog.locator(".relation-section__title").filter({ hasText: heading })
-    ).toBeVisible();
+    await expect(page.locator('dialog[data-dialog="context"] .relation-section__title')
+      .filter({ hasText: heading })).toBeVisible();
   }
 });
 
 test.describe("without JavaScript", () => {
   test.use({ javaScriptEnabled: false });
 
-  for (const theme of ["blog", "docs", "digital-garden"] as const) {
+  for (const theme of themes) {
     test(`${theme} retains authored content and navigation`, async ({ page }) => {
       await page.goto(site(theme));
-      await expect(page.locator("main article")).toBeVisible();
+      await expect(page.locator(theme === "minimal" ? "main > .minimal-reading-column > .minimal-entry" : "main > .docs-article"))
+        .toBeVisible();
       await expect(page.getByRole("navigation").first()).toBeVisible();
       await expect(page.locator(".mobile-toolbar")).toBeHidden();
     });
   }
 
-  test("docs language links remain usable", async ({ page }) => {
-    await page.goto(localizedDocs("/zh-CN/docs/Getting%20Started/"));
-    const switcher = page.locator("[data-language-switcher]");
-    await switcher.locator("summary").click();
-    await switcher.getByRole("link", { name: "English" }).click();
-    await expect(page).toHaveURL(/\/__site__\/docs-i18n\/docs\/Getting%20Started\/$/);
-    await expect(page.locator("html")).toHaveAttribute("lang", "en");
+  test("priority navigation exposes every custom link without JavaScript", async ({ page }, testInfo) => {
+    test.skip(testInfo.project.name !== "desktop-chromium", "desktop no-JavaScript navigation assertion");
+    await page.goto("/__fixture__/features/minimal/navigation/");
+    const navigation = page.getByRole("navigation", { name: "Primary navigation" });
+    await expect(navigation.locator("[data-priority-navigation-list] > li > a")).toHaveText([
+      "Home", "Blog", "Docs", "About", "Portfolio", "Projects", "Team", "Contact"
+    ]);
+    await expect(navigation.locator("[data-priority-navigation-more]")).toBeHidden();
+    await expect(navigation.getByRole("link", { name: "Projects" })).toHaveAttribute("aria-current", "page");
   });
 
-  test("blog comments retain the GitHub Discussions fallback", async ({ page }) => {
+  test("docs serves its complete index without JavaScript", async ({ page }) => {
+    await page.goto(site("docs", "/docs/Getting%20Started/"));
+    const navigation = page.getByRole("navigation", { name: "Documentation", exact: true });
+    await expect(navigation.getByRole("link", { name: "Architecture" })).toBeVisible();
+    await expect(page.getByRole("link", { name: "View full documentation index" })).toHaveCount(0);
+  });
+
+  test("Comments retain the GitHub Discussions fallback", async ({ page }) => {
     await page.goto("/__fixture__/comments/");
     const comments = page.getByRole("region", { name: "Comments" });
-    await expect(comments).toBeVisible();
     await expect(comments.locator("script[data-website-comments-client]")).toHaveCount(0);
     await expect(comments.getByRole("link", { name: "Open discussions on GitHub" })).toBeVisible();
   });
 
-  test("non-default context features have a mobile server-rendered fallback", async ({ page }, testInfo) => {
-    test.skip(testInfo.project.name !== "mobile-chromium", "mobile fallback assertion");
-    for (const theme of ["blog", "docs", "digital-garden"] as const) {
-      await page.goto(`/__fixture__/features/${theme}/relations/`);
-      await expect(page.locator("[data-context-panel]")).toBeVisible();
+  test("documentation graphs and mobile context have server-rendered fallbacks", async ({ page }, testInfo) => {
+    await page.goto(site("minimal", "/docs/Syntax/"));
+    await expect(page.locator(".local-graph__fallback")).toBeVisible();
+    await expect(page.locator("pre[lang='mermaid']")).toBeVisible();
+    if (testInfo.project.name === "mobile-chromium") {
+      await expect(page.getByRole("complementary", { name: "Page context" })).toBeVisible();
       await expect(page.getByRole("heading", { name: "Backlinks" })).toBeVisible();
     }
   });

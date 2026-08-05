@@ -16,7 +16,7 @@ class CommentsTest < Minitest::Test
       note("blog/open.md", "---\npublish: true\ncontent_type: post\ndate: 2026-08-01\n---\n# Open"),
       note("blog/closed.md", "---\npublish: true\ncontent_type: post\ndate: 2026-08-02\ncomments: false\n---\n# Closed"),
       note("about.md", "---\npublish: true\nupdated: 2026-08-03\ncomments: true\n---\n# About"),
-      theme: "blog",
+      theme: "minimal",
       lang: "zh-CN",
       comments: COMMENT_IDS
     )
@@ -40,7 +40,7 @@ class CommentsTest < Minitest::Test
     assert_nil page(result, "/blog/closed/").data.dig("website", "comments")
     assert_nil page(result, "/about/").data.dig("website", "comments")
     assert_nil page(result, "/").data.dig("website", "comments")
-    assert_nil page(result, "/archive/").data.dig("website", "comments")
+    assert_nil page(result, "/blog/").data.dig("website", "comments")
   end
 
   def test_theme_defaults_can_be_overridden_for_every_theme
@@ -49,7 +49,7 @@ class CommentsTest < Minitest::Test
       note("blog/post.md", "---\npublish: true\ncontent_type: post\ndate: 2026-08-01\n---\n# Post")
     ]
 
-    %w[docs digital-garden].each do |theme|
+    %w[docs].each do |theme|
       disabled = compile(*entries, theme: theme, comments: COMMENT_IDS)
       assert disabled.success?, disabled.diagnostics.map(&:message).join("\n")
       assert_nil page(disabled, "/blog/post/").data.dig("website", "comments"), theme
@@ -59,7 +59,7 @@ class CommentsTest < Minitest::Test
       assert_equal "website:post:blog/post", page(enabled, "/blog/post/").data.dig("website", "comments", "term"), theme
     end
 
-    blog = compile(*entries, theme: "blog", comments: COMMENT_IDS.merge("enabled" => false))
+    blog = compile(*entries, theme: "minimal", comments: COMMENT_IDS.merge("enabled" => false))
     assert blog.success?, blog.diagnostics.map(&:message).join("\n")
     assert_nil page(blog, "/blog/post/").data.dig("website", "comments")
   end
@@ -69,7 +69,7 @@ class CommentsTest < Minitest::Test
     result = compile(
       note("index.md", "---\npublish: true\nupdated: 2026-08-03\n---\n# Home"),
       note("blog/post.md", "---\npublish: true\ncontent_type: post\ndate: 2026-08-01\n---\n# Post"),
-      theme: "blog",
+      theme: "minimal",
       lang: "en-GB",
       environment: "development",
       comments: configured
@@ -87,7 +87,7 @@ class CommentsTest < Minitest::Test
     result = compile(
       note("index.md", "---\npublish: true\nupdated: 2026-08-03\n---\n# Home"),
       note("blog/post.md", "---\npublish: true\ncontent_type: post\ndate: 2026-08-01\n---\n# Post"),
-      theme: "blog",
+      theme: "minimal",
       comments: { "enabled" => true }
     )
 
@@ -127,10 +127,10 @@ class CommentsTest < Minitest::Test
       note("index.md", "---\npublish: true\nupdated: 2026-08-03\n---\n# Home"),
       note("blog/中文.md", "---\npublish: true\ncontent_type: post\ndate: 2026-08-01\n---\n# 中文")
     ]
-    first = compile(*entries, theme: "blog", comments: COMMENTS)
+    first = compile(*entries, theme: "minimal", comments: COMMENTS)
     second = compile(
       *entries,
-      theme: "blog",
+      theme: "minimal",
       url: "https://other.example",
       baseurl: "/manual",
       comments: COMMENTS
@@ -151,13 +151,13 @@ class CommentsTest < Minitest::Test
   def test_comments_config_fails_closed
     home = note("index.md", "---\npublish: true\nupdated: 2026-08-03\n---\n# Home")
     cases = [
-      ["mapping", "must be a mapping", theme: "blog", comments: true],
-      ["unknown setting", "unknown comments setting", theme: "blog", comments: { "surprise" => true }],
-      ["boolean", "YAML boolean", theme: "blog", comments: COMMENTS.merge("enabled" => "true")],
-      ["repository", "owner/repository", theme: "blog", repository: "", comments: COMMENTS],
-      ["repository id type", "repository_id must be a string", theme: "blog", comments: COMMENTS.merge("repository_id" => true)],
-      ["category type", "category must be a string", theme: "blog", comments: COMMENTS.merge("category" => true)],
-      ["category id type", "category_id must be a string", theme: "blog", comments: COMMENTS.merge("category_id" => true)]
+      ["mapping", "must be a mapping", theme: "minimal", comments: true],
+      ["unknown setting", "unknown comments setting", theme: "minimal", comments: { "surprise" => true }],
+      ["boolean", "YAML boolean", theme: "minimal", comments: COMMENTS.merge("enabled" => "true")],
+      ["repository", "owner/repository", theme: "minimal", repository: "", comments: COMMENTS],
+      ["repository id type", "repository_id must be a string", theme: "minimal", comments: COMMENTS.merge("repository_id" => true)],
+      ["category type", "category must be a string", theme: "minimal", comments: COMMENTS.merge("category" => true)],
+      ["category id type", "category_id must be a string", theme: "minimal", comments: COMMENTS.merge("category_id" => true)]
     ]
 
     cases.each do |label, message, overrides|
@@ -171,7 +171,7 @@ class CommentsTest < Minitest::Test
     invalid = compile(
       note("index.md", "---\npublish: true\nupdated: 2026-08-03\n---\n# Home"),
       note("blog/post.md", "---\npublish: true\ncontent_type: post\ndate: 2026-08-01\ncomments: \"yes\"\n---\n# Post"),
-      theme: "blog",
+      theme: "minimal",
       comments: COMMENTS
     )
 

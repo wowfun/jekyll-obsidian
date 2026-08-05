@@ -7,7 +7,7 @@ class RelationsAndTransclusionTest < Minitest::Test
     result = compile(
       note("index.md", "---\npublish: true\nupdated: 2026-07-30\n---\n# Home\n[[target]]\n![[target#Section]]"),
       note("target.md", "---\npublish: true\nupdated: 2026-07-30\n---\n# Target\n## Section\nEmbedded text."),
-      theme: "digital-garden"
+      theme: "minimal"
     )
 
     assert result.success?, result.diagnostics.map(&:message).join("\n")

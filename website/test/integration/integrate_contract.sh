@@ -27,7 +27,7 @@ new_host() {
   cp "$SITE_DIR/bin/integrate" "$new_host_path/website/bin/integrate"
   cp "$SITE_DIR/scripts/templates/host-config.yml" "$new_host_path/website/scripts/templates/host-config.yml"
   cp "$SITE_DIR/scripts/templates/pages.yml" "$new_host_path/website/scripts/templates/pages.yml"
-  printf '%s\n' '---' 'publish: true' '---' '# Documentation' > "$new_host_path/docs/index.md"
+  printf '%s\n' '---' 'publish: true' '---' '# Start' > "$new_host_path/docs/Start.md"
 }
 
 assert_lf_without_bom() {
@@ -72,10 +72,10 @@ awk '
   { print }
 ' "$default_host/.github/jekyll-obsidian.yml" > "$config_tmp"
 mv -- "$config_tmp" "$default_host/.github/jekyll-obsidian.yml"
-"$default_host/website/bin/integrate" --theme digital-garden >/dev/null
+"$default_host/website/bin/integrate" --theme minimal >/dev/null
 grep -Fqx 'title: Preserved host title' "$default_host/.github/jekyll-obsidian.yml" || fail "top-level host configuration was lost."
 grep -Fqx '  repository: owner/project' "$default_host/.github/jekyll-obsidian.yml" || fail "website host configuration was lost."
-grep -Fqx "  theme: 'digital-garden'" "$default_host/.github/jekyll-obsidian.yml" || fail "theme was not updated."
+grep -Fqx "  theme: 'minimal'" "$default_host/.github/jekyll-obsidian.yml" || fail "theme was not updated."
 
 new_host
 detached_markers_host=$new_host_path
@@ -96,10 +96,19 @@ fi
 
 mkdir -p "$default_host/Documentation/用户 指南"
 printf '%s\n' '---' 'publish: true' '---' '# Unicode documentation' > "$default_host/Documentation/用户 指南/index.md"
-"$default_host/website/bin/integrate" --source 'Documentation\用户 指南' --theme blog >/dev/null
+"$default_host/website/bin/integrate" --source 'Documentation\用户 指南' --theme minimal >/dev/null
 grep -Fqx "  source: 'Documentation/用户 指南'" "$default_host/.github/jekyll-obsidian.yml" || fail "Windows-style source was not normalized."
 [ "$(grep -Fxc "      - 'Documentation/用户 指南/**'" "$default_host/.github/workflows/pages.yml")" -eq 2 ] || fail "Unicode workflow trigger was not generated."
 "$default_host/website/bin/integrate" --check >/dev/null
+
+new_host
+legacy_theme_host=$new_host_path
+for legacy_theme in blog digital-garden; do
+  if "$legacy_theme_host/website/bin/integrate" --theme "$legacy_theme" >/dev/null 2>&1; then
+    fail "the removed $legacy_theme theme was accepted."
+  fi
+done
+[ ! -e "$legacy_theme_host/.github" ] || fail "an invalid legacy theme left partial integration files."
 
 special_source="docs'[one]"
 mkdir -p "$default_host/$special_source"
@@ -147,30 +156,6 @@ if "$reversed_markers_host/website/bin/integrate" >/dev/null 2>&1; then
 fi
 [ "$reversed_before" = "$(cksum "$reversed_markers_host/.github/jekyll-obsidian.yml")" ] || fail "a malformed managed block was rewritten."
 [ ! -e "$reversed_markers_host/.github/workflows" ] || fail "a malformed managed block created a workflow directory."
-
-new_host
-private_host=$new_host_path
-printf '%s\n' '---' 'publish: false' '---' '# Private' > "$private_host/docs/index.md"
-if "$private_host/website/bin/integrate" >/dev/null 2>&1; then
-  fail "a private root index was accepted."
-fi
-[ ! -e "$private_host/.github" ] || fail "a failed content preflight created host files."
-
-new_host
-nested_publish_host=$new_host_path
-printf '%s\n' '---' 'metadata:' '  publish: true' '---' '# Nested flag' > "$nested_publish_host/docs/index.md"
-if "$nested_publish_host/website/bin/integrate" >/dev/null 2>&1; then
-  fail "a nested publish key was accepted as the public root flag."
-fi
-[ ! -e "$nested_publish_host/.github" ] || fail "a nested publish failure created host files."
-
-new_host
-string_publish_host=$new_host_path
-printf '%s\n' '---' 'publish: true#not-a-comment' '---' '# String flag' > "$string_publish_host/docs/index.md"
-if "$string_publish_host/website/bin/integrate" >/dev/null 2>&1; then
-  fail "a string beginning with true was accepted as the public root flag."
-fi
-[ ! -e "$string_publish_host/.github" ] || fail "an invalid publish value created host files."
 
 new_host
 link_host=$new_host_path

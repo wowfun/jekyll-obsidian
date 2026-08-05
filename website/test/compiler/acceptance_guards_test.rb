@@ -57,13 +57,13 @@ class AcceptanceGuardsTest < Minitest::Test
 
   def profile_synthetic_vault(size)
     entries = synthetic_chain(size)
-    compile(*entries, theme: "digital-garden") # Warm Commonmarker and Ruby before taking the sample.
+    compile(*entries, theme: "minimal") # Warm Commonmarker and Ruby before taking the sample.
 
     result = nil
     elapsed = nil
     parsed_markdown = with_commonmarker_parse_probe do |calls|
       started_at = Process.clock_gettime(Process::CLOCK_MONOTONIC)
-      result = compile(*entries, theme: "digital-garden")
+      result = compile(*entries, theme: "minimal")
       elapsed = Process.clock_gettime(Process::CLOCK_MONOTONIC) - started_at
       calls
     end

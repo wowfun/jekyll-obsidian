@@ -2,6 +2,7 @@
 
 require "listen"
 require "fileutils"
+require "open3"
 require "stringio"
 require "tmpdir"
 require "test_helper"
@@ -170,5 +171,21 @@ class DevWatchTest < Minitest::Test
 
     assert_includes source, "JekyllObsidian::DevWatch.configured_source"
     refute_match(/source\.is_a\?\(String\).*\? source : \"vault\"/, source)
+  end
+
+  def test_local_server_uses_the_project_preview_defaults
+    source = File.read(File.expand_path("../../scripts/dev-watch.rb", __dir__))
+
+    assert_includes source, 'Options.new(host: "127.0.0.1", port: 58_000, baseurl: "", theme: "minimal")'
+    assert_includes source, 'command.concat(["--theme", options.theme])'
+  end
+
+  def test_local_server_help_reports_the_preview_theme_default
+    command = File.expand_path("../../bin/dev", __dir__)
+    stdout, stderr, status = Open3.capture3(command, "--help")
+
+    assert status.success?, stderr
+    assert_empty stderr
+    assert_includes stdout, "Preview theme (default: minimal)"
   end
 end

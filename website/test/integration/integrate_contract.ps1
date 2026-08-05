@@ -26,7 +26,7 @@ function New-Host {
     Copy-Item -LiteralPath (Join-Path $SiteDir "bin\integrate.cmd") -Destination (Join-Path $root "website\bin\integrate.cmd")
     Copy-Item -LiteralPath (Join-Path $SiteDir "scripts\templates\host-config.yml") -Destination (Join-Path $root "website\scripts\templates\host-config.yml")
     Copy-Item -LiteralPath (Join-Path $SiteDir "scripts\templates\pages.yml") -Destination (Join-Path $root "website\scripts\templates\pages.yml")
-    Write-Lf (Join-Path $root "docs\index.md") "---`npublish: true`n---`n# Documentation`n"
+    Write-Lf (Join-Path $root "docs\Start.md") "---`npublish: true`n---`n# Start`n"
     return $root
 }
 
@@ -101,7 +101,7 @@ try {
     $unicodeSource = "Documentation\用户 指南"
     [System.IO.Directory]::CreateDirectory((Join-Path $unicodeRoot $unicodeSource)) | Out-Null
     Write-Lf (Join-Path $unicodeRoot "$unicodeSource\index.md") "---`npublish: true`n---`n# Unicode documentation`n"
-    [void](Invoke-Adapter "pwsh" $unicodeRoot @("--source", $unicodeSource, "--theme", "blog"))
+    [void](Invoke-Adapter "pwsh" $unicodeRoot @("--source", $unicodeSource, "--theme", "minimal"))
     $config = [System.IO.File]::ReadAllText((Join-Path $unicodeRoot ".github\jekyll-obsidian.yml"))
     $workflow = [System.IO.File]::ReadAllText((Join-Path $unicodeRoot ".github\workflows\pages.yml"))
     if (-not $config.Contains("source: 'Documentation/用户 指南'")) { Fail "Windows source was not normalized" }
@@ -120,11 +120,17 @@ try {
     $preservedConfig = $preservedConfig.Replace("title: My Project Documentation", "title: Preserved host title")
     $preservedConfig = $preservedConfig.Replace('  repository: ""', "  repository: owner/project")
     Write-Lf $preservedConfigPath $preservedConfig
-    [void](Invoke-Adapter "pwsh" $preserveRoot @("--theme", "digital-garden"))
+    [void](Invoke-Adapter "pwsh" $preserveRoot @("--theme", "minimal"))
     $preservedConfig = [System.IO.File]::ReadAllText($preservedConfigPath)
     if (-not $preservedConfig.Contains("title: Preserved host title")) { Fail "host title was not preserved" }
     if (-not $preservedConfig.Contains("  repository: owner/project")) { Fail "repository setting was not preserved" }
-    if (-not $preservedConfig.Contains("  theme: 'digital-garden'")) { Fail "managed theme was not updated" }
+    if (-not $preservedConfig.Contains("  theme: 'minimal'")) { Fail "managed theme was not updated" }
+
+    $legacyThemeRoot = New-Host
+    foreach ($legacyTheme in @("blog", "digital-garden")) {
+        [void](Invoke-Adapter "pwsh" $legacyThemeRoot @("--theme", $legacyTheme) $false)
+    }
+    if (Test-Path -LiteralPath (Join-Path $legacyThemeRoot ".github")) { Fail "an invalid legacy theme left partial integration files" }
 
     $detachedMarkersRoot = New-Host
     [System.IO.Directory]::CreateDirectory((Join-Path $detachedMarkersRoot ".github")) | Out-Null
@@ -147,16 +153,6 @@ try {
     Write-Lf (Join-Path $unmanagedConfigRoot ".github\jekyll-obsidian.yml") "title: Existing configuration`n"
     [void](Invoke-Adapter "pwsh" $unmanagedConfigRoot @() $false)
     if (Test-Path -LiteralPath (Join-Path $unmanagedConfigRoot ".github\workflows")) { Fail "unmanaged configuration failure created a workflow directory" }
-
-    $privateRoot = New-Host
-    Write-Lf (Join-Path $privateRoot "docs\index.md") "---`nmetadata:`n  publish: true`n---`n# Nested flag`n"
-    [void](Invoke-Adapter "pwsh" $privateRoot @() $false)
-    if (Test-Path -LiteralPath (Join-Path $privateRoot ".github")) { Fail "failed content preflight left partial integration files" }
-
-    $stringPublishRoot = New-Host
-    Write-Lf (Join-Path $stringPublishRoot "docs\index.md") "---`npublish: true#not-a-comment`n---`n# String flag`n"
-    [void](Invoke-Adapter "pwsh" $stringPublishRoot @() $false)
-    if (Test-Path -LiteralPath (Join-Path $stringPublishRoot ".github")) { Fail "invalid publish value left partial integration files" }
 
     $caseRoot = New-Host
     [void](Invoke-Adapter "pwsh" $caseRoot @("--source", "Docs") $false)

@@ -18,14 +18,14 @@ async function outputSizes(theme: string) {
 }
 
 test("production theme outputs stay within site and average HTML budgets", async () => {
-  for (const theme of ["blog", "docs", "digital-garden"] as const) {
+  for (const theme of ["minimal", "docs"] as const) {
     const sizes = await outputSizes(theme);
     expect(sizes.total, `${theme} site bytes`).toBeLessThan(10 * 1024 * 1024);
     expect(sizes.averageHtml, `${theme} average HTML bytes`).toBeLessThan(50 * 1024);
   }
 });
 
-for (const theme of ["blog", "docs", "digital-garden"] as const) {
+for (const theme of ["minimal", "docs"] as const) {
   test(`${theme} matches its presentation baseline`, async ({ page }) => {
     await page.emulateMedia({ colorScheme: "light", reducedMotion: "reduce" });
     await page.addInitScript(() =>

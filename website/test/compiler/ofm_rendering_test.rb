@@ -62,9 +62,13 @@ class OfmRenderingTest < Minitest::Test
   end
 
   def test_inline_tags_join_frontmatter_but_code_comments_and_html_do_not
-    result = compile(note("index.md", <<~MARKDOWN), theme: "digital-garden")
+    result = compile(
+      note("index.md", "---\npublish: true\n---\n# Home"),
+      note("blog/tags.md", <<~MARKDOWN),
       ---
       publish: true
+      content_type: post
+      date: 2026-07-30
       tags: [frontmatter]
       updated: 2026-07-30
       ---
@@ -80,14 +84,16 @@ class OfmRenderingTest < Minitest::Test
       <div>
       #raw-html-tag
       </div>
-    MARKDOWN
+      MARKDOWN
+      theme: "minimal"
+    )
 
     assert result.success?, result.diagnostics.map(&:message).join("\n")
     catalog = generated_json(result, "/assets/website/catalog.v1.json")
     tags = catalog.fetch("notes").first.fetch("tags")
     assert_equal ["field-notes", "frontmatter", "guide/syntax"], tags
-    tag_names = page(result, "/tags/").data.dig("website", "theme_data", "tag_groups")
-      .map { |group| group.fetch("name") }
+    tag_names = page(result, "/blog/").data.dig("website", "theme_data", "topic_summaries")
+      .map { |topic| topic.fetch("name") }
     assert_includes tag_names, "field-notes"
     refute_includes tag_names, "inline-code"
     refute_includes tag_names, "comment-tag"
@@ -220,7 +226,7 @@ class OfmRenderingTest < Minitest::Test
         \![[media/private.png]] \#private-escaped-tag
       MARKDOWN
       attachment("media/private.png", "PRIVATE-ASSET", media_type: "image/png"),
-      theme: "digital-garden"
+      theme: "minimal"
     )
 
     assert result.success?, result.diagnostics.map(&:message).join("\n")
@@ -265,7 +271,7 @@ class OfmRenderingTest < Minitest::Test
       MARKDOWN
       attachment("media/public.png", "PUBLIC", media_type: "image/png"),
       attachment("media/private.png", "PRIVATE", media_type: "image/png"),
-      theme: "digital-garden"
+      theme: "minimal"
     )
 
     assert result.success?, result.diagnostics.map(&:message).join("\n")
@@ -292,7 +298,7 @@ class OfmRenderingTest < Minitest::Test
       MARKDOWN
       attachment("media/public.png", "PUBLIC", media_type: "image/png"),
       attachment("media/private.png", "PRIVATE", media_type: "image/png"),
-      theme: "digital-garden"
+      theme: "minimal"
     )
 
     assert result.success?, result.diagnostics.map(&:message).join("\n")

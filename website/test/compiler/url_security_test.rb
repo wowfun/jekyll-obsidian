@@ -56,8 +56,6 @@ class UrlSecurityTest < Minitest::Test
 
   def test_notes_cannot_claim_generated_or_asset_namespaces
     reserved = [
-      "/tags/",
-      "/notes/",
       "/404.html/child/",
       "/feed.xml/",
       "/sitemap.xml/",
@@ -66,14 +64,18 @@ class UrlSecurityTest < Minitest::Test
     ]
 
     reserved.each do |permalink|
-      result = compile(note("index.md", <<~MARKDOWN), theme: "digital-garden")
+      result = compile(
+        note("index.md", <<~MARKDOWN),
         ---
         publish: true
         permalink: #{permalink}
         updated: 2026-07-30
         ---
         # Reserved
-      MARKDOWN
+        MARKDOWN
+        note("posts/entry.md", "---\npublish: true\ncontent_type: post\ndate: 2026-07-30\n---\n# Entry"),
+        theme: "minimal"
+      )
 
       refute result.success?, "expected #{permalink.inspect} to be reserved"
       assert result.diagnostics.any? { |item| item.code == "route_collision" }

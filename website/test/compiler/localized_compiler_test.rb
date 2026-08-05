@@ -10,7 +10,7 @@ class LocalizedCompilerTest < Minitest::Test
       locale_manifest("_locale.yml", "name: English\n"),
       locale_manifest(
         "_translations/zh-CN/_locale.yml",
-        "name: 简体中文\nhreflang: zh-Hans\ndir: ltr\nmessages:\n  contents: 目录\n  search: 搜索\n#{zh_messages}"
+        "name: 简体中文\nhreflang: zh-Hans\ndir: ltr\nmessages:\n  search: 搜索\n#{zh_messages}"
       )
     ]
   end
@@ -49,7 +49,8 @@ class LocalizedCompilerTest < Minitest::Test
     assert_equal "zh-CN", translated.data.dig("website", "i18n", "content_lang")
     assert_includes translated.content, 'href="/zh-CN/docs/Fallback/"'
     assert_equal "/assets/website/i18n/zh-CN/search.v1.json", translated.data.dig("website", "resources", "search")
-    assert_equal "/assets/website/i18n/zh-CN/docs-navigation.html", translated.data.dig("website", "theme_data", "docs_tree_url")
+    translated_tree = translated.data.dig("website", "theme_data", "docs_tree")
+    assert_equal %w[docs/Guide.md docs/Fallback.md], translated_tree.map { |node| node.fetch("id") }
     assert_equal %w[docs/Fallback.md docs/Guide.md index.md], translated.data.dig("website", "local_graph", "nodes").map { |node| node.fetch("id") }
     assert translated.data.dig("website", "local_graph", "nodes").all? { |node| node.fetch("url").start_with?("/zh-CN/") }
 
@@ -63,7 +64,7 @@ class LocalizedCompilerTest < Minitest::Test
 
     source = translated.data.dig("website", "source_links", "source")
     assert_includes URI.decode_uri_component(source), "vault/_translations/zh-CN/docs/Guide.md"
-    assert_equal %w[/assets/website/catalog.v1.json /assets/website/docs-navigation.html /assets/website/graph.v1.json /assets/website/i18n/zh-CN/catalog.v1.json /assets/website/i18n/zh-CN/docs-navigation.html /assets/website/i18n/zh-CN/graph.v1.json /assets/website/i18n/zh-CN/search.v1.json /assets/website/search.v1.json /sitemap.xml], result.generated_files.map(&:route)
+    assert_equal %w[/assets/website/catalog.v1.json /assets/website/graph.v1.json /assets/website/i18n/zh-CN/catalog.v1.json /assets/website/i18n/zh-CN/graph.v1.json /assets/website/i18n/zh-CN/search.v1.json /assets/website/search.v1.json /sitemap.xml], result.generated_files.map(&:route)
     localized_graph = generated_json(result, "/assets/website/i18n/zh-CN/graph.v1.json")
     assert localized_graph.fetch("nodes").all? { |node| node.fetch("url").start_with?("/zh-CN/") }
     assert_equal %w[en zh-CN], result.site_data.dig("website_i18n", "locales").map { |locale| locale.fetch("code") }
@@ -76,6 +77,48 @@ class LocalizedCompilerTest < Minitest::Test
     refute result.pages.any? { |output| output.route.start_with?("/_translations/") }
     refute result.notes.any? { |output| output.id.start_with?("_translations/") }
     assert_nil page(result, "/zh-CN/")
+  end
+
+  def test_minimal_authored_home_uses_the_same_translation_fallback_contract_as_notes
+    result = compile(
+      note("index.md", "---\npublish: true\ntitle: Home\nupdated: 2026-08-01\n---\n# Home\nDefault-language copy."),
+      *manifests,
+      theme: "minimal",
+      i18n: I18N.merge("enabled" => true)
+    )
+
+    assert result.success?, result.diagnostics.map(&:message).join("\n")
+    fallback = page(result, "/zh-CN/")
+    assert_equal true, fallback.data.dig("website", "i18n", "fallback")
+    assert_equal "en", fallback.data.dig("website", "i18n", "content_lang")
+    assert_equal "noindex", fallback.data.dig("website", "robots")
+    assert_equal "https://example.test/", fallback.data.dig("website", "canonical_url")
+    assert_empty fallback.data.dig("website", "alternates")
+    assert_includes fallback.data.dig("website", "source_links", "source"), "vault/index.md"
+    refute_includes result.generated_files.find { |file| file.route == "/sitemap.xml" }.content,
+      "https://example.test/zh-CN/"
+  end
+
+  def test_minimal_blog_heading_localizes_unless_configuration_supplies_a_label
+    entries = [
+      note("index.md", "---\npublish: true\n---\n# Home"),
+      note("blog/post.md", "---\npublish: true\ndate: 2026-08-01\n---\n# Post"),
+      *manifests("  blog: 博客\n")
+    ]
+    localized = compile(*entries, theme: "minimal", i18n: I18N.merge("enabled" => true))
+    assert localized.success?, localized.diagnostics.map(&:message).join("\n")
+    assert_equal "Blog", page(localized, "/blog/").data.fetch("title")
+    assert_equal "博客", page(localized, "/zh-CN/blog/").data.fetch("title")
+
+    configured = compile(
+      *entries,
+      theme: "minimal",
+      i18n: I18N.merge("enabled" => true),
+      navigation: { "blog" => { "label" => "Writing" } }
+    )
+    assert configured.success?, configured.diagnostics.map(&:message).join("\n")
+    assert_equal "Writing", page(configured, "/blog/").data.fetch("title")
+    assert_equal "Writing", page(configured, "/zh-CN/blog/").data.fetch("title")
   end
 
   def test_real_translations_have_reciprocal_hreflang_and_fallbacks_are_omitted_from_sitemap
@@ -105,31 +148,58 @@ class LocalizedCompilerTest < Minitest::Test
     refute_includes translated.content, "/manual/manual/"
   end
 
+  def test_indexless_locale_roots_redirect_to_each_locales_first_ordered_page
+    result = compile(
+      note("docs/Later.md", "---\npublish: true\ncontent_type: doc\nnav_order: 20\n---\n# Later"),
+      note("docs/Start.md", "---\npublish: true\ncontent_type: doc\nnav_order: 10\n---\n# Start"),
+      *manifests,
+      note("_translations/zh-CN/docs/Start.md", "---\npublish: true\ntitle: 开始\n---\n# 开始"),
+      theme: "docs",
+      i18n: I18N,
+      baseurl: "/manual",
+      content: { "directories" => { "doc" => ["docs"], "post" => [] } }
+    )
+
+    assert result.success?, result.diagnostics.map(&:message).join("\n")
+    default_redirect = page(result, "/")
+    translated_redirect = page(result, "/zh-CN/")
+    assert_equal "/manual/docs/Start/", default_redirect.data.dig("website", "redirect_url")
+    assert_equal "https://example.test/manual/docs/Start/", default_redirect.data.dig("website", "canonical_url")
+    assert_equal "/manual/zh-CN/docs/Start/", translated_redirect.data.dig("website", "redirect_url")
+    assert_equal "https://example.test/manual/zh-CN/docs/Start/", translated_redirect.data.dig("website", "canonical_url")
+    assert_equal "/manual/zh-CN/docs/Start/", page(result, "/zh-CN/docs/Later/").data.dig("website", "routes", "home")
+
+    sitemap = result.generated_files.find { |file| file.route == "/sitemap.xml" }.content
+    refute_includes sitemap, "<loc>https://example.test/manual/</loc>"
+    refute_includes sitemap, "<loc>https://example.test/manual/zh-CN/</loc>"
+    assert_includes sitemap, "https://example.test/manual/zh-CN/docs/Start/"
+  end
+
   def test_locale_manifests_are_closed_and_i18n_defaults_are_theme_specific
     unknown_message = manifests("  invented: nope\n")
     result = compile(*default_notes, *unknown_message, theme: "docs", i18n: I18N)
     refute result.success?
     assert result.diagnostics.any? { |item| item.code == "invalid_locale_message" }
 
-    blog = compile(*default_notes, *manifests, theme: "blog", i18n: I18N)
-    assert blog.success?, blog.diagnostics.map(&:message).join("\n")
-    assert_nil page(blog, "/zh-CN/")
+    minimal = compile(*default_notes, *manifests, theme: "minimal", i18n: I18N)
+    assert minimal.success?, minimal.diagnostics.map(&:message).join("\n")
+    assert_nil page(minimal, "/zh-CN/")
 
-    garden = compile(*default_notes, *manifests, theme: "digital-garden", i18n: I18N)
-    assert garden.success?, garden.diagnostics.map(&:message).join("\n")
-    assert_nil page(garden, "/zh-CN/")
-
-    %w[blog digital-garden].each do |theme|
-      localized = compile(*default_notes, *manifests, *translations, theme: theme, i18n: I18N.merge("enabled" => true))
-      assert localized.success?, localized.diagnostics.map(&:message).join("\n")
-      assert_equal "指南", page(localized, "/zh-CN/docs/Guide/").data.fetch("title"), theme
-    end
+    localized = compile(
+      *default_notes,
+      *manifests,
+      *translations,
+      theme: "minimal",
+      i18n: I18N.merge("enabled" => true)
+    )
+    assert localized.success?, localized.diagnostics.map(&:message).join("\n")
+    assert_equal "指南", page(localized, "/zh-CN/docs/Guide/").data.fetch("title")
 
     disabled_docs = compile(*default_notes, *manifests, *translations, theme: "docs", i18n: { "enabled" => false })
     assert disabled_docs.success?, disabled_docs.diagnostics.map(&:message).join("\n")
     assert_nil page(disabled_docs, "/zh-CN/")
 
-    invalid_enabled = compile(*default_notes, theme: "blog", i18n: { "enabled" => "true" })
+    invalid_enabled = compile(*default_notes, theme: "minimal", i18n: { "enabled" => "true" })
     refute invalid_enabled.success?
     assert invalid_enabled.diagnostics.any? { |item| item.code == "invalid_i18n_config" && item.message.include?("YAML boolean") }
 
@@ -220,7 +290,7 @@ class LocalizedCompilerTest < Minitest::Test
       *notes,
       *manifests,
       localized,
-      theme: "blog",
+      theme: "minimal",
       i18n: I18N.merge("enabled" => true),
       content: { "directories" => { "doc" => [], "post" => ["posts"] } }
     )
@@ -241,7 +311,7 @@ class LocalizedCompilerTest < Minitest::Test
       *default_notes,
       collision,
       *manifests,
-      theme: "blog",
+      theme: "minimal",
       i18n: I18N.merge("enabled" => true)
     )
 
@@ -253,12 +323,12 @@ class LocalizedCompilerTest < Minitest::Test
     notes = [
       note(
         "index.md",
-        "---\npublish: true\ntitle: /literal-title\ndescription: /literal-description\ntags:\n  - /literal-tag\n---\n# Home\n/literal-body"
+        "---\npublish: true\ntitle: /literal-title\nsubtitle: /literal-subtitle\ndescription: /literal-description\ntags:\n  - /literal-tag\nauthor:\n  - /literal-author\ncategories:\n  - /literal-category\n---\n# Home\n/literal-body"
       )
     ]
     localized = note(
       "_translations/zh-CN/index.md",
-      "---\npublish: true\ntitle: /translated-title\ndescription: /translated-description\ntags:\n  - /translated-tag\n---\n# 首页\n/translated-body"
+      "---\npublish: true\ntitle: /translated-title\nsubtitle: /translated-subtitle\ndescription: /translated-description\ntags:\n  - /translated-tag\nauthor:\n  - /translated-author\ncategories:\n  - /translated-category\n---\n# 首页\n/translated-body"
     )
     result = compile(*notes, *manifests, localized, theme: "docs", i18n: I18N)
 
@@ -266,7 +336,10 @@ class LocalizedCompilerTest < Minitest::Test
     translated = page(result, "/zh-CN/")
     assert_equal "/translated-title", translated.data.fetch("title")
     assert_equal "/translated-description", translated.data.fetch("description")
+    assert_equal "/translated-subtitle", translated.data.dig("website", "subtitle")
     assert_equal ["/translated-tag"], translated.data.dig("website", "tags")
+    assert_equal ["/translated-author"], translated.data.dig("website", "author")
+    assert_equal ["/translated-category"], translated.data.dig("website", "categories")
     assert_includes translated.content, "/translated-body"
 
     search_entry = generated_json(result, "/assets/website/i18n/zh-CN/search.v1.json").fetch("documents").first

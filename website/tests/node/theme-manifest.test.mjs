@@ -18,9 +18,8 @@ test("publishes independent theme and feature asset closures", async () => {
 
   assert.equal(manifest.schema_version, 1);
   assert.deepEqual(Object.keys(manifest.entries).sort(), [
-    "blog",
-    "digital-garden",
-    "docs"
+    "docs",
+    "minimal"
   ]);
   assert.deepEqual(Object.keys(manifest.features).sort(), [
     "graph",
@@ -32,16 +31,23 @@ test("publishes independent theme and feature asset closures", async () => {
 
   for (const [theme, entry] of Object.entries(manifest.entries)) {
     assert.match(entry.js, new RegExp(`^${theme}-[A-Z0-9]+\\.js$`));
+    assert.match(entry.color_scheme, /^color-scheme-bootstrap-[A-Z0-9]+\.js$/);
     assert.match(entry.css, new RegExp(`^${theme}-[A-Z0-9]+\\.css$`));
     assert.ok(entry.files.includes(entry.js), `${theme} closure includes its script`);
+    assert.ok(entry.files.includes(entry.color_scheme), `${theme} closure includes its color scheme bootstrap`);
     assert.ok(entry.files.includes(entry.css), `${theme} closure includes its stylesheet`);
     assert.deepEqual(entry.files, [...entry.files].sort());
     assert.ok(await closureBytes(entry.files) < 1_000_000, `${theme} core stays below 1 MB`);
   }
 
+  const bootstrap = manifest.entries.docs.color_scheme;
+  const bootstrapSource = await readFile(path.join(assets, bootstrap), "utf8");
+  assert.doesNotMatch(bootstrapSource, /\b(?:import|export)\b/, "bootstrap remains a blocking classic script");
+
   const docsNavigation = manifest.files.find((file) => /(?:^|\/)docs-navigation-[A-Z0-9]+\.js$/.test(file));
   assert.ok(docsNavigation, "docs navigation has a generated chunk");
   assert.ok(manifest.entries.docs.files.includes(docsNavigation), "docs owns its navigation chunk");
+  assert.ok(manifest.entries.minimal.files.includes(docsNavigation), "minimal owns its documentation navigation chunk");
 
   for (const [feature, descriptor] of Object.entries(manifest.features)) {
     assert.ok(descriptor.files.length > 0, `${feature} has a publishable closure`);

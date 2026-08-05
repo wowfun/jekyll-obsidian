@@ -102,14 +102,16 @@ class MediaAndFeedTest < Minitest::Test
   def test_feed_omits_only_notes_without_a_deterministic_time
     result = compile(
       note("index.md", "---\npublish: true\nupdated: 2026-07-30\n---\n# Home"),
-      note("timeless.md", "---\npublish: true\n---\n# Timeless"),
-      theme: "digital-garden"
+      note("posts/dated.md", "---\npublish: true\ncontent_type: post\ndate: 2026-07-30\n---\n# Dated"),
+      note("posts/timeless.md", "---\npublish: true\ncontent_type: post\n---\n# Timeless"),
+      theme: "minimal",
+      environment: "development"
     )
 
     assert result.success?
     feed = result.generated_files.find { |item| item.route == "/feed.xml" }
     refute_nil feed
-    assert_includes feed.content, "Home"
+    assert_includes feed.content, "Dated"
     refute_includes feed.content, "Timeless"
     assert result.diagnostics.any? { |item| item.code == "feed_omitted_missing_time" }
   end
@@ -117,12 +119,12 @@ class MediaAndFeedTest < Minitest::Test
   def test_git_time_enables_feed_without_using_the_clock
     result = compile(
       note(
-        "index.md",
-        "---\npublish: true\n---\n# Home",
+        "posts/git.md",
+        "---\npublish: true\ncontent_type: post\n---\n# Git dated",
         first_committed_at: "2026-07-01T01:02:03Z",
         last_committed_at: "2026-07-30T04:05:06Z"
       ),
-      theme: "digital-garden"
+      theme: "minimal"
     )
 
     feed = result.generated_files.find { |item| item.route == "/feed.xml" }
@@ -134,8 +136,9 @@ class MediaAndFeedTest < Minitest::Test
   def test_yaml_date_is_rfc3339_utc_midnight_and_datetime_keeps_its_offset
     result = compile(
       note("index.md", "---\npublish: true\nupdated: 2026-07-30\n---\n# Home"),
-      note("timed.md", "---\npublish: true\nupdated: '2026-07-30T04:05:06+08:00'\n---\n# Timed"),
-      theme: "digital-garden"
+      note("posts/date.md", "---\npublish: true\ncontent_type: post\ndate: 2026-07-30\nupdated: 2026-07-30\n---\n# Date"),
+      note("posts/timed.md", "---\npublish: true\ncontent_type: post\ndate: 2026-07-30\nupdated: '2026-07-30T04:05:06+08:00'\n---\n# Timed"),
+      theme: "minimal"
     )
 
     assert result.success?, result.diagnostics.map(&:message).join("\n")

@@ -70,6 +70,16 @@ class RoutingAndIndexesTest < Minitest::Test
     end
   end
 
+  def test_root_index_cannot_move_the_home_route
+    result = compile(
+      note("index.md", "---\npublish: true\npermalink: /elsewhere/\n---\n# Home"),
+      theme: "minimal"
+    )
+
+    refute result.success?
+    assert result.diagnostics.any? { |item| item.code == "invalid_home_permalink" }
+  end
+
   def test_equivalent_routes_collide_fail_closed
     result = compile(
       note("index.md", "---\npublish: true\nupdated: 2026-07-30\n---\n# Home"),
@@ -85,7 +95,7 @@ class RoutingAndIndexesTest < Minitest::Test
     result = compile(
       note("index.md", "---\npublish: true\naliases: [Start]\ntags: [garden, cjk/中文]\ndescription: Intro\nupdated: 2026-07-30\n---\n# Home\nAuthored words."),
       note("other.md", "---\npublish: true\nupdated: 2026-07-29\n---\n# Other\n![[index]]"),
-      theme: "digital-garden"
+      theme: "minimal"
     )
 
     catalog = generated_json(result, "/assets/website/catalog.v1.json")
@@ -103,21 +113,27 @@ class RoutingAndIndexesTest < Minitest::Test
   end
 
   def test_tag_anchors_are_stable_when_slug_forms_collide
-    result = compile(note("index.md", <<~MARKDOWN), theme: "digital-garden")
+    result = compile(
+      note("index.md", "---\npublish: true\n---\n# Home"),
+      note("blog/tags.md", <<~MARKDOWN),
       ---
       publish: true
+      content_type: post
+      date: 2026-07-30
       tags: ["a b", "a-b"]
       updated: 2026-07-30
       ---
-      # Home
-    MARKDOWN
+      # Tagged post
+      MARKDOWN
+      theme: "minimal"
+    )
 
     assert result.success?, result.diagnostics.map(&:message).join("\n")
-    anchors = page(result, "/tags/").data.dig("website", "theme_data", "tag_groups")
-      .map { |group| group.fetch("anchor") }
+    anchors = page(result, "/blog/").data.dig("website", "theme_data", "topic_summaries")
+      .map { |topic| topic.fetch("anchor") }
     assert_includes anchors, "a-b"
     assert_includes anchors, "a-b-2"
-    tag_links = page(result, "/").data.dig("website", "tag_links")
+    tag_links = page(result, "/blog/tags/").data.dig("website", "tag_links")
     assert_equal ["a-b", "a-b-2"], tag_links.map { |item| item.fetch("anchor") }
   end
 end
