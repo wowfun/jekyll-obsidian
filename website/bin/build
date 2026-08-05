@@ -24,7 +24,7 @@ elif [ "${JEKYLL_BASEURL+x}" = x ]; then
 fi
 
 usage() {
-  printf '%s\n' "Usage: <site-dir>/bin/build [--url ORIGIN] [--baseurl PATH] [--source PATH | --example] [--theme blog|docs|digital-garden] [--destination _site[-NAME]] [--skip-assets]"
+  printf '%s\n' "Usage: <site-dir>/bin/build [--url ORIGIN] [--baseurl PATH] [--source PATH | --example] [--theme minimal|docs] [--destination _site[-NAME]] [--skip-assets]"
 }
 
 fail() {
@@ -53,8 +53,8 @@ while [ "$#" -gt 0 ]; do
     --theme)
       [ "$#" -ge 2 ] || fail "--theme requires a value."
       case "$2" in
-        blog|docs|digital-garden) theme=$2 ;;
-        *) fail "--theme must be one of: blog, docs, digital-garden." ;;
+        minimal|docs) theme=$2 ;;
+        *) fail "--theme must be one of: minimal, docs." ;;
       esac
       shift 2
       ;;

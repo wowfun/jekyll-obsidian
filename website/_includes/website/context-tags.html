@@ -1,0 +1,7 @@
+{% assign ui = page.website.i18n.messages %}
+{% assign topic_summaries = include.summaries | default: page.website.tag_summaries %}
+{% if page.website.theme == 'minimal' %}{% assign tags_title = ui.topics | default: 'Topics' %}{% assign filter_url = page.website.routes.blog %}{% unless filter_url %}{% assign filter_url = '/blog/' | relative_url %}{% endunless %}{% else %}{% assign tags_title = ui.tags | default: 'Tags' %}{% assign filter_url = page.website.routes.tags %}{% unless filter_url %}{% assign filter_url = '/tags/' | relative_url %}{% endunless %}{% endif %}
+<section class="relation-section context-tags" aria-labelledby="context-tags-title-{{ include.location }}">
+  <h2 class="relation-section__title" id="context-tags-title-{{ include.location }}">{{ tags_title | escape }}</h2>
+  <ul class="context-tag-list">{% for topic in topic_summaries %}<li><a href="{% if page.website.theme == 'minimal' %}{{ filter_url | escape }}?topic={{ topic.anchor | url_encode }}{% elsif topic.url %}{{ topic.url | escape }}{% else %}{{ filter_url | escape }}#{{ topic.anchor | escape }}{% endif %}" aria-label="{{ topic.name | escape }} — {{ topic.count }} {{ ui.notes | default: 'notes' | escape }}"><span class="context-tag__name" aria-hidden="true">{{ topic.name | escape }}</span><span class="context-tag__count" aria-hidden="true">{{ topic.count }}</span></a></li>{% endfor %}</ul>
+</section>

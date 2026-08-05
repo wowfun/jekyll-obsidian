@@ -75,7 +75,9 @@ module JekyllObsidian
     :content,
     :features,
     :i18n,
-    :comments
+    :comments,
+    :contacts,
+    :navigation
   )
 
   BuildRequest = ImmutableRecord.define(:snapshot, :config)
@@ -110,6 +112,7 @@ module JekyllObsidian
     :feature_flags,
     :image_url,
     :source_links,
+    :topics,
     :links,
     :backlinks,
     :embedded_by
@@ -139,6 +142,8 @@ module JekyllObsidian
     :features,
     :content,
     :comments,
+    :contacts,
+    :navigation,
     :site,
     :url_builder
   )

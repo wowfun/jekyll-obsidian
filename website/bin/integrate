@@ -29,7 +29,7 @@ Configure a host repository for GitHub Pages without Ruby or Node.js.
 
 Options:
   --source PATH       Repository-relative content directory (default: docs)
-  --theme THEME       blog, docs, or digital-garden (default: docs)
+  --theme THEME       minimal or docs (default: docs)
   --check             Verify generated integration files without changing them
   --force-workflow    Replace an existing unmanaged Pages workflow
   --help, -h          Show this help
@@ -188,8 +188,8 @@ case "$source_value" in
   website|website/*) fail "--source must not overlap website/ except for the bundled website/docs example." ;;
 esac
 case "$theme_value" in
-  blog|docs|digital-garden) ;;
-  *) fail "--theme must be one of: blog, docs, digital-garden." ;;
+  minimal|docs) ;;
+  *) fail "--theme must be one of: minimal, docs." ;;
 esac
 
 current_path=$HOST_DIR
@@ -205,30 +205,6 @@ IFS=$old_ifs
 [ -d "$current_path" ] || fail "website.source does not exist: $source_value"
 resolved_source=$(CDPATH= cd -- "$current_path" && pwd -P)
 [ "$resolved_source" = "$HOST_DIR/$source_value" ] || fail "--source casing must match the repository path exactly."
-
-index_path=$current_path/index.md
-assert_not_link "$index_path" "the public root index"
-[ -f "$index_path" ] || fail "a public $source_value/index.md is required."
-if ! awk '
-  NR == 1 {
-    sub(/\r$/, "")
-    if ($0 != "---") exit 2
-    in_frontmatter = 1
-    next
-  }
-  in_frontmatter {
-    sub(/\r$/, "")
-    if ($0 == "---" || $0 == "...") {
-      closed = 1
-      in_frontmatter = 0
-      next
-    }
-    if ($0 ~ /^publish:[[:space:]]*true([[:space:]]+#.*)?[[:space:]]*$/) published++
-  }
-  END { if (!(closed && published == 1)) exit 1 }
-' "$index_path"; then
-  fail "$source_value/index.md must use a root YAML frontmatter entry publish: true."
-fi
 
 if [ -e "$WORKFLOW_PATH" ]; then
   workflow_first_line=$(sed -n '1p' "$WORKFLOW_PATH")

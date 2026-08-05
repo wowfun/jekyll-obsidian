@@ -1,12 +1,42 @@
 {% assign ui = page.website.i18n.messages %}
 {% case page.website.kind %}
-{% when 'archive' %}
-  <h1>{{ ui.archive | default: 'Archive' | escape }}</h1>
+{% when 'home' %}
+  {% assign recent_posts = page.website.theme_data.recent_posts %}
+  {% if recent_posts.size > 0 %}
+    {% assign blog_url = page.website.theme_data.view_all_url | default: page.website.routes.blog %}
+    {% unless blog_url %}{% assign blog_url = '/blog/' | relative_url %}{% endunless %}
+    <section class="minimal-recent" aria-labelledby="minimal-recent-title">
+      <header class="minimal-section-heading">
+        <h2 id="minimal-recent-title">{{ ui.recent_posts | default: 'Recent posts' | escape }}</h2>
+        <a href="{{ blog_url | escape }}">{{ ui.view_all | default: 'View all' | escape }} <span aria-hidden="true">→</span></a>
+      </header>
+      <div class="minimal-recent__grid">
+        {% for post in recent_posts limit: 6 %}
+          <article class="minimal-post-card{% if post.image or post.image_url %} minimal-post-card--with-image{% endif %}">
+            {% if post.image or post.image_url %}<a class="minimal-post-card__media" href="{{ post.url | escape }}" tabindex="-1" aria-hidden="true"><img src="{{ post.image | default: post.image_url | escape }}" alt="" loading="lazy" decoding="async"></a>{% endif %}
+            <div class="minimal-post-card__body">
+              <h3><a href="{{ post.url | escape }}">{{ post.title | escape }}</a></h3>
+              {% if post.subtitle %}<p class="minimal-post-card__subtitle">{{ post.subtitle | escape }}</p>{% endif %}
+              {% if post.summary and post.summary != '' %}<p class="minimal-post-card__excerpt">{{ post.summary | escape }}</p>{% endif %}
+              {% if post.authors.size > 0 or post.published_at %}
+                <footer>
+                  {% if post.authors.size > 0 %}<span>{{ ui.posted_by | default: 'Posted by' | escape }} {% for author in post.authors %}{% if author.url %}<a href="{{ author.url | escape }}">{{ author.name | escape }}</a>{% else %}{{ author.name | escape }}{% endif %}{% unless forloop.last %}, {% endunless %}{% endfor %}{% if post.published_at %} {{ ui.on | default: 'on' | escape }} {% endif %}</span>{% endif %}
+                  {% if post.published_at %}<time datetime="{{ post.published_at | escape }}">{% unless post.authors.size > 0 %}{{ ui.published | default: 'Published' | escape }} {% endunless %}{{ post.published_at | date: "%Y-%m-%d" }}</time>{% endif %}
+                </footer>
+              {% endif %}
+            </div>
+          </article>
+        {% endfor %}
+      </div>
+    </section>
+  {% endif %}
+  {% if page.website.theme_data.contacts.size > 0 %}<nav class="minimal-contacts" aria-label="{{ ui.contact | default: 'Contact' | escape }}">{% for contact in page.website.theme_data.contacts %}<a href="{{ contact.url | escape }}" rel="me">{{ contact.label | escape }}</a>{% endfor %}</nav>{% endif %}
+{% when 'blog-index' %}
+  <h1>{{ page.title | default: ui.blog | default: 'Blog' | escape }}</h1>
+  {% include website/tag-filter.html summaries=page.website.theme_data.topic_summaries total=page.website.theme_data.topic_filter_count %}
 {% when 'tags' %}
   <h1>{{ ui.tags | default: 'Tags' | escape }}</h1>
   {% for group in page.website.theme_data.tag_groups %}<section id="{{ group.anchor | escape }}"><h2>{{ group.name | escape }}</h2><ul>{% for note in group.notes %}<li><a href="{{ note.url | escape }}">{{ note.title | escape }}</a></li>{% endfor %}</ul></section>{% endfor %}
-{% when 'notes' %}
-  <h1>{{ ui.all_notes | default: 'All notes' | escape }}</h1><ul class="website-index-list">{% for note in page.website.theme_data.notes %}<li><a href="{{ note.url | escape }}">{{ note.title | escape }}</a></li>{% endfor %}</ul>
 {% when '404' %}
   <h1>{{ ui.page_not_found | default: 'Page not found' | escape }}</h1><p>{{ ui.page_not_found_description | default: 'The requested page is not in this published site.' | escape }}</p><p><a href="{{ page.website.theme_data.home_url | escape }}">{{ ui.return_home | default: 'Return home' | escape }}</a></p>
 {% endcase %}

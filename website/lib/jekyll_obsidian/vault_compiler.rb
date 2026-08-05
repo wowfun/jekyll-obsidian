@@ -6,6 +6,7 @@ require "json"
 require "nokogiri"
 require "pathname"
 require "set"
+require "uri"
 
 module JekyllObsidian
   class VaultCompiler
@@ -45,12 +46,23 @@ module JekyllObsidian
     THEMES = BuiltInThemes::IDS
     FEATURE_KEYS = %w[search tags feed graph relations previews outline].freeze
     COMMENT_KEYS = %w[enabled repository repository_id category category_id].freeze
+    CONTACT_KEYS = %w[label url].freeze
+    NAVIGATION_BUILTINS = {
+      "home" => { "order" => 0, "visible" => true }.freeze,
+      "blog" => { "order" => 10, "visible" => true }.freeze,
+      "docs" => { "order" => 20, "visible" => true }.freeze
+    }.freeze
+    NAVIGATION_OVERRIDE_KEYS = %w[label order visible].freeze
+    NAVIGATION_KEYS = (NAVIGATION_BUILTINS.keys + %w[folders]).freeze
+    NAVIGATION_FOLDER_KEYS = (NAVIGATION_OVERRIDE_KEYS + %w[path]).freeze
+    CUSTOM_NAVIGATION_DEFAULTS = { "order" => 100, "visible" => true }.freeze
+    MAX_CONTACTS = 12
     GISCUS_LANGUAGES = Set.new(%w[
       ar be bg ca cs da de en eo es eu fa fr gr hbs he hu id it ja kh ko nl pl
       pt ro ru th tr uk uz vi zh-CN zh-HK zh-TW
     ]).freeze
     THEME_FEATURE_DEFAULTS = {
-      "blog" => {
+      "minimal" => {
         "search" => true, "tags" => true, "feed" => true,
         "graph" => true, "relations" => true, "previews" => true, "outline" => true
       },
@@ -58,10 +70,6 @@ module JekyllObsidian
         "search" => true, "tags" => false, "feed" => false,
         "graph" => true, "relations" => true, "previews" => true, "outline" => true
       },
-      "digital-garden" => {
-        "search" => true, "tags" => true, "feed" => true,
-        "graph" => true, "relations" => true, "previews" => true, "outline" => true
-      }
     }.transform_values(&:freeze).freeze
     DEFAULT_CONTENT = {
       "default_type" => "page",
@@ -90,6 +98,7 @@ module JekyllObsidian
       :nav_order,
       :nav_exclude,
       :feature_flags,
+      :topics,
       keyword_init: true
     )
 
@@ -109,9 +118,11 @@ module JekyllObsidian
       :options,
       :anchor_id,
       :unresolved,
+      :property,
       keyword_init: true
     )
 
+    Topic = Struct.new(:kind, :name, :occurrence, keyword_init: true)
     Anchor = Struct.new(:kind, :id, :label, :level, :chain, keyword_init: true)
     TransclusionContext = Struct.new(:host_id, :sequence, :instances, :bytes, keyword_init: true)
     MAX_TRANSCLUSION_DEPTH = 16
@@ -149,6 +160,8 @@ module JekyllObsidian
       @features = THEME_FEATURE_DEFAULTS.fetch(@theme)
       @content = DEFAULT_CONTENT
       @comments = disabled_comments_config
+      @contacts = []
+      @navigation_config = default_navigation_config
     end
 
     def compile
@@ -163,11 +176,21 @@ module JekyllObsidian
       merge_content_features
 
       published_site = build_published_site_model
+      navigation = SiteNavigation.build(
+        model: published_site,
+        settings: @navigation_config,
+        content: @content,
+        url_builder: @url_builder,
+        theme: @theme
+      )
+      @diagnostics.concat(navigation.diagnostics)
       theme_config = EffectiveThemeConfig.new(
         theme: @theme,
         features: @features,
         content: @content,
         comments: @comments,
+        contacts: @contacts,
+        navigation: navigation,
         site: @config,
         url_builder: @url_builder
       )
@@ -215,6 +238,8 @@ module JekyllObsidian
       resolve_theme_config
       resolve_content_config
       resolve_comments_config
+      resolve_contacts_config
+      resolve_navigation_config
       @url_builder = UrlBuilder.new(origin: @config.url, baseurl: @config.baseurl)
       error("missing_origin", "production builds require a non-empty url origin") if production? && @url_builder.origin.empty?
     rescue ArgumentError => exception
@@ -268,7 +293,7 @@ module JekyllObsidian
 
       unknown = raw.keys - COMMENT_KEYS
       unknown.sort.each { |key| error("invalid_comments", "unknown comments setting #{key.inspect}") }
-      enabled = raw.fetch("enabled", @theme == "blog")
+      enabled = raw.fetch("enabled", @theme == "minimal")
       unless enabled == true || enabled == false
         error("invalid_comments", "comments.enabled must be a YAML boolean")
         enabled = false
@@ -328,6 +353,175 @@ module JekyllObsidian
         language: "en",
         load: false
       )
+    end
+
+    def resolve_contacts_config
+      raw = @config.contacts
+      return @contacts = [] if raw.nil?
+      unless raw.is_a?(Array)
+        error("invalid_contacts", "website.contacts must be a list of label and url mappings")
+        return @contacts = []
+      end
+      error("invalid_contacts", "website.contacts supports at most #{MAX_CONTACTS} entries") if raw.length > MAX_CONTACTS
+
+      @contacts = raw.first(MAX_CONTACTS).each_with_index.filter_map do |entry, index|
+        unless entry.is_a?(Hash) && entry.keys.all? { |key| key.is_a?(String) }
+          error("invalid_contacts", "contacts[#{index}] must be a mapping with string keys")
+          next
+        end
+        unknown = entry.keys - CONTACT_KEYS
+        unless unknown.empty?
+          error("invalid_contacts", "unknown contacts[#{index}] setting #{unknown.sort.first.inspect}")
+          next
+        end
+
+        label = contact_text(entry["label"], "contacts[#{index}].label", 64)
+        url = contact_text(entry["url"], "contacts[#{index}].url", 2048)
+        next unless label && url
+        unless contact_url?(url)
+          error("invalid_contacts", "contacts[#{index}].url must use https, mailto, or tel")
+          next
+        end
+
+        { "label" => label, "url" => url }
+      end
+    end
+
+    def resolve_navigation_config
+      raw = @config.navigation
+      return @navigation_config = default_navigation_config if raw.nil?
+      unless raw.is_a?(Hash) && raw.keys.all? { |key| key.is_a?(String) }
+        error("invalid_navigation_config", "website.navigation must be a mapping with string keys")
+        return @navigation_config = default_navigation_config
+      end
+
+      (raw.keys - NAVIGATION_KEYS).sort.each do |key|
+        error("invalid_navigation_config", "unknown website.navigation setting #{key.inspect}")
+      end
+
+      normalized = NAVIGATION_BUILTINS.to_h do |name, defaults|
+        value = if raw.key?(name)
+          normalize_navigation_override(raw[name], "website.navigation.#{name}", defaults)
+        else
+          defaults.dup
+        end
+        [name, value]
+      end
+      folders = raw.fetch("folders", [])
+      unless folders.is_a?(Array)
+        error("invalid_navigation_config", "website.navigation.folders must be an array")
+        folders = []
+      end
+      normalized["folders"] = folders.each_with_index.filter_map do |entry, index|
+        normalize_navigation_folder(entry, index)
+      end
+      @navigation_config = DeepFreeze.call(normalized)
+    end
+
+    def default_navigation_config
+      DeepFreeze.call(
+        NAVIGATION_BUILTINS.transform_values(&:dup).merge("folders" => [])
+      )
+    end
+
+    def normalize_navigation_override(value, path, defaults)
+      unless value.is_a?(Hash) && value.keys.all? { |key| key.is_a?(String) }
+        error("invalid_navigation_config", "#{path} must be a mapping with string keys")
+        return defaults.dup
+      end
+
+      (value.keys - NAVIGATION_OVERRIDE_KEYS).sort.each do |key|
+        error("invalid_navigation_config", "unknown #{path} setting #{key.inspect}")
+      end
+      normalize_navigation_fields(value, path, defaults)
+    end
+
+    def normalize_navigation_folder(value, index)
+      path = "website.navigation.folders[#{index}]"
+      unless value.is_a?(Hash) && value.keys.all? { |key| key.is_a?(String) }
+        error("invalid_navigation_config", "#{path} must be a mapping with string keys")
+        return nil
+      end
+
+      (value.keys - NAVIGATION_FOLDER_KEYS).sort.each do |key|
+        error("invalid_navigation_config", "unknown #{path} setting #{key.inspect}")
+      end
+      folder_path = normalize_navigation_folder_path(value["path"], "#{path}.path")
+      return nil unless folder_path
+
+      normalize_navigation_fields(value, path, CUSTOM_NAVIGATION_DEFAULTS).merge("path" => folder_path)
+    end
+
+    def normalize_navigation_fields(value, path, defaults)
+      normalized = defaults.dup
+      if value.key?("label")
+        label = value["label"]
+        if FrontMatter.valid_output_text?(label) && !label.strip.empty?
+          normalized["label"] = label
+        else
+          error("invalid_navigation_config", "#{path}.label must be a non-empty string containing only output-safe Unicode characters")
+        end
+      end
+      if value.key?("order")
+        order = value["order"]
+        if order.is_a?(Integer)
+          normalized["order"] = order
+        else
+          error("invalid_navigation_config", "#{path}.order must be an integer")
+        end
+      end
+      if value.key?("visible")
+        visible = value["visible"]
+        if visible == true || visible == false
+          normalized["visible"] = visible
+        else
+          error("invalid_navigation_config", "#{path}.visible must be a YAML boolean")
+        end
+      end
+      normalized
+    end
+
+    def normalize_navigation_folder_path(value, path)
+      unless FrontMatter.valid_output_text?(value)
+        error("invalid_navigation_config", "#{path} must be a string")
+        return nil
+      end
+      if value.empty? || value.start_with?("/", "\\") || value.include?("\\") || value != value.unicode_normalize(:nfc)
+        error("invalid_navigation_config", "#{path} must be a normalized vault-relative POSIX directory")
+        return nil
+      end
+      segments = value.split("/", -1)
+      if segments.any? { |segment| segment.empty? || segment == "." || segment == ".." }
+        error("invalid_navigation_config", "#{path} must not contain empty or traversal segments")
+        return nil
+      end
+      value
+    rescue EncodingError
+      error("invalid_navigation_config", "#{path} must contain valid Unicode")
+      nil
+    end
+
+    def contact_text(value, key, limit)
+      unless value.is_a?(String) && !value.strip.empty? && value.length <= limit && FrontMatter.valid_output_text?(value)
+        error("invalid_contacts", "#{key} must be a non-empty output-safe string of at most #{limit} characters")
+        return nil
+      end
+
+      value.strip
+    end
+
+    def contact_url?(value)
+      uri = URI.parse(value)
+      case uri.scheme&.downcase
+      when "https"
+        !uri.host.to_s.empty?
+      when "mailto", "tel"
+        !uri.opaque.to_s.empty? && !uri.opaque.match?(/\s/)
+      else
+        false
+      end
+    rescue URI::InvalidURIError
+      false
     end
 
     def resolve_content_config
@@ -435,6 +629,13 @@ module JekyllObsidian
           @all_note_paths << path
           parsed = FrontMatter.parse(path, entry.bytes.to_s)
           @diagnostics.concat(parsed.diagnostics)
+          if parsed.properties.key?("navigation") && parsed.properties["publish"] != true
+            error(
+              "unpublished_page_navigation",
+              "navigation frontmatter is only supported on published pages",
+              path
+            )
+          end
           next unless parsed.properties["publish"] == true
           unless FrontMatter.valid_output_text?(parsed.body)
             error("invalid_character", "public note body contains a character forbidden by XML 1.0", path)
@@ -465,9 +666,7 @@ module JekyllObsidian
     end
 
     def parse_public_notes
-      unless @notes.key?("index.md")
-        error("missing_index", "a public root vault/index.md is required", "index.md")
-      end
+      error("missing_public_notes", "the content directory must contain at least one public note", nil) if @notes.empty?
     end
 
     def establish_identities
@@ -481,6 +680,9 @@ module JekyllObsidian
           route = @url_builder.route_for_note(note.id)
         end
         note.route = route || @url_builder.route_for_note(note.id)
+        if note.id == "index.md" && note.route != "/"
+          error("invalid_home_permalink", "the public root index must publish at /", note.id)
+        end
         note.updated = deterministic_updated(note)
         note.created = deterministic_created(note)
         note.content_type = classify_content(note)
@@ -543,6 +745,7 @@ module JekyllObsidian
         note.title = note.properties["title"] || first_h1(note.document) || filename_title(note.id)
         build_anchor_registry(note)
         annotate_occurrences(note)
+        annotate_frontmatter_topics(note)
         annotate_code_markers(note)
       end
     end
@@ -645,6 +848,35 @@ module JekyllObsidian
       end
     end
 
+    def annotate_frontmatter_topics(note)
+      note.topics = Array(note.properties["tags"]).map do |tag|
+        Topic.new(kind: "tag", name: tag)
+      end
+
+      { "author" => "author", "categories" => "category" }.each do |property, kind|
+        Array(note.properties[property]).each do |value|
+          link = FrontMatter.parse_wiki_link(value)
+          unless link
+            note.topics << Topic.new(kind: kind, name: value)
+            next
+          end
+          target, display = link
+
+          occurrence = Occurrence.new(
+            index: note.occurrences.length,
+            source_id: note.id,
+            raw_target: target,
+            display: display,
+            kind: :link,
+            syntax: :frontmatter_topic,
+            property: property
+          )
+          note.occurrences << occurrence
+          note.topics << Topic.new(kind: kind, occurrence: occurrence)
+        end
+      end
+    end
+
     def resolve_all_occurrences
       @notes.values.sort_by(&:id).each do |note|
         note.occurrences.each do |occurrence|
@@ -717,6 +949,17 @@ module JekyllObsidian
         occurrence.resolved_type = :note
         occurrence.target_id = note_target
         resolve_occurrence_fragment(@notes.fetch(note_target), occurrence)
+        return
+      end
+
+      if occurrence.syntax == :frontmatter_topic
+        occurrence.unresolved = true
+        warning(
+          "unresolved_property_link",
+          "#{occurrence.property} wiki link target is missing or not a public note",
+          note.id,
+          occurrence.source_span
+        )
         return
       end
 
@@ -1180,6 +1423,7 @@ module JekyllObsidian
           feature_flags: note.feature_flags,
           image_url: published_image_url(note),
           source_links: repository_links(note.id),
+          topics: published_topics(note),
           links: relation_cards(direct.fetch(note.id, []).select { |item| item.kind == :link }),
           backlinks: relation_cards(backlinks.fetch(note.id, []), source: true),
           embedded_by: relation_cards(embedded_by.fetch(note.id, []), source: true)
@@ -1193,6 +1437,24 @@ module JekyllObsidian
         graph_edges: graph_edges,
         graph_degrees: graph_degrees_for(notes, graph_edges)
       )
+    end
+
+    def published_topics(note)
+      note.topics.filter_map do |topic|
+        occurrence = topic.occurrence
+        unless occurrence
+          next({ "kind" => topic.kind, "name" => topic.name })
+        end
+
+        target = @notes[occurrence.target_id]
+        name = occurrence.display || target&.title || occurrence.raw_target
+        value = { "kind" => topic.kind, "name" => name }
+        if target && !occurrence.unresolved
+          fragment = occurrence.anchor_id || occurrence.fragment
+          value["url"] = "#{@url_builder.href(target.route)}#{fragment && !fragment.empty? ? "##{fragment}" : ""}"
+        end
+        value
+      end.uniq
     end
 
     def render_with_transclusions(note_id, stack, context, depth:, raw_fragment: nil, resolved_anchor_id: nil)
@@ -1518,7 +1780,8 @@ module JekyllObsidian
     end
 
     def sitemap_xml(pages)
-      urls = pages.map(&:route).reject { |route| route == "/404.html" }.sort
+      urls = pages.reject { |page| %w[404 redirect].include?(page.data.dig("website", "kind")) }
+        .map(&:route).sort
       body = urls.map { |route| "  <url><loc>#{h(@url_builder.absolute_url(route))}</loc></url>" }.join("\n")
       %(<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n#{body}\n</urlset>\n)
     end
@@ -1601,14 +1864,14 @@ module JekyllObsidian
       namespace_keys = reserved_namespaces.map do |namespace|
         @url_builder.collision_key(namespace).delete_suffix("/")
       end
-      pages.select { |page| page.data.dig("website", "kind") == "note" }.each do |page|
-        page_key = @url_builder.collision_key(page.route).delete_suffix("/")
+      @notes.each_value do |note|
+        page_key = @url_builder.collision_key(note.route).delete_suffix("/")
         next unless namespace_keys.any? { |namespace| page_key == namespace || page_key.start_with?("#{namespace}/") }
 
-        error("route_collision", "note route collides with a generated system namespace", page.route)
+        error("route_collision", "note route collides with a generated system namespace", note.route)
       end
 
-      return unless production?
+      return unless production? && @notes.any?
       index_count = pages.count { |page| page.route == "/" }
       error("invalid_index_count", "production must generate exactly one /index.html", nil) unless index_count == 1
     end

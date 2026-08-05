@@ -1,0 +1,77 @@
+<!doctype html>
+<html class="no-js" lang="{{ page.website.i18n.locale | default: site.lang | default: 'en' | escape }}" dir="{{ page.website.i18n.dir | default: 'ltr' | escape }}">
+  <head>{% assign entry = site.data.website_assets.entries.minimal %}{% include website/head.html entry=entry %}</head>
+  <body class="theme-minimal">
+    {% assign ui = page.website.i18n.messages %}
+    {% assign is_docs_page = false %}
+    {% if page.website.kind == 'note' and page.website.content_type == 'doc' and page.website.theme_data.docs_tree.size > 0 %}{% assign is_docs_page = true %}{% endif %}
+    {% assign is_authored_home = false %}
+    {% if page.website.kind == 'home' and page.website.id %}{% assign is_authored_home = true %}{% endif %}
+    {% assign has_mobile_context = false %}
+    {% if page.website.kind == 'home' %}
+      {% if page.website.theme_data.topic_summaries.size > 0 or page.website.has_context %}{% assign has_mobile_context = true %}{% endif %}
+    {% elsif page.website.kind == 'blog-index' and page.website.theme_data.timeline.size > 0 %}
+      {% assign has_mobile_context = true %}
+    {% elsif page.website.kind == 'note' and page.website.has_context %}
+      {% assign has_mobile_context = true %}
+    {% endif %}
+
+    <a class="skip-link" href="#main-content">{{ ui.skip_to_content | default: 'Skip to content' | escape }}</a>
+    {% include website/header.html theme='minimal' %}
+
+    <main class="minimal-shell{% unless page.website.kind == 'note' %} minimal-shell--system{% endunless %}{% if is_docs_page %} minimal-shell--docs{% endif %}" id="main-content"{% if page.website.kind == 'blog-index' %} data-filter-page{% endif %}>
+      {% if is_docs_page %}
+        <aside class="minimal-docs-sidebar">
+          <nav class="docs-tree" aria-label="{{ ui.documentation | default: 'Documentation' | escape }}" data-docs-navigation>
+            {% include website/docs-tree.html nodes=page.website.theme_data.docs_tree %}
+          </nav>
+        </aside>
+      {% endif %}
+
+      <div class="minimal-reading-column" data-docs-main>
+        <article class="minimal-entry{% if page.website.cssclasses %} {{ page.website.cssclasses | join: ' ' }}{% endif %}">
+          {% if page.website.i18n.fallback %}<aside class="translation-fallback" role="note">{{ ui.translation_missing | default: 'This page is not translated yet. The default-language version is shown.' | escape }}</aside>{% endif %}
+          {% include website/note-header.html %}
+          <div class="note-content" lang="{{ page.website.i18n.content_lang | default: page.website.i18n.locale | default: site.lang | default: 'en' | escape }}" dir="{{ page.website.i18n.content_dir | default: page.website.i18n.dir | default: 'ltr' | escape }}">
+            {% if page.website.kind == 'note' or page.website.kind == 'home' %}{{ content }}{% endif %}
+            {% unless page.website.kind == 'note' %}{% include website/system-page.html %}{% endunless %}
+          </div>
+          {% if page.website.kind == 'note' or is_authored_home %}{% include website/source-actions.html %}{% endif %}
+          {% if page.website.kind == 'note' %}{% include website/comments.html %}{% endif %}
+        </article>
+
+        {% if page.website.kind == 'blog-index' and page.website.theme_data.archive_groups %}
+          <div class="archive-ledger" data-filter-list>
+            {% for group in page.website.theme_data.archive_groups %}
+              <section data-filter-group>
+                <h2>{{ group.label | default: group.year | escape }}</h2>
+                {% include website/blog-ledger.html posts=group.posts compact=true filterable=true %}
+              </section>
+            {% endfor %}
+          </div>
+        {% endif %}
+
+        {% if is_docs_page %}{% include website/docs-navigation.html %}{% else %}{% include website/blog-navigation.html %}{% endif %}
+      </div>
+
+      {% if page.website.kind == 'home' and has_mobile_context %}
+        <aside class="minimal-context minimal-home-context" data-page-context data-context-panel data-dialog-movable="context" aria-label="{% if page.website.has_context %}{{ ui.page_context | default: 'Page context' | escape }}{% else %}{{ ui.topics | default: 'Topics' | escape }}{% endif %}">
+          {% if page.website.theme_data.topic_summaries.size > 0 %}{% include website/context-tags.html location='rail' summaries=page.website.theme_data.topic_summaries %}{% endif %}
+          {% if page.website.has_context %}{% include website/context.html location='rail' %}{% endif %}
+        </aside>
+      {% elsif page.website.kind == 'blog-index' and page.website.theme_data.timeline.size > 0 %}
+        <aside class="minimal-context archive-context" data-page-context data-dialog-movable="context" aria-label="{{ ui.chronology | default: 'Chronology' | escape }}">{% include website/archive-timeline.html timeline=page.website.theme_data.timeline %}</aside>
+      {% elsif page.website.kind == 'note' and page.website.has_context %}
+        <aside class="minimal-context" data-page-context data-context-panel data-dialog-movable="context" aria-label="{{ ui.page_context | default: 'Page context' | escape }}">{% include website/context.html location='rail' %}</aside>
+      {% endif %}
+    </main>
+
+    {% include website/footer.html %}
+    <nav class="mobile-toolbar" aria-label="{{ ui.mobile_actions | default: 'Mobile actions' | escape }}">
+      <button type="button" data-dialog-open="browse">{{ ui.browse | default: 'Browse' | escape }}</button>
+      {% if page.website.features.search %}<button type="button" data-search-open>{{ ui.search | default: 'Search' | escape }}</button>{% endif %}
+      {% if has_mobile_context %}<button type="button" data-dialog-open="context">{% if page.website.kind == 'blog-index' %}{{ ui.chronology | default: 'Chronology' | escape }}{% elsif page.website.kind == 'home' and page.website.has_context %}{{ ui.context | default: 'Context' | escape }}{% elsif page.website.kind == 'home' %}{{ ui.topics | default: 'Topics' | escape }}{% elsif page.website.features.outline and page.website.features.relations == false and page.website.local_graph == nil %}{{ ui.on_this_page | default: 'On this page' | escape }}{% else %}{{ ui.context | default: 'Context' | escape }}{% endif %}</button>{% endif %}
+    </nav>
+    <div data-page-dialogs>{% include website/dialogs.html theme='minimal' %}</div>
+  </body>
+</html>

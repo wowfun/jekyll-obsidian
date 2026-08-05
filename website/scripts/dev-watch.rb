@@ -38,13 +38,13 @@ ASSET_WATCH_ENTRIES = %w[
   tsconfig.json
 ].freeze
 
-options = Options.new(host: "127.0.0.1", port: 4000, baseurl: "", theme: nil)
+options = Options.new(host: "127.0.0.1", port: 58_000, baseurl: "", theme: "minimal")
 OptionParser.new do |parser|
-  parser.banner = "Usage: <site-dir>/bin/dev [--host HOST] [--port PORT] [--baseurl PATH] [--theme blog|docs|digital-garden]"
+  parser.banner = "Usage: <site-dir>/bin/dev [--host HOST] [--port PORT] [--baseurl PATH] [--theme minimal|docs]"
   parser.on("--host HOST") { |value| options.host = value }
   parser.on("--port PORT", Integer) { |value| options.port = value }
   parser.on("--baseurl PATH") { |value| options.baseurl = value }
-  parser.on("--theme THEME", %w[blog docs digital-garden]) { |value| options.theme = value }
+  parser.on("--theme THEME", %w[minimal docs], "Preview theme (default: minimal)") { |value| options.theme = value }
 end.parse!
 
 site_dir = File.expand_path("..", __dir__)
@@ -96,7 +96,7 @@ def run_build(site_dir, options, destination, build_assets:)
     "--baseurl", options.baseurl,
     "--destination", destination
   ]
-  command.concat(["--theme", options.theme]) if options.theme
+  command.concat(["--theme", options.theme])
   command << "--skip-assets" unless build_assets
 
   success = false

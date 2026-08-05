@@ -9,6 +9,7 @@ const DIALOG_NAMES = new Set<WebsiteDialogName>([
 ]);
 
 const movablePlaceholders = new WeakMap<Element, Comment>();
+const dialogsController = Symbol.for("jekyll-obsidian.dialogs-controller");
 
 function dialogFor(name: WebsiteDialogName): HTMLDialogElement | null {
   return document.querySelector<HTMLDialogElement>(`dialog[data-dialog="${name}"]`);
@@ -68,29 +69,33 @@ export function closeWebsiteDialog(name: WebsiteDialogName): void {
 }
 
 export function initialiseDialogs(): void {
-  document.addEventListener("click", (event) => {
-    const target = event.target;
-    if (!(target instanceof Element)) return;
+  const controlledDocument = document as Document & { [dialogsController]?: boolean };
+  if (!controlledDocument[dialogsController]) {
+    document.addEventListener("click", (event) => {
+      const target = event.target;
+      if (!(target instanceof Element)) return;
 
-    const opener = target.closest<HTMLElement>("[data-dialog-open]");
-    if (opener) {
-      const name = opener.dataset.dialogOpen;
-      if (name && DIALOG_NAMES.has(name as WebsiteDialogName)) {
-        event.preventDefault();
-        openWebsiteDialog(name as WebsiteDialogName);
+      const opener = target.closest<HTMLElement>("[data-dialog-open]");
+      if (opener) {
+        const name = opener.dataset.dialogOpen;
+        if (name && DIALOG_NAMES.has(name as WebsiteDialogName)) {
+          event.preventDefault();
+          openWebsiteDialog(name as WebsiteDialogName);
+        }
+        return;
       }
-      return;
-    }
 
-    const closer = target.closest<HTMLElement>("[data-dialog-close]");
-    if (closer) {
-      closer.closest<HTMLDialogElement>("dialog")?.close();
-    }
-  });
+      const closer = target.closest<HTMLElement>("[data-dialog-close]");
+      if (closer) closer.closest<HTMLDialogElement>("dialog")?.close();
+    });
+    controlledDocument[dialogsController] = true;
+  }
 
   for (const dialog of document.querySelectorAll<HTMLDialogElement>(
     "dialog[data-dialog]"
   )) {
+    if (dialog.dataset.websiteDialogInitialised === "true") continue;
+    dialog.dataset.websiteDialogInitialised = "true";
     dialog.addEventListener("close", () => restoreDialogContent(dialog));
     dialog.addEventListener("click", (event) => {
       if (event.target === dialog) dialog.close();

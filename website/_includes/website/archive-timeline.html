@@ -1,0 +1,8 @@
+{% if include.timeline and include.timeline.size > 0 %}
+  {% assign ui = page.website.i18n.messages %}
+  {% if page.website.theme == 'minimal' %}{% assign filter_url = page.website.routes.blog %}{% unless filter_url %}{% assign filter_url = '/blog/' | relative_url %}{% endunless %}{% else %}{% assign filter_url = page.website.routes.tags %}{% unless filter_url %}{% assign filter_url = '/tags/' | relative_url %}{% endunless %}{% endif %}
+  <nav class="archive-timeline" data-timeline-nav aria-labelledby="archive-timeline-title">
+    <h2 class="relation-section__title" id="archive-timeline-title">{{ ui.chronology | default: 'Chronology' | escape }}</h2>
+    {% for group in include.timeline %}<section class="archive-timeline__year"><h3><a href="{{ filter_url | escape }}?year={{ group.year | url_encode }}" data-year-filter-option data-filter-year="{{ group.year | escape }}"><span>{{ group.year | escape }}</span><span class="archive-timeline__count">{{ group.count }}</span></a></h3><ul>{% for month in group.months %}<li><a href="{{ filter_url | escape }}?month={{ month.key | url_encode }}" data-month-filter-option data-filter-month="{{ month.key | escape }}"><span>{{ month.label | escape }}</span><span class="archive-timeline__count">{{ month.count }}</span></a></li>{% endfor %}</ul></section>{% endfor %}
+  </nav>
+{% endif %}

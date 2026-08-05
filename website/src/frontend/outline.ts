@@ -1,10 +1,10 @@
-export function initialiseOutline(): void {
+export function initialiseOutline(): () => void {
   const links = Array.from(
     document.querySelectorAll<HTMLAnchorElement>(
       "[data-outline-link][href^='#'], [data-outline] a[href^='#']"
     )
   );
-  if (links.length === 0 || !("IntersectionObserver" in window)) return;
+  if (links.length === 0 || !("IntersectionObserver" in window)) return () => undefined;
 
   const headingLinks = new Map<Element, HTMLAnchorElement>();
   for (const link of links) {
@@ -13,7 +13,7 @@ export function initialiseOutline(): void {
     const heading = document.getElementById(decodeURIComponent(fragment));
     if (heading) headingLinks.set(heading, link);
   }
-  if (headingLinks.size === 0) return;
+  if (headingLinks.size === 0) return () => undefined;
 
   let current: HTMLAnchorElement | null = null;
   const mark = (link: HTMLAnchorElement) => {
@@ -40,4 +40,5 @@ export function initialiseOutline(): void {
   for (const heading of headingLinks.keys()) observer.observe(heading);
   const firstLink = headingLinks.values().next().value as HTMLAnchorElement | undefined;
   if (firstLink) mark(firstLink);
+  return () => observer.disconnect();
 }

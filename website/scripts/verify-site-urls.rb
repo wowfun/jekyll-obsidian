@@ -79,10 +79,6 @@ class SiteUrlVerifier
     route = route_for_output(relative)
     document = Nokogiri::HTML5.parse(File.read(path, encoding: "UTF-8"))
     @html_ids[path] = document.css("[id]").map { |node| node["id"] }.to_set
-    if relative.match?(%r{\Aassets/website/(?:i18n/[A-Za-z]{2,8}(?:-[A-Za-z0-9]{1,8})*/)?docs-navigation\.html\z})
-      document.css("a[href]").each { |node| verify_reference(node["href"], "/", relative) }
-      return
-    end
     csp_node = document.css("meta[http-equiv]").find do |node|
       node["http-equiv"].to_s.casecmp("Content-Security-Policy").zero?
     end

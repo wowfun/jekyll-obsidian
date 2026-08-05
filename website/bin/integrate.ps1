@@ -14,7 +14,7 @@ Configure a host repository for GitHub Pages without Ruby or Node.js.
 
 Options:
   --source PATH       Repository-relative content directory (default: docs)
-  --theme THEME       blog, docs, or digital-garden (default: docs)
+  --theme THEME       minimal or docs (default: docs)
   --check             Verify generated integration files without changing them
   --force-workflow    Replace an existing unmanaged Pages workflow
   --help, -h          Show this help
@@ -142,19 +142,6 @@ function Escape-WorkflowGlob([string]$Value) {
     return $builder.ToString()
 }
 
-function Test-PublicIndex([string]$Path) {
-    $lines = [System.IO.File]::ReadAllLines($Path)
-    if ($lines.Length -eq 0 -or $lines[0] -ne "---") { return $false }
-    $published = 0
-    for ($index = 1; $index -lt $lines.Length; $index++) {
-        if ($lines[$index] -eq "---" -or $lines[$index] -eq "...") {
-            return $published -eq 1
-        }
-        if ($lines[$index] -match '^publish:\s*true(?:\s+#.*)?\s*$') { $published++ }
-    }
-    return $false
-}
-
 $SourceValue = $null
 $ThemeValue = $null
 $SourceWasSet = $false
@@ -249,8 +236,8 @@ try {
         ($SourceValue -eq "website" -or $SourceValue.StartsWith("website/", [StringComparison]::OrdinalIgnoreCase))) {
         Fail "--source must not overlap website/ except for the bundled website/docs example."
     }
-    if (@("blog", "docs", "digital-garden") -cnotcontains $ThemeValue) {
-        Fail "--theme must be one of: blog, docs, digital-garden."
+    if (@("minimal", "docs") -cnotcontains $ThemeValue) {
+        Fail "--theme must be one of: minimal, docs."
     }
 
     $CurrentPath = $HostDir
@@ -263,10 +250,6 @@ try {
         }
     }
     if (-not (Test-Path -LiteralPath $CurrentPath -PathType Container)) { Fail "website.source does not exist: $SourceValue" }
-    $IndexPath = Join-Path $CurrentPath "index.md"
-    Assert-NotReparsePoint $IndexPath "the public root index"
-    if (-not (Test-Path -LiteralPath $IndexPath -PathType Leaf)) { Fail "a public $SourceValue/index.md is required." }
-    if (-not (Test-PublicIndex $IndexPath)) { Fail "$SourceValue/index.md must use a root YAML frontmatter entry publish: true." }
 
     if (Test-Path -LiteralPath $WorkflowPath) {
         $existingWorkflow = Read-Utf8Text $WorkflowPath

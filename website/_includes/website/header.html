@@ -1,36 +1,29 @@
 <header class="site-header">
   {% assign ui = page.website.i18n.messages %}
-  {% assign home_route = page.website.routes.home | default: '/' %}
-  {% assign notes_route = page.website.routes.notes | default: '/notes/' %}
-  {% assign archive_route = page.website.routes.archive | default: '/archive/' %}
-  {% assign tags_route = page.website.routes.tags | default: '/tags/' %}
-  {% assign feed_route = page.website.routes.feed | default: '/feed.xml' %}
+  {% assign home_url = page.website.home_url | default: page.website.routes.home %}
+  {% unless home_url %}{% assign home_url = '/' | relative_url %}{% endunless %}
   <div class="site-header__inner">
-    <a class="site-mark" href="{{ home_route | relative_url }}" aria-label="{{ site.title | escape }} — {{ ui.home | default: 'Home' | escape }}">
-      <span class="site-mark__glyph" aria-hidden="true">{% if include.theme == 'blog' %}¶{% elsif include.theme == 'docs' %}⌁{% else %}φ{% endif %}</span>
+    <a class="site-mark" href="{{ home_url | escape }}" aria-label="{{ site.title | escape }} — {{ ui.home | default: 'Home' | escape }}">
+      <span class="site-mark__glyph" aria-hidden="true">{% if include.theme == 'minimal' %}¶{% else %}⌁{% endif %}</span>
       <span class="site-mark__name">{{ site.title | escape }}</span>
     </a>
-    <nav class="site-navigation" aria-label="{{ ui.primary_navigation | default: 'Primary navigation' | escape }}">
-      {% if include.theme == 'blog' %}
-        <a href="{{ home_route | relative_url }}">{{ ui.latest | default: 'Latest' | escape }}</a>
-        <a href="{{ archive_route | relative_url }}">{{ ui.archive | default: 'Archive' | escape }}</a>
-        {% if page.website.features.tags %}<a href="{{ tags_route | relative_url }}">{{ ui.topics | default: 'Topics' | escape }}</a>{% endif %}
-        {% if page.website.features.feed and site.data.website_feed_available %}<a href="{{ feed_route | relative_url }}">{{ ui.feed | default: 'Feed' | escape }}</a>{% endif %}
-      {% elsif include.theme == 'docs' %}
-        <a href="{{ home_route | relative_url }}">{{ ui.overview | default: 'Overview' | escape }}</a>
-        {% if page.website.theme_data.docs_home_url %}<a href="{{ page.website.theme_data.docs_home_url | escape }}">{{ ui.documentation | default: 'Documentation' | escape }}</a>{% endif %}
-        {% if page.website.features.tags %}<a href="{{ tags_route | relative_url }}">{{ ui.tags | default: 'Tags' | escape }}</a>{% endif %}
-        {% if page.website.features.feed and site.data.website_feed_available %}<a href="{{ feed_route | relative_url }}">{{ ui.feed | default: 'Feed' | escape }}</a>{% endif %}
-      {% else %}
-        <a href="{{ notes_route | relative_url }}">{{ ui.notes | default: 'Notes' | escape }}</a>
-        {% if page.website.features.tags %}<a href="{{ tags_route | relative_url }}">{{ ui.tags | default: 'Tags' | escape }}</a>{% endif %}
-        {% if page.website.features.feed and site.data.website_feed_available %}<a href="{{ feed_route | relative_url }}">{{ ui.feed | default: 'Feed' | escape }}</a>{% endif %}
-      {% endif %}
+
+    <nav class="site-navigation" aria-label="{{ ui.primary_navigation | default: 'Primary navigation' | escape }}" data-priority-navigation>
+      <ul class="site-navigation__list" data-priority-navigation-list>
+        {% for item in page.website.navigation %}
+          <li data-priority-navigation-item data-navigation-id="{{ item.id | escape }}"><a href="{{ item.url | escape }}"{% if item.id == page.website.active_navigation_id %} aria-current="page"{% endif %}>{{ item.label | escape }}</a></li>
+        {% endfor %}
+      </ul>
+      <details class="site-navigation__more" data-priority-navigation-more hidden>
+        <summary>{{ ui.more | default: 'More' | escape }}</summary>
+        <ul class="site-navigation__overflow" data-priority-navigation-overflow></ul>
+      </details>
     </nav>
+
     <div class="site-actions">
       {% if page.website.features.search %}
         <button class="site-action" type="button" data-search-open aria-label="{{ ui.search | default: 'Search' | escape }}">
-          <span class="site-action__label">{{ ui.search | default: 'Search' | escape }}</span> <kbd>⌘K</kbd>
+          <span class="site-action__label">{{ ui.search | default: 'Search' | escape }}</span><kbd class="site-action__shortcut" aria-hidden="true">⌘K</kbd>
         </button>
       {% endif %}
       {% include website/language-switcher.html %}

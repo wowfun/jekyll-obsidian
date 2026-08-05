@@ -13,9 +13,9 @@ try {
 const result = await esbuild.build({
   absWorkingDir: projectRoot,
   entryPoints: {
-    blog: "src/frontend/entries/blog.ts",
+    minimal: "src/frontend/entries/minimal.ts",
     docs: "src/frontend/entries/docs.ts",
-    "digital-garden": "src/frontend/entries/digital-garden.ts",
+    "color-scheme-bootstrap": "src/frontend/color-scheme-bootstrap.ts",
     "docs-navigation": "src/frontend/docs-navigation.ts",
     search: "src/frontend/search.ts",
     "search-worker": "src/frontend/search-worker.ts",
@@ -88,10 +88,14 @@ function assetClosure(initialOutputs, { includeDynamicImports }) {
 }
 
 const themeSources = {
-  blog: ["src/frontend/entries/blog.ts"],
-  docs: ["src/frontend/entries/docs.ts", "src/frontend/docs-navigation.ts"],
-  "digital-garden": ["src/frontend/entries/digital-garden.ts"]
+  minimal: ["src/frontend/entries/minimal.ts", "src/frontend/docs-navigation.ts"],
+  docs: ["src/frontend/entries/docs.ts", "src/frontend/docs-navigation.ts"]
 };
+const colorSchemeBootstrap = outputForEntryPoint("src/frontend/color-scheme-bootstrap.ts");
+const colorSchemeBootstrapPath = path.relative(
+  staged.stagingDirectory,
+  colorSchemeBootstrap.outputPath
+).split(path.sep).join("/");
 const featureSources = {
   search: "src/frontend/search.ts",
   graph: "src/frontend/graph.ts",
@@ -110,8 +114,9 @@ const entries = Object.fromEntries(
       theme,
       {
         js: path.relative(staged.stagingDirectory, entry.outputPath).split(path.sep).join("/"),
+        color_scheme: colorSchemeBootstrapPath,
         ...(css ? { css } : {}),
-        files: assetClosure([entry, ...ownedEntries], { includeDynamicImports: false })
+        files: assetClosure([entry, ...ownedEntries, colorSchemeBootstrap], { includeDynamicImports: false })
       }
     ];
   })

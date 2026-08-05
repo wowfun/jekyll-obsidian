@@ -8,6 +8,13 @@
       </header>
       <div class="website-dialog__body">
         <label class="search-box"><span aria-hidden="true">⌕</span><span class="visually-hidden">{{ ui.search_pages | default: 'Search pages' | escape }}</span><input type="search" inputmode="search" autocomplete="off" placeholder="{{ ui.search_placeholder | default: 'Title, tag, or phrase' | escape }}" data-search-input><kbd>⌘K</kbd></label>
+        {% if page.website.navigation.size > 0 %}
+          <nav class="search-navigation" aria-label="{{ ui.primary_navigation | default: 'Primary navigation' | escape }}" data-search-navigation>
+            <ul class="search-navigation__list">
+              {% for item in page.website.navigation %}<li data-navigation-id="{{ item.id | escape }}"><a href="{{ item.url | escape }}"{% if item.id == page.website.active_navigation_id %} aria-current="page"{% endif %}>{{ item.label | escape }}</a></li>{% endfor %}
+            </ul>
+          </nav>
+        {% endif %}
         <p class="search-status" data-search-status aria-live="polite">{{ ui.search_initial | default: 'The index loads when search opens.' | escape }}</p>
         <ol class="search-results" data-search-results></ol>
       </div>
@@ -16,20 +23,32 @@
 {% endif %}
 
 <template data-dialog-template="browse">
-  {% assign home_route = page.website.routes.home | default: '/' %}
-  {% assign notes_route = page.website.routes.notes | default: '/notes/' %}
-  {% assign archive_route = page.website.routes.archive | default: '/archive/' %}
-  {% assign tags_route = page.website.routes.tags | default: '/tags/' %}
-  {% assign feed_route = page.website.routes.feed | default: '/feed.xml' %}
-  <nav aria-label="{{ ui.more_browse_options | default: 'More ways to browse' | escape }}"><ul class="relation-list"><li><a href="{{ home_route | relative_url }}">{{ ui.home | default: 'Home' | escape }}</a></li>{% if include.theme == 'blog' %}<li><a href="{{ archive_route | relative_url }}">{{ ui.archive | default: 'Archive' | escape }}</a></li>{% elsif include.theme != 'docs' %}<li><a href="{{ notes_route | relative_url }}">{{ ui.all_notes | default: 'All notes' | escape }}</a></li>{% endif %}{% if page.website.features.tags %}<li><a href="{{ tags_route | relative_url }}">{{ ui.tags | default: 'Tags' | escape }}</a></li>{% endif %}{% if page.website.features.feed and site.data.website_feed_available %}<li><a href="{{ feed_route | relative_url }}">{{ ui.feed | default: 'Feed' | escape }}</a></li>{% endif %}</ul></nav>
+  <nav aria-label="{{ ui.primary_navigation | default: 'Primary navigation' | escape }}">
+    <ul class="relation-list">
+      {% for item in page.website.navigation %}<li data-navigation-id="{{ item.id | escape }}"><a href="{{ item.url | escape }}"{% if item.id == page.website.active_navigation_id %} aria-current="page"{% endif %}>{{ item.label | escape }}</a></li>{% endfor %}
+    </ul>
+  </nav>
+  {% assign browse_has_docs_tree = false %}{% if include.theme == 'docs' or page.website.content_type == 'doc' %}{% if page.website.theme_data.docs_tree.size > 0 %}{% assign browse_has_docs_tree = true %}{% endif %}{% endif %}
+  {% if browse_has_docs_tree %}
+    <nav class="docs-tree docs-tree--dialog" aria-label="{{ ui.documentation | default: 'Documentation' | escape }}">
+      {% include website/docs-tree.html nodes=page.website.theme_data.docs_tree %}
+    </nav>
+  {% endif %}
 </template>
 <dialog class="website-dialog" data-dialog="browse" aria-labelledby="browse-dialog-title"><div class="website-dialog__sheet"><header class="website-dialog__header"><h2 class="website-dialog__title" id="browse-dialog-title">{{ ui.browse | default: 'Browse' | escape }}</h2><button class="website-dialog__close" type="button" data-dialog-close aria-label="{{ ui.close_browse | default: 'Close browse menu' | escape }}">&times;</button></header><div class="website-dialog__body" data-dialog-content></div></div></dialog>
 
-{% if page.website.kind == 'note' and page.website.has_context %}
-  <dialog class="website-dialog" data-dialog="context" aria-labelledby="context-dialog-title"><div class="website-dialog__sheet"><header class="website-dialog__header"><h2 class="website-dialog__title" id="context-dialog-title">{% if page.website.features.outline and page.website.features.relations == false and page.website.local_graph == nil %}{{ ui.on_this_page | default: 'On this page' | escape }}{% else %}{{ ui.context | default: 'Context' | escape }}{% endif %}</h2><button class="website-dialog__close" type="button" data-dialog-close aria-label="{{ ui.close_context | default: 'Close page context' | escape }}">&times;</button></header><div class="website-dialog__body" data-dialog-content></div></div></dialog>
+{% assign has_timeline_context = false %}{% if page.website.kind == 'blog-index' and page.website.theme_data.timeline.size > 0 %}{% assign has_timeline_context = true %}{% endif %}
+{% assign has_context_dialog = has_timeline_context %}{% if page.website.kind == 'home' %}{% if page.website.theme_data.topic_summaries.size > 0 or page.website.has_context %}{% assign has_context_dialog = true %}{% endif %}{% elsif page.website.kind == 'note' and page.website.has_context %}{% assign has_context_dialog = true %}{% endif %}
+{% if has_context_dialog %}
+  <dialog class="website-dialog" data-dialog="context" aria-labelledby="context-dialog-title"><div class="website-dialog__sheet"><header class="website-dialog__header"><h2 class="website-dialog__title" id="context-dialog-title">{% if has_timeline_context %}{{ ui.chronology | default: 'Chronology' | escape }}{% elsif page.website.kind == 'home' and page.website.has_context %}{{ ui.context | default: 'Context' | escape }}{% elsif page.website.kind == 'home' %}{{ ui.topics | default: 'Topics' | escape }}{% elsif page.website.features.outline and page.website.features.relations == false and page.website.local_graph == nil %}{{ ui.on_this_page | default: 'On this page' | escape }}{% else %}{{ ui.context | default: 'Context' | escape }}{% endif %}</h2><button class="website-dialog__close" type="button" data-dialog-close aria-label="{{ ui.close_context | default: 'Close page context' | escape }}">&times;</button></header><div class="website-dialog__body" data-dialog-content></div></div></dialog>
 {% endif %}
 
-{% if page.website.kind == 'note' and page.website.features.graph and page.website.local_graph %}
+{% assign graph_page = false %}
+{% if page.website.kind == 'note' %}{% assign graph_page = true %}{% endif %}
+{% if page.website.kind == 'home' and page.website.id %}{% assign graph_page = true %}{% endif %}
+{% assign has_graph_dialogs = false %}
+{% if graph_page and page.website.features.graph and page.website.local_graph %}{% assign has_graph_dialogs = true %}{% endif %}
+{% if has_graph_dialogs %}
   <dialog class="website-dialog website-dialog--graph" data-dialog="graph-global" aria-labelledby="global-graph-dialog-title"><div class="website-dialog__sheet"><header class="website-dialog__header"><h2 class="website-dialog__title" id="global-graph-dialog-title">{{ ui.full_graph | default: 'Full graph' | escape }}</h2><button class="website-dialog__close" type="button" data-dialog-close aria-label="{{ ui.close_full_graph | default: 'Close full graph' | escape }}">&times;</button></header><div class="website-dialog__body"><div class="graph-view graph-view--global" data-graph-dialog-view="global" data-graph-mode="global" data-current-note-id="{{ page.website.id | escape }}" data-graph-too-large="{{ ui.graph_too_large | default: 'This complete graph is too large to render interactively. Use local graphs or search instead.' | escape }}"{% if ui.graph_loading %} data-graph-loading="{{ ui.graph_loading | escape }}"{% endif %}{% if ui.graph_unavailable %} data-graph-unavailable="{{ ui.graph_unavailable | escape }}"{% endif %}{% if ui.graph_summary %} data-graph-summary="{{ ui.graph_summary | escape }}"{% endif %}{% if ui.graph_node_label %} data-graph-node-label="{{ ui.graph_node_label | escape }}"{% endif %}{% if ui.graph_title %} data-graph-title="{{ ui.graph_title | escape }}"{% endif %}{% if ui.graph_description %} data-graph-description="{{ ui.graph_description | escape }}"{% endif %}><p class="graph-status" data-graph-status aria-live="polite">{{ ui.graph_loading | default: 'Loading graph…' | escape }}</p></div></div></div></dialog>
   <dialog class="website-dialog website-dialog--graph" data-dialog="graph-local" aria-labelledby="expanded-graph-dialog-title"><div class="website-dialog__sheet"><header class="website-dialog__header"><h2 class="website-dialog__title" id="expanded-graph-dialog-title">{{ ui.local_graph | default: 'Local graph' | escape }}</h2><button class="website-dialog__close" type="button" data-dialog-close aria-label="{{ ui.close_local_graph | default: 'Close local graph' | escape }}">&times;</button></header><div class="website-dialog__body"><div class="graph-view graph-view--expanded" data-graph-dialog-view="local" data-graph-mode="expanded" data-current-note-id="{{ page.website.id | escape }}"{% if ui.graph_loading %} data-graph-loading="{{ ui.graph_loading | escape }}"{% endif %}{% if ui.graph_unavailable %} data-graph-unavailable="{{ ui.graph_unavailable | escape }}"{% endif %}{% if ui.graph_summary %} data-graph-summary="{{ ui.graph_summary | escape }}"{% endif %}{% if ui.graph_node_label %} data-graph-node-label="{{ ui.graph_node_label | escape }}"{% endif %}{% if ui.graph_title %} data-graph-title="{{ ui.graph_title | escape }}"{% endif %}{% if ui.graph_description %} data-graph-description="{{ ui.graph_description | escape }}"{% endif %}><p class="graph-status" data-graph-status aria-live="polite">{{ ui.graph_loading | default: 'Loading graph…' | escape }}</p></div></div></div></dialog>
 {% endif %}

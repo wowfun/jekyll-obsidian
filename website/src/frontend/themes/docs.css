@@ -1,48 +1,29 @@
 @layer tokens {
   .theme-docs {
-    --frost: #eef3f3;
-    --surface: #fbfdfd;
-    --ink: #172526;
-    --graphite: #5a696b;
     --violet: #236f86;
     --teal: #a64f2d;
-    --violet-soft: #dcecef;
-    --teal-soft: #f2e3dc;
-    --line: #d3dddd;
-    --line-strong: #b9c8c8;
-    --code-surface: #e8eeee;
+    --violet-soft: #e8e8e3;
+    --teal-soft: #f3e4da;
     --focus-ring: 0 0 0 3px rgb(35 111 134 / 25%);
     --article-width: 760px;
     --rail-width: 220px;
   }
 
   :root[data-color-scheme="dark"] .theme-docs {
-    --frost: #111a1b;
-    --surface: #182325;
-    --ink: #e7eeee;
-    --graphite: #a5b4b5;
-    --violet: #72bed1;
-    --teal: #e39a77;
-    --violet-soft: #1c3941;
-    --teal-soft: #402c25;
-    --line: #2f3d3f;
-    --line-strong: #46585a;
-    --code-surface: #101819;
+    --violet: #78b7ff;
+    --teal: #e59a73;
+    --violet-soft: #1d2a38;
+    --teal-soft: #3b2922;
+    --focus-ring: 0 0 0 3px rgb(120 183 255 / 28%);
   }
 
   @media (prefers-color-scheme: dark) {
     :root:not([data-color-scheme="light"]) .theme-docs {
-      --frost: #111a1b;
-      --surface: #182325;
-      --ink: #e7eeee;
-      --graphite: #a5b4b5;
-      --violet: #72bed1;
-      --teal: #e39a77;
-      --violet-soft: #1c3941;
-      --teal-soft: #402c25;
-      --line: #2f3d3f;
-      --line-strong: #46585a;
-      --code-surface: #101819;
+      --violet: #78b7ff;
+      --teal: #e59a73;
+      --violet-soft: #1d2a38;
+      --teal-soft: #3b2922;
+      --focus-ring: 0 0 0 3px rgb(120 183 255 / 28%);
     }
   }
 }
@@ -89,18 +70,11 @@
 
   .docs-sidebar {
     position: sticky;
-    padding: 1.2rem 0 1.5rem 1.15rem;
-    border-inline-start: 1px solid var(--line-strong);
+    padding: 0.4rem 0 1.5rem;
   }
 
   .docs-sidebar::before {
-    position: absolute;
-    inset-block: 0;
-    inset-inline-start: -4px;
-    inline-size: 7px;
-    background: repeating-linear-gradient(to bottom, var(--teal) 0 1px, transparent 1px 12px);
-    content: "";
-    opacity: 0.7;
+    content: none;
   }
 
   .docs-main {
@@ -109,9 +83,8 @@
 
   .docs-article {
     padding: clamp(2rem, 5vw, 4rem);
-    border: 1px solid var(--line);
-    border-block-start: 3px solid var(--ink);
-    background: var(--surface);
+    border: 0;
+    background: transparent;
   }
 
   .docs-context {
@@ -120,33 +93,24 @@
 }
 
 @layer content {
-  .docs-sidebar__label {
-    margin-block-end: 0.9rem;
-    color: var(--teal);
-    font-size: 0.64rem;
-    font-weight: 720;
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
-  }
-
   .theme-docs .note-title {
     max-inline-size: 20ch;
     font-family: var(--font-ui);
-    font-size: clamp(2.2rem, 5vw, 3.7rem);
-    font-variation-settings: "CASL" 0.28, "MONO" 0;
-    font-weight: 620;
-    letter-spacing: -0.045em;
+    font-size: clamp(2rem, 4vw, 3.1rem);
+    font-weight: 650;
+    letter-spacing: -0.025em;
+    line-height: 1.08;
   }
 
   .theme-docs .note-description,
+  .theme-docs .note-subtitle,
   .theme-docs .note-content {
     font-family: var(--font-ui);
-    font-variation-settings: "CASL" 0.15, "MONO" 0;
   }
 
   .theme-docs .note-content {
-    font-size: 1rem;
-    line-height: 1.72;
+    font-size: clamp(1rem, 1.2vw, 1.08rem);
+    line-height: 1.7;
   }
 
   .theme-docs .note-content h1,
@@ -154,21 +118,34 @@
   .theme-docs .note-content h3,
   .theme-docs .note-content h4 {
     font-family: var(--font-ui);
-    font-variation-settings: "CASL" 0.3, "MONO" 0;
   }
 
   .theme-docs .note-content h2 {
-    padding-block-start: 1.2rem;
-    border-block-start: 1px solid var(--line);
+    padding-block-start: 0;
+    border-block-start: 0;
+    font-size: clamp(1.5rem, 2.5vw, 1.9rem);
+    font-weight: 650;
+    letter-spacing: -0.015em;
   }
 
   .theme-docs .note-content h2::before {
-    inset-block-start: -1px;
-    inset-inline-start: 0;
-    inline-size: 2.6rem;
-    block-size: 2px;
-    border: 0;
-    background: var(--violet);
+    content: none;
+  }
+
+  .theme-docs .note-header {
+    margin-block-end: 2.5rem;
+    padding-block-end: 0;
+    border-block-end: 0;
+  }
+
+  .theme-docs .note-description,
+  .theme-docs .note-subtitle {
+    margin-block-start: 0;
+    font-style: normal;
+  }
+
+  .theme-docs .note-meta {
+    margin-block-start: 1rem;
   }
 }
 
@@ -208,30 +185,6 @@
     font-weight: 700;
   }
 
-  .breadcrumbs {
-    margin-block-end: 0.8rem;
-  }
-
-  .breadcrumbs ol {
-    display: flex;
-    flex-wrap: wrap;
-    margin: 0;
-    padding: 0;
-    gap: 0.35rem;
-    list-style: none;
-  }
-
-  .breadcrumbs li {
-    color: var(--graphite);
-    font-size: 0.68rem;
-  }
-
-  .breadcrumbs li + li::before {
-    margin-inline-end: 0.35rem;
-    color: var(--teal);
-    content: "⌁";
-  }
-
   .theme-docs .sequence-navigation {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -267,65 +220,6 @@
     font-size: 0.82rem;
   }
 
-  .docs-home-browse {
-    display: grid;
-    grid-template-columns: minmax(11rem, 0.75fr) minmax(0, 1.25fr);
-    margin-block-start: 1rem;
-    border: 1px solid var(--line);
-    border-block-start: 3px solid var(--teal);
-    background: var(--surface);
-  }
-
-  .docs-home-browse > header {
-    padding: 1.2rem 1.35rem;
-    border-inline-end: 1px solid var(--line);
-  }
-
-  .docs-home-browse > header p {
-    margin: 0 0 0.25rem;
-    color: var(--teal);
-    font-size: 0.62rem;
-    font-weight: 720;
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
-  }
-
-  .docs-home-browse h2 {
-    margin: 0;
-    font-family: var(--font-ui);
-    font-size: clamp(1.1rem, 2vw, 1.45rem);
-    font-variation-settings: "CASL" 0.2, "MONO" 0;
-    letter-spacing: -0.025em;
-  }
-
-  .docs-home-browse ul {
-    display: grid;
-    align-content: center;
-    margin: 0;
-    padding: 0.8rem 1.1rem;
-    gap: 0.15rem;
-    list-style: none;
-  }
-
-  .docs-home-browse a,
-  .docs-home-browse li > span {
-    display: block;
-    padding: 0.45rem 0.55rem;
-    color: var(--ink);
-    font-family: var(--font-ui);
-    font-size: 0.82rem;
-    text-decoration: none;
-  }
-
-  .docs-home-browse a::after {
-    float: inline-end;
-    color: var(--teal);
-    content: "→";
-  }
-
-  .docs-home-browse a:hover {
-    background: var(--violet-soft);
-  }
 }
 
 @media (max-width: 1100px) {
@@ -358,20 +252,6 @@
   .docs-article {
     padding: 2.2rem max(1.25rem, 5vw) 4rem;
     border-inline: 0;
-  }
-
-  .breadcrumbs {
-    padding-inline: max(1.25rem, 5vw);
-  }
-
-  .docs-home-browse {
-    grid-template-columns: 1fr;
-    margin: 1rem max(1.25rem, 5vw) 0;
-  }
-
-  .docs-home-browse > header {
-    border-inline-end: 0;
-    border-block-end: 1px solid var(--line);
   }
 
   .no-js .docs-sidebar,

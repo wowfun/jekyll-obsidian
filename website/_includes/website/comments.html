@@ -3,7 +3,6 @@
   {% assign ui = page.website.i18n.messages %}
   <section class="website-comments" aria-labelledby="website-comments-title"{% if comments.load %} data-website-comments-load data-website-comments-repository="{{ comments.repository | escape }}" data-website-comments-repository-id="{{ comments.repository_id | escape }}" data-website-comments-category="{{ comments.category | escape }}" data-website-comments-category-id="{{ comments.category_id | escape }}" data-website-comments-term="{{ comments.term | escape }}" data-website-comments-language="{{ comments.language | escape }}" data-website-comments-unavailable="{{ ui.comments_unavailable | default: 'Comments could not be loaded. You can continue the conversation on GitHub.' | escape }}"{% endif %}>
     <header class="website-comments__header">
-      <p class="website-comments__eyebrow">{{ ui.discussion | default: 'Discussion' | escape }}</p>
       <h2 id="website-comments-title">{{ ui.comments | default: 'Comments' | escape }}</h2>
     </header>
     {% if comments.load %}

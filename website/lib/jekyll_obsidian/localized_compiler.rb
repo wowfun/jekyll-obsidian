@@ -13,11 +13,11 @@ module JekyllObsidian
   class LocalizedCompiler
     TRANSLATIONS_ROOT = "_translations"
     LOCALE_MANIFEST = "_locale.yml"
-    TRANSLATABLE_PROPERTIES = %w[title description tags image cssclasses].freeze
-    STRUCTURAL_PROPERTIES = (FrontMatter::SUPPORTED - TRANSLATABLE_PROPERTIES - %w[publish]).freeze
+    TRANSLATABLE_PROPERTIES = %w[title subtitle description tags author categories image cssclasses].freeze
+    STRUCTURAL_PROPERTIES = (FrontMatter::SUPPORTED - TRANSLATABLE_PROPERTIES - %w[publish navigation]).freeze
     URL_PROPERTIES = %w[
-      absolute_url canonical_url discussion_url docs_home_url docs_index_url docs_tree_url
-      home_url href image route url
+      absolute_url canonical_url discussion_url docs_home_url
+      home_url href image redirect_url route url
     ].freeze
     SOURCE_LINK_PROPERTIES = %w[edit history issue source].freeze
     LOCALE_PATTERN = /\A[A-Za-z]{2,8}(?:-[A-Za-z0-9]{1,8})*\z/
@@ -29,6 +29,12 @@ module JekyllObsidian
       "overview" => "Overview",
       "documentation" => "Documentation",
       "tags" => "Tags",
+      "all" => "All",
+      "filter_by_tag" => "Filter by tag",
+      "filter_by_topic" => "Filter by topic",
+      "chronology" => "Chronology",
+      "no_matching_entries" => "No entries match these filters.",
+      "contact" => "Contact",
       "graph" => "Graph",
       "feed" => "Feed",
       "search" => "Search",
@@ -38,9 +44,6 @@ module JekyllObsidian
       "use_dark_scheme" => "Use dark color scheme",
       "light_scheme" => "Light",
       "dark_scheme" => "Dark",
-      "contents" => "Contents",
-      "view_full_index" => "View full documentation index",
-      "breadcrumb" => "Breadcrumb",
       "page_context" => "Page context",
       "mobile_actions" => "Mobile actions",
       "browse" => "Browse",
@@ -52,6 +55,8 @@ module JekyllObsidian
       "dispatch" => "Dispatch",
       "note" => "Note",
       "published" => "Published",
+      "posted_by" => "Posted by",
+      "on" => "on",
       "updated" => "Updated",
       "edit" => "Edit",
       "history" => "History",
@@ -59,8 +64,6 @@ module JekyllObsidian
       "report_issue" => "Report issue",
       "contribute" => "Contribute to this page",
       "documentation_sequence" => "Documentation sequence",
-      "manual_index" => "Manual index",
-      "browse_handbook" => "Browse the handbook",
       "search_title" => "Search this site",
       "close_search" => "Close search",
       "search_pages" => "Search pages",
@@ -73,7 +76,6 @@ module JekyllObsidian
       "search_result_one" => "{count} note found.",
       "search_result_many" => "{count} notes found.",
       "close_browse" => "Close browse menu",
-      "more_browse_options" => "More ways to browse",
       "close_context" => "Close page context",
       "outgoing_links" => "Outgoing links",
       "direct_links" => "Direct links",
@@ -84,13 +86,16 @@ module JekyllObsidian
       "not_embedded" => "Not embedded elsewhere.",
       "outline" => "On this page",
       "no_headings" => "No headings on this page.",
-      "all_notes" => "All notes",
       "page_not_found" => "Page not found",
       "page_not_found_description" => "The requested page is not in this published site.",
       "return_home" => "Return home",
       "primary_navigation" => "Primary navigation",
       "home" => "Home",
-      "archive" => "Archive",
+      "blog" => "Blog",
+      "docs" => "Docs",
+      "recent_posts" => "Recent posts",
+      "view_all" => "View all",
+      "more" => "More",
       "interactive_graph" => "Interactive graph",
       "open_full_graph" => "Open full graph",
       "open_local_graph" => "Expand local graph",
@@ -114,24 +119,12 @@ module JekyllObsidian
       "download" => "Download",
       "built_by" => "Built by",
       "project_on_github" => "Jekyll Obsidian on GitHub",
-      "latest" => "Latest",
       "topics" => "Topics",
       "notes" => "Notes",
       "note_context" => "Note context",
       "post_sequence" => "Post sequence",
-      "older" => "Older",
-      "newer" => "Newer",
       "dated_posts" => "Dated posts",
-      "chronology" => "Chronology",
       "field_dispatches" => "Field dispatches",
-      "browse_archive" => "Browse the archive",
-      "notebook_index" => "Notebook index",
-      "explore_garden" => "Explore the garden",
-      "garden_overview" => "Garden overview",
-      "browse_every_page" => "Browse every published page",
-      "follow_subjects" => "Follow recurring subjects",
-      "see_vault_links" => "See links across the vault",
-      "discussion" => "Discussion",
       "comments" => "Comments",
       "comments_loading" => "Loading comments…",
       "comments_development" => "Comments load only on the published site.",
@@ -159,6 +152,7 @@ module JekyllObsidian
       @actual_by_locale = {}
       @physical_sources = {}
       @default_locale = @config.lang.to_s
+      @validated_navigation_locales = Set.new
     rescue ArgumentError => exception
       @diagnostics ||= []
       error("invalid_url_config", exception.message)
@@ -347,7 +341,12 @@ module JekyllObsidian
 
             error("localized_structure_override", "translation must not change #{property}", entry.path)
           end
-          merged = default_parse.properties.merge(translated_parse.properties)
+          merged = merge_translation_properties(
+            logical_path,
+            default_parse.properties,
+            translated_parse.properties,
+            entry.path
+          )
           bytes = "#{Psych.dump(merged)}---\n#{translated_parse.body}"
           translated[logical_path] = SnapshotEntry.new(**entry.to_h.merge(
             path: logical_path,
@@ -368,6 +367,60 @@ module JekyllObsidian
       snapshots
     end
 
+    def merge_translation_properties(logical_path, default_properties, translated_properties, physical_path)
+      merged = default_properties.merge(translated_properties)
+      return merged unless translated_properties.key?("navigation")
+
+      default_navigation = default_properties["navigation"]
+      translated_navigation = translated_properties.fetch("navigation")
+      unless default_navigation && translated_page?(logical_path, default_properties)
+        error(
+          "localized_structure_override",
+          "translation may only override navigation.label for a default-language page already present in navigation",
+          physical_path
+        )
+        return default_navigation ? merged.merge("navigation" => default_navigation) : merged.reject { |key, _| key == "navigation" }
+      end
+
+      %w[order visible].each do |property|
+        next unless translated_navigation.key?(property)
+
+        error(
+          "localized_structure_override",
+          "translation must inherit navigation.#{property} from the default language",
+          physical_path
+        )
+      end
+      label_override = translated_navigation.key?("label") ? { "label" => translated_navigation.fetch("label") } : {}
+      merged.merge("navigation" => default_navigation.merge(label_override))
+    end
+
+    def translated_page?(logical_path, properties)
+      return true if logical_path == "index.md"
+
+      explicit = properties["content_type"]
+      return explicit == "page" if explicit
+
+      raw_content = @config.content.is_a?(Hash) ? @config.content : {}
+      default_type = config_value(raw_content, "default_type") || VaultCompiler::DEFAULT_CONTENT.fetch("default_type")
+      directories = if raw_content.key?("directories") || raw_content.key?(:directories)
+        configured = config_value(raw_content, "directories")
+        configured.is_a?(Hash) ? configured : {}
+      else
+        VaultCompiler::DEFAULT_CONTENT.fetch("directories")
+      end
+      directory = File.dirname(logical_path)
+      %w[post doc].each do |type|
+        configured = config_value(directories, type) || []
+        return false if Array(configured).any? { |prefix| directory == prefix || directory.start_with?("#{prefix}/") }
+      end
+      default_type == "page"
+    end
+
+    def config_value(hash, key)
+      hash.key?(key) ? hash[key] : hash[key.to_sym]
+    end
+
     def combine(results)
       pages = []
       generated_files = []
@@ -375,10 +428,11 @@ module JekyllObsidian
       notes = []
       relations = []
       default_routes = note_routes(results.fetch(@default_locale))
+      default_navigation_order = navigation_order(results.fetch(@default_locale))
 
       @locales.each do |locale|
         result = results.fetch(locale)
-        result.pages.each { |page| pages << localize_page(page, locale, default_routes) }
+        result.pages.each { |page| pages << localize_page(page, locale, default_routes, default_navigation_order) }
         result.generated_files.each do |file|
           localized = localize_generated_file(file, locale)
           generated_files << localized if localized
@@ -425,16 +479,17 @@ module JekyllObsidian
       )
     end
 
-    def localize_page(page, locale, default_routes)
+    def localize_page(page, locale, default_routes, default_navigation_order)
       route = prefixed_route(page.route, locale)
       data = localize_data(page.data, locale)
       website = data.fetch("website")
       kind = website.fetch("kind")
       note_id = website["id"]
-      actual = kind != "note" || locale == @default_locale || @actual_by_locale.fetch(locale).include?(note_id)
+      authored_page = kind == "note" || (kind == "home" && note_id)
+      actual = !authored_page || locale == @default_locale || @actual_by_locale.fetch(locale).include?(note_id)
       default_route = kind == "note" ? default_routes.fetch(note_id) : page.route
       localizations = @locales.map do |candidate|
-        candidate_actual = kind != "note" || candidate == @default_locale || @actual_by_locale.fetch(candidate).include?(note_id)
+        candidate_actual = !authored_page || candidate == @default_locale || @actual_by_locale.fetch(candidate).include?(note_id)
         locale_data = @locale_data.fetch(candidate)
         {
           "locale" => candidate,
@@ -459,14 +514,35 @@ module JekyllObsidian
       content_locale_data = actual ? locale_data : @locale_data.fetch(@default_locale)
       website["route"] = route
       website["href"] = @url_builder.href(route)
-      website["canonical_url"] = actual ? @url_builder.absolute_url(route) : @url_builder.absolute_url(default_route)
       website["alternates"] = alternates
       website["robots"] = "noindex" unless actual
       website["resources"] = resource_urls(locale)
-      website["routes"] = %w[home tags notes archive].to_h do |name|
-        base = name == "home" ? "/" : "/#{name}/"
-        [name, prefixed_route(base, locale)]
-      end.merge("feed" => prefixed_route("/feed.xml", locale))
+      website["home_route"] = prefixed_route(website.fetch("home_route", "/"), locale)
+      localize_navigation_labels!(website, locale_data.fetch("messages"))
+      preserve_default_navigation_order!(website, default_navigation_order)
+      if kind == "redirect" && (destination = Array(website["navigation"]).first)
+        website["redirect_url"] = destination.fetch("url")
+        data["title"] = destination.fetch("label")
+      end
+      validate_localized_navigation!(website, locale)
+      website["canonical_url"] = if kind == "redirect"
+        absolute_for(website.fetch("redirect_url"))
+      elsif actual
+        @url_builder.absolute_url(route)
+      else
+        @url_builder.absolute_url(default_route)
+      end
+      routes = Array(website["navigation"]).to_h do |item|
+        [item.fetch("id"), item.fetch("url")]
+      end
+      routes["home"] = website.fetch("home_url")
+      if website.fetch("theme") == "docs" && website.fetch("features").fetch("tags")
+        routes["tags"] = @url_builder.href(prefixed_route("/tags/", locale))
+      end
+      if website.fetch("features").fetch("feed")
+        routes["feed"] = @url_builder.href(prefixed_route("/feed.xml", locale))
+      end
+      website["routes"] = routes
       website["i18n"] = {
         "locale" => locale,
         "name" => locale_data.fetch("name"),
@@ -482,7 +558,7 @@ module JekyllObsidian
         website["comments"]["language"] = VaultCompiler.giscus_language(locale)
       end
       localize_page_copy!(data, kind, locale_data.fetch("messages"))
-      if kind == "note" && actual && locale != @default_locale
+      if %w[note home].include?(kind) && note_id && actual && locale != @default_locale && @actual_by_locale.fetch(locale).include?(note_id)
         website["source_links"] = repository_links(@physical_sources.fetch(locale).fetch(note_id), note_id)
       end
       content = localize_html(page.content, locale)
@@ -522,7 +598,6 @@ module JekyllObsidian
         "catalog" => @url_builder.href("#{prefix}/catalog.v1.json"),
         "preview" => @url_builder.href("#{prefix}/catalog.v1.json"),
         "graph" => @url_builder.href("#{prefix}/graph.v1.json"),
-        "docs_navigation" => @url_builder.href("#{prefix}/docs-navigation.html"),
         "feed" => @url_builder.href(prefixed_route("/feed.xml", locale))
       }
     end
@@ -610,9 +685,7 @@ module JekyllObsidian
         return value
       end
       relative = "/" if relative.empty?
-      localized = if relative == "/assets/website/docs-navigation.html"
-        "/assets/website/i18n/#{locale}/docs-navigation.html"
-      elsif relative.start_with?("/assets/vault/", "/assets/website/")
+      localized = if relative.start_with?("/assets/vault/", "/assets/website/")
         relative
       else
         prefixed_route(relative, locale)
@@ -634,6 +707,19 @@ module JekyllObsidian
         website = page.data["website"]
         [website["id"], page.route] if website&.fetch("kind", nil) == "note"
       end.to_h
+    end
+
+    def navigation_order(result)
+      page = result.pages.find { |candidate| candidate.data.dig("website", "navigation") }
+      Array(page&.data&.dig("website", "navigation")).map { |item| item.fetch("id") }
+    end
+
+    def preserve_default_navigation_order!(website, default_order)
+      positions = default_order.each_with_index.to_h
+      navigation = Array(website["navigation"])
+      website["navigation"] = navigation.each_with_index.sort_by do |item, index|
+        [positions.fetch(item.fetch("id"), positions.length), index]
+      end.map(&:first)
     end
 
     def repository_links(path, logical_path)
@@ -661,7 +747,9 @@ module JekyllObsidian
 
     def sitemap_xml(pages)
       body = pages.reject do |page|
-        page.route.end_with?("/404.html") || page.data.dig("website", "i18n", "fallback")
+        page.data.dig("website", "kind") == "redirect" ||
+          page.route.end_with?("/404.html") ||
+          page.data.dig("website", "i18n", "fallback")
       end.sort_by(&:route).map do |page|
         website = page.data.fetch("website")
         alternates = Array(website["alternates"]).map do |alternate|
@@ -715,15 +803,83 @@ module JekyllObsidian
     end
 
     def localize_page_copy!(data, kind, messages)
+      if kind == "blog-index"
+        data["title"] = localized_builtin_label(data.fetch("website"), "blog", messages)
+        return
+      end
+      if kind == "home" && !data.dig("website", "id")
+        data["title"] = localized_builtin_label(data.fetch("website"), "home", messages)
+        return
+      end
+
       title_key = {
-        "archive" => "archive",
         "tags" => "tags",
         "graph" => "graph",
-        "notes" => "all_notes",
         "404" => "page_not_found"
       }[kind]
       data["title"] = messages.fetch(title_key) if title_key
       data["description"] = messages.fetch("page_not_found_description") if kind == "404"
+    end
+
+    def localize_navigation_labels!(website, messages)
+      labels = if website.fetch("theme") == "minimal"
+        { "home" => "home", "blog" => "blog", "docs" => "docs" }
+      else
+        { "home" => "overview", "docs" => "documentation" }
+      end
+      Array(website["navigation"]).each do |item|
+        message_key = labels[item["id"]]
+        next unless message_key
+
+        item["label"] = messages.fetch(message_key) unless configured_navigation_label(item["id"])
+      end
+    end
+
+    def validate_localized_navigation!(website, locale)
+      return unless @validated_navigation_locales.add?(locale)
+
+      labels = {}
+      Array(website["navigation"]).each do |item|
+        label = item["label"]
+        unless valid_text?(label) && !label.strip.empty?
+          error(
+            "invalid_navigation_label",
+            "localized navigation label must be a non-empty string containing only output-safe Unicode characters",
+            locale_manifest_path(locale)
+          )
+          next
+        end
+
+        key = label.strip.unicode_normalize(:nfc).downcase(:fold)
+        if labels.key?(key)
+          error(
+            "duplicate_navigation_label",
+            "localized navigation labels must be unique; #{item.fetch("id").inspect} conflicts with #{labels.fetch(key).inspect}",
+            locale_manifest_path(locale)
+          )
+        else
+          labels[key] = item.fetch("id")
+        end
+      rescue EncodingError
+        error("invalid_navigation_label", "localized navigation label must contain valid Unicode", locale_manifest_path(locale))
+      end
+    end
+
+    def locale_manifest_path(locale)
+      locale == @default_locale ? LOCALE_MANIFEST : "#{TRANSLATIONS_ROOT}/#{locale}/#{LOCALE_MANIFEST}"
+    end
+
+    def localized_builtin_label(website, id, messages)
+      item = Array(website["navigation"]).find { |candidate| candidate["id"] == id }
+      item&.fetch("label") || configured_navigation_label(id) || messages.fetch(id)
+    end
+
+    def configured_navigation_label(id)
+      configured = @config.navigation.is_a?(Hash) ? @config.navigation : {}
+      override = configured[id] || configured[id.to_sym]
+      return unless override.is_a?(Hash)
+
+      override["label"] || override[:label]
     end
 
     def escape(value)

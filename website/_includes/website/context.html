@@ -1,3 +1,3 @@
 {% if page.website.features.graph and page.website.local_graph %}{% include website/local-graph.html location=include.location %}{% endif %}
 {% if page.website.features.outline and page.website.outline.size > 0 %}{% include website/outline.html location=include.location %}{% endif %}
-{% if page.website.features.relations %}{% include website/relations.html location=include.location %}{% endif %}
+{% if page.website.features.relations %}{% include website/relations.html location=include.location %}{% elsif page.website.tag_summaries and page.website.tag_summaries.size > 0 %}{% include website/context-tags.html location=include.location %}{% endif %}

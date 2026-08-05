@@ -41,7 +41,7 @@ export async function renderMermaid(): Promise<void> {
     startOnLoad: false,
     securityLevel: "strict",
     theme: "base",
-    fontFamily: '"Recursive Variable", system-ui, sans-serif',
+    fontFamily: getComputedStyle(document.body).fontFamily || "system-ui, sans-serif",
     themeVariables: {
       background: cssToken("--surface", "#ffffff"),
       primaryColor: cssToken("--violet-soft", "#ece9ff"),

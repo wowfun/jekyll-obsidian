@@ -56,6 +56,10 @@ export async function activateSearch(dialog: HTMLDialogElement): Promise<void> {
   const input = dialog.querySelector<HTMLInputElement>("[data-search-input]");
   const results = dialog.querySelector<HTMLElement>("[data-search-results]");
   const status = dialog.querySelector<HTMLElement>("[data-search-status]");
+  const navigation = dialog.querySelector<HTMLElement>("[data-search-navigation]");
+  const navigationItems = navigation
+    ? [...navigation.querySelectorAll<HTMLElement>("[data-navigation-id]")]
+    : [];
   if (!input || !results || !status) {
     throw new Error("Search dialog is missing its input, results, or status element");
   }
@@ -88,6 +92,14 @@ export async function activateSearch(dialog: HTMLDialogElement): Promise<void> {
   const query = () => {
     latestQueryId = ++session.nextQueryId;
     const value = input.value.trim();
+    const foldedValue = value.normalize("NFKC").toLocaleLowerCase();
+    let visibleNavigationItems = 0;
+    navigationItems.forEach((item) => {
+      const label = item.textContent?.normalize("NFKC").toLocaleLowerCase() || "";
+      item.hidden = Boolean(foldedValue) && !label.includes(foldedValue);
+      if (!item.hidden) visibleNavigationItems += 1;
+    });
+    if (navigation) navigation.hidden = visibleNavigationItems === 0;
     results.replaceChildren();
     if (!value) {
       status.textContent = dialog.dataset.searchPrompt || "Type a title, tag, or phrase.";
@@ -98,7 +110,9 @@ export async function activateSearch(dialog: HTMLDialogElement): Promise<void> {
 
   input.addEventListener("input", query);
   dialog.addEventListener("keydown", (event) => {
-    const links = Array.from(results.querySelectorAll<HTMLAnchorElement>("a[href]"));
+    const links = Array.from(
+      dialog.querySelectorAll<HTMLAnchorElement>("[data-search-navigation] a[href], [data-search-results] a[href]")
+    ).filter((link) => !link.closest<HTMLElement>("[hidden]"));
     const current = links.indexOf(document.activeElement as HTMLAnchorElement);
     if (event.key === "ArrowDown" && links.length > 0) {
       event.preventDefault();

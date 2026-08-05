@@ -14,7 +14,7 @@ require_relative "workspace_layout"
 module JekyllObsidian
   module Adapter
     BUNDLED_FEATURE_IDS = %w[search graph previews math mermaid].freeze
-    CONFIG_KEYS = %w[source syntax_profile theme repository edit_branch content features i18n comments].freeze
+    CONFIG_KEYS = %w[source syntax_profile theme repository edit_branch content features i18n comments contacts navigation].freeze
     IGNORED_CONTENT_DIRECTORIES = %w[.obsidian .trash].freeze
     STAGING_BASENAME_PATTERN = /\Avault-assets\.[A-Za-z0-9.-]+\z/
     StagingLease = Struct.new(:parent, :path, keyword_init: true)
@@ -158,7 +158,9 @@ module JekyllObsidian
         "content" => configured["content"],
         "features" => configured["features"],
         "i18n" => configured["i18n"],
-        "comments" => configured["comments"]
+        "comments" => configured["comments"],
+        "contacts" => configured["contacts"],
+        "navigation" => configured["navigation"]
       }
       [website, layout]
     end
@@ -381,6 +383,8 @@ module JekyllObsidian
           features: website.fetch("features"),
           i18n: website.fetch("i18n"),
           comments: website.fetch("comments"),
+          contacts: website.fetch("contacts"),
+          navigation: website.fetch("navigation"),
           repository: repository.to_s,
           edit_branch: website.fetch("edit_branch"),
           environment: ENV.fetch("JEKYLL_ENV", "development")
@@ -544,12 +548,18 @@ module JekyllObsidian
       js = entry["js"]
       fatal("asset manifest #{location}.js is invalid") unless js.is_a?(String)
       validate_manifest_path!(js)
+      color_scheme = entry["color_scheme"]
+      fatal("asset manifest #{location}.color_scheme is invalid") unless color_scheme.is_a?(String)
+      validate_manifest_path!(color_scheme)
       if entry.key?("css")
         fatal("asset manifest #{location}.css is invalid") unless entry["css"].is_a?(String)
         validate_manifest_path!(entry["css"])
       end
       validate_manifest_file_list!(entry, location)
       fatal("asset manifest #{location}.files must contain its js") unless entry.fetch("files").include?(js)
+      unless entry.fetch("files").include?(color_scheme)
+        fatal("asset manifest #{location}.files must contain its color scheme bootstrap")
+      end
       if entry.key?("css") && !entry.fetch("files").include?(entry["css"])
         fatal("asset manifest #{location}.files must contain its css")
       end

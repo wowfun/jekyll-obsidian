@@ -1,5 +1,5 @@
 import "../styles.css";
-import "../themes/docs.css";
+import "../themes/minimal.css";
 import { initialiseWebsite } from "../main";
 
 initialiseWebsite();

@@ -84,7 +84,7 @@ jobs:
         env:
           JEKYLL_ENV: production
         run: |
-          for theme in blog docs digital-garden; do
+          for theme in minimal docs; do
             bin/build \
               --example \
               --theme "$theme" \
@@ -95,10 +95,10 @@ jobs:
           done
           bin/build \
             --example \
-            --theme digital-garden \
+            --theme minimal \
             --url https://example.invalid \
             --baseurl /jekyll-obsidian \
-            --destination _site-digital-garden-project \
+            --destination _site-minimal-project \
             --skip-assets
 
       - name: Validate the host content

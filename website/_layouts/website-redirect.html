@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="{{ page.website.i18n.locale | default: site.lang | default: 'en' | escape }}" dir="{{ page.website.i18n.dir | default: 'ltr' | escape }}">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="light dark">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'self'; form-action 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' https:; media-src 'self' https:; object-src 'self'; font-src 'self'; connect-src 'self'; frame-src 'self'">
+    <meta name="robots" content="noindex">
+    <meta http-equiv="refresh" content="0; url={{ page.website.redirect_url | escape }}">
+    <link rel="canonical" href="{{ page.website.canonical_url | escape }}">
+    <meta property="og:url" content="{{ page.website.absolute_url | escape }}">
+    <title>{{ page.title | escape }} · {{ site.title | escape }}</title>
+  </head>
+  <body>
+    <main><p><a href="{{ page.website.redirect_url | escape }}">{{ page.title | escape }}</a></p></main>
+  </body>
+</html>
