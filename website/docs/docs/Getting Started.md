@@ -26,7 +26,7 @@ website/bin/setup
 website/bin/dev
 ```
 
-`website/bin/setup` installs the locked Ruby and Node dependencies under `website/`. `website/bin/dev` watches the configured content directory and the site sources, rebuilds frontend assets only when their inputs change, and serves `website/_site`.
+`website/bin/setup` installs the locked Ruby and Node dependencies under `website/`. `website/bin/dev` watches the configured content directory and the site sources, rebuilds frontend assets only when their inputs change, and serves `website/_site` with the Minimal theme by default. Pass `--theme docs` to preview the standalone handbook.
 
 Native Windows initialization and Pages deployment use `website\bin\integrate.cmd`; use WSL when a local Jekyll preview is required.
 
@@ -72,4 +72,4 @@ The build command resolves `_site` inside the site directory and writes `website
 
 The production build fails on ambiguous or private embeds, cycles, path escapes, symlinks, and URL collisions. Ordinary unresolved links stay visible and produce warnings.
 
-Try `website/bin/dev --theme blog`, `website/bin/dev --theme docs`, or `website/bin/dev --theme digital-garden` against this same vault. Continue with [[docs/Syntax|Syntax]] or review the [[docs/Deployment|Deployment]] path.
+Continue with [[docs/Syntax|Syntax]] or review the [[docs/Deployment|Deployment]] path.

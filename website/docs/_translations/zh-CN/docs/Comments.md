@@ -12,15 +12,14 @@ Jekyll Obsidian 通过 [Giscus](https://giscus.app/) 为已发布的文章关联
 
 ## 哪些页面会显示评论
 
-所有内置主题都支持评论，但只有分类为 `content_type: post` 的页面可以挂载评论组件。普通页面、文档笔记、归档、标签及其他生成页面都不会显示评论。
+所有内置主题都支持评论，但只有分类为 `content_type: post` 的页面可以挂载评论组件。普通页面、文档笔记、Blog 索引、标签及其他生成页面都不会显示评论。
 
 要启用评论，必须先配置 `website.comments`。没有这个映射时，所有主题都会关闭评论。该映射存在但省略 `enabled` 时，由主题决定默认状态：
 
 | 主题 | 配置 `website.comments` 后的默认状态 |
 | --- | --- |
-| `blog` | 开启 |
+| `minimal` | 开启 |
 | `docs` | 关闭 |
-| `digital-garden` | 关闭 |
 
 任何主题都可以通过 `enabled: true` 或 `enabled: false` 覆盖默认状态。
 
@@ -44,7 +43,7 @@ Jekyll Obsidian 通过 [Giscus](https://giscus.app/) 为已发布的文章关联
 website:
   # jekyll-obsidian:managed-start
   source: docs
-  theme: blog
+  theme: minimal
   # jekyll-obsidian:managed-end
   repository: owner/site
   comments:

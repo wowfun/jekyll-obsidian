@@ -7,7 +7,7 @@ aliases:
 tags:
   - jekyll-obsidian
   - guide
-description: One Obsidian vault, three intentional ways to publish it.
+description: One Obsidian vault, two intentional site models.
 image: assets/research-folio.svg
 cssclasses:
   - website-home
@@ -15,9 +15,9 @@ created: 2026-07-31
 updated: 2026-08-04
 ---
 
-# One vault, three ways to publish
+# One vault, two ways to publish
 
-This site is both starter content and the manual for `jekyll-obsidian`. Every page began as an ordinary Markdown note in this vault; the configured theme decides whether the result reads as a blog, a handbook, or a digital garden.
+This site is both starter content and the manual for `jekyll-obsidian`. Every page began as an ordinary Markdown note in this vault. Minimal combines a Home page, Blog, Docs, and custom sections; Docs provides a focused handbook.
 
 > [!note] Open the source in Obsidian
 > The compiler reads `website/docs/`, but never rewrites the vault. Open this directory directly and keep using links, properties, callouts, and embeds in Obsidian.
@@ -40,4 +40,4 @@ This site is both starter content and the manual for `jekyll-obsidian`. Every pa
 
 The repository is public source material. `publish: true` controls generated site output, not access to committed files. Keep truly private notes in another vault or an uncommitted location.
 
-The project now defaults to the Docs theme. Blog and Digital Garden remain available as explicit theme choices and use the same content routes without forcing their navigation models into the handbook.
+The default build configuration uses the Docs theme. Minimal is the general-purpose choice and uses the same authored content routes without forcing its site navigation into the standalone handbook.

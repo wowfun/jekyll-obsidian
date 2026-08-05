@@ -13,7 +13,7 @@ updated: 2026-08-03
 
 # Architecture
 
-The project has three cooperating modules behind one compiler interface: the pure vault compiler, an internal theme presenter seam, and the Jekyll adapter. That shape keeps publication rules testable without a live site, gives three real theme adapters one immutable content model, and keeps Jekyll lifecycle details out of note parsing.
+The project has three cooperating modules behind one compiler interface: the pure vault compiler, an internal theme presenter seam, and the Jekyll adapter. That shape keeps publication rules testable without a live site, gives two theme adapters one immutable content model, and keeps Jekyll lifecycle details out of note parsing.
 
 ## Reader isolation
 
@@ -49,11 +49,11 @@ The adapter also loads only the selected theme and feature closure from the hash
 
 ## Theme presenter seam
 
-`blog`, `docs`, and `digital-garden` consume the same published model. They select layouts, navigation, and homepage additions; they never parse Markdown, discover attachments, or recalculate relations. Shared note features keep one Liquid and frontend implementation across the themes while inheriting each theme's visual tokens. Theme IDs are closed in v1 rather than exposed through a speculative third-party registry.
+`minimal` and `docs` consume the same published model. They select layouts, navigation, and homepage additions; they never parse Markdown, discover attachments, or recalculate relations. Shared note features keep one Liquid and frontend implementation across the themes while inheriting each theme's visual tokens. Theme IDs are closed in v1 rather than exposed through a speculative third-party registry. The compiler also owns Minimal's `SiteNavigation` projection, so Liquid receives one ordered interface for built-in, folder, and page tabs instead of rediscovering navigation rules.
 
 `GraphPayload` remains the complete, schema-v1 public graph stored in `graph.v1.json`; it is emitted whenever Graph is enabled and fetched only when the complete-graph dialog opens. Data generation is not truncated. The browser's SVG viewer has a separate 250-node/1,000-edge safety boundary and falls back to local graphs or search when a payload exceeds it, avoiding an unbounded DOM and force simulation. The page-level `LocalGraphPayload` is embedded in note data, so the right rail never downloads the full site to discover neighbours. `/graph/` is deliberately not reserved or generated.
 
-Structured comment settings are validated once into an immutable `CommentsConfig`. The shared presenter projects only the small `page.website.comments` interface needed by eligible post pages; Liquid never interprets raw configuration. Giscus is one external implementation owned by the shared frontend, so the project does not expose a hypothetical multi-provider adapter seam. Development output keeps a server-rendered Discussions link without loading the external client, while production pages receive a narrowly scoped CSP profile. Theme defaults are resolved at this boundary: a present i18n mapping defaults on for Docs, and a present comments mapping defaults on for Blog; explicit YAML booleans override either default for every built-in theme.
+Structured comment settings are validated once into an immutable `CommentsConfig`. The shared presenter projects only the small `page.website.comments` interface needed by eligible post pages; Liquid never interprets raw configuration. Giscus is one external implementation owned by the shared frontend, so the project does not expose a hypothetical multi-provider adapter seam. Development output keeps a server-rendered Discussions link without loading the external client, while production pages receive a narrowly scoped CSP profile. Theme defaults are resolved at this boundary: a present i18n mapping defaults on for Docs, and a present comments mapping defaults on for Minimal; explicit YAML booleans override either default for every built-in theme.
 
 ## Determinism
 

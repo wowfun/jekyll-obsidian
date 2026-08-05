@@ -7,7 +7,7 @@ tags:
   - github-pages
 description: Add the website workspace to another repository and deploy its documentation without a local build toolchain.
 created: 2026-08-02
-updated: 2026-08-03
+updated: 2026-08-04
 ---
 
 # Host integration
@@ -16,7 +16,7 @@ Copy the complete `website/` directory to the root of a host repository. The hos
 
 ## Deploy without installing a toolchain
 
-The host must already contain a public root note such as `docs/index.md`:
+The host must already contain at least one public note, such as `docs/Start.md`:
 
 ```yaml
 ---
@@ -61,7 +61,7 @@ Both platform adapters accept the same options:
 
 ```text
 --source PATH
---theme blog|docs|digital-garden
+--theme minimal|docs
 --check
 --force-workflow
 --help
@@ -70,7 +70,7 @@ Both platform adapters accept the same options:
 For example:
 
 ```sh
-website/bin/integrate --source handbook --theme digital-garden
+website/bin/integrate --source handbook --theme minimal
 website/bin/integrate --check
 ```
 
@@ -80,7 +80,9 @@ Windows path separators are accepted and normalized before writing the portable 
 .\website\bin\integrate.cmd --source "Documentation\User Guide" --theme docs
 ```
 
-The source must be an existing repository-relative directory with a regular, non-symlink `index.md`. Its root frontmatter must contain one top-level `publish: true` entry. Traversal, site overlap, symbolic links, Windows junctions, reparse points, and path casing mismatches are rejected. The dependency-free check validates this integration contract; the compiler in Actions remains authoritative for complete YAML, routing, link, attachment, and publication validation.
+The source must be an existing repository-relative directory. Traversal, site overlap, symbolic links, Windows junctions, reparse points, and path casing mismatches are rejected. `index.md` is optional at the source root and in every subdirectory. The dependency-free command validates the integration path; the compiler in Actions remains authoritative for YAML, routing, link, attachment, and publication validation and requires at least one note with a top-level YAML boolean `publish: true`.
+
+The supported theme identifiers are `minimal` and `docs`.
 
 ## Customize the host
 
@@ -137,7 +139,7 @@ The native Windows support in this guide covers integration and deployment. Use 
 
 ## Troubleshooting
 
-- If `index.md must use ... publish: true` appears, put one unquoted, top-level `publish: true` entry between the opening and closing frontmatter delimiters.
+- If the compiler reports that the content directory has no public notes, put one unquoted, top-level `publish: true` entry between a note's opening and closing frontmatter delimiters.
 - If the command reports a site overlap, keep host content outside `website/`. Only the bundled `website/docs/` example is allowed inside it.
 - If `pages.yml is not managed` appears, inspect the existing workflow. Use `--force-workflow` only when replacing it is intentional.
 - If `--check` reports drift after updating `website/`, run `integrate` once without `--check`, then commit the refreshed files.

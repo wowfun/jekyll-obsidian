@@ -30,7 +30,7 @@ Embeds keep their source attribution. When the same excerpt appears more than on
 
 Common Markdown works alongside ==highlighting==, footnotes, and task states.[^contract]
 
-- [x] Publish a root index.
+- [x] Publish at least one note.
 - [ ] Replace the sample title.
 - [/] Review a draft.
 

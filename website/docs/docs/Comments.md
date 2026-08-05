@@ -18,15 +18,14 @@ Visitors can read the public discussion in the page. Posting a comment or reacti
 
 ## Where comments appear
 
-Comments are available in every built-in theme, but only pages classified as `content_type: post` are eligible. Pages, documentation notes, archive pages, tags, and other generated pages never receive a comment widget.
+Comments are available in every built-in theme, but only pages classified as `content_type: post` are eligible. Pages, documentation notes, Blog indexes, tags, and other generated pages never receive a comment widget.
 
 The `website.comments` mapping must exist before comments can be enabled. If it is absent, comments are off for every theme. When the mapping exists and omits `enabled`, the theme decides the default:
 
 | Theme | Default with `website.comments` present |
 | --- | --- |
-| `blog` | Enabled |
+| `minimal` | Enabled |
 | `docs` | Disabled |
-| `digital-garden` | Disabled |
 
 Set `enabled: true` or `enabled: false` to override that default in any theme.
 
@@ -50,7 +49,7 @@ Add the comment settings outside the managed `source` and `theme` lines in `.git
 website:
   # jekyll-obsidian:managed-start
   source: docs
-  theme: blog
+  theme: minimal
   # jekyll-obsidian:managed-end
   repository: owner/site
   comments:

@@ -16,7 +16,7 @@ The generated workflow targets GitHub.com. It separates untrusted verification f
 
 ## Pull requests and pushes
 
-Every pull request and every push to the repository's default branch checks out the full Git history, runs the dependency-free integration drift check, installs the locked Ruby and Node dependencies, runs the template test suite, and validates the configured host content. The bundled example is built with all three themes in both deployment shapes:
+Every pull request and every push to the repository's default branch checks out the full Git history, runs the dependency-free integration drift check, installs the locked Ruby and Node dependencies, runs the template test suite, and validates the configured host content. The bundled example builds both themes at a domain root and builds Minimal again under a project path, covering both deployment shapes:
 
 1. At a domain root, such as `https://owner.github.io/`.
 2. Under a project path, such as `https://owner.github.io/jekyll-obsidian/`.

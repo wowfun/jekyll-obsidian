@@ -34,6 +34,11 @@ website:
       post: []
       doc: []
   features: {}
+  contacts:
+    - label: GitHub
+      url: https://github.com/owner
+    - label: Email
+      url: mailto:hello@example.com
 ```
 
 `website.source` is relative to the host repository root. The bundled defaults use `source: website/docs`; a generated host override normally uses `source: docs` or another directory outside `website/`.
@@ -44,23 +49,27 @@ The canonical commands merge `website/_config.yml`, then `.github/jekyll-obsidia
 
 `title`, `description`, and `lang` feed the shell, metadata, Atom, and accessibility labels. Set `website.repository` to an `owner/repository` pair to show Edit, History, View source, and Report issue links. If it is blank, the build checks `GITHUB_REPOSITORY` and the local `origin` remote. The links stay hidden when no repository can be identified.
 
+Minimal Home renders the public root `index.md`, followed by the six most recent posts in a two-column grid. Each summary can show `image`, `subtitle`, a body excerpt, authors, and its publication date. A post without an image uses the full card width instead of a placeholder. The Blog link opens the complete reverse-chronological list at `/blog/`.
+
+Add `website.contacts` to place contact links after the recent-post section. Each entry requires a short `label` and an `https:`, `mailto:`, or `tel:` URL; omit the list to hide the contact section. Labels are rendered as text so any provider or community can be represented without an icon-specific configuration vocabulary.
+
 ## Site themes
 
-Each build selects one complete presentation preset. `blog` adds chronology and archive, `docs` adds a hierarchical handbook navigator, and `digital-garden` adds a folio-style reading surface and note index. Search, wiki-link previews, page outlines, note relations, and the interactive graph are shared capabilities in all three themes. A command-line override is useful for comparing the same content without editing configuration:
+Each build selects one complete presentation preset. `minimal` supports a Home page, Blog, Docs, and custom sections in one general-purpose shell. `docs` provides a focused hierarchical handbook. Search, wiki-link previews, page outlines, note relations, and the interactive graph are shared capabilities in both themes. A command-line override is useful for comparing the same content without editing configuration:
 
 ```sh
 website/bin/dev --theme docs
-website/bin/build --theme blog --url https://example.test --baseurl "" --destination _site
+website/bin/build --theme minimal --url https://example.test --baseurl "" --destination _site
 ```
 
-The build writes the named destination below `website/`, so `_site` becomes `website/_site`.
+The build writes the named destination below `website/`, so `_site` becomes `website/_site`. The supported theme identifiers are `minimal` and `docs`.
 
 Feature keys omitted from `website.features` inherit the theme defaults. Explicit YAML booleans can override `search`, `tags`, `feed`, `graph`, `relations`, `previews`, and `outline`.
 
-| Feature | Blog | Docs | Digital Garden |
-| --- | --- | --- | --- |
-| `search`, `previews`, `outline`, `relations`, `graph` | on | on | on |
-| `tags`, `feed` | on | off | on |
+| Feature | Minimal | Docs |
+| --- | --- | --- |
+| `search`, `previews`, `outline`, `relations`, `graph` | on | on |
+| `tags`, `feed` | on | off |
 
 Set any shared feature to the YAML boolean `false` to remove it. For example:
 
@@ -70,6 +79,51 @@ website:
     graph: false
     previews: false
 ```
+
+## Minimal navigation
+
+Minimal begins with Home, Blog, and Docs, ordered at `0`, `10`, and `20`. Blog and Docs disappear automatically when the content tree has no public post or documentation page. Override their labels, order, or visibility under `website.navigation`; `visible: false` removes only the tab and leaves its pages public:
+
+```yaml
+website:
+  theme: minimal
+  navigation:
+    home:
+      label: Home
+      order: 0
+      visible: true
+    blog:
+      label: Writing
+      order: 30
+      visible: true
+    docs:
+      label: Handbook
+      order: 20
+      visible: true
+    folders:
+      - path: portfolio
+        label: Portfolio
+        order: 40
+```
+
+A folder path is relative to `website.source` and selects published pages whose effective `content_type` is `page`. Its public `index.md` is the tab destination when present; otherwise the tab opens the first visible page after `nav_order`, title, and path sorting. A folder label defaults to its index title when present, then to a readable form of its last path segment. Custom folder order defaults to `100`, and `visible` defaults to `true`. Ordinary folders never become tabs unless listed here.
+
+A public standalone page can opt into the same navigation directly from frontmatter:
+
+```yaml
+---
+publish: true
+content_type: page
+navigation:
+  label: About
+  order: 15
+  visible: true
+---
+```
+
+The label defaults to the page title, the order defaults to `100`, and visibility defaults to `true`. Only a published note whose effective content type is `page` may declare `navigation`. Duplicate sources or targets, reserved built-in conflicts, invalid paths, and folders without a visible destination fail the build. A translation may replace `navigation.label`; the default-language page owns `order` and `visible`.
+
+Tabs that do not fit the desktop header move into an accessible More menu. The mobile Browse sheet and the Search dialog's quick navigation use the same ordered destinations and active state. Search narrows those quick links by their configured labels while it queries note content. Without JavaScript, the header links remain visible and wrap naturally. Opening Docs from Minimal keeps the Minimal site shell while adding the handbook tree, page outline, and previous or next links.
 
 ## Graph and wiki-link previews
 
@@ -81,7 +135,7 @@ Hover or keyboard-focus a wiki link to open its reading preview. Catalog metadat
 
 ## GitHub Discussions comments
 
-Every theme can attach a GitHub Discussion to each `content_type: post` through [Giscus](https://giscus.app/). Comments are disabled when `website.comments` is absent. When the mapping is present and omits `enabled`, Blog enables comments while Docs and Digital Garden keep them disabled. To use comments, first prepare a public GitHub repository:
+Both themes can attach a GitHub Discussion to each `content_type: post` through [Giscus](https://giscus.app/). Comments are disabled when `website.comments` is absent. When the mapping is present and omits `enabled`, Minimal enables comments while Docs keeps them disabled. To use comments, first prepare a public GitHub repository:
 
 1. Enable **Settings → General → Features → Discussions**.
 2. Create a `Blog comments` category. The Announcement format is recommended because maintainers and Giscus can create discussions there while visitors can still reply.
@@ -92,7 +146,7 @@ Then add the values to the host configuration:
 
 ```yaml
 website:
-  theme: blog
+  theme: minimal
   repository: owner/site
   comments:
     # Optional. Omit this to reuse website.repository.
@@ -102,7 +156,7 @@ website:
     category_id: DIC_kwDOxxxxxxxx
 ```
 
-Add `enabled: true` inside `comments` when the active theme is Docs or Digital Garden; add `enabled: false` to keep a configured Blog dormant. The comments repository may be the publication repository or a separate public community repository. The build never checks whether Discussions is enabled or the Giscus App is installed. Missing provider IDs produce a warning and a non-interactive fallback instead of failing the build. Add a `giscus.json` file to the comments repository when you want to restrict embedding to the production site origin.
+Add `enabled: true` inside `comments` when the active theme is Docs; add `enabled: false` to keep a configured Minimal site dormant. The comments repository may be the publication repository or a separate public community repository. The build never checks whether Discussions is enabled or the Giscus App is installed. Missing provider IDs produce a warning and a non-interactive fallback instead of failing the build. Add a `giscus.json` file to the comments repository when you want to restrict embedding to the production site origin.
 
 Once enabled, every `content_type: post` has comments in any theme. Disable one article with a YAML boolean:
 
@@ -122,7 +176,7 @@ See [[Comments|Comments with GitHub Discussions]] for thread identity, origin re
 
 ## Localization
 
-Every theme can opt into static localization by listing locales under `website.i18n`. The mapping enables localization by default for Docs and stays disabled by default for Blog and Digital Garden; set `enabled: true` there. The top-level `lang` is the default locale and must appear in the list when localization is enabled:
+Both themes can opt into static localization by listing locales under `website.i18n`. The mapping enables localization by default for Docs and stays disabled by default for Minimal; set `enabled: true` there. The top-level `lang` is the default locale and must appear in the list when localization is enabled:
 
 ```yaml
 lang: en
@@ -135,28 +189,27 @@ website:
       - zh-CN
 ```
 
-Add `enabled: true` inside `i18n` for Blog or Digital Garden; add `enabled: false` to keep a configured Docs locale plan dormant. Keep the default language in the normal content tree. Put translated notes at the same relative path below `_translations/<locale>/`, and add `publish: true` to each translation. Every configured locale requires `_locale.yml` at its locale root; `name` is required, while `hreflang`, `dir`, and the closed `messages` catalog are optional. A missing translation does not fail the build. It keeps its localized URL, shows the default-language content with a notice, and is excluded from search-engine indexing and the sitemap.
+Add `enabled: true` inside `i18n` for Minimal; add `enabled: false` to keep a configured Docs locale plan dormant. Keep the default language in the normal content tree. Put translated notes at the same relative path below `_translations/<locale>/`, and add `publish: true` to each translation. Every configured locale requires `_locale.yml` at its locale root; `name` is required, while `hreflang`, `dir`, and the closed `messages` catalog are optional. A missing translation does not fail the build. It keeps its localized URL, shows the default-language content with a notice, and is excluded from search-engine indexing and the sitemap.
 
 ```yaml
 name: 简体中文
 hreflang: zh-Hans
 dir: ltr
 messages:
-  contents: 目录
   search: 搜索
 ```
 
 `dir` accepts only `ltr` or `rtl`. Message values must be strings and keys must belong to the closed built-in theme catalog; unknown keys fail the build. Omitted messages use the built-in English text. The locale list order is also the language-switcher order.
 
-The default locale keeps existing URLs. Other locales use their configured tag as a prefix, such as `/zh-CN/docs/Getting%20Started/`. Navigation, search, theme system pages, language switching, SEO metadata, and locale assets stay partitioned for Blog, Docs, and Digital Garden alike.
+The default locale keeps existing URLs. Other locales use their configured tag as a prefix, such as `/zh-CN/docs/Getting%20Started/`. Navigation, search, theme system pages, language switching, SEO metadata, and locale assets stay partitioned for Minimal and Docs alike.
 
 See [[Localization|Localization guide]] for locale manifests, translation authority, fallback pages, SEO behavior, and troubleshooting.
 
 ## Color and type
 
-The themes share a narrow set of CSS custom properties. Light mode begins with Frost and white surfaces; dark mode uses a deep blue-black background. Violet marks links and focus, while teal marks relationships and secondary annotations.
+The themes share a narrow set of CSS custom properties. Light mode uses warm paper and surface tones; dark mode uses neutral black and gray. Blue marks links and focus, while terracotta marks relationships and secondary annotations.
 
-The article face is the self-hosted Literata variable font. Recursive handles controls and code, with its MONO axis enabled for code. CJK text falls back to installed Noto or Source Han families, then the platform serif or sans stack. The template stays small while CJK remains a first-class authoring path.
+Articles and controls use the platform sans-serif stack, with installed Noto Sans CJK or Source Han Sans preferred for CJK text. Code uses the platform monospace stack. The site does not download a webfont, so the exact face follows the reader's operating system while the typographic scale and spacing remain consistent.
 
 Override tokens in your own stylesheet rather than editing hashed build output. Keep text and focus contrast above WCAG AA in both color schemes.
 
@@ -164,18 +217,34 @@ Override tokens in your own stylesheet rather than editing hashed build output. 
 
 The compiler accepts this fixed set of note properties:
 
-- `publish`, `title`, `aliases`, `tags`, and `description`
+- `publish`, `title`, `subtitle`, `aliases`, `tags`, `author`, `categories`, and `description`
 - `permalink`, `image`, and `cssclasses`
 - `created` and `updated`
-- `content_type`, `date`, `nav_order`, and `nav_exclude`
+- `content_type`, `date`, `nav_order`, `nav_exclude`, and `navigation`
 - `comments`
 
-Unknown keys never flow into Liquid or generated data. `aliases`, `tags`, and `cssclasses` are string arrays. `publish`, `nav_exclude`, and `comments` use YAML booleans. Dates use ISO 8601. A note title comes from `title`, its first level-one heading, or its filename, in that order.
+Unknown keys never flow into Liquid or generated data. `aliases`, `tags`, `author`, `categories`, and `cssclasses` are string arrays; `subtitle` is a string. `publish`, `nav_exclude`, and `comments` use YAML booleans. `navigation` is the closed mapping documented above. Dates use ISO 8601. A note title comes from `title`, its first level-one heading, or its filename, in that order.
+
+Minimal Home shows `subtitle` below the article title, then uses `description` or a compiler-generated body excerpt for the summary. When `author` is present, the summary footer lists its values. Both `author` and `categories` join `tags` in the Home Topics area. Their entries may be ordinary strings or wiki links to public notes:
+
+```yaml
+---
+subtitle: Dreamers among programmers
+author:
+  - "[[People/Ada Lovelace|Ada]]"
+  - Editorial team
+categories:
+  - "[[AI]]"
+  - "[[Machine Learning|ML]]"
+---
+```
+
+Wiki-link entries must be YAML double-quoted strings. Their visible label uses the alias after `|`, or the target note title when no alias is supplied. Every Home Topics capsule opens the matching Blog filter; a wiki-linked author shown in a post summary may additionally link directly to that public author page. Unresolved wiki links produce a compiler warning and remain filterable text instead of leaking `[[...]]` into the site.
 
 ## Content and navigation
 
 An explicit `content_type: post | doc | page` wins over directory defaults. Post publication dates use `date`, then `created`, then the first Git commit. A production build rejects a post with no deterministic date.
 
-Docs navigation follows vault directories. `nav_order` sorts sibling documents and `nav_exclude: true` removes only that note link; children remain reachable. Each non-root page initially renders its current branch, then loads the shared full navigation when JavaScript is available. Search builds its index in a Web Worker. Local graphs are projected by the compiler; the browser fetches the complete graph only after its dialog opens.
+Docs navigation follows vault directories. `nav_order` sorts sibling documents and `nav_exclude: true` removes only that note link; children remain reachable. `index.md` is optional at every level. A published root `index.md` always owns `/`, so a different `permalink` on that note is rejected. A folder without an index links to its first visible child after `nav_order`, title, and path sorting. Minimal Home can render without a root index when posts exist; if neither exists, the root redirects to the first visible top-level navigation destination. Docs redirects an indexless root to its first navigation item. Every Docs page server-renders the complete documentation tree; JavaScript navigation preserves the shared shell while replacing only page-specific content and context. Search builds its index in a Web Worker. Local graphs are projected by the compiler; the browser fetches the complete graph only after its dialog opens.
 
 See [[docs/development/architecture|Architecture]] before changing compiler or adapter seams.

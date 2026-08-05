@@ -1,21 +1,22 @@
 # jekyll-obsidian
 
-`jekyll-obsidian` turns an Obsidian folder into a Jekyll blog, documentation site, or digital garden. Copy the bundled `website/` directory into your repository; your vault stays outside it and remains directly usable in Obsidian.
+English | [简体中文](README.zh-CN.md)
+
+`jekyll-obsidian` turns an Obsidian folder into a general-purpose Jekyll site or a documentation handbook. Copy the bundled `website/` directory into your repository; your vault stays outside it and remains directly usable in Obsidian.
 
 Live preview: [sinputer.top/jekyll-obsidian](https://sinputer.top/jekyll-obsidian/)
 
 Choose one built-in theme for each build:
 
-- `blog` provides recent posts, an archive, tags, an Atom feed, and defaults configured GitHub Discussions comments on.
-- `docs` provides a document tree, breadcrumbs, and previous or next links.
-- `digital-garden` provides a folio-style reading surface, note index, tags, and an Atom feed.
+- `minimal` combines an authored Home page with recent posts, a full Blog, documentation, and explicit custom sections for personal or organization sites.
+- `docs` provides a document tree and previous or next links.
 
-All three themes enable search, wiki-link reading previews, the page outline, note relations, and an interactive local graph by default. Each note keeps its local graph at the top of the right-hand context rail. Its two controls open the complete public graph or an expanded view of the current note's neighbourhood; `/graph/` is not a generated route.
+Both themes enable search, wiki-link reading previews, the page outline, note relations, and an interactive local graph by default. Each note keeps its local graph at the top of the right-hand context rail. Its two controls open the complete public graph or an expanded view of the current note's neighbourhood; `/graph/` is not a generated route.
 
 Switching themes does not change note URLs.
-The default theme is `docs`. Every theme can publish locale overlays from `_translations/<locale>/` and attach GitHub Discussions comments to posts. When the corresponding mapping is present and omits `enabled`, localization defaults on only for `docs`, while comments default on only for `blog`.
+The default build theme is `docs`. Both themes can publish locale overlays from `_translations/<locale>/` and attach GitHub Discussions comments to posts. When the corresponding mapping is present and omits `enabled`, localization defaults on only for `docs`, while comments default on only for `minimal`.
 
-See [Localization](website/docs/docs/Localization.md) for locale manifests, translation authority, fallback pages, and SEO behavior.
+See [Localization](website/docs/docs/Localization.md) for locale manifests, which content controls site structure, fallback pages, and SEO behavior.
 
 ## Before you publish
 
@@ -28,7 +29,7 @@ Canvas and Bases files become downloads when a public note links to them. Inspec
 ## Add it to your repository
 
 1. Copy the complete `website/` directory to the root of your repository.
-2. Choose a content directory outside `website/`, such as `docs/`, and add a public `index.md` to it.
+2. Choose a content directory outside `website/`, such as `docs/`, and add at least one public Markdown note.
 3. Run the integration command from the repository root.
 
 On macOS, Linux, or WSL:
@@ -50,7 +51,7 @@ Your repository will have this shape:
 ```text
 repository/
 ├── docs/
-│   └── index.md
+│   └── Start.md
 ├── website/
 └── .github/
     ├── jekyll-obsidian.yml
@@ -79,7 +80,7 @@ The generated `.github/jekyll-obsidian.yml` is the host repository's configurati
 
 The configuration interface is the root `website:` mapping.
 
-Every theme can store post comments in GitHub Discussions through Giscus. Comments use the publication repository by default and can point at a separate public repository. A configured `blog` enables them by default; `docs` and `digital-garden` require `website.comments.enabled: true`. Enabling comments before Discussions or the Giscus App is ready does not fail the build; incomplete provider values produce a warning and a non-interactive fallback. See [Comments](website/docs/docs/Comments.md) for repository setup, thread identity, privacy boundaries, and troubleshooting.
+Both themes can store post comments in GitHub Discussions through Giscus. Comments use the publication repository by default and can point at a separate public repository. When `website.comments` exists and omits `enabled`, `minimal` enables comments by default; `docs` requires `website.comments.enabled: true`. Enabling comments before Discussions or the Giscus App is ready does not fail the build; incomplete Giscus configuration produces a warning and a non-interactive fallback. See [Comments](website/docs/docs/Comments.md) for repository setup, thread identity, privacy boundaries, and troubleshooting.
 
 Open your content directory directly in Obsidian. A note enters the site only when its frontmatter contains the YAML boolean `publish: true`:
 
@@ -94,6 +95,8 @@ tags:
 
 The strings `"true"` and `"yes"` are not accepted. Obsidian's `.obsidian/` state and `.trash/` are excluded from the content snapshot.
 
+`index.md` is optional at the content root and in every nested folder. Minimal uses a public root `index.md` above the six most recent posts on Home; without one, Home can still show the post stream. A folder without an index links to its first ordered public page. A content directory with no public notes still fails the build.
+
 When updating `jekyll-obsidian`, replace your copied `website/` directory, rerun the integration command, and commit any refreshed generated files. `website/bin/integrate --check` verifies that the host configuration and workflow remain synchronized.
 
 ## Optional local preview
@@ -105,7 +108,7 @@ website/bin/setup
 website/bin/dev
 ```
 
-Open the URL printed by the local server, which is `http://127.0.0.1:4000/` by default. Pass `--theme blog`, `--theme docs`, or `--theme digital-garden` to preview the same content with another theme.
+Open the URL printed by the local server, which is `http://127.0.0.1:58000/` by default. Local preview uses the Minimal theme unless you pass `--theme docs`.
 
 ## Guides
 

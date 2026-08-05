@@ -1,12 +1,12 @@
 ---
 publish: true
 title: Jekyll Obsidian
-description: 从同一个 Obsidian 仓库发布文档、博客或数字花园。
+description: 从同一个 Obsidian 仓库发布通用站点或文档手册。
 ---
 
-# 一个仓库，三种发布方式
+# 一个仓库，两种发布方式
 
-本站既是入门示例，也是 `jekyll-obsidian` 的使用手册。所有页面都来自普通 Markdown 笔记；主题决定站点呈现为博客、文档手册还是数字花园。
+本站既是入门示例，也是 `jekyll-obsidian` 的使用手册。所有页面都来自普通 Markdown 笔记。Minimal 把首页、Blog、Docs 和自定义栏目组成通用站点；Docs 则提供专注的文档手册。
 
 > [!note] 在 Obsidian 中打开源码
 > 编译器读取 `website/docs/`，但不会改写内容。你可以直接在 Obsidian 中打开这个目录，继续使用链接、属性、提示块与嵌入。
@@ -21,3 +21,5 @@ description: 从同一个 Obsidian 仓库发布文档、博客或数字花园。
 - [[Localization|本地化]]介绍语言清单、译文覆盖层、回退页面与 SEO 行为。
 
 尚未翻译的页面会保留中文 URL，并明确提示当前显示的是英文原文。
+
+默认构建配置使用 Docs 主题。Minimal 是通用站点选项，与 Docs 共用同一组内容路由。

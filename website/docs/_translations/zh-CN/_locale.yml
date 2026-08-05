@@ -8,6 +8,12 @@ messages:
   overview: 概览
   documentation: 文档
   tags: 标签
+  all: 全部
+  filter_by_tag: 按标签筛选
+  filter_by_topic: 按主题筛选
+  chronology: 时间归档
+  no_matching_entries: 没有符合这些筛选条件的条目。
+  contact: 联系方式
   graph: 关系图
   feed: 订阅
   search: 搜索
@@ -17,9 +23,6 @@ messages:
   use_dark_scheme: 使用深色配色
   light_scheme: 浅色
   dark_scheme: 深色
-  contents: 目录
-  view_full_index: 查看完整文档索引
-  breadcrumb: 面包屑导航
   page_context: 页面上下文
   mobile_actions: 移动端操作
   browse: 浏览
@@ -31,6 +34,8 @@ messages:
   dispatch: 通讯
   note: 笔记
   published: 发布于
+  posted_by: 发布者
+  "on": 于
   updated: 更新于
   edit: 编辑
   history: 历史
@@ -38,8 +43,6 @@ messages:
   report_issue: 报告问题
   contribute: 参与编辑本页
   documentation_sequence: 文档顺序
-  manual_index: 手册索引
-  browse_handbook: 浏览手册
   search_title: 搜索本站
   close_search: 关闭搜索
   search_pages: 搜索页面
@@ -52,7 +55,6 @@ messages:
   search_result_one: 找到 {count} 篇笔记。
   search_result_many: 找到 {count} 篇笔记。
   close_browse: 关闭浏览菜单
-  more_browse_options: 更多浏览方式
   close_context: 关闭页面上下文
   outgoing_links: 出站链接
   direct_links: 直接链接
@@ -63,13 +65,16 @@ messages:
   not_embedded: 未被其他笔记嵌入。
   outline: 本页内容
   no_headings: 本页没有标题。
-  all_notes: 所有笔记
   page_not_found: 找不到页面
   page_not_found_description: 请求的页面不在此发布站点中。
   return_home: 返回首页
   primary_navigation: 主导航
   home: 首页
-  archive: 归档
+  blog: 博客
+  docs: 文档
+  recent_posts: 最新文章
+  view_all: 查看全部
+  more: 更多
   interactive_graph: 交互式关系图
   open_full_graph: 打开完整关系图
   open_local_graph: 放大当前页面的局部关系图
@@ -93,24 +98,12 @@ messages:
   download: 下载
   built_by: 构建工具
   project_on_github: GitHub 上的 Jekyll Obsidian
-  latest: 最新文章
   topics: 主题
   notes: 笔记
   note_context: 笔记上下文
   post_sequence: 文章顺序
-  older: 较早
-  newer: 较新
   dated_posts: 按日期排列的文章
-  chronology: 时间线
   field_dispatches: 现场通讯
-  browse_archive: 浏览归档
-  notebook_index: 笔记索引
-  explore_garden: 探索花园
-  garden_overview: 花园概览
-  browse_every_page: 浏览所有已发布页面
-  follow_subjects: 按主题浏览
-  see_vault_links: 查看知识库链接
-  discussion: 讨论
   comments: 评论
   comments_loading: 正在载入评论…
   comments_development: 评论仅在发布站点中载入。

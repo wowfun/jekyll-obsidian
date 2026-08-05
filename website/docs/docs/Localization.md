@@ -12,7 +12,7 @@ updated: 2026-08-04
 
 # Localization
 
-Static localization is available in Blog, Docs, and Digital Garden. One build publishes every configured locale, so a localized site does not need a second Jekyll invocation, a translation service, or browser language detection.
+Static localization is available in Minimal and Docs. One build publishes every configured locale, so a localized site does not need a second Jekyll invocation, a translation service, or browser language detection.
 
 ## Enable localization
 
@@ -20,9 +20,8 @@ Localization is disabled for every theme when `website.i18n` is absent. When the
 
 | Theme | Default with `website.i18n` present |
 | --- | --- |
-| `blog` | Disabled |
+| `minimal` | Disabled |
 | `docs` | Enabled |
-| `digital-garden` | Disabled |
 
 The top-level `lang` is the default locale and must appear in `locales`. List order controls the language switcher order.
 
@@ -37,7 +36,7 @@ website:
       - zh-CN
 ```
 
-Add `enabled: true` under `i18n` for Blog or Digital Garden. Add `enabled: false` to keep a configured Docs locale plan dormant. Locale tags use a BCP 47 style form such as `en`, `zh-CN`, or `ar-EG`; comparisons are case-insensitive, duplicates are rejected, and `assets` is reserved.
+Add `enabled: true` under `i18n` for Minimal. Add `enabled: false` to keep a configured Docs locale plan dormant. Locale tags use a BCP 47 style form such as `en`, `zh-CN`, or `ar-EG`; comparisons are case-insensitive, duplicates are rejected, and `assets` is reserved.
 
 ## Lay out locale content
 
@@ -46,18 +45,18 @@ The default language stays in the normal content tree. Each other locale mirrors
 ```text
 content/
 ├── _locale.yml
-├── index.md
+├── Start.md
 ├── guide/
-│   └── Start.md
+│   └── Advanced.md
 └── _translations/
     └── zh-CN/
         ├── _locale.yml
-        ├── index.md
+        ├── Start.md
         └── guide/
-            └── Start.md
+            └── Advanced.md
 ```
 
-Relative paths pair translations. In this example, `_translations/zh-CN/guide/Start.md` translates `guide/Start.md`. A translated note without a default note at the same path is an orphan and fails the build.
+Relative paths pair translations. In this example, `_translations/zh-CN/guide/Advanced.md` translates `guide/Advanced.md`. A translated note without a default note at the same path is an orphan and fails the build. Locale roots do not require `index.md`; each one redirects to its localized form of the default tree's first ordered page.
 
 The default tree owns site structure. It decides which notes exist, how they are classified and ordered, and which public routes they use. Translations supply localized content without creating a separate information architecture.
 
@@ -70,7 +69,6 @@ name: 简体中文
 hreflang: zh-Hans
 dir: ltr
 messages:
-  contents: 目录
   search: 搜索
 ```
 
@@ -92,9 +90,9 @@ tags:
 ---
 ```
 
-A translation can replace the body and the translatable properties `title`, `description`, `tags`, `image`, and `cssclasses`. It inherits omitted values from the default note.
+A translation can replace the body and the translatable properties `title`, `subtitle`, `description`, `tags`, `author`, `categories`, `image`, and `cssclasses`. When the default page opts into top-level navigation, its translation may also replace `navigation.label`. It inherits omitted values from the default note.
 
-Structural properties belong to the default note. This includes `permalink`, `content_type`, `date`, `created`, `updated`, `nav_order`, `nav_exclude`, `aliases`, and `comments`. Omit these properties from the translation; if present, they must exactly match the default value. Git-derived publication and update dates also come from the default note, so committing a translation does not reorder posts or archives.
+Structural properties belong to the default note. This includes `permalink`, `content_type`, `date`, `created`, `updated`, `nav_order`, `nav_exclude`, `aliases`, and `comments`. Omit these properties from the translation; if present, they must exactly match the default value. Always omit `navigation.order` and `navigation.visible` from a translation because any attempt to set them is rejected. Git-derived publication and update dates also come from the default note, so committing a translation does not reorder posts or Blog lists.
 
 ## Understand localized URLs and resources
 
@@ -110,7 +108,7 @@ _translations/zh-CN/guide/Start.md
 
 The site's `baseurl` still prefixes both forms. Locale tags are preserved as configured in public paths.
 
-Each locale receives its own instances of the active theme's navigation, breadcrumbs, previous and next links, tags, note-local graph and relations, search index, feed, and system pages. Its complete graph is a locale-specific resource opened from note pages rather than a generated `/graph/` page. Default-locale resources stay below `/assets/website/`; another locale uses `/assets/website/i18n/<locale>/`. This keeps navigation, previews, search, and graph data from different languages separate.
+Each locale receives its own instances of the active theme's navigation, previous and next links, tags, note-local graph and relations, search index, feed, and system pages. Its complete graph is a locale-specific resource opened from note pages rather than a generated `/graph/` page. Default-locale resources stay below `/assets/website/`; another locale uses `/assets/website/i18n/<locale>/`. This keeps navigation, previews, search, and graph data from different languages separate.
 
 ## Link notes and share attachments
 

@@ -6,7 +6,7 @@ description: 使用语言覆盖层发布本地化导航、搜索与 SEO 元数�
 
 # 本地化
 
-博客、文档和数字花园主题均支持静态本地化。一次构建会发布所有已配置语言，因此本地化站点不需要再次调用 Jekyll，也不依赖翻译服务或浏览器语言检测。
+Minimal 和 Docs 主题均支持静态本地化。一次构建会发布所有已配置语言，因此本地化站点不需要再次调用 Jekyll，也不依赖翻译服务或浏览器语言检测。
 
 ## 启用本地化
 
@@ -14,9 +14,8 @@ description: 使用语言覆盖层发布本地化导航、搜索与 SEO 元数�
 
 | 主题 | 存在 `website.i18n` 时的默认值 |
 | --- | --- |
-| `blog` | 关闭 |
+| `minimal` | 关闭 |
 | `docs` | 开启 |
-| `digital-garden` | 关闭 |
 
 顶层 `lang` 是默认语言，必须出现在 `locales` 中。列表顺序同时决定语言切换器的顺序。
 
@@ -31,7 +30,7 @@ website:
       - zh-CN
 ```
 
-博客或数字花园主题需要在 `i18n` 下添加 `enabled: true`。若要暂时停用已配置的文档主题语言方案，请添加 `enabled: false`。语言标签采用类似 BCP 47 的形式，例如 `en`、`zh-CN` 或 `ar-EG`；比较时不区分大小写，重复标签会被拒绝，`assets` 是保留名称。
+Minimal 主题需要在 `i18n` 下添加 `enabled: true`。若要暂时停用已配置的 Docs 语言方案，请添加 `enabled: false`。语言标签采用类似 BCP 47 的形式，例如 `en`、`zh-CN` 或 `ar-EG`；比较时不区分大小写，重复标签会被拒绝，`assets` 是保留名称。
 
 ## 组织各语言内容
 
@@ -40,18 +39,18 @@ website:
 ```text
 content/
 ├── _locale.yml
-├── index.md
+├── Start.md
 ├── guide/
-│   └── Start.md
+│   └── Advanced.md
 └── _translations/
     └── zh-CN/
         ├── _locale.yml
-        ├── index.md
+        ├── Start.md
         └── guide/
-            └── Start.md
+            └── Advanced.md
 ```
 
-相对路径用于配对译文。在此示例中，`_translations/zh-CN/guide/Start.md` 是 `guide/Start.md` 的译文。如果同一路径下没有默认语言笔记，译文就是孤立译文，构建会失败。
+相对路径用于配对译文。在此示例中，`_translations/zh-CN/guide/Advanced.md` 是 `guide/Advanced.md` 的译文。如果同一路径下没有默认语言笔记，译文就是孤立译文，构建会失败。各语言根目录都不要求提供 `index.md`；它们会跳转到默认内容树排序首项所对应的本地化页面。
 
 默认内容树决定站点结构，包括有哪些笔记、笔记如何分类与排序，以及使用哪些公开路由。译文只提供本地化内容，不会创建另一套信息架构。
 
@@ -64,7 +63,6 @@ name: 简体中文
 hreflang: zh-Hans
 dir: ltr
 messages:
-  contents: 目录
   search: 搜索
 ```
 
@@ -86,9 +84,9 @@ tags:
 ---
 ```
 
-译文可以替换正文，以及 `title`、`description`、`tags`、`image` 和 `cssclasses` 这些可翻译属性。省略的值从默认语言笔记继承。
+译文可以替换正文，以及 `title`、`subtitle`、`description`、`tags`、`author`、`categories`、`image` 和 `cssclasses` 这些可翻译属性。默认语言页面加入顶部导航后，译文也可以替换 `navigation.label`。省略的值从默认语言笔记继承。
 
-结构属性由默认语言笔记决定，包括 `permalink`、`content_type`、`date`、`created`、`updated`、`nav_order`、`nav_exclude`、`aliases` 和 `comments`。请在译文中省略这些属性；如果保留，其值必须与默认语言笔记完全一致。由 Git 推导的发布日期和更新时间也继承默认语言笔记，因此提交译文不会改变文章或归档的排序。
+结构属性由默认语言笔记决定，包括 `permalink`、`content_type`、`date`、`created`、`updated`、`nav_order`、`nav_exclude`、`aliases` 和 `comments`。请在译文中省略这些属性；如果保留，其值必须与默认语言笔记完全一致。译文必须始终省略 `navigation.order` 和 `navigation.visible`，尝试设置任意一项都会被拒绝。由 Git 推导的发布日期和更新时间也继承默认语言笔记，因此提交译文不会改变文章或 Blog 列表的排序。
 
 ## 理解本地化 URL 与资源
 
@@ -104,7 +102,7 @@ _translations/zh-CN/guide/Start.md
 
 站点 `baseurl` 仍会添加到两种路径之前。公开路径会原样保留配置中的语言标签。
 
-每个语言都有独立的导航、面包屑、上一篇与下一篇、标签、图谱、关系、搜索索引、订阅源和适用的系统页面。默认语言资源位于 `/assets/website/`；其他语言使用 `/assets/website/i18n/<locale>/`。这样可以避免不同语言的导航与搜索数据混用。
+每个语言都有独立的导航、上一篇与下一篇、标签、图谱、关系、搜索索引、订阅源和适用的系统页面。默认语言资源位于 `/assets/website/`；其他语言使用 `/assets/website/i18n/<locale>/`。这样可以避免不同语言的导航与搜索数据混用。
 
 ## 链接笔记并共享附件
 

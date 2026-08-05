@@ -40,7 +40,7 @@ Each feature has one of three outcomes:
 | CJK emphasis | render | Commonmarker CJK emphasis is enabled. Search adds deterministic CJK unigrams and bigrams. |
 | Standard and relaxed task states | render | Standard and custom task markers keep their original state in `data-task`; each disabled checkbox has an accessible state label. |
 | Tags and nested tags | render | Inline and frontmatter tags join one tag index. Nested tags use stable anchors on that page. |
-| Properties in the supported allowlist | render | `publish`, `title`, `aliases`, `tags`, `description`, `permalink`, `image`, `cssclasses`, `created`, `updated`, `content_type`, `date`, `nav_order`, and `nav_exclude` are accepted with strict types. `image` must resolve to a local published image and supplies the public `og:image` URL. |
+| Properties in the supported allowlist | render | `publish`, `title`, `subtitle`, `aliases`, `tags`, `author`, `categories`, `description`, `permalink`, `image`, `cssclasses`, `created`, `updated`, `content_type`, `date`, `nav_order`, `nav_exclude`, `navigation`, and `comments` are accepted with strict types. `navigation` is a closed mapping of optional `label`, `order`, and `visible` values and is available only to public pages. `author` and `categories` are string arrays; wiki-link entries must be double-quoted and resolve through the public-note linker. `image` must resolve to a local published image and supplies the public `og:image` URL. |
 | Unknown properties and Jekyll control keys | unsupported | They are excluded from page data, HTML, JSON, and XML. |
 
 ## Callouts and comments

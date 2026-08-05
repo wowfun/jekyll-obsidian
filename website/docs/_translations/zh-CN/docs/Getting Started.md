@@ -17,6 +17,8 @@ website/bin/setup
 website/bin/dev
 ```
 
+`website/bin/dev` 默认预览 Minimal 通用站点；使用 `website/bin/dev --theme docs` 预览独立文档手册。
+
 ## 发布一篇笔记
 
 在 `website/docs/` 下创建 Markdown 文件，并添加 YAML 布尔值：

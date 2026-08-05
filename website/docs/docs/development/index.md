@@ -55,7 +55,7 @@ Use an explicit origin and base path when checking generated URLs:
 ```sh
 JEKYLL_ENV=production website/bin/build \
   --example \
-  --theme digital-garden \
+  --theme minimal \
   --url https://example.test \
   --baseurl /jekyll-obsidian \
   --destination _site

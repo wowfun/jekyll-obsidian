@@ -1,0 +1,2 @@
+- Pre-release, backward compatibility is not required; use a first-principles approach and avoid unnecessary technical debt.
+- The product experience MUST minimize cognitive load by omitting anything that does not clarify intent, enable action, or add incremental value, unless required for correctness, safety, or explicit user confirmation.
