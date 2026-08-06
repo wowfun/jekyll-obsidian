@@ -116,20 +116,20 @@ class MediaAndFeedTest < Minitest::Test
     assert result.diagnostics.any? { |item| item.code == "feed_omitted_missing_time" }
   end
 
-  def test_git_time_enables_feed_without_using_the_clock
+  def test_post_first_commit_enables_feed_without_synthesizing_updated
     result = compile(
       note(
         "posts/git.md",
         "---\npublish: true\ncontent_type: post\n---\n# Git dated",
-        first_committed_at: "2026-07-01T01:02:03Z",
-        last_committed_at: "2026-07-30T04:05:06Z"
+        first_committed_at: "2026-07-01T01:02:03Z"
       ),
       theme: "minimal"
     )
 
+    assert_nil page(result, "/posts/git/").data.dig("website", "updated")
     feed = result.generated_files.find { |item| item.route == "/feed.xml" }
     refute_nil feed
-    assert_includes feed.content, "2026-07-30T04:05:06Z"
+    assert_includes feed.content, "<updated>2026-07-01T01:02:03Z</updated>"
     refute_includes feed.content, "#{Time.now.year + 1}"
   end
 

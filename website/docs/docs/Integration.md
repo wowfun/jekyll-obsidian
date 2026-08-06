@@ -49,7 +49,7 @@ The CMD launcher uses PowerShell 7 when it is available and otherwise falls back
 .\website\bin\integrate.ps1
 ```
 
-The command needs neither Ruby nor Node.js. It defaults to `docs/` and the `docs` theme, creates `.github/jekyll-obsidian.yml`, and renders `.github/workflows/pages.yml`. It never calls GitHub or modifies repository settings.
+The command needs neither Ruby nor Node.js. It defaults to `docs/` and the `minimal` theme, creates `.github/jekyll-obsidian.yml`, and renders `.github/workflows/pages.yml`. It never calls GitHub or modifies repository settings.
 
 Then open **Settings → Pages → Build and deployment**, choose **GitHub Actions** as the Source, commit the generated files, and push. GitHub Actions installs Ruby, Node.js, dependencies, and Chromium before building and deploying the site.
 
@@ -80,7 +80,7 @@ Windows path separators are accepted and normalized before writing the portable 
 .\website\bin\integrate.cmd --source "Documentation\User Guide" --theme docs
 ```
 
-The source must be an existing repository-relative directory. Traversal, site overlap, symbolic links, Windows junctions, reparse points, and path casing mismatches are rejected. `index.md` is optional at the source root and in every subdirectory. The dependency-free command validates the integration path; the compiler in Actions remains authoritative for YAML, routing, link, attachment, and publication validation and requires at least one note with a top-level YAML boolean `publish: true`.
+The source must be an existing repository-relative directory. Traversal, site overlap, symbolic links, Windows junctions, reparse points, and path casing mismatches are rejected. `index.md` is optional at the source root and in every subdirectory. The dependency-free command validates the integration path; the compiler in Actions remains authoritative for YAML, routing, link, attachment, and publication validation and requires at least one note selected by the publication policy.
 
 The supported theme identifiers are `minimal` and `docs`.
 
@@ -94,18 +94,19 @@ title: My Project Documentation
 website:
   # jekyll-obsidian:managed-start
   source: docs
-  theme: docs
+  theme: minimal
   # jekyll-obsidian:managed-end
   repository: ""
   edit_branch: main
   content:
+    publish_by_default: []
     default_type: doc
     directories:
       post: []
       doc: []
 ```
 
-`integrate` updates only the marked `source` and `theme` lines. Other keys and comments remain under host ownership. This includes the optional `website.comments` and `website.i18n` mappings available to every theme; repository owners configure GitHub Discussions and Giscus separately. The generated content defaults classify files directly below `docs/` as documentation, so a file such as `docs/guide.md` appears in the Docs navigator.
+`integrate` updates only the marked `source` and `theme` lines. Other keys and comments remain under host ownership. This includes the optional `website.comments` and `website.i18n` mappings available to every theme; repository owners configure GitHub Discussions and Giscus separately. New hosts keep `publish_by_default` empty, so notes require `publish: true`. Add `.` to publish the complete source tree by default, or list one or more source-relative directories. The generated content defaults classify published files directly below `docs/` as documentation, so a file such as `docs/guide.md` appears in the Docs navigator after it is selected for publication.
 
 The publishing interface is the root `website:` mapping. `integrate` requires exactly one managed `website:` root; malformed or missing managed markers fail safely.
 
@@ -124,7 +125,7 @@ docs/.obsidian/workspace*.json
 docs/.trash/
 ```
 
-Only notes with YAML boolean `publish: true` enter the generated site, but that is not a repository privacy mechanism. Never commit secrets or private records to a readable repository.
+Only notes selected by `publish: true` or `website.content.publish_by_default` enter the generated site. A selected note can opt out with `publish: false`. These controls are not a repository privacy mechanism. Never commit secrets or private records to a readable repository.
 
 ## Optional local development
 
@@ -139,7 +140,7 @@ The native Windows support in this guide covers integration and deployment. Use 
 
 ## Troubleshooting
 
-- If the compiler reports that the content directory has no public notes, put one unquoted, top-level `publish: true` entry between a note's opening and closing frontmatter delimiters.
+- If the compiler reports that the content directory has no public notes, add an unquoted, top-level `publish: true` to one note or configure a directory under `website.content.publish_by_default`.
 - If the command reports a site overlap, keep host content outside `website/`. Only the bundled `website/docs/` example is allowed inside it.
 - If `pages.yml is not managed` appears, inspect the existing workflow. Use `--force-workflow` only when replacing it is intentional.
 - If `--check` reports drift after updating `website/`, run `integrate` once without `--check`, then commit the refreshed files.

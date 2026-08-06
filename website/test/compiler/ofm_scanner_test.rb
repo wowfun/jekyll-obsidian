@@ -68,6 +68,50 @@ class OfmScannerTest < Minitest::Test
     assert_equal ["outside"], result.tags
   end
 
+  def test_iframes_are_tokenized_outside_code_and_comments
+    result = JekyllObsidian::OfmScanner.prepare(<<~MARKDOWN)
+      <iframe
+        src="https://example.test/embed"
+        title="Example">ignored fallback</iframe>
+      `inline <iframe src="https://inline.test"></iframe>`
+      ```html
+      <iframe src="https://fenced.test"></iframe>
+      ```
+      <!-- <iframe src="https://comment.test"></iframe> -->
+    MARKDOWN
+
+    assert_equal 1, result.iframes.length
+    iframe = result.iframes.first
+    assert iframe.closed
+    assert_includes iframe.html, 'src="https://example.test/embed"'
+    assert_equal 1, iframe.source_span.start_line
+    assert_includes result.markdown, '<website-ofm-iframe data-token="0">'
+    assert_includes result.markdown, "https://inline.test"
+    assert_includes result.markdown, "https://fenced.test"
+    refute_includes result.markdown, "https://comment.test"
+  end
+
+  def test_unclosed_iframe_is_reported_to_the_compiler
+    result = JekyllObsidian::OfmScanner.prepare("<iframe src=\"https://example.test\">\nrest\n")
+
+    assert_equal 1, result.iframes.length
+    refute result.iframes.first.closed
+  end
+
+  def test_unfinished_iframe_opening_tag_is_retained_for_diagnostics
+    result = JekyllObsidian::OfmScanner.prepare(<<~HTML)
+      <iframe src="https://example.test"
+      Following text
+    HTML
+
+    assert_equal 1, result.iframes.length
+    iframe = result.iframes.first
+    refute iframe.closed
+    assert_includes iframe.html, "Following text"
+    assert_equal 1, iframe.source_span.start_line
+    assert_equal 2, iframe.source_span.end_line
+  end
+
   def test_block_id_replacement_preserves_the_line_ending
     result = JekyllObsidian::OfmScanner.prepare("- First ^first\n- Second\n")
 

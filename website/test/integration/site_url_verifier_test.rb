@@ -11,7 +11,7 @@ class SiteUrlVerifierTest < Minitest::Test
       FileUtils.mkdir_p(File.join(site, "assets", "website"))
       File.write(File.join(site, "index.html"), <<~HTML)
         <!doctype html><html><head>
-        <meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'self'; form-action 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' https:; media-src 'self' https:; object-src 'self'; font-src 'self'; connect-src 'self'; frame-src 'self'">
+        <meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'self'; form-action 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' https:; media-src 'self'; object-src 'self'; font-src 'self'; connect-src 'self'; frame-src 'self'">
         <link rel="canonical" href="https://example.test/">
         <meta property="og:url" content="https://example.test/">
         <meta name="website:catalog" content="/assets/website/catalog.v1.json">
@@ -65,7 +65,7 @@ class SiteUrlVerifierTest < Minitest::Test
       File.write(File.join(site, "assets", "website", "catalog.v1.json"), '{"schema_version":1,"notes":[]}')
       File.write(File.join(site, "index.html"), <<~HTML)
         <!doctype html><html><head>
-        <meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'self'; form-action 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' https:; media-src 'self' https:; object-src 'self'; font-src 'self'; connect-src 'self'; frame-src 'self'">
+        <meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'self'; form-action 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' https:; media-src 'self'; object-src 'self'; font-src 'self'; connect-src 'self'; frame-src 'self'">
         <link rel="canonical" href="https://example.test/project/">
         <meta property="og:url" content="https://example.test/project/">
         <link rel="stylesheet" href="/project/assets/site.css">
@@ -82,7 +82,7 @@ class SiteUrlVerifierTest < Minitest::Test
     Dir.mktmpdir("website-comments-url-verifier") do |site|
       File.write(File.join(site, "index.html"), <<~HTML)
         <!doctype html><html><head>
-        <meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'self'; form-action 'self'; script-src 'self' https://giscus.app; style-src 'self' 'unsafe-inline' https://giscus.app; img-src 'self' https:; media-src 'self' https:; object-src 'self'; font-src 'self'; connect-src 'self'; frame-src 'self' https://giscus.app">
+        <meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'self'; form-action 'self'; script-src 'self' https://giscus.app; style-src 'self' 'unsafe-inline' https://giscus.app; img-src 'self' https:; media-src 'self'; object-src 'self'; font-src 'self'; connect-src 'self'; frame-src 'self' https://giscus.app">
         <link rel="canonical" href="https://example.test/">
         <meta property="og:url" content="https://example.test/">
         <meta name="giscus:backlink" content="https://example.test/">
@@ -101,13 +101,13 @@ class SiteUrlVerifierTest < Minitest::Test
     cases = {
       "permission-only" => <<~HTML,
         <!doctype html><html><head>
-        <meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'self'; form-action 'self'; script-src 'self' https://giscus.app; style-src 'self' 'unsafe-inline' https://giscus.app; img-src 'self' https:; media-src 'self' https:; object-src 'self'; font-src 'self'; connect-src 'self'; frame-src 'self' https://giscus.app">
+        <meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'self'; form-action 'self'; script-src 'self' https://giscus.app; style-src 'self' 'unsafe-inline' https://giscus.app; img-src 'self' https:; media-src 'self'; object-src 'self'; font-src 'self'; connect-src 'self'; frame-src 'self' https://giscus.app">
         <link rel="canonical" href="https://example.test/"><meta property="og:url" content="https://example.test/">
         </head><body></body></html>
       HTML
       "hook-only" => <<~HTML
         <!doctype html><html><head>
-        <meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'self'; form-action 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' https:; media-src 'self' https:; object-src 'self'; font-src 'self'; connect-src 'self'; frame-src 'self'">
+        <meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'self'; form-action 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' https:; media-src 'self'; object-src 'self'; font-src 'self'; connect-src 'self'; frame-src 'self'">
         <link rel="canonical" href="https://example.test/"><meta property="og:url" content="https://example.test/">
         </head><body><section data-website-comments-load></section></body></html>
       HTML
@@ -127,7 +127,7 @@ class SiteUrlVerifierTest < Minitest::Test
     Dir.mktmpdir("website-comments-external-script") do |site|
       File.write(File.join(site, "index.html"), <<~HTML)
         <!doctype html><html><head>
-        <meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'self'; form-action 'self'; script-src 'self' https://giscus.app; style-src 'self' 'unsafe-inline' https://giscus.app; img-src 'self' https:; media-src 'self' https:; object-src 'self'; font-src 'self'; connect-src 'self'; frame-src 'self' https://giscus.app">
+        <meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'self'; form-action 'self'; script-src 'self' https://giscus.app; style-src 'self' 'unsafe-inline' https://giscus.app; img-src 'self' https:; media-src 'self'; object-src 'self'; font-src 'self'; connect-src 'self'; frame-src 'self' https://giscus.app">
         <link rel="canonical" href="https://example.test/"><meta property="og:url" content="https://example.test/">
         <meta name="giscus:backlink" content="https://example.test/">
         <script src="https://analytics.example/client.js"></script>
@@ -144,7 +144,7 @@ class SiteUrlVerifierTest < Minitest::Test
   def test_noindex_pages_require_a_canonical_to_an_existing_indexable_page
     Dir.mktmpdir("website-noindex-canonical") do |site|
       FileUtils.mkdir_p(File.join(site, "zh-CN"))
-      csp = "default-src 'self'; base-uri 'self'; form-action 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' https:; media-src 'self' https:; object-src 'self'; font-src 'self'; connect-src 'self'; frame-src 'self'"
+      csp = "default-src 'self'; base-uri 'self'; form-action 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' https:; media-src 'self'; object-src 'self'; font-src 'self'; connect-src 'self'; frame-src 'self'"
       File.write(File.join(site, "index.html"), <<~HTML)
         <!doctype html><html><head>
         <meta http-equiv="Content-Security-Policy" content="#{csp}">
@@ -184,6 +184,117 @@ class SiteUrlVerifierTest < Minitest::Test
       _stdout, stderr, status = Open3.capture3(Gem.ruby, script, site, "https://example.test", "")
       refute status.success?
       assert_includes stderr, "canonical target must be indexable"
+    end
+  end
+
+  def test_accepts_exact_page_scoped_video_and_player_permissions
+    Dir.mktmpdir("website-external-media-verifier") do |site|
+      File.write(File.join(site, "index.html"), <<~HTML)
+        <!doctype html><html><head>
+        <meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'self'; form-action 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' https:; media-src 'self' https://cdn.example; object-src 'self'; font-src 'self'; connect-src 'self'; frame-src 'self' https://www.youtube-nocookie.com">
+        <link rel="canonical" href="https://example.test/">
+        <meta property="og:url" content="https://example.test/">
+        </head><body>
+        <video controls preload="metadata"><source src="https://cdn.example/demo.mp4?token=signed" type="video/mp4"></video>
+        <iframe class="website-external-player website-external-player--youtube" data-website-external-player="youtube" src="https://www.youtube-nocookie.com/embed/NnTvZWp5Q7o" title="Demo" loading="lazy" referrerpolicy="strict-origin-when-cross-origin" allow="autoplay; encrypted-media; picture-in-picture" allowfullscreen></iframe>
+        </body></html>
+      HTML
+
+      script = File.expand_path("../../scripts/verify-site-urls.rb", __dir__)
+      _stdout, stderr, status = Open3.capture3(Gem.ruby, script, site, "https://example.test", "")
+      assert status.success?, stderr
+    end
+  end
+
+  def test_rejects_unscoped_or_noncanonical_external_players
+    cases = {
+      "wide-csp" => [
+        "frame-src 'self' https:",
+        '<iframe src="https://video.example/embed/1" title="Video"></iframe>'
+      ],
+      "missing-contract" => [
+        "frame-src 'self' https://www.youtube-nocookie.com",
+        '<iframe src="https://www.youtube-nocookie.com/embed/NnTvZWp5Q7o" title="Video"></iframe>'
+      ]
+    }
+    cases.each do |label, (frame_src, frame)|
+      Dir.mktmpdir("website-external-player-#{label}") do |site|
+        File.write(File.join(site, "index.html"), <<~HTML)
+          <!doctype html><html><head>
+          <meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'self'; form-action 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' https:; media-src 'self'; object-src 'self'; font-src 'self'; connect-src 'self'; #{frame_src}">
+          <link rel="canonical" href="https://example.test/"><meta property="og:url" content="https://example.test/">
+          </head><body>#{frame}</body></html>
+        HTML
+        script = File.expand_path("../../scripts/verify-site-urls.rb", __dir__)
+        _stdout, stderr, status = Open3.capture3(Gem.ruby, script, site, "https://example.test", "")
+        refute status.success?, label
+        assert_includes stderr, "external iframe", label
+      end
+    end
+  end
+
+  def test_generated_markdown_links_must_resolve_to_real_files
+    Dir.mktmpdir("website-markdown-resource-verifier") do |site|
+      File.write(File.join(site, "index.md"), "# Home\n")
+      File.write(File.join(site, "index.html"), <<~HTML)
+        <!doctype html><html><head>
+        <meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'self'; form-action 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' https:; media-src 'self'; object-src 'self'; font-src 'self'; connect-src 'self'; frame-src 'self'">
+        <link rel="canonical" href="https://example.test/">
+        <meta property="og:url" content="https://example.test/">
+        </head><body><a href="/index.md" target="_blank" rel="noopener">View as Markdown</a></body></html>
+      HTML
+      script = File.expand_path("../../scripts/verify-site-urls.rb", __dir__)
+
+      _stdout, stderr, status = Open3.capture3(Gem.ruby, script, site, "https://example.test", "")
+      assert status.success?, stderr
+
+      FileUtils.rm(File.join(site, "index.md"))
+      _stdout, stderr, status = Open3.capture3(Gem.ruby, script, site, "https://example.test", "")
+      refute status.success?
+      assert_includes stderr, "index.md"
+    end
+  end
+
+
+  def test_accepts_sandboxed_web_frames_and_lazy_tweets_with_exact_permissions
+    Dir.mktmpdir("website-web-tweet-verifier") do |site|
+      File.write(File.join(site, "index.html"), <<~HTML)
+        <!doctype html><html><head>
+        <meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'self'; form-action 'self'; script-src 'self' https://platform.twitter.com; style-src 'self' 'unsafe-inline'; img-src 'self' https:; media-src 'self'; object-src 'self'; font-src 'self'; connect-src 'self'; frame-src 'self' https://frame.example https://platform.twitter.com">
+        <link rel="canonical" href="https://example.test/">
+        <meta property="og:url" content="https://example.test/">
+        </head><body>
+        <figure class="website-external-frame">
+          <iframe class="website-external-frame__viewport" data-website-external-frame="web" src="https://frame.example/embed#section" title="Example" loading="lazy" referrerpolicy="strict-origin-when-cross-origin" sandbox="#{JekyllObsidian::ExternalMedia::IFRAME_SANDBOX}" allowfullscreen height="480"></iframe>
+          <a class="website-external-frame__fallback" href="https://frame.example/embed#section" target="_blank" rel="noopener noreferrer">Open embedded page</a>
+        </figure>
+        <figure class="website-tweet" data-website-tweet="1580548874246443010">
+          <div data-website-tweet-mount></div>
+          <a data-website-tweet-fallback href="https://x.com/obsdmd/status/1580548874246443010">View post on X</a>
+        </figure>
+        </body></html>
+      HTML
+
+      script = File.expand_path("../../scripts/verify-site-urls.rb", __dir__)
+      _stdout, stderr, status = Open3.capture3(Gem.ruby, script, site, "https://example.test", "")
+      assert status.success?, stderr
+    end
+  end
+
+  def test_rejects_tweet_permissions_without_a_compiler_marker
+    Dir.mktmpdir("website-invalid-tweet-verifier") do |site|
+      File.write(File.join(site, "index.html"), <<~HTML)
+        <!doctype html><html><head>
+        <meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'self'; form-action 'self'; script-src 'self' https://platform.twitter.com; style-src 'self' 'unsafe-inline'; img-src 'self' https:; media-src 'self'; object-src 'self'; font-src 'self'; connect-src 'self'; frame-src 'self' https://platform.twitter.com">
+        <link rel="canonical" href="https://example.test/"><meta property="og:url" content="https://example.test/">
+        </head><body><p>No Tweet here.</p></body></html>
+      HTML
+
+      script = File.expand_path("../../scripts/verify-site-urls.rb", __dir__)
+      _stdout, stderr, status = Open3.capture3(Gem.ruby, script, site, "https://example.test", "")
+      refute status.success?
+      assert_includes stderr, "script-src"
+      assert_includes stderr, "frame-src"
     end
   end
 end

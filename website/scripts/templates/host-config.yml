@@ -9,6 +9,7 @@ website:
   repository: ""
   edit_branch: main
   content:
+    publish_by_default: []
     default_type: doc
     directories:
       post: []

@@ -3,14 +3,14 @@
 require "test_helper"
 
 class ThemeContractTest < Minitest::Test
-  def test_default_theme_is_docs_and_unknown_themes_fail_closed
+  def test_default_theme_is_minimal_and_unknown_themes_fail_closed
     home = note("index.md", "---\npublish: true\nupdated: 2026-07-30\n---\n# Home")
 
     default_result = compile(home)
     assert default_result.success?, default_result.diagnostics.map(&:message).join("\n")
-    assert_equal "docs", default_result.theme
-    assert_equal "website-docs", page(default_result, "/").data.fetch("layout")
-    assert_equal "docs", page(default_result, "/").data.dig("website", "theme")
+    assert_equal "minimal", default_result.theme
+    assert_equal "website-minimal", page(default_result, "/").data.fetch("layout")
+    assert_equal "minimal", page(default_result, "/").data.dig("website", "theme")
     assert_equal "https://github.com/example/garden", default_result.site_data.fetch("website_repository_url")
 
     invalid_result = compile(home, theme: "magazine")
@@ -152,7 +152,8 @@ class ThemeContractTest < Minitest::Test
     minimal = compile(*entries, theme: "minimal")
     assert minimal.success?, minimal.diagnostics.map(&:message).join("\n")
     assert_equal %w[/ /404.html /blog/ /blog/post/ /docs/guide/], minimal.pages.map(&:route)
-    assert_equal %w[/assets/website/catalog.v1.json /assets/website/graph.v1.json /assets/website/search.v1.json /feed.xml /sitemap.xml], minimal.generated_files.map(&:route)
+    minimal_artifacts = minimal.generated_files.reject { |file| file.media_type == "text/markdown" }
+    assert_equal %w[/assets/website/catalog.v1.json /assets/website/graph.v1.json /assets/website/search.v1.json /feed.xml /sitemap.xml], minimal_artifacts.map(&:route)
     assert_equal true, minimal.features.fetch("previews")
     assert_equal true, minimal.features.fetch("outline")
     assert_equal true, minimal.features.fetch("relations")
@@ -163,7 +164,8 @@ class ThemeContractTest < Minitest::Test
     docs = compile(*entries, theme: "docs")
     assert docs.success?, docs.diagnostics.map(&:message).join("\n")
     assert_equal %w[/ /404.html /blog/post/ /docs/guide/], docs.pages.map(&:route)
-    assert_equal %w[/assets/website/catalog.v1.json /assets/website/graph.v1.json /assets/website/search.v1.json /sitemap.xml], docs.generated_files.map(&:route)
+    docs_artifacts = docs.generated_files.reject { |file| file.media_type == "text/markdown" }
+    assert_equal %w[/assets/website/catalog.v1.json /assets/website/graph.v1.json /assets/website/search.v1.json /sitemap.xml], docs_artifacts.map(&:route)
     assert_equal true, docs.features.fetch("previews")
     assert_equal true, docs.features.fetch("outline")
     assert_equal true, docs.features.fetch("relations")
@@ -577,33 +579,64 @@ class ThemeContractTest < Minitest::Test
   end
 
   def test_graph_projects_complete_global_data_and_one_hop_local_graphs
-    result = compile(
-      note("index.md", "---\npublish: true\nupdated: 2026-07-30\n---\n# Home\n[[a]]\n[[b]]"),
-      note("a.md", "---\npublish: true\nupdated: 2026-07-30\n---\n# Alpha\n[[b]]"),
-      note("b.md", "---\npublish: true\nupdated: 2026-07-30\n---\n# Beta"),
-      note("isolated.md", "---\npublish: true\nupdated: 2026-07-30\n---\n# Isolated"),
-      note("private.md", "---\npublish: false\n---\n# Private\n[[index]]"),
-      theme: "docs"
-    )
-    assert result.success?, result.diagnostics.map(&:message).join("\n")
-    assert_nil page(result, "/graph/")
+    %w[minimal docs].each do |theme|
+      result = compile(
+        note("index.md", "---\npublish: true\nupdated: 2026-07-30\n---\n# Home\n[[a]]\n[[b]]"),
+        note("a.md", "---\npublish: true\nupdated: 2026-07-30\n---\n# Alpha\n[[b]]"),
+        note("b.md", "---\npublish: true\nupdated: 2026-07-30\n---\n# Beta"),
+        note("isolated.md", "---\npublish: true\ntitle: Isolated\nupdated: 2026-07-30\n---\nIsolated body."),
+        note("private.md", "---\npublish: false\n---\n# Private\n[[index]]"),
+        theme: theme
+      )
+      assert result.success?, result.diagnostics.map(&:message).join("\n")
+      assert_nil page(result, "/graph/")
 
-    graph = generated_json(result, "/assets/website/graph.v1.json")
-    assert_equal %w[a.md b.md index.md isolated.md], graph.fetch("nodes").map { |node| node.fetch("id") }
-    assert_equal({ "a.md" => 2, "b.md" => 2, "index.md" => 2, "isolated.md" => 0 }, graph.fetch("nodes").to_h { |node| [node.fetch("id"), node.fetch("degree")] })
+      graph = generated_json(result, "/assets/website/graph.v1.json")
+      assert_equal %w[a.md b.md index.md isolated.md], graph.fetch("nodes").map { |node| node.fetch("id") }
+      assert_equal({ "a.md" => 2, "b.md" => 2, "index.md" => 2, "isolated.md" => 0 }, graph.fetch("nodes").to_h { |node| [node.fetch("id"), node.fetch("degree")] })
 
-    home_graph = page(result, "/").data.dig("website", "local_graph")
-    assert_equal "index.md", home_graph.fetch("current_id")
-    assert_equal %w[a.md b.md index.md], home_graph.fetch("nodes").map { |node| node.fetch("id") }
-    assert_equal 2, home_graph.fetch("edges").length
+      home_graph = page(result, "/").data.dig("website", "local_graph")
+      assert_equal "index.md", home_graph.fetch("current_id")
+      assert_equal %w[a.md b.md index.md], home_graph.fetch("nodes").map { |node| node.fetch("id") }
+      assert_equal 2, home_graph.fetch("edges").length
 
-    alpha_graph = page(result, "/a/").data.dig("website", "local_graph")
-    assert_equal %w[a.md b.md index.md], alpha_graph.fetch("nodes").map { |node| node.fetch("id") }
-    assert_equal 2, alpha_graph.fetch("edges").length
+      alpha_graph = page(result, "/a/").data.dig("website", "local_graph")
+      assert_equal %w[a.md b.md index.md], alpha_graph.fetch("nodes").map { |node| node.fetch("id") }
+      assert_equal 2, alpha_graph.fetch("edges").length
 
-    isolated_graph = page(result, "/isolated/").data.dig("website", "local_graph")
-    assert_equal ["isolated.md"], isolated_graph.fetch("nodes").map { |node| node.fetch("id") }
-    assert_empty isolated_graph.fetch("edges")
+      isolated = page(result, "/isolated/")
+      assert_nil isolated.data.dig("website", "local_graph"), theme
+      assert_equal false, isolated.data.dig("website", "has_context"), theme
+    end
+  end
+
+  def test_embed_relations_enable_local_graphs_but_self_links_do_not
+    %w[minimal docs].each do |theme|
+      result = compile(
+        note("index.md", "---\npublish: true\nupdated: 2026-07-30\n---\n# Home"),
+        note("embed-source.md", "---\npublish: true\nupdated: 2026-07-30\n---\n# Embed source\n![[embed-target]]"),
+        note("embed-target.md", "---\npublish: true\nupdated: 2026-07-30\n---\n# Embed target"),
+        note("self.md", "---\npublish: true\nupdated: 2026-07-30\n---\n# Self\n[[self]]"),
+        theme: theme
+      )
+      assert result.success?, result.diagnostics.map(&:message).join("\n")
+
+      source_graph = page(result, "/embed-source/").data.dig("website", "local_graph")
+      target_graph = page(result, "/embed-target/").data.dig("website", "local_graph")
+      assert_equal "embed-source.md", source_graph.fetch("current_id")
+      assert_equal "embed-target.md", target_graph.fetch("current_id")
+      assert_equal %w[embed-source.md embed-target.md], source_graph.fetch("nodes").map { |node| node.fetch("id") }
+      assert_equal %w[embed-source.md embed-target.md], target_graph.fetch("nodes").map { |node| node.fetch("id") }
+      assert_equal ["embed"], source_graph.fetch("edges").map { |edge| edge.fetch("kind") }
+      assert_equal source_graph.fetch("edges"), target_graph.fetch("edges"), theme
+
+      self_page = page(result, "/self/")
+      assert_nil self_page.data.dig("website", "local_graph"), theme
+
+      graph = generated_json(result, "/assets/website/graph.v1.json")
+      assert_includes graph.fetch("nodes").map { |node| node.fetch("id") }, "self.md", theme
+      assert graph.fetch("edges").any? { |edge| edge.fetch("source") == "self.md" && edge.fetch("target") == "self.md" }, theme
+    end
   end
 
   def test_feature_and_always_generated_namespaces_reserve_matching_directory_routes

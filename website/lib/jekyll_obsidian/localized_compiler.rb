@@ -17,7 +17,7 @@ module JekyllObsidian
     STRUCTURAL_PROPERTIES = (FrontMatter::SUPPORTED - TRANSLATABLE_PROPERTIES - %w[publish navigation]).freeze
     URL_PROPERTIES = %w[
       absolute_url canonical_url discussion_url docs_home_url
-      home_url href image redirect_url route url
+      home_url href image markdown_url redirect_url route url
     ].freeze
     SOURCE_LINK_PROPERTIES = %w[edit history issue source].freeze
     LOCALE_PATTERN = /\A[A-Za-z]{2,8}(?:-[A-Za-z0-9]{1,8})*\z/
@@ -63,6 +63,14 @@ module JekyllObsidian
       "view_source" => "View source",
       "report_issue" => "Report issue",
       "contribute" => "Contribute to this page",
+      "copy_page" => "Copy page",
+      "copy_page_description" => "Copy page as Markdown for LLMs",
+      "view_as_markdown" => "View as Markdown",
+      "view_as_markdown_description" => "View this page as plain text",
+      "more_page_actions" => "More page actions",
+      "copied" => "Copied",
+      "copy_failed" => "Copy failed. Open View as Markdown and copy the text.",
+      "opens_in_new_tab" => "opens in a new tab",
       "documentation_sequence" => "Documentation sequence",
       "search_title" => "Search this site",
       "close_search" => "Close search",
@@ -103,7 +111,6 @@ module JekyllObsidian
       "local_graph" => "Local graph",
       "close_full_graph" => "Close full graph",
       "close_local_graph" => "Close local graph",
-      "isolated_graph" => "This note has no linked neighbours yet.",
       "graph_loading" => "Loading graph…",
       "graph_unavailable" => "The interactive graph could not be loaded. Use the linked notes below.",
       "graph_too_large" => "This complete graph is too large to render interactively. Use local graphs or search instead.",
@@ -117,6 +124,8 @@ module JekyllObsidian
       "missing_fragment" => "Missing fragment: {label}",
       "download_pdf" => "Download PDF",
       "download" => "Download",
+      "open_embedded_page" => "Open embedded page",
+      "view_post_on_x" => "View post on X",
       "built_by" => "Built by",
       "project_on_github" => "Jekyll Obsidian on GitHub",
       "topics" => "Topics",
@@ -153,6 +162,7 @@ module JekyllObsidian
       @physical_sources = {}
       @default_locale = @config.lang.to_s
       @validated_navigation_locales = Set.new
+      @content_policy = ContentPolicy.resolve(nil).policy
     rescue ArgumentError => exception
       @diagnostics ||= []
       error("invalid_url_config", exception.message)
@@ -189,6 +199,10 @@ module JekyllObsidian
     end
 
     def validate_configuration
+      content_resolution = ContentPolicy.resolve(@config.content)
+      @diagnostics.concat(content_resolution.diagnostics)
+      @content_policy = content_resolution.policy
+
       raw = @config.i18n
       unless raw.is_a?(Hash)
         error("invalid_i18n_config", "website.i18n must be a mapping")
@@ -202,7 +216,7 @@ module JekyllObsidian
         return
       end
       configured_theme = @config.theme.to_s
-      configured_theme = "docs" if configured_theme.empty?
+      configured_theme = "minimal" if configured_theme.empty?
       @enabled = enabled.nil? ? configured_theme == "docs" : enabled
       locales = fetch(raw, "locales")
       return unless @enabled || !locales.nil?
@@ -292,7 +306,7 @@ module JekyllObsidian
         next unless entry.kind.to_sym == :note
         parsed = FrontMatter.parse(entry.path, entry.bytes.to_s)
         @diagnostics.concat(parsed.diagnostics)
-        [entry.path, [entry, parsed]] if parsed.properties["publish"] == true
+        [entry.path, [entry, parsed]] if @content_policy.publish?(entry.path, parsed.properties)
       end.to_h
 
       configured_roots = @locales.reject { |locale| locale == @default_locale }.map { |locale| "#{TRANSLATIONS_ROOT}/#{locale}/" }
@@ -330,10 +344,7 @@ module JekyllObsidian
           end
           translated_parse = FrontMatter.parse(entry.path, entry.bytes.to_s)
           @diagnostics.concat(translated_parse.diagnostics)
-          unless translated_parse.properties["publish"] == true
-            error("unpublished_translation", "translation notes must use publish: true", entry.path)
-            next
-          end
+          next if translated_parse.properties["publish"] == false
           default_entry, default_parse = default_pair
           STRUCTURAL_PROPERTIES.each do |property|
             next unless translated_parse.properties.key?(property)
@@ -352,8 +363,7 @@ module JekyllObsidian
             path: logical_path,
             bytes: bytes,
             size: bytes.bytesize,
-            first_committed_at: default_entry.first_committed_at,
-            last_committed_at: default_entry.last_committed_at
+            first_committed_at: default_entry.first_committed_at
           ))
           (@physical_sources[locale] ||= {})[logical_path] = entry.path
         end
@@ -396,29 +406,7 @@ module JekyllObsidian
     end
 
     def translated_page?(logical_path, properties)
-      return true if logical_path == "index.md"
-
-      explicit = properties["content_type"]
-      return explicit == "page" if explicit
-
-      raw_content = @config.content.is_a?(Hash) ? @config.content : {}
-      default_type = config_value(raw_content, "default_type") || VaultCompiler::DEFAULT_CONTENT.fetch("default_type")
-      directories = if raw_content.key?("directories") || raw_content.key?(:directories)
-        configured = config_value(raw_content, "directories")
-        configured.is_a?(Hash) ? configured : {}
-      else
-        VaultCompiler::DEFAULT_CONTENT.fetch("directories")
-      end
-      directory = File.dirname(logical_path)
-      %w[post doc].each do |type|
-        configured = config_value(directories, type) || []
-        return false if Array(configured).any? { |prefix| directory == prefix || directory.start_with?("#{prefix}/") }
-      end
-      default_type == "page"
-    end
-
-    def config_value(hash, key)
-      hash.key?(key) ? hash[key] : hash[key.to_sym]
+      @content_policy.classify(logical_path, properties) == "page"
     end
 
     def combine(results)
@@ -653,6 +641,12 @@ module JekyllObsidian
       fragment.css(".website-download-card__meta").each do |node|
         replace_generated_text(node, messages.fetch("download"), locale) if node.text == MESSAGE_DEFAULTS.fetch("download")
       end
+      fragment.css(".website-external-frame__fallback").each do |node|
+        replace_generated_text(node, messages.fetch("open_embedded_page"), locale) if node.text == MESSAGE_DEFAULTS.fetch("open_embedded_page")
+      end
+      fragment.css(".website-tweet__fallback").each do |node|
+        replace_generated_text(node, messages.fetch("view_post_on_x"), locale) if node.text == MESSAGE_DEFAULTS.fetch("view_post_on_x")
+      end
     end
 
     def replace_generated_text(node, text, locale)
@@ -762,16 +756,12 @@ module JekyllObsidian
     end
 
     def preflight_routes(pages, files, assets)
-      seen = {}
+      registry = DestinationRegistry.new
       (pages + files + assets).each do |output|
         destination = destination_key(output)
-        conflict = seen.find do |candidate, _route|
-          candidate == destination || candidate.start_with?("#{destination}/") || destination.start_with?("#{candidate}/")
-        end
+        conflict = registry.add(destination, output.route)
         if conflict
-          error("route_collision", "localized output collides with #{conflict.last}", output.route)
-        else
-          seen[destination] = output.route
+          error("route_collision", "localized output collides with #{conflict}", output.route)
         end
       end
     end

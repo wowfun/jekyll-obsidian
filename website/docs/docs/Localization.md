@@ -7,7 +7,7 @@ tags:
   - i18n
 description: Publish locale overlays with localized navigation, search, and SEO metadata.
 created: 2026-08-04
-updated: 2026-08-04
+updated: 2026-08-06
 ---
 
 # Localization
@@ -78,11 +78,10 @@ messages:
 
 ## Write a translation
 
-Every translated note must explicitly opt into publication:
+Every translated note inherits publication from its public default-language counterpart, so the translated frontmatter can omit `publish`:
 
 ```yaml
 ---
-publish: true
 title: 快速开始
 description: 安装并构建第一个站点。
 tags:
@@ -90,9 +89,9 @@ tags:
 ---
 ```
 
-A translation can replace the body and the translatable properties `title`, `subtitle`, `description`, `tags`, `author`, `categories`, `image`, and `cssclasses`. When the default page opts into top-level navigation, its translation may also replace `navigation.label`. It inherits omitted values from the default note.
+A translation can replace the body and the translatable properties `title`, `subtitle`, `description`, `tags`, `author`, `categories`, `image`, and `cssclasses`. When the default page opts into top-level navigation, its translation may also replace `navigation.label`. It inherits omitted values from the default note. Set the YAML boolean `publish: false` on a translation to disable only that translation and serve the default-language fallback at its localized URL.
 
-Structural properties belong to the default note. This includes `permalink`, `content_type`, `date`, `created`, `updated`, `nav_order`, `nav_exclude`, `aliases`, and `comments`. Omit these properties from the translation; if present, they must exactly match the default value. Always omit `navigation.order` and `navigation.visible` from a translation because any attempt to set them is rejected. Git-derived publication and update dates also come from the default note, so committing a translation does not reorder posts or Blog lists.
+Structural properties belong to the default note. This includes `permalink`, `content_type`, `date`, `created`, `updated`, `nav_order`, `nav_exclude`, `aliases`, and `comments`. Omit these properties from the translation; if present, they must exactly match the default value. Always omit `navigation.order` and `navigation.visible` from a translation because any attempt to set them is rejected. A post without `date` or `created` inherits the default note's Git-derived publication date. `updated` is never derived from Git; omit it unless the default note declares an explicit update date. Committing only a translation therefore changes neither post chronology nor the Blog order.
 
 ## Understand localized URLs and resources
 
@@ -136,7 +135,6 @@ Dates use a deterministic ISO representation in every locale. This avoids Englis
 | --- | --- |
 | Default locale is missing | Add top-level `lang` to `website.i18n.locales`. |
 | Locale manifest is missing or invalid | Add `_locale.yml` at every locale root, provide `name`, and check `hreflang`, `dir`, and message values. |
-| Translation is unpublished | Add the YAML boolean `publish: true` to the translated note. |
 | Translation is orphaned | Create the default note at the same relative path, or remove the translation. |
 | Translation overrides structure | Remove structural properties from the translation, or make them exactly match the default note. |
 | Localized asset is unsupported | Move the binary asset to the default content tree and reference the shared file. |

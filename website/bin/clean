@@ -1,0 +1,97 @@
+#!/usr/bin/env sh
+set -eu
+
+SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)
+PROJECT_DIR=$(CDPATH= cd -- "$SCRIPT_DIR/.." && pwd -P)
+removed_count=0
+
+fail() {
+  printf '%s\n' "Clean failed: $1" >&2
+  exit 1
+}
+
+visit_targets() {
+  callback=$1
+
+  for relative_path in \
+    .jekyll-cache \
+    .jekyll-obsidian-cache \
+    .sass-cache \
+    coverage \
+    playwright-report \
+    blob-report \
+    test-results \
+    .vitest \
+    .nyc_output \
+    tmp \
+    log; do
+    "$callback" "$PROJECT_DIR/$relative_path" directory "$relative_path"
+  done
+
+  "$callback" "$PROJECT_DIR/.jekyll-metadata" file .jekyll-metadata
+
+  for target in "$PROJECT_DIR"/_site "$PROJECT_DIR"/_site-[A-Za-z0-9]*; do
+    if [ ! -e "$target" ] && [ ! -L "$target" ]; then
+      continue
+    fi
+    name=${target##*/}
+    case "$name" in
+      _site) ;;
+      _site-[A-Za-z0-9]*)
+        case "$name" in
+          *[!A-Za-z0-9._-]*) continue ;;
+        esac
+        ;;
+      *) continue ;;
+    esac
+    "$callback" "$target" directory "$name"
+  done
+}
+
+validate_target() {
+  target=$1
+  kind=$2
+  label=$3
+
+  case "$target" in
+    "$PROJECT_DIR"/*) ;;
+    *) fail "$label is outside the site directory." ;;
+  esac
+
+  if [ ! -e "$target" ] && [ ! -L "$target" ]; then
+    return
+  fi
+  [ ! -L "$target" ] || fail "refusing to remove symbolic link $label."
+
+  case "$kind" in
+    directory) [ -d "$target" ] || fail "$label must be a directory." ;;
+    file) [ -f "$target" ] || fail "$label must be a regular file." ;;
+    *) fail "unknown target type for $label." ;;
+  esac
+}
+
+remove_target() {
+  target=$1
+  kind=$2
+
+  if [ ! -e "$target" ]; then
+    return
+  fi
+
+  case "$kind" in
+    directory) rm -rf -- "$target" ;;
+    file) rm -f -- "$target" ;;
+  esac
+  removed_count=$((removed_count + 1))
+}
+
+visit_targets validate_target
+visit_targets remove_target
+
+if [ "$removed_count" -eq 0 ]; then
+  printf '%s\n' "Build output is already clean."
+elif [ "$removed_count" -eq 1 ]; then
+  printf '%s\n' "Removed 1 build output path."
+else
+  printf 'Removed %s build output paths.\n' "$removed_count"
+fi

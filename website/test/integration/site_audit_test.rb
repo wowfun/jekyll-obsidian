@@ -9,6 +9,7 @@ class SiteAuditTest < Minitest::Test
   def test_accepts_a_minimal_allowlisted_site
     Dir.mktmpdir("garden-site-audit") do |site|
       File.write(File.join(site, "index.html"), "<!doctype html><title>Garden</title>")
+      File.write(File.join(site, "index.md"), "# Garden\n")
 
       stdout, stderr, status = audit(site)
       assert status.success?, "#{stdout}\n#{stderr}"
@@ -31,6 +32,17 @@ class SiteAuditTest < Minitest::Test
     Dir.mktmpdir("garden-site-audit") do |site|
       File.write(File.join(site, "index.html"), "<!doctype html><title>Garden</title>")
       File.write(File.join(site, "credentials.pem"), "PRIVATE KEY")
+
+      _stdout, stderr, status = audit(site)
+      refute status.success?
+      assert_includes stderr, "output is not on the extension allowlist"
+    end
+  end
+
+  def test_rejects_markdown_without_a_published_page_counterpart
+    Dir.mktmpdir("garden-site-audit") do |site|
+      File.write(File.join(site, "index.html"), "<!doctype html><title>Garden</title>")
+      File.write(File.join(site, "private.md"), "# Private\n")
 
       _stdout, stderr, status = audit(site)
       refute status.success?

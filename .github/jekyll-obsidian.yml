@@ -4,11 +4,12 @@ title: Jekyll Obsidian
 website:
   # jekyll-obsidian:managed-start
   source: 'website/docs'
-  theme: 'docs'
+  theme: 'minimal'
   # jekyll-obsidian:managed-end
   repository: ""
   edit_branch: main
   i18n:
+    enabled: true
     locales:
       - en
       - zh-CN

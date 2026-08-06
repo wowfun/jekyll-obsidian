@@ -9,7 +9,7 @@ tags:
   - ofm
 description: The OFM v1 authoring surface, with links, embeds, callouts, math, and media.
 created: 2026-07-31
-updated: 2026-07-31
+updated: 2026-08-06
 ---
 
 # Syntax
@@ -83,11 +83,36 @@ An image embed can include its width or width and height:
 
 Local audio, video, and PDF files use native browser controls. In v1, `.3gp` is audio and `.webm` is video. PDF embeds accept page and height options. Canvas and Bases files become download cards because v1 does not execute their data models.
 
+External HTTPS media uses the same Markdown image syntax. GIFs and other supported images keep image semantics and optional Obsidian dimensions. Direct video files use native controls. YouTube, Bilibili, and Vimeo links become privacy-conscious, lazy player frames, while X or Twitter status links become lazy Tweet embeds with a normal link as their fallback.
+
+```md
+![Animation|320x180](https://media.example/loop.gif)
+![Product tour](https://cdn.example/tour.mp4)
+![Conference talk](https://www.youtube.com/watch?v=NnTvZWp5Q7o&t=1m30s)
+![](https://www.bilibili.com/video/BV1E7411e7hC?p=2)
+![](https://vimeo.com/212731897)
+![](https://x.com/obsdmd/status/1580548874246443010)
+```
+
+Use an explicit iframe only when the page cannot be represented by one of those media forms:
+
+```html
+<iframe
+  src="https://example.com/interactive"
+  title="Interactive example"
+  height="560">
+</iframe>
+```
+
+The compiler accepts only HTTPS iframe URLs without credentials or custom ports. It discards authored active attributes, rebuilds known video players from canonical provider URLs, and applies one fixed sandbox to generic pages. Every external embed loads only on pages that contain it and receives the narrow Content Security Policy it needs. Generic frames and Tweets retain plain HTTPS fallback links. Builds never contact the provider. An iframe written inside inline code, a code fence, or a comment remains inert source text.
+
 ## Tags and comments
 
 Inline tags such as #field-notes and nested tags such as #guide/syntax join tags from frontmatter. The site uses one tag index with stable anchors.
 
 Obsidian comments and HTML comments do not appear in HTML, previews, search, graph metadata, or feeds.
+
+Every authored public note also has Copy page and View as Markdown actions. Both use the same frontmatter-free Markdown resource and preserve the authored body, including OFM syntax and comments. Treat comments in a public note as public source text.
 
 %% This sentence is intentionally private to the source. %%
 

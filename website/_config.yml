@@ -7,10 +7,11 @@ baseurl: ""
 website:
   source: website/docs
   syntax_profile: ofm@1
-  theme: docs
+  theme: minimal
   repository: ""
   edit_branch: main
   content:
+    publish_by_default: []
     default_type: page
     directories:
       post:

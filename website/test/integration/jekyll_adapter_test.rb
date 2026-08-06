@@ -70,11 +70,15 @@ class JekyllAdapterTest < Minitest::Test
     assert catalog.start_with?("{\"schema_version\":1")
     refute_includes catalog, "<!doctype html>"
 
+    markdown = File.read(File.join(destination, "index.md"))
+    assert_equal "# Integration\nLiteral {{ site.secret }}.\n![[media/public.png]]\n", markdown
+
     homepage = site.pages.find { |page| page.respond_to?(:website_route) && page.website_route == "/" }
     assert_equal(
       "https://github.com/example/obsidian/edit/main/vault/index.md",
       homepage.data.dig("website", "source_links", "edit")
     )
+    assert_equal "/index.md", homepage.data.dig("website", "markdown_url")
   end
 
   def test_indexless_source_renders_a_verified_root_redirect_to_the_first_page
@@ -115,6 +119,65 @@ class JekyllAdapterTest < Minitest::Test
     assert_includes index, 'href="https://github.com/example/obsidian"'
     assert_includes index, 'aria-label="Jekyll Obsidian on GitHub"'
     assert_match(/Built by.*Jekyll Obsidian.*·.*MIT License.*·.*#{site.time.strftime("%Y")}/m, index)
+  end
+
+  def test_real_themes_render_graph_ui_only_for_cross_note_relations
+    File.write(File.join(@temporary_root, "vault", "index.md"), <<~MARKDOWN)
+      ---
+      publish: true
+      title: Isolated
+      updated: 2026-07-30
+      ---
+      Isolated body.
+    MARKDOWN
+    File.write(File.join(@temporary_root, "vault", "connected.md"), <<~MARKDOWN)
+      ---
+      publish: true
+      title: Connected
+      updated: 2026-07-30
+      ---
+      [[target]]
+    MARKDOWN
+    File.write(File.join(@temporary_root, "vault", "target.md"), <<~MARKDOWN)
+      ---
+      publish: true
+      title: Target
+      updated: 2026-07-30
+      ---
+      Target body.
+    MARKDOWN
+    File.write(File.join(@temporary_root, "vault", "self.md"), <<~MARKDOWN)
+      ---
+      publish: true
+      title: Self
+      updated: 2026-07-30
+      ---
+      [[self]]
+    MARKDOWN
+    install_project_layout
+
+    %w[minimal docs].each do |theme|
+      themed_destination = File.join(@site_root, "_site-#{theme}")
+      build_site(
+        "destination" => themed_destination,
+        "website" => website_config.merge("theme" => theme)
+      ).process
+
+      isolated = File.read(File.join(themed_destination, "index.html"))
+      refute_includes isolated, "data-local-graph-section", theme
+      refute_includes isolated, 'data-dialog="graph-global"', theme
+      refute_includes isolated, 'data-dialog="graph-local"', theme
+
+      self_linked = File.read(File.join(themed_destination, "self", "index.html"))
+      refute_includes self_linked, "data-local-graph-section", theme
+      refute_includes self_linked, 'data-dialog="graph-global"', theme
+      refute_includes self_linked, 'data-dialog="graph-local"', theme
+
+      connected = File.read(File.join(themed_destination, "connected", "index.html"))
+      assert_includes connected, "data-local-graph-section", theme
+      assert_includes connected, 'data-dialog="graph-global"', theme
+      assert_includes connected, 'data-dialog="graph-local"', theme
+    end
   end
 
   def test_obsidian_trash_is_not_compiled_as_public_content
@@ -849,9 +912,10 @@ class JekyllAdapterTest < Minitest::Test
     assert File.file?(File.join(destination, "assets", "website", "docs.js"))
   end
 
-  def test_git_times_are_discovered_for_non_ascii_vault_paths
+  def test_git_first_commit_dates_ignore_later_commits_and_do_not_synthesize_updated
     FileUtils.mkdir_p(File.join(@temporary_root, "vault", "blog"))
-    File.write(File.join(@temporary_root, "vault", "blog", "中文.md"), "---\npublish: true\n---\n# 中文")
+    post_path = File.join(@temporary_root, "vault", "blog", "中文.md")
+    File.write(post_path, "---\npublish: true\n---\n# 中文")
     run_git("init", "--quiet")
     run_git("config", "user.name", "Obsidian Test")
     run_git("config", "user.email", "obsidian@example.test")
@@ -861,11 +925,28 @@ class JekyllAdapterTest < Minitest::Test
       "GIT_COMMITTER_DATE" => "2026-07-31T12:34:56+00:00"
     }
     run_git("commit", "--quiet", "-m", "Unicode fixture", environment: git_environment)
+    File.open(post_path, "a") { |file| file.write("\nLater edit.") }
+    run_git("add", "vault/blog/中文.md")
+    later_environment = {
+      "GIT_AUTHOR_DATE" => "2026-08-01T01:02:03+00:00",
+      "GIT_COMMITTER_DATE" => "2026-08-01T01:02:03+00:00"
+    }
+    run_git("commit", "--quiet", "-m", "Later edit", environment: later_environment)
+    install_project_layout
 
-    build_site.process
+    site = build_site
+    site.process
     feed = File.read(File.join(destination, "feed.xml"))
     assert_includes feed, "2026-07-31T12:34:56Z"
+    refute_includes feed, "2026-08-01T01:02:03Z"
     assert_includes feed, "中文"
+
+    post = site.pages.find { |page| page.data.dig("website", "id") == "blog/中文.md" }
+    refute_nil post
+    assert_nil post.data.dig("website", "updated")
+    post_html = File.read(post.destination(destination))
+    assert_includes post_html, "Published 2026-07-31"
+    refute_includes post_html, "Updated "
   end
 
   def test_missing_deterministic_time_omits_feed_navigation_and_passes_url_verification
@@ -933,7 +1014,7 @@ class JekyllAdapterTest < Minitest::Test
     assert_equal first_output, second_output
   end
 
-  def test_git_times_reuse_the_head_and_source_cache
+  def test_git_first_commit_times_replace_the_legacy_cache_and_are_reused
     status = Object.new
     status.define_singleton_method(:success?) { true }
     calls = []
@@ -947,6 +1028,12 @@ class JekyllAdapterTest < Minitest::Test
     end
     layout = JekyllObsidian::WorkspaceLayout.resolve(site: build_site, source: "vault")
     FileUtils.mkdir_p(layout.jekyll_cache_root)
+    cache_path = File.join(layout.jekyll_cache_root, "jekyll-obsidian-git-times.json")
+    File.write(cache_path, JSON.generate(
+      "head" => "abc123",
+      "source" => "vault",
+      "times" => { "index.md" => { "first" => "2025-01-01T00:00:00Z", "last" => "2025-02-01T00:00:00Z" } }
+    ))
     canary = File.join(@temporary_root, "git-cache-canary.json")
     File.write(canary, "preserve me")
     predictable_temporary = File.join(
@@ -956,14 +1043,18 @@ class JekyllAdapterTest < Minitest::Test
     File.symlink(canary, predictable_temporary)
 
     with_replaced_singleton_method(Open3, :capture3, capture) do
-      first = JekyllObsidian::Adapter.send(:git_time_map, layout)
-      second = JekyllObsidian::Adapter.send(:git_time_map, layout)
+      first = JekyllObsidian::Adapter.send(:git_first_commit_time_map, layout)
+      second = JekyllObsidian::Adapter.send(:git_first_commit_time_map, layout)
       assert_equal first, second
+      assert_equal({ "index.md" => "2026-07-30T00:00:00Z" }, first)
     end
 
     assert_equal 1, calls.count { |command| command.include?("log") }
     assert calls.all? { |command| command[2] == @temporary_root }
-    assert File.file?(File.join(@site_root, ".jekyll-cache", "jekyll-obsidian-git-times.json"))
+    cache = JSON.parse(File.read(cache_path))
+    assert_equal 1, cache.fetch("version")
+    assert_equal({ "index.md" => "2026-07-30T00:00:00Z" }, cache.fetch("first_committed_at"))
+    refute cache.key?("times")
     assert_equal "preserve me", File.read(canary)
     assert File.symlink?(predictable_temporary)
   end

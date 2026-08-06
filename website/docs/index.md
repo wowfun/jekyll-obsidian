@@ -38,6 +38,6 @@ This site is both starter content and the manual for `jekyll-obsidian`. Every pa
 
 ## A useful constraint
 
-The repository is public source material. `publish: true` controls generated site output, not access to committed files. Keep truly private notes in another vault or an uncommitted location.
+The repository is public source material. The publication policy controls generated site output, not access to committed files. Keep truly private notes in another vault or an uncommitted location.
 
-The default build configuration uses the Docs theme. Minimal is the general-purpose choice and uses the same authored content routes without forcing its site navigation into the standalone handbook.
+Minimal is the default build and deployment theme. Docs is the standalone handbook. Both use the same authored content routes without bringing Docs navigation into the general-purpose experience.

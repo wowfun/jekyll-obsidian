@@ -6,7 +6,7 @@ tags:
   - guide/customization
 description: Adjust site identity, visual tokens, navigation, and repository links.
 created: 2026-07-31
-updated: 2026-08-04
+updated: 2026-08-06
 ---
 
 # Customization
@@ -23,12 +23,13 @@ baseurl: ""
 website:
   # jekyll-obsidian:managed-start
   source: docs
-  theme: docs
+  theme: minimal
   # jekyll-obsidian:managed-end
   syntax_profile: ofm@1
   repository: owner/repository
   edit_branch: main
   content:
+    publish_by_default: []
     default_type: doc
     directories:
       post: []
@@ -44,6 +45,19 @@ website:
 `website.source` is relative to the host repository root. The bundled defaults use `source: website/docs`; a generated host override normally uses `source: docs` or another directory outside `website/`.
 
 The canonical commands merge `website/_config.yml`, then `.github/jekyll-obsidian.yml`, then temporary command-line or Pages values. The integration command owns only the marked `source` and `theme` lines in the host file; titles, repository links, content classification, and feature overrides remain editable around that block. `bin/build` pins the Jekyll source, implementation directories, caches, destination, and safety settings to `website/`. Direct `jekyll` commands do not load the host overlay or these ownership safeguards and are not a supported entrypoint.
+
+## Publication defaults
+
+`website.content.publish_by_default` is an array of directories relative to `website.source`. Each entry selects Markdown files in that directory and its descendants. The default is an empty array, which keeps `publish: true` as the required opt-in. Use `.` when every Markdown file in the content tree should publish unless it opts out:
+
+```yaml
+website:
+  content:
+    publish_by_default:
+      - .
+```
+
+An explicit YAML boolean always wins. `publish: false` excludes one note from a selected directory, while `publish: true` includes one note outside those directories. Publication directories do not classify content; `default_type`, `directories.post`, `directories.doc`, and a note's `content_type` still decide whether a published note is a page, post, or document. Attachments remain private unless a published note, its `image` property, or its transclusion closure references them.
 
 ## Site identity
 
@@ -127,7 +141,7 @@ Tabs that do not fit the desktop header move into an accessible More menu. The m
 
 ## Graph and wiki-link previews
 
-Every published note places its one-hop graph above Outline and Relations in the right-hand context rail. The graph contains the current note and every directly linked or embedded public note in the current language partition. An isolated note still shows its own node. Node area grows with its degree in the complete public graph.
+A published note places its one-hop graph above Outline and Relations in the right-hand context rail only when it links to, embeds, is linked from, or is embedded by another public note in the current language partition. The graph contains the current note and those direct neighbours. Isolated notes and notes with only self-links omit the local graph, while the complete graph still contains their nodes. Node area grows with its degree in the complete public graph.
 
 Use the graph's left button to open the complete graph and its right button to enlarge the current note's local graph. In either view, scroll the mouse wheel over the canvas to zoom around the pointer, drag empty canvas space to pan, and drag a neighbouring node to reposition it; the current node stays fixed at the visual centre. Click a node to visit that note, or focus it and press Enter or Space. The complete graph JSON loads only when its dialog is opened and always contains every public node and relation. To keep the page responsive, the SVG viewer declines to render complete graphs above 250 nodes or 1,000 relations and directs readers to local graphs or search instead. There is no generated `/graph/` page or navigation tab, so a published note may use that route.
 
@@ -189,7 +203,7 @@ website:
       - zh-CN
 ```
 
-Add `enabled: true` inside `i18n` for Minimal; add `enabled: false` to keep a configured Docs locale plan dormant. Keep the default language in the normal content tree. Put translated notes at the same relative path below `_translations/<locale>/`, and add `publish: true` to each translation. Every configured locale requires `_locale.yml` at its locale root; `name` is required, while `hreflang`, `dir`, and the closed `messages` catalog are optional. A missing translation does not fail the build. It keeps its localized URL, shows the default-language content with a notice, and is excluded from search-engine indexing and the sitemap.
+Add `enabled: true` inside `i18n` for Minimal; add `enabled: false` to keep a configured Docs locale plan dormant. Keep the default language in the normal content tree. Put translated notes at the same relative path below `_translations/<locale>/`. A translation inherits the publication state of its public default-language note; set `publish: false` on the translation to show the existing default-language fallback instead. Every configured locale requires `_locale.yml` at its locale root; `name` is required, while `hreflang`, `dir`, and the closed `messages` catalog are optional. A missing or disabled translation does not fail the build. It keeps its localized URL, shows the default-language content with a notice, and is excluded from search-engine indexing and the sitemap.
 
 ```yaml
 name: 简体中文
@@ -224,6 +238,8 @@ The compiler accepts this fixed set of note properties:
 - `comments`
 
 Unknown keys never flow into Liquid or generated data. `aliases`, `tags`, `author`, `categories`, and `cssclasses` are string arrays; `subtitle` is a string. `publish`, `nav_exclude`, and `comments` use YAML booleans. `navigation` is the closed mapping documented above. Dates use ISO 8601. A note title comes from `title`, its first level-one heading, or its filename, in that order.
+
+`updated` is optional and appears in page metadata only when the author supplies it; the compiler never infers an update date from Git. A post's publication time uses `date`, then `created`, then its first Git commit. Atom entries use explicit `updated` when present and otherwise use that publication time for posts. A non-post note without `updated` is omitted from the feed.
 
 Minimal Home shows `subtitle` below the article title, then uses `description` or a compiler-generated body excerpt for the summary. When `author` is present, the summary footer lists its values. Both `author` and `categories` join `tags` in the Home Topics area. Their entries may be ordinary strings or wiki links to public notes:
 

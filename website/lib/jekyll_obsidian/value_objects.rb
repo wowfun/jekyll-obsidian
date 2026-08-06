@@ -54,8 +54,7 @@ module JekyllObsidian
     :device,
     :inode,
     :mtime_ns,
-    :first_committed_at,
-    :last_committed_at
+    :first_committed_at
   )
 
   Snapshot = ImmutableRecord.define(:entries)
@@ -88,6 +87,7 @@ module JekyllObsidian
   GeneratedFile = ImmutableRecord.define(:route, :content, :media_type)
   CopiedAsset = ImmutableRecord.define(:source_path, :route, :media_type, :size, :device, :inode, :mtime_ns)
   NoteOutput = ImmutableRecord.define(:id, :title, :route, :properties)
+  ContentSecurityNeeds = ImmutableRecord.define(:media_sources, :frame_sources, :script_sources)
 
   # Internal, immutable hand-off between the OFM compiler and the built-in
   # theme presenters. Keeping rendered note content and all relation-derived
@@ -99,6 +99,7 @@ module JekyllObsidian
     :route,
     :content,
     :properties,
+    :markdown_source,
     :authored_text,
     :preview,
     :outline,
@@ -110,6 +111,7 @@ module JekyllObsidian
     :nav_exclude,
     :has_h1,
     :feature_flags,
+    :content_security,
     :image_url,
     :source_links,
     :topics,

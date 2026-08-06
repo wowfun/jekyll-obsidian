@@ -311,7 +311,7 @@ class NavigationConfigurationTest < Minitest::Test
     projection = JekyllObsidian::SiteNavigation.build(
       model: model,
       settings: navigation,
-      content: JekyllObsidian::VaultCompiler::DEFAULT_CONTENT,
+      content: JekyllObsidian::ContentPolicy::DEFAULT_SETTINGS,
       url_builder: JekyllObsidian::UrlBuilder.new(origin: "https://example.test", baseurl: "/site"),
       theme: "minimal"
     )

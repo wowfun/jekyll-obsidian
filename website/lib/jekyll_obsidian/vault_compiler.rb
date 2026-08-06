@@ -71,10 +71,6 @@ module JekyllObsidian
         "graph" => true, "relations" => true, "previews" => true, "outline" => true
       },
     }.transform_values(&:freeze).freeze
-    DEFAULT_CONTENT = {
-      "default_type" => "page",
-      "directories" => { "post" => ["blog"].freeze, "doc" => ["docs"].freeze }.freeze
-    }.freeze
     MutableNote = Struct.new(
       :id,
       :entry,
@@ -119,6 +115,7 @@ module JekyllObsidian
       :anchor_id,
       :unresolved,
       :property,
+      :external_media,
       keyword_init: true
     )
 
@@ -156,9 +153,10 @@ module JekyllObsidian
       @copied_asset_paths = Set.new
       @transclusion_selection_cache = {}
       @url_builder = nil
-      @theme = "docs"
+      @theme = "minimal"
       @features = THEME_FEATURE_DEFAULTS.fetch(@theme)
-      @content = DEFAULT_CONTENT
+      @content_policy = ContentPolicy.resolve(nil).policy
+      @content = @content_policy.settings
       @comments = disabled_comments_config
       @contacts = []
       @navigation_config = default_navigation_config
@@ -249,12 +247,12 @@ module JekyllObsidian
 
     def resolve_theme_config
       requested = @config.theme.to_s
-      requested = "docs" if requested.empty?
+      requested = "minimal" if requested.empty?
       if THEMES.include?(requested)
         @theme = requested
       else
         error("invalid_theme", "theme must be one of: #{THEMES.join(', ')}")
-        @theme = "docs"
+        @theme = "minimal"
       end
 
       overrides = @config.features
@@ -525,84 +523,10 @@ module JekyllObsidian
     end
 
     def resolve_content_config
-      raw = @config.content
-      unless raw.nil? || raw.is_a?(Hash)
-        error("invalid_content_config", "content must be a mapping")
-        return
-      end
-      raw ||= {}
-      unknown = raw.keys.map(&:to_s) - %w[default_type directories]
-      unknown.each { |key| error("invalid_content_config", "unknown content setting #{key.inspect}") }
-
-      default_type = fetch_hash_value(raw, "default_type") || "page"
-      unless FrontMatter::CONTENT_TYPES.include?(default_type)
-        error("invalid_content_config", "content.default_type must be one of: #{FrontMatter::CONTENT_TYPES.join(', ')}")
-        default_type = "page"
-      end
-
-      directories = if raw.key?("directories") || raw.key?(:directories)
-        fetch_hash_value(raw, "directories")
-      else
-        DEFAULT_CONTENT.fetch("directories")
-      end
-      unless directories.is_a?(Hash)
-        error("invalid_content_directories", "content.directories must be a mapping")
-        directories = {}
-      end
-      unknown_directories = directories.keys.map(&:to_s) - %w[post doc]
-      unknown_directories.each { |key| error("invalid_content_directories", "unknown content directory type #{key.inspect}") }
-
-      normalized = %w[post doc].to_h do |type|
-        values = fetch_hash_value(directories, type) || []
-        unless values.is_a?(Array)
-          error("invalid_content_directories", "content.directories.#{type} must be an array")
-          values = []
-        end
-        valid = values.filter_map { |value| normalize_content_directory(value, type) }.uniq.sort
-        [type, valid]
-      end
-      normalized.fetch("post").product(normalized.fetch("doc")).each do |post_directory, doc_directory|
-        next unless directory_overlaps?(post_directory, doc_directory)
-
-        error(
-          "overlapping_content_directories",
-          "post and doc directories overlap: #{post_directory.inspect} and #{doc_directory.inspect}"
-        )
-      end
-      @content = {
-        "default_type" => default_type,
-        "directories" => normalized.transform_values(&:freeze).freeze
-      }.freeze
-    end
-
-    def fetch_hash_value(hash, key)
-      hash.key?(key) ? hash[key] : hash[key.to_sym]
-    end
-
-    def normalize_content_directory(value, type)
-      unless FrontMatter.valid_output_text?(value)
-        error("invalid_content_directory", "content.directories.#{type} entries must be strings")
-        return nil
-      end
-      if value.empty? || value.start_with?("/", "\\") || value.include?("\\") || value != value.unicode_normalize(:nfc)
-        error("invalid_content_directory", "content directories must be normalized vault-relative POSIX paths")
-        return nil
-      end
-      segments = value.split("/", -1)
-      if segments.any? { |segment| segment.empty? || segment == "." || segment == ".." }
-        error("invalid_content_directory", "content directories must not contain empty or traversal segments")
-        return nil
-      end
-      value
-    rescue EncodingError
-      error("invalid_content_directory", "content directories must be valid Unicode")
-      nil
-    end
-
-    def directory_overlaps?(first, second)
-      left = first.downcase(:fold)
-      right = second.downcase(:fold)
-      left == right || left.start_with?("#{right}/") || right.start_with?("#{left}/")
+      resolution = ContentPolicy.resolve(@config.content)
+      @diagnostics.concat(resolution.diagnostics)
+      @content_policy = resolution.policy
+      @content = @content_policy.settings
     end
 
     def index_snapshot
@@ -629,14 +553,15 @@ module JekyllObsidian
           @all_note_paths << path
           parsed = FrontMatter.parse(path, entry.bytes.to_s)
           @diagnostics.concat(parsed.diagnostics)
-          if parsed.properties.key?("navigation") && parsed.properties["publish"] != true
+          published = @content_policy.publish?(path, parsed.properties)
+          if parsed.properties.key?("navigation") && !published
             error(
               "unpublished_page_navigation",
               "navigation frontmatter is only supported on published pages",
               path
             )
           end
-          next unless parsed.properties["publish"] == true
+          next unless published
           unless FrontMatter.valid_output_text?(parsed.body)
             error("invalid_character", "public note body contains a character forbidden by XML 1.0", path)
             next
@@ -683,9 +608,12 @@ module JekyllObsidian
         if note.id == "index.md" && note.route != "/"
           error("invalid_home_permalink", "the public root index must publish at /", note.id)
         end
-        note.updated = deterministic_updated(note)
+        note.updated = note.properties["updated"]
         note.created = deterministic_created(note)
-        note.content_type = classify_content(note)
+        if note.id == "index.md" && note.properties["content_type"] && note.properties["content_type"] != "page"
+          error("invalid_root_content_type", "the public root index must have content_type: page", note.id)
+        end
+        note.content_type = @content_policy.classify(note.id, note.properties)
         note.nav_order = note.properties["nav_order"]
         note.nav_exclude = note.properties["nav_exclude"] == true
         note.published_at = published_at(note)
@@ -711,21 +639,6 @@ module JekyllObsidian
           note_routes[key] = note.id
         end
       end
-    end
-
-    def classify_content(note)
-      explicit = note.properties["content_type"]
-      if note.id == "index.md"
-        error("invalid_root_content_type", "the public root index must have content_type: page", note.id) if explicit && explicit != "page"
-        return "page"
-      end
-      return explicit if explicit
-
-      directory = File.dirname(note.id)
-      matches = @content.fetch("directories").flat_map do |type, configured|
-        configured.filter_map { |prefix| type if directory == prefix || directory.start_with?("#{prefix}/") }
-      end
-      matches.first || @content.fetch("default_type")
     end
 
     def published_at(note)
@@ -806,6 +719,24 @@ module JekyllObsidian
         )
       end
 
+      note.scanner.iframes.each do |iframe|
+        descriptor = ExternalMedia.resolve_iframe(iframe.html, closed: iframe.closed)
+        note.occurrences << Occurrence.new(
+          index: note.occurrences.length,
+          source_id: note.id,
+          raw_target: descriptor.source_url,
+          display: descriptor.title,
+          kind: :embed,
+          syntax: :html_iframe,
+          source_span: iframe.source_span,
+          scanner_token: iframe.token,
+          resolved_type: :external_media,
+          external_media: descriptor
+        )
+      rescue ExternalMedia::Invalid => exception
+        error("invalid_external_media", exception.message, note.id, iframe.source_span)
+      end
+
       note.scanner.wikilinks.each do |link|
         note.occurrences << Occurrence.new(
           index: note.occurrences.length,
@@ -824,7 +755,10 @@ module JekyllObsidian
         when :link, :image
           raw_url = node.url.to_s
           next if raw_url.empty?
-          next if external_url?(raw_url, note.id, source_span(node.source_position), media: node.type == :image)
+          if external_url?(raw_url, note.id, source_span(node.source_position), media: node.type == :image)
+            annotate_external_media(note, node, raw_url) if node.type == :image
+            next
+          end
 
           display = plain_node_text(node)
           occurrence_target = raw_url
@@ -846,6 +780,54 @@ module JekyllObsidian
           node.url = token_url(occurrence.index)
         end
       end
+    end
+
+    def annotate_external_media(note, node, raw_url)
+      descriptor = ExternalMedia.resolve(raw_url)
+      return unless descriptor
+
+      if descriptor.kind != :image && node.parent&.type != :paragraph
+        error(
+          "invalid_external_media",
+          "block external media must use a standalone Markdown image",
+          note.id,
+          source_span(node.source_position)
+        )
+        return
+      end
+
+      display = plain_node_text(node)
+      options = {}
+      if descriptor.kind == :image
+        display, options = external_image_display(display)
+      end
+      occurrence = Occurrence.new(
+        index: note.occurrences.length,
+        source_id: note.id,
+        raw_target: raw_url,
+        display: display,
+        kind: :embed,
+        syntax: :markdown_image,
+        source_span: source_span(node.source_position),
+        resolved_type: :external_media,
+        options: options,
+        external_media: descriptor
+      )
+      note.occurrences << occurrence
+      node.url = token_url(occurrence.index)
+    rescue ExternalMedia::Invalid => exception
+      error("invalid_external_media", exception.message, note.id, source_span(node.source_position))
+    end
+
+    def external_image_display(display)
+      if (dimension = display.match(/\A(\d+)(?:x(\d+))?\z/))
+        return ["", { "width" => dimension[1].to_i, "height" => dimension[2]&.to_i }.compact]
+      end
+      if (dimension = display.match(/\A(.*)\|(\d+)(?:x(\d+))?\z/m))
+        return [dimension[1], { "width" => dimension[2].to_i, "height" => dimension[3]&.to_i }.compact]
+      end
+
+      [display, {}]
     end
 
     def annotate_frontmatter_topics(note)
@@ -880,7 +862,7 @@ module JekyllObsidian
     def resolve_all_occurrences
       @notes.values.sort_by(&:id).each do |note|
         note.occurrences.each do |occurrence|
-          resolve_occurrence(note, occurrence)
+          resolve_occurrence(note, occurrence) unless occurrence.resolved_type == :external_media
           if occurrence.resolved_type == :note
             @relations << Relation.new(
               source_id: note.id,
@@ -1115,6 +1097,11 @@ module JekyllObsidian
         node["data-website-occurrence"] = occurrence.index.to_s if node
       end
 
+      note.occurrences.select { |occurrence| occurrence.syntax == :html_iframe }.each do |occurrence|
+        node = fragment.at_css("website-ofm-iframe[data-token='#{occurrence.scanner_token}']")
+        node["data-website-occurrence"] = occurrence.index.to_s if node
+      end
+
       note.occurrences.select { |occurrence| %i[markdown_link markdown_image].include?(occurrence.syntax) }.each do |occurrence|
         selector = occurrence.syntax == :markdown_image ? "img[src='#{token_url(occurrence.index)}']" : "a[href='#{token_url(occurrence.index)}']"
         node = fragment.at_css(selector)
@@ -1132,13 +1119,13 @@ module JekyllObsidian
 
     def promote_embed_placeholders(fragment)
       fragment.css("p").to_a.each do |paragraph|
-        next if paragraph.xpath("./website-embed").empty?
+        next unless paragraph.children.any? { |child| block_embed_node?(child) }
 
         replacement = Nokogiri::HTML5.fragment("")
         inline = new_paragraph_like(paragraph)
         discard_break = false
         paragraph.children.to_a.each do |child|
-          if child.element? && child.name == "website-embed"
+          if block_embed_node?(child)
             replacement.add_child(inline) if meaningful_paragraph?(inline)
             inline = new_paragraph_like(paragraph)
             replacement.add_child(child.unlink)
@@ -1152,6 +1139,17 @@ module JekyllObsidian
         end
         replacement.add_child(inline) if meaningful_paragraph?(inline)
         paragraph.replace(replacement)
+      end
+      fragment.css("p").each { |paragraph| paragraph.remove unless meaningful_paragraph?(paragraph) }
+    end
+
+    def block_embed_node?(node)
+      return false unless node.element?
+      return true if node.name == "website-embed"
+
+      classes = node["class"].to_s.split
+      classes.any? do |name|
+        %w[website-external-player website-external-video website-external-frame website-tweet].include?(name)
       end
     end
 
@@ -1195,7 +1193,38 @@ module JekyllObsidian
         end
       elsif occurrence.resolved_type == :attachment
         transform_attachment_node(occurrence, node)
+      elsif occurrence.resolved_type == :external_media
+        transform_external_media_node(occurrence, node)
       end
+    end
+
+    def transform_external_media_node(occurrence, node)
+      descriptor = occurrence.external_media
+      if descriptor.kind != :image && node.parent&.name != "p"
+        error(
+          "invalid_external_media",
+          "block external media must use a standalone Markdown image",
+          occurrence.source_id,
+          occurrence.source_span
+        )
+        return
+      end
+
+      replacement = case descriptor.kind
+      when :image
+        image_node(node.document, occurrence, descriptor.source_url)
+      when :direct_video
+        external_video_node(node.document, descriptor, occurrence.display)
+      when :player
+        external_player_node(node.document, descriptor, occurrence.display)
+      when :web_frame
+        external_web_frame_node(node.document, descriptor)
+      when :tweet
+        tweet_node(node.document, descriptor)
+      else
+        raise "unsupported external media descriptor: #{descriptor.kind.inspect}"
+      end
+      node.replace(replacement)
     end
 
     def transform_attachment_node(occurrence, node)
@@ -1410,6 +1439,11 @@ module JekyllObsidian
           route: note.route,
           content: content,
           properties: note.properties,
+          markdown_source: PublishedMarkdown.content(
+            title: note.title,
+            body: note.body,
+            has_h1: note.has_h1
+          ),
           authored_text: note.authored_text,
           preview: note.preview,
           outline: note.outline,
@@ -1421,6 +1455,7 @@ module JekyllObsidian
           nav_exclude: note.nav_exclude,
           has_h1: note.has_h1,
           feature_flags: note.feature_flags,
+          content_security: content_security_needs(content),
           image_url: published_image_url(note),
           source_links: repository_links(note.id),
           topics: published_topics(note),
@@ -1436,6 +1471,24 @@ module JekyllObsidian
         relations: relations,
         graph_edges: graph_edges,
         graph_degrees: graph_degrees_for(notes, graph_edges)
+      )
+    end
+
+    def content_security_needs(content)
+      fragment = Nokogiri::HTML5.fragment(content)
+      media_sources = fragment.css("video[src], audio[src], video source[src], audio source[src]")
+        .filter_map { |node| ExternalMedia.https_origin(node["src"]) }
+        .uniq
+        .sort
+      frame_sources = fragment.css("iframe[src]")
+        .filter_map { |node| ExternalMedia.https_origin(node["src"]) }
+        .uniq
+        .sort
+      tweet = !fragment.at_css("[data-website-tweet]").nil?
+      ContentSecurityNeeds.new(
+        media_sources: media_sources,
+        frame_sources: (frame_sources + (tweet ? ["https://platform.twitter.com"] : [])).uniq.sort,
+        script_sources: tweet ? ["https://platform.twitter.com"] : []
       )
     end
 
@@ -1684,7 +1737,7 @@ module JekyllObsidian
     end
 
     def build_generated_files(pages, model, theme_output)
-      theme_output.artifacts.filter_map do |artifact|
+      artifacts = theme_output.artifacts.filter_map do |artifact|
         case artifact
         when "catalog"
           json_file("/assets/website/catalog.v1.json", catalog_payload(model))
@@ -1702,6 +1755,14 @@ module JekyllObsidian
           raise ArgumentError, "unknown generated artifact #{artifact.inspect}"
         end
       end
+      markdown = model.notes.map do |note|
+        GeneratedFile.new(
+          route: PublishedMarkdown.route(note.route),
+          content: note.markdown_source,
+          media_type: "text/markdown"
+        )
+      end
+      artifacts + markdown
     end
 
     def catalog_payload(model)
@@ -1794,7 +1855,7 @@ module JekyllObsidian
 
       missing = candidates.select { |note| feed_timestamp(note).nil? }
       unless missing.empty?
-        warning("feed_omitted_missing_time", "feed omitted #{missing.length} public note(s) without property or Git update time")
+        warning("feed_omitted_missing_time", "feed omitted #{missing.length} public note(s) without an explicit update time or post publication time")
       end
 
       candidates -= missing
@@ -1851,13 +1912,12 @@ module JekyllObsidian
     end
 
     def preflight_routes(pages, generated_files, copied_assets, reserved_namespaces)
-      registry = {}
+      registry = DestinationRegistry.new
       (pages + generated_files + copied_assets).each do |output|
-        key = @url_builder.collision_key(output.route)
-        if registry.key?(key)
-          error("route_collision", "output route collides with #{registry[key]}", output.route)
-        else
-          registry[key] = output.route
+        destination = destination_key(output)
+        conflict = registry.add(destination, output.route)
+        if conflict
+          error("route_collision", "output route collides with #{conflict}", output.route)
         end
       end
 
@@ -1874,6 +1934,15 @@ module JekyllObsidian
       return unless production? && @notes.any?
       index_count = pages.count { |page| page.route == "/" }
       error("invalid_index_count", "production must generate exactly one /index.html", nil) unless index_count == 1
+    end
+
+    def destination_key(output)
+      key = @url_builder.collision_key(output.route)
+      if output.is_a?(PageOutput)
+        key.end_with?("/") ? "#{key}index.html" : key
+      else
+        output.route.end_with?("/") ? key : key.delete_suffix("/")
+      end
     end
 
     def resolve_note_path(source_id, raw_target)
@@ -1963,10 +2032,6 @@ module JekyllObsidian
     def attachment_extension?(target)
       extension = File.extname(target).downcase
       !extension.empty? && extension != NOTE_EXTENSION
-    end
-
-    def deterministic_updated(note)
-      note.properties["updated"] || note.entry.last_committed_at
     end
 
     def deterministic_created(note)
@@ -2067,11 +2132,91 @@ module JekyllObsidian
       node = Nokogiri::XML::Node.new(name, document)
       node["controls"] = "controls"
       node["preload"] = "metadata"
+      node["playsinline"] = "playsinline" if name == "video"
       source = Nokogiri::XML::Node.new("source", document)
       source["src"] = href
       source["type"] = media_type.to_s unless media_type.to_s.empty?
       node.add_child(source)
       node
+    end
+
+    def external_video_node(document, descriptor, label)
+      node = media_node(document, "video", descriptor.source_url, descriptor.media_type)
+      node["class"] = "website-external-video"
+      node["aria-label"] = label.to_s.strip unless label.to_s.strip.empty?
+      fallback = Nokogiri::XML::Node.new("a", document)
+      fallback["href"] = descriptor.fallback_url
+      fallback["rel"] = "noopener noreferrer"
+      fallback.content = label.to_s.strip.empty? ? "Open video" : label.to_s.strip
+      node.add_child(fallback)
+      node
+    end
+
+    def external_player_node(document, descriptor, label)
+      node = Nokogiri::XML::Node.new("iframe", document)
+      node["class"] = "website-external-player website-external-player--#{descriptor.provider}"
+      node["data-website-external-player"] = descriptor.provider.to_s
+      node["src"] = descriptor.source_url
+      node["title"] = label.to_s.strip.empty? ? (descriptor.title || external_player_title(descriptor.provider)) : label.to_s.strip
+      node["loading"] = "lazy"
+      node["referrerpolicy"] = "strict-origin-when-cross-origin"
+      node["allow"] = descriptor.iframe_allow if descriptor.iframe_allow
+      node["allowfullscreen"] = "allowfullscreen"
+      node["width"] = descriptor.width.to_s if descriptor.width
+      node["height"] = descriptor.height.to_s if descriptor.height
+      node
+    end
+
+    def external_web_frame_node(document, descriptor)
+      wrapper = Nokogiri::XML::Node.new("figure", document)
+      wrapper["class"] = "website-external-frame"
+      frame = Nokogiri::XML::Node.new("iframe", document)
+      frame["class"] = "website-external-frame__viewport"
+      frame["data-website-external-frame"] = "web"
+      frame["src"] = descriptor.source_url
+      frame["title"] = descriptor.title
+      frame["loading"] = "lazy"
+      frame["referrerpolicy"] = "strict-origin-when-cross-origin"
+      frame["sandbox"] = descriptor.iframe_sandbox
+      frame["allowfullscreen"] = "allowfullscreen"
+      frame["width"] = descriptor.width.to_s if descriptor.width
+      frame["height"] = descriptor.height.to_s
+      wrapper.add_child(frame)
+      fallback = Nokogiri::XML::Node.new("a", document)
+      fallback["class"] = "website-external-frame__fallback"
+      fallback["href"] = descriptor.fallback_url
+      fallback["target"] = "_blank"
+      fallback["rel"] = "noopener noreferrer"
+      fallback.content = "Open embedded page"
+      wrapper.add_child(fallback)
+      wrapper
+    end
+
+    def tweet_node(document, descriptor)
+      wrapper = Nokogiri::XML::Node.new("figure", document)
+      wrapper["class"] = "website-tweet"
+      wrapper["data-website-tweet"] = descriptor.identifier
+      mount = Nokogiri::XML::Node.new("div", document)
+      mount["class"] = "website-tweet__mount"
+      mount["data-website-tweet-mount"] = ""
+      wrapper.add_child(mount)
+      fallback = Nokogiri::XML::Node.new("a", document)
+      fallback["class"] = "website-tweet__fallback"
+      fallback["data-website-tweet-fallback"] = ""
+      fallback["href"] = descriptor.fallback_url
+      fallback["target"] = "_blank"
+      fallback["rel"] = "noopener noreferrer"
+      fallback.content = "View post on X"
+      wrapper.add_child(fallback)
+      wrapper
+    end
+
+    def external_player_title(provider)
+      {
+        youtube: "YouTube video player",
+        bilibili: "Bilibili video player",
+        vimeo: "Vimeo video player"
+      }.fetch(provider, "Video player")
     end
 
     def pdf_node(document, occurrence, href)

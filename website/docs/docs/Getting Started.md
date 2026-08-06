@@ -43,7 +43,9 @@ tags:
 ---
 ```
 
-The value must be the boolean `true`. The strings `"true"` and `"yes"` are invalid. A Markdown file without frontmatter, or with `publish: false`, stays out of HTML, search, graph data, feeds, sitemaps, and copied assets. The configured content directory's `.obsidian/` and `.trash/` trees are excluded before this publication check.
+The value must be the boolean `true`. The strings `"true"` and `"yes"` are invalid. Without publication defaults, a Markdown file that omits `publish` stays out of HTML, search, graph data, feeds, sitemaps, and copied assets.
+
+To publish a directory recursively, add its source-relative path to `website.content.publish_by_default`. The special path `.` selects the complete content tree. Within that scope, set `publish: false` on an individual note to keep it out of the site. An explicit `publish: true` can still include a note outside the configured directories. The configured content directory's `.obsidian/` and `.trash/` trees are excluded before this publication check.
 
 ## Add links and attachments
 

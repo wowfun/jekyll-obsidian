@@ -5,8 +5,9 @@ require "cgi/escape"
 module JekyllObsidian
   class OfmScanner
     Embed = Struct.new(:target, :source_span, :token, keyword_init: true)
+    Iframe = Struct.new(:html, :source_span, :token, :closed, keyword_init: true)
     Wikilink = Struct.new(:target, :display, :source_span, :token, keyword_init: true)
-    Result = Struct.new(:markdown, :block_ids, :embeds, :wikilinks, :tags, keyword_init: true)
+    Result = Struct.new(:markdown, :block_ids, :embeds, :iframes, :wikilinks, :tags, keyword_init: true)
 
     VOID_HTML_TAGS = %w[
       area base basefont bgsound br col command embed frame hr img input keygen
@@ -25,20 +26,24 @@ module JekyllObsidian
       @inline_code_delimiter = nil
       @raw_html_stack = []
       @html_tag = nil
+      @iframe_body = nil
       @list_quote_depth = nil
       @list_indents = []
       @block_ids = []
       @embeds = []
+      @iframes = []
       @wikilinks = []
       @tags = []
     end
 
     def prepare
       output = @markdown.lines.map.with_index(1) { |line, line_number| process_line(line, line_number) }.join
+      capture_unfinished_iframe
       Result.new(
         markdown: output,
         block_ids: @block_ids,
         embeds: @embeds,
+        iframes: @iframes,
         wikilinks: @wikilinks,
         tags: @tags.uniq
       )
@@ -82,8 +87,10 @@ module JekyllObsidian
       cursor = 0
 
       while cursor < line.length
-        if @html_tag
-          cursor = continue_html_tag(line, cursor, output)
+        if @iframe_body
+          cursor = continue_iframe_body(line, cursor, output)
+        elsif @html_tag
+          cursor = continue_html_tag(line, cursor, output, line_number)
         elsif @html_comment
           cursor = continue_comment(line, cursor, output, "-->", :@html_comment)
         elsif @ofm_comment
@@ -113,7 +120,7 @@ module JekyllObsidian
             cursor += 2
           end
         elsif line[cursor] == "<" && (tag = html_tag_start(line, cursor))
-          cursor = start_html_tag(line, cursor, output, tag)
+          cursor = start_html_tag(line, cursor, output, tag, line_number)
         elsif !@raw_html_stack.empty?
           output << line[cursor]
           cursor += 1
@@ -359,28 +366,97 @@ module JekyllObsidian
       { name: match[2].downcase, closing: !match[1].nil? }
     end
 
-    def start_html_tag(line, cursor, output, tag)
-      @html_tag = tag.merge(quote: nil, last_nonspace: nil)
-      continue_html_tag(line, cursor, output)
+    def start_html_tag(line, cursor, output, tag, line_number)
+      capture_iframe = tag[:name] == "iframe" && !tag[:closing]
+      @html_tag = tag.merge(
+        quote: nil,
+        last_nonspace: nil,
+        capture_iframe: capture_iframe,
+        raw: capture_iframe ? +"" : nil,
+        start_line: line_number,
+        start_column: cursor + 1,
+        end_line: line_number,
+        end_column: cursor + 1
+      )
+      continue_html_tag(line, cursor, output, line_number)
     end
 
-    def continue_html_tag(line, cursor, output)
+    def continue_html_tag(line, cursor, output, line_number)
       while cursor < line.length
         character = line[cursor]
-        output << character
+        if @html_tag[:capture_iframe]
+          @html_tag[:raw] << character
+          @html_tag[:end_line] = line_number
+          @html_tag[:end_column] = cursor + 1
+        else
+          output << character
+        end
         if @html_tag[:quote]
           @html_tag[:quote] = nil if character == @html_tag[:quote]
         elsif character == '"' || character == "'"
           @html_tag[:quote] = character
         elsif character == ">"
+          captured = @html_tag[:capture_iframe]
+          self_closing = @html_tag[:last_nonspace] == "/"
+          tag = @html_tag
           finish_html_tag
+          if captured
+            iframe = Iframe.new(
+              html: tag.fetch(:raw),
+              source_span: SourceSpan.new(
+                start_line: tag.fetch(:start_line),
+                start_column: tag.fetch(:start_column),
+                end_line: line_number,
+                end_column: cursor + 1
+              ),
+              token: @iframes.length,
+              closed: self_closing
+            )
+            @iframes << iframe
+            output << %(<website-ofm-iframe data-token="#{iframe.token}"></website-ofm-iframe>)
+            @iframe_body = iframe unless self_closing
+          end
           return cursor + 1
         elsif !character.match?(/\s/)
           @html_tag[:last_nonspace] = character
         end
         cursor += 1
       end
+      if @html_tag[:capture_iframe]
+        ending = line_ending(line)
+        output << ending unless ending.empty? || output.end_with?(ending)
+      end
       cursor
+    end
+
+    def capture_unfinished_iframe
+      tag = @html_tag
+      return unless tag&.fetch(:capture_iframe, false)
+
+      @iframes << Iframe.new(
+        html: tag.fetch(:raw),
+        source_span: SourceSpan.new(
+          start_line: tag.fetch(:start_line),
+          start_column: tag.fetch(:start_column),
+          end_line: tag.fetch(:end_line),
+          end_column: tag.fetch(:end_column)
+        ),
+        token: @iframes.length,
+        closed: false
+      )
+    end
+
+    def continue_iframe_body(line, cursor, output)
+      match = line.match(%r{</\s*iframe\s*>}i, cursor)
+      unless match
+        ending = line_ending(line)
+        output << ending unless ending.empty? || output.end_with?(ending)
+        return line.length
+      end
+
+      @iframe_body.closed = true
+      @iframe_body = nil
+      match.end(0)
     end
 
     def finish_html_tag
@@ -388,7 +464,7 @@ module JekyllObsidian
       if tag[:closing]
         matching = @raw_html_stack.rindex(tag[:name])
         @raw_html_stack.slice!(matching..) if matching
-      elsif tag[:last_nonspace] != "/" && !VOID_HTML_TAGS.include?(tag[:name])
+      elsif !tag[:capture_iframe] && tag[:last_nonspace] != "/" && !VOID_HTML_TAGS.include?(tag[:name])
         @raw_html_stack << tag[:name]
       end
       @html_tag = nil

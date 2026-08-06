@@ -20,7 +20,6 @@
     {% for edge in local_graph.edges %}<i data-graph-edge data-edge-source="{{ edge.source | escape }}" data-edge-target="{{ edge.target | escape }}" data-edge-kind="{{ edge.kind | escape }}" data-edge-count="{{ edge.count }}"></i>{% endfor %}
   </template>
   <div class="local-graph__fallback" data-graph-fallback>
-    {% assign neighbour_count = local_graph.nodes.size | minus: 1 %}
-    {% if neighbour_count > 0 %}<ul class="relation-list">{% for node in local_graph.nodes %}{% unless node.id == local_graph.current_id %}<li><a href="{{ node.url | escape }}">{{ node.title | escape }}</a></li>{% endunless %}{% endfor %}</ul>{% else %}<p class="relation-empty">{{ ui.isolated_graph | default: 'This note has no linked neighbours yet.' | escape }}</p>{% endif %}
+    <ul class="relation-list">{% for node in local_graph.nodes %}{% unless node.id == local_graph.current_id %}<li><a href="{{ node.url | escape }}">{{ node.title | escape }}</a></li>{% endunless %}{% endfor %}</ul>
   </div>
 </section>

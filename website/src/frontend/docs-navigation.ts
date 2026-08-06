@@ -4,6 +4,7 @@ export const DOCS_PAGE_CHANGE_EVENT = "website:docs-page-change";
 
 const navigationController = Symbol.for("jekyll-obsidian.docs-navigation-controller");
 const PAGE_HEAD_SELECTOR = "[data-page-head]";
+const PAGE_CSP_SELECTOR = "meta[data-page-csp]";
 
 type ControlledDocument = Document & { [navigationController]?: () => void };
 
@@ -102,7 +103,17 @@ function syncLanguageSwitcher(source: Document): void {
   if (currentPanel && nextPanel) currentPanel.replaceChildren(...[...nextPanel.childNodes].map((node) => document.importNode(node, true)));
 }
 
+export function sameContentSecurityPolicy(source: Document): boolean {
+  const currentCsp = document.head.querySelector<HTMLMetaElement>(PAGE_CSP_SELECTOR)?.content;
+  const nextCsp = source.head.querySelector<HTMLMetaElement>(PAGE_CSP_SELECTOR)?.content;
+  return Boolean(currentCsp && currentCsp === nextCsp);
+}
+
 function commitPage(source: Document, url: URL, push: boolean): void {
+  if (!sameContentSecurityPolicy(source)) {
+    throw new TypeError("Destination requires a different Content Security Policy");
+  }
+
   const currentMain = document.querySelector<HTMLElement>("[data-docs-main]");
   const nextMain = source.querySelector<HTMLElement>("[data-docs-main]");
   const currentTheme = [...document.body.classList].find((name) => name.startsWith("theme-"));

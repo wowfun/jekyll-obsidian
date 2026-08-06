@@ -1,0 +1,11 @@
+title: Browser i18n fixture
+lang: en
+
+website:
+  source: website/docs
+  theme: docs
+  i18n:
+    enabled: true
+    locales:
+      - en
+      - zh-CN

@@ -42,6 +42,14 @@ messages:
   view_source: 查看源码
   report_issue: 报告问题
   contribute: 参与编辑本页
+  copy_page: 复制页面
+  copy_page_description: 以 Markdown 复制页面，供 LLM 使用
+  view_as_markdown: 以 Markdown 查看
+  view_as_markdown_description: 以纯文本查看本页
+  more_page_actions: 更多页面操作
+  copied: 已复制
+  copy_failed: 复制失败。请打开「以 Markdown 查看」后手动复制。
+  opens_in_new_tab: 在新标签页中打开
   documentation_sequence: 文档顺序
   search_title: 搜索本站
   close_search: 关闭搜索
@@ -82,7 +90,6 @@ messages:
   local_graph: 局部关系图
   close_full_graph: 关闭完整关系图
   close_local_graph: 关闭局部关系图
-  isolated_graph: 此笔记暂时没有关联笔记。
   graph_loading: 正在载入关系图…
   graph_unavailable: 无法载入交互式关系图，请使用下方的关联笔记列表。
   graph_too_large: 完整关系图规模过大，无法交互渲染；请改用局部关系图或搜索。
@@ -96,6 +103,8 @@ messages:
   missing_fragment: 找不到片段：{label}
   download_pdf: 下载 PDF
   download: 下载
+  open_embedded_page: 打开嵌入页面
+  view_post_on_x: 在 X 查看帖子
   built_by: 构建工具
   project_on_github: GitHub 上的 Jekyll Obsidian
   topics: 主题

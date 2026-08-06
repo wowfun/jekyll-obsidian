@@ -3,6 +3,19 @@
 require "test_helper"
 
 class UrlSecurityTest < Minitest::Test
+  def test_destination_registry_detects_exact_and_ancestor_collisions
+    registry = JekyllObsidian::DestinationRegistry.new
+
+    assert_nil registry.add("/guide/index.html", "/guide/")
+    assert_equal "/guide/", registry.add("/guide/index.html", "/duplicate/")
+    assert_equal "/guide/", registry.add("/guide", "/guide-file")
+    assert_nil registry.add("/guides/index.html", "/guides/")
+
+    ancestor_first = JekyllObsidian::DestinationRegistry.new
+    assert_nil ancestor_first.add("/manual", "/manual-file")
+    assert_equal "/manual-file", ancestor_first.add("/manual/start/index.html", "/manual/start/")
+  end
+
   def test_permalink_rejects_encoded_separators_dot_segments_and_controls
     builder = JekyllObsidian::UrlBuilder.new(origin: "https://example.test", baseurl: "")
     invalid = [

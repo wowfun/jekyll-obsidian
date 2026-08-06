@@ -64,7 +64,13 @@ class LocalizedCompilerTest < Minitest::Test
 
     source = translated.data.dig("website", "source_links", "source")
     assert_includes URI.decode_uri_component(source), "vault/_translations/zh-CN/docs/Guide.md"
-    assert_equal %w[/assets/website/catalog.v1.json /assets/website/graph.v1.json /assets/website/i18n/zh-CN/catalog.v1.json /assets/website/i18n/zh-CN/graph.v1.json /assets/website/i18n/zh-CN/search.v1.json /assets/website/search.v1.json /sitemap.xml], result.generated_files.map(&:route)
+    assert_equal %w[/docs/Fallback.md /docs/Guide.md /index.md /zh-CN/docs/Fallback.md /zh-CN/docs/Guide.md /zh-CN/index.md],
+      result.generated_files.select { |file| file.media_type == "text/markdown" }.map(&:route)
+    artifacts = result.generated_files.reject { |file| file.media_type == "text/markdown" }
+    assert_equal %w[/assets/website/catalog.v1.json /assets/website/graph.v1.json /assets/website/i18n/zh-CN/catalog.v1.json /assets/website/i18n/zh-CN/graph.v1.json /assets/website/i18n/zh-CN/search.v1.json /assets/website/search.v1.json /sitemap.xml], artifacts.map(&:route)
+    assert_equal "# 指南\n[[docs/Fallback]]\n", result.generated_files.find { |file| file.route == "/zh-CN/docs/Guide.md" }.content
+    assert_equal "# Default only\n", result.generated_files.find { |file| file.route == "/zh-CN/docs/Fallback.md" }.content
+    assert_equal "/zh-CN/docs/Guide.md", translated.data.dig("website", "markdown_url")
     localized_graph = generated_json(result, "/assets/website/i18n/zh-CN/graph.v1.json")
     assert localized_graph.fetch("nodes").all? { |node| node.fetch("url").start_with?("/zh-CN/") }
     assert_equal %w[en zh-CN], result.site_data.dig("website_i18n", "locales").map { |locale| locale.fetch("code") }
@@ -145,6 +151,7 @@ class LocalizedCompilerTest < Minitest::Test
     assert_equal "/manual/zh-CN/docs/Guide/", translated.data.dig("website", "href")
     assert_includes translated.content, 'href="/manual/zh-CN/docs/Fallback/"'
     assert_equal "/manual/assets/website/i18n/zh-CN/search.v1.json", translated.data.dig("website", "resources", "search")
+    assert_equal "/manual/zh-CN/docs/Guide.md", translated.data.dig("website", "markdown_url")
     refute_includes translated.content, "/manual/manual/"
   end
 
@@ -247,13 +254,24 @@ class LocalizedCompilerTest < Minitest::Test
     assert_includes codes, "localized_asset_unsupported"
   end
 
-  def test_translation_must_explicitly_publish_and_paths_must_be_normalized
-    unpublished = note("_translations/zh-CN/docs/Guide.md", "---\ntitle: 指南\n---\n# 指南")
+  def test_translation_inherits_publication_and_paths_must_be_normalized
+    inherited = note("_translations/zh-CN/docs/Guide.md", "---\ntitle: 指南\n---\n# 指南")
+    translated = compile(*default_notes, *manifests, inherited, theme: "docs", i18n: I18N)
+
+    assert translated.success?, translated.diagnostics.map(&:message).join("\n")
+    refute page(translated, "/zh-CN/docs/Guide/").data.dig("website", "i18n", "fallback")
+    assert_equal "指南", page(translated, "/zh-CN/docs/Guide/").data.fetch("title")
+
+    disabled = note("_translations/zh-CN/docs/Guide.md", "---\npublish: false\n---\n# 不发布")
+    fallback = compile(*default_notes, *manifests, disabled, theme: "docs", i18n: I18N)
+
+    assert fallback.success?, fallback.diagnostics.map(&:message).join("\n")
+    assert_equal true, page(fallback, "/zh-CN/docs/Guide/").data.dig("website", "i18n", "fallback")
+
     invalid_path = note("_translations/zh-CN/docs/../Fallback.md", "---\npublish: true\n---\n# 错误")
-    result = compile(*default_notes, *manifests, unpublished, invalid_path, theme: "docs", i18n: I18N)
+    result = compile(*default_notes, *manifests, invalid_path, theme: "docs", i18n: I18N)
 
     refute result.success?
-    assert result.diagnostics.any? { |item| item.code == "unpublished_translation" }
     assert result.diagnostics.any? { |item| item.code == "invalid_translation_path" }
   end
 
@@ -265,25 +283,21 @@ class LocalizedCompilerTest < Minitest::Test
     assert result.diagnostics.any? { |item| item.code == "route_collision" }
   end
 
-  def test_translation_overlay_inherits_default_git_dates
+  def test_translation_overlay_inherits_default_git_publication_date_without_synthesizing_updated
     first_committed_at = "2025-02-03T04:05:06Z"
-    last_committed_at = "2025-03-04T05:06:07Z"
     translated_first_committed_at = "2026-06-07T08:09:10Z"
-    translated_last_committed_at = "2026-07-08T09:10:11Z"
     notes = [
       note("index.md", "---\npublish: true\n---\n# Home"),
       note(
         "posts/git-dated.md",
         "---\npublish: true\ncontent_type: post\n---\n# Git dated",
-        first_committed_at: first_committed_at,
-        last_committed_at: last_committed_at
+        first_committed_at: first_committed_at
       )
     ]
     localized = note(
       "_translations/zh-CN/posts/git-dated.md",
       "---\npublish: true\n---\n# Git 日期",
-      first_committed_at: translated_first_committed_at,
-      last_committed_at: translated_last_committed_at
+      first_committed_at: translated_first_committed_at
     )
 
     result = compile(
@@ -299,7 +313,7 @@ class LocalizedCompilerTest < Minitest::Test
     translated = page(result, "/zh-CN/posts/git-dated/")
     assert_equal first_committed_at, translated.data.dig("website", "published_at")
     assert_equal first_committed_at, translated.data.dig("website", "created")
-    assert_equal last_committed_at, translated.data.dig("website", "updated")
+    assert_nil translated.data.dig("website", "updated")
   end
 
   def test_locale_routes_reject_file_and_directory_ancestor_conflicts

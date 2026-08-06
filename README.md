@@ -11,10 +11,10 @@ Choose one built-in theme for each build:
 - `minimal` combines an authored Home page with recent posts, a full Blog, documentation, and explicit custom sections for personal or organization sites.
 - `docs` provides a document tree and previous or next links.
 
-Both themes enable search, wiki-link reading previews, the page outline, note relations, and an interactive local graph by default. Each note keeps its local graph at the top of the right-hand context rail. Its two controls open the complete public graph or an expanded view of the current note's neighbourhood; `/graph/` is not a generated route.
+Both themes enable search, wiki-link reading previews, the page outline, note relations, and an interactive local graph by default. A note participating in a link or embed relation with another public note keeps its local graph at the top of the right-hand context rail; isolated and self-link-only notes omit it. Its two controls open the complete public graph or an expanded view of the current note's neighbourhood. The complete graph still contains every public note, and `/graph/` is not a generated route.
 
 Switching themes does not change note URLs.
-The default build theme is `docs`. Both themes can publish locale overlays from `_translations/<locale>/` and attach GitHub Discussions comments to posts. When the corresponding mapping is present and omits `enabled`, localization defaults on only for `docs`, while comments default on only for `minimal`.
+The default build and deployment theme is `minimal`. Both themes can publish locale overlays from `_translations/<locale>/` and attach GitHub Discussions comments to posts. When the corresponding mapping is present and omits `enabled`, localization defaults on only for `docs`, while comments default on only for `minimal`.
 
 See [Localization](website/docs/docs/Localization.md) for locale manifests, which content controls site structure, fallback pages, and SEO behavior.
 
@@ -22,7 +22,7 @@ See [Localization](website/docs/docs/Localization.md) for locale manifests, whic
 
 Deploying with GitHub Pages does not require Ruby, Node.js, Bundler, npm, or a browser on your computer. The generated GitHub Actions workflow installs the build toolchain.
 
-`publish: true` controls what enters the generated site. It does not make other committed files private. Anyone who can read the repository can read unpublished notes too, so do not commit secrets, personal records, or other private material.
+The publication policy controls what enters the generated site. It does not make other committed files private. Anyone who can read the repository can read unpublished notes too, so do not commit secrets, personal records, or other private material.
 
 Canvas and Bases files become downloads when a public note links to them. Inspect them before committing because they can contain excerpts or references to unpublished material.
 
@@ -35,16 +35,16 @@ Canvas and Bases files become downloads when a public note links to them. Inspec
 On macOS, Linux, or WSL:
 
 ```sh
-website/bin/integrate --source docs --theme docs
+website/bin/integrate --source docs
 ```
 
 On native Windows, from PowerShell:
 
 ```powershell
-.\website\bin\integrate.cmd --source docs --theme docs
+.\website\bin\integrate.cmd --source docs
 ```
 
-The command defaults to `--source docs --theme docs`. It creates `.github/jekyll-obsidian.yml` and `.github/workflows/pages.yml` without installing dependencies or contacting GitHub.
+The command defaults to `--source docs --theme minimal`. It creates `.github/jekyll-obsidian.yml` and `.github/workflows/pages.yml` without installing dependencies or contacting GitHub.
 
 Your repository will have this shape:
 
@@ -82,7 +82,7 @@ The configuration interface is the root `website:` mapping.
 
 Both themes can store post comments in GitHub Discussions through Giscus. Comments use the publication repository by default and can point at a separate public repository. When `website.comments` exists and omits `enabled`, `minimal` enables comments by default; `docs` requires `website.comments.enabled: true`. Enabling comments before Discussions or the Giscus App is ready does not fail the build; incomplete Giscus configuration produces a warning and a non-interactive fallback. See [Comments](website/docs/docs/Comments.md) for repository setup, thread identity, privacy boundaries, and troubleshooting.
 
-Open your content directory directly in Obsidian. A note enters the site only when its frontmatter contains the YAML boolean `publish: true`:
+Open your content directory directly in Obsidian. By default, a note enters the site only when its frontmatter contains the YAML boolean `publish: true`:
 
 ```yaml
 ---
@@ -93,7 +93,7 @@ tags:
 ---
 ```
 
-The strings `"true"` and `"yes"` are not accepted. Obsidian's `.obsidian/` state and `.trash/` are excluded from the content snapshot.
+The strings `"true"` and `"yes"` are not accepted. To publish a whole folder recursively, list its path under `website.content.publish_by_default`; use `.` to select the complete content tree. A note can opt out of either default with the YAML boolean `publish: false`. Obsidian's `.obsidian/` state and `.trash/` are excluded from the content snapshot.
 
 `index.md` is optional at the content root and in every nested folder. Minimal uses a public root `index.md` above the six most recent posts on Home; without one, Home can still show the post stream. A folder without an index links to its first ordered public page. A content directory with no public notes still fails the build.
 
@@ -109,6 +109,8 @@ website/bin/dev
 ```
 
 Open the URL printed by the local server, which is `http://127.0.0.1:58000/` by default. Local preview uses the Minimal theme unless you pass `--theme docs`.
+
+Run `website/bin/clean` from the repository root to remove generated sites, Jekyll and frontend caches, test reports, coverage, and temporary build directories. Installed Ruby and Node.js dependencies are preserved.
 
 ## Guides
 

@@ -30,6 +30,6 @@ title: 我的第一篇笔记
 ---
 ```
 
-只有 `publish: true` 的笔记会进入 HTML、搜索与站点地图。未提交的私密内容仍应放在其他仓库或忽略目录中。
+默认情况下，只有 `publish: true` 的笔记会进入 HTML、搜索与站点地图。如需递归发布一个目录，请把它相对于内容根目录的路径加入 `website.content.publish_by_default`；特殊路径 `.` 表示完整内容树。默认发布范围内的单篇笔记可通过 `publish: false` 排除。私密内容仍应放在其他仓库或忽略目录中。
 
 继续阅读 [[Syntax|语法]]，或查看 [[Deployment|部署]]流程。

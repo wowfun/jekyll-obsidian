@@ -21,15 +21,14 @@ module CompilerTestHelpers
     comments: nil
   }.freeze
 
-  def note(path, body, first_committed_at: nil, last_committed_at: nil)
+  def note(path, body, first_committed_at: nil)
     JekyllObsidian::SnapshotEntry.new(
       path: path,
       bytes: body,
       kind: :note,
       media_type: "text/markdown",
       size: body.bytesize,
-      first_committed_at: first_committed_at,
-      last_committed_at: last_committed_at
+      first_committed_at: first_committed_at
     )
   end
 

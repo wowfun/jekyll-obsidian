@@ -14,7 +14,7 @@ Configure a host repository for GitHub Pages without Ruby or Node.js.
 
 Options:
   --source PATH       Repository-relative content directory (default: docs)
-  --theme THEME       minimal or docs (default: docs)
+  --theme THEME       minimal or docs (default: minimal)
   --check             Verify generated integration files without changing them
   --force-workflow    Replace an existing unmanaged Pages workflow
   --help, -h          Show this help
@@ -33,7 +33,7 @@ Merge this block into a root website mapping, then run the command again:
 website:
   # jekyll-obsidian:managed-start
   source: 'docs'
-  theme: 'docs'
+  theme: 'minimal'
   # jekyll-obsidian:managed-end
 "@
 }
@@ -222,7 +222,7 @@ try {
     }
     else {
         if (-not $SourceWasSet) { $SourceValue = "docs" }
-        if (-not $ThemeWasSet) { $ThemeValue = "docs" }
+        if (-not $ThemeWasSet) { $ThemeValue = "minimal" }
     }
 
     $SourceValue = $SourceValue.Replace('\', '/')

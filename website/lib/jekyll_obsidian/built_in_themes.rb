@@ -87,6 +87,7 @@ module JekyllObsidian
           "route" => note.route,
           "href" => config.url_builder.href(note.route),
           "absolute_url" => config.url_builder.absolute_url(note.route),
+          "markdown_url" => config.url_builder.href(PublishedMarkdown.route(note.route)),
           "aliases" => Array(properties["aliases"]),
           "subtitle" => properties["subtitle"],
           "tags" => Array(properties["tags"]),
@@ -102,6 +103,11 @@ module JekyllObsidian
           "routes" => { "home" => home_route },
           "theme" => config.theme,
           "features" => config.features.merge(note.feature_flags),
+          "content_security" => {
+            "media_sources" => note.content_security.media_sources,
+            "frame_sources" => note.content_security.frame_sources,
+            "script_sources" => note.content_security.script_sources
+          },
           "theme_data" => theme_data,
           "tag_links" => Array(note.properties["tags"]).filter_map do |tag|
             anchor = topic_anchors[topic_identity("name" => tag)]
@@ -286,8 +292,11 @@ module JekyllObsidian
           neighbours_by_note[target][source] = true
         end
 
-        model.notes.to_h do |note|
-          node_ids = [note.id, *neighbours_by_note[note.id].keys].uniq.sort
+        model.notes.each_with_object({}) do |note, graphs|
+          neighbour_ids = neighbours_by_note[note.id].keys.reject { |id| id == note.id }
+          next if neighbour_ids.empty?
+
+          node_ids = [note.id, *neighbour_ids].sort
           nodes = node_ids.map do |id|
             target = model.notes_by_id.fetch(id)
             {
@@ -300,7 +309,7 @@ module JekyllObsidian
           edges = edges_by_note[note.id].sort_by do |edge|
             [edge.fetch("source"), edge.fetch("target"), edge.fetch("kind")]
           end
-          [note.id, { "current_id" => note.id, "nodes" => nodes, "edges" => edges }]
+          graphs[note.id] = { "current_id" => note.id, "nodes" => nodes, "edges" => edges }
         end
       end
 

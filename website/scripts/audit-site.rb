@@ -22,6 +22,17 @@ def fail_audit(message)
   exit 1
 end
 
+def generated_markdown_resource?(site_dir, relative)
+  return false unless File.extname(relative).casecmp(".md").zero?
+
+  candidates = ["#{relative.delete_suffix('.md')}/index.html"]
+  if File.basename(relative).casecmp("index.md").zero?
+    directory = File.dirname(relative)
+    candidates << (directory == "." ? "index.html" : "#{directory}/index.html")
+  end
+  candidates.any? { |html| File.file?(File.join(site_dir, html)) }
+end
+
 site_dir = File.expand_path(ARGV.fetch(0, File.expand_path("../_site", __dir__)))
 fail_audit("#{site_dir} is not a directory") unless File.directory?(site_dir)
 fail_audit("the site root must not be a symbolic link") if File.lstat(site_dir).symlink?
@@ -45,7 +56,8 @@ Find.find(site_dir) do |path|
 
   localized_artifact = relative.match?(%r{\Aassets/website/i18n/[A-Za-z]{2,8}(?:-[A-Za-z0-9]{1,8})*/(?:catalog|graph|search)\.v1\.json\z}) ||
     relative.match?(%r{\A[A-Za-z]{2,8}(?:-[A-Za-z0-9]{1,8})*/feed\.xml\z})
-  allowed = EXACT_FILES.include?(relative) || localized_artifact || relative.end_with?("/index.html") || ALLOWED_EXTENSIONS.include?(File.extname(relative).downcase)
+  allowed = EXACT_FILES.include?(relative) || localized_artifact || relative.end_with?("/index.html") ||
+    generated_markdown_resource?(site_dir, relative) || ALLOWED_EXTENSIONS.include?(File.extname(relative).downcase)
   fail_audit("output is not on the extension allowlist: #{relative}") unless allowed
 
   total += stat.size

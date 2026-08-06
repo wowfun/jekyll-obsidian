@@ -18,6 +18,7 @@ class ThemeCliTest < Minitest::Test
     before = Digest::SHA256.file(config_path).hexdigest
     base_config = YAML.safe_load_file(config_path, permitted_classes: [], aliases: false)
     assert_equal true, base_config["disable_disk_cache"]
+    assert_equal "minimal", base_config.dig("website", "theme")
 
     Dir.mktmpdir("jekyll-obsidian-cli") do |temporary|
       capture = File.join(temporary, "overlay.yml")
@@ -69,6 +70,8 @@ class ThemeCliTest < Minitest::Test
       paths = File.read(captured_config).split(",")
       assert_equal File.join(@project_root, "_config.yml"), paths[0]
       assert_equal File.expand_path("../../../.github/jekyll-obsidian.yml", __dir__), paths[1]
+      host_config = YAML.safe_load_file(paths[1], permitted_classes: [], aliases: false)
+      assert_equal "minimal", host_config.dig("website", "theme")
       assert_match(%r{/\.jekyll-obsidian-cache/config\.[^/]+/config\.yml\z}, paths[2])
     end
   ensure

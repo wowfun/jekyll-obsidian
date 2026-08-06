@@ -29,7 +29,7 @@ Configure a host repository for GitHub Pages without Ruby or Node.js.
 
 Options:
   --source PATH       Repository-relative content directory (default: docs)
-  --theme THEME       minimal or docs (default: docs)
+  --theme THEME       minimal or docs (default: minimal)
   --check             Verify generated integration files without changing them
   --force-workflow    Replace an existing unmanaged Pages workflow
   --help, -h          Show this help
@@ -49,7 +49,7 @@ Merge this block into a root website mapping, then run the command again:
 website:
   # jekyll-obsidian:managed-start
   source: 'docs'
-  theme: 'docs'
+  theme: 'minimal'
   # jekyll-obsidian:managed-end
 MESSAGE
   exit 1
@@ -171,7 +171,7 @@ if [ -e "$CONFIG_PATH" ]; then
   [ "$theme_was_set" -eq 1 ] || theme_value=$current_theme
 else
   [ "$source_was_set" -eq 1 ] || source_value=docs
-  [ "$theme_was_set" -eq 1 ] || theme_value=docs
+  [ "$theme_was_set" -eq 1 ] || theme_value=minimal
 fi
 
 source_value=$(printf '%s' "$source_value" | sed 's|\\|/|g')

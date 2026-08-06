@@ -15,6 +15,7 @@ module JekyllObsidian
   module Adapter
     BUNDLED_FEATURE_IDS = %w[search graph previews math mermaid].freeze
     CONFIG_KEYS = %w[source syntax_profile theme repository edit_branch content features i18n comments contacts navigation].freeze
+    GIT_FIRST_COMMIT_CACHE_VERSION = 1
     IGNORED_CONTENT_DIRECTORIES = %w[.obsidian .trash].freeze
     STAGING_BASENAME_PATTERN = /\Avault-assets\.[A-Za-z0-9.-]+\z/
     StagingLease = Struct.new(:parent, :path, keyword_init: true)
@@ -31,6 +32,7 @@ module JekyllObsidian
       attr_reader :website_route
 
       def initialize(site, output, generated: false)
+        @compiler_generated_file = generated
         @website_route = output.route
         directory, filename = self.class.route_parts(output.route)
         super(site, site.source, directory, filename)
@@ -40,6 +42,13 @@ module JekyllObsidian
         data["permalink"] = output.route
         data["render_with_liquid"] = false
         data["website_generated"] = true
+      end
+
+      # Compiler-owned artifacts are already final bytes. Present an inert
+      # source extension to Jekyll's renderer while the permalink retains the
+      # public extension (including `.md`).
+      def extname
+        @compiler_generated_file ? ".website-generated" : super
       end
 
       def self.route_parts(route)
@@ -210,7 +219,7 @@ module JekyllObsidian
 
     def build_snapshot(layout)
       root = layout.source_root
-      git_times = git_time_map(layout)
+      git_first_commit_times = git_first_commit_time_map(layout)
       entries = []
       Find.find(root) do |absolute|
         relative = Pathname.new(absolute).relative_path_from(Pathname.new(root)).to_s
@@ -237,7 +246,6 @@ module JekyllObsidian
         else
           :attachment
         end
-        times = git_times.fetch(normalized, {})
         flags = File::RDONLY | (File.const_defined?(:NOFOLLOW) ? File::NOFOLLOW : 0)
         File.open(absolute, flags) do |file|
           pinned = file.stat
@@ -251,8 +259,7 @@ module JekyllObsidian
             device: pinned.dev,
             inode: pinned.ino,
             mtime_ns: pinned.mtime.to_i * 1_000_000_000 + pinned.mtime.nsec,
-            first_committed_at: times[:first],
-            last_committed_at: times[:last]
+            first_committed_at: git_first_commit_times[normalized]
           )
         end
       end
@@ -261,7 +268,7 @@ module JekyllObsidian
       fatal("vault changed during snapshot: #{exception.message}")
     end
 
-    def git_time_map(layout)
+    def git_first_commit_time_map(layout)
       source = layout.source
       head, _head_error, head_status = Open3.capture3("git", "-C", layout.workspace_root, "rev-parse", "HEAD")
       return {} unless head_status.success?
@@ -269,13 +276,14 @@ module JekyllObsidian
       head = head.strip
       cache_path = File.join(layout.jekyll_cache_root, "jekyll-obsidian-git-times.json")
       ensure_runtime_directory!(layout.jekyll_cache_root, "Jekyll cache")
-      cached_bytes = read_regular_cache_file(cache_path, "Git date cache")
+      cached_bytes = read_regular_cache_file(cache_path, "Git first-commit cache")
       if cached_bytes
         cached = JSON.parse(cached_bytes)
-        if cached["head"] == head && cached["source"] == source && cached["times"].is_a?(Hash)
-          return cached.fetch("times").transform_values do |times|
-            { first: times["first"], last: times["last"] }
-          end
+        cached_times = cached["first_committed_at"]
+        if cached["version"] == GIT_FIRST_COMMIT_CACHE_VERSION && cached["head"] == head &&
+            cached["source"] == source && cached_times.is_a?(Hash) &&
+            cached_times.all? { |path, time| path.is_a?(String) && time.is_a?(String) }
+          return cached_times
         end
       end
 
@@ -301,13 +309,17 @@ module JekyllObsidian
         next unless stripped.start_with?(prefix)
 
         relative = stripped.delete_prefix(prefix).unicode_normalize(:nfc)
-        item = (result[relative] ||= { first: current_time, last: current_time })
-        item[:first] = current_time
+        result[relative] = current_time
       end
       FileUtils.mkdir_p(File.dirname(cache_path))
       temporary = Tempfile.create(["jekyll-obsidian-git-times.", ".tmp"], File.dirname(cache_path))
       temporary_path = temporary.path
-      temporary.write(JSON.generate("head" => head, "source" => source, "times" => result))
+      temporary.write(JSON.generate(
+        "version" => GIT_FIRST_COMMIT_CACHE_VERSION,
+        "head" => head,
+        "source" => source,
+        "first_committed_at" => result
+      ))
       temporary.flush
       temporary.fsync
       temporary.close

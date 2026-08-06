@@ -72,11 +72,10 @@ messages:
 
 ## 编写译文
 
-每篇译文都必须显式允许发布：
+每篇译文都会继承其公开默认语言笔记的发布状态，因此译文 frontmatter 可以省略 `publish`：
 
 ```yaml
 ---
-publish: true
 title: 快速开始
 description: 安装并构建第一个站点。
 tags:
@@ -84,9 +83,9 @@ tags:
 ---
 ```
 
-译文可以替换正文，以及 `title`、`subtitle`、`description`、`tags`、`author`、`categories`、`image` 和 `cssclasses` 这些可翻译属性。默认语言页面加入顶部导航后，译文也可以替换 `navigation.label`。省略的值从默认语言笔记继承。
+译文可以替换正文，以及 `title`、`subtitle`、`description`、`tags`、`author`、`categories`、`image` 和 `cssclasses` 这些可翻译属性。默认语言页面加入顶部导航后，译文也可以替换 `navigation.label`。省略的值从默认语言笔记继承。如需只停用该译文，请设置 YAML 布尔值 `publish: false`；对应的本地化 URL 会显示默认语言回退内容。
 
-结构属性由默认语言笔记决定，包括 `permalink`、`content_type`、`date`、`created`、`updated`、`nav_order`、`nav_exclude`、`aliases` 和 `comments`。请在译文中省略这些属性；如果保留，其值必须与默认语言笔记完全一致。译文必须始终省略 `navigation.order` 和 `navigation.visible`，尝试设置任意一项都会被拒绝。由 Git 推导的发布日期和更新时间也继承默认语言笔记，因此提交译文不会改变文章或 Blog 列表的排序。
+结构属性由默认语言笔记决定，包括 `permalink`、`content_type`、`date`、`created`、`updated`、`nav_order`、`nav_exclude`、`aliases` 和 `comments`。请在译文中省略这些属性；如果保留，其值必须与默认语言笔记完全一致。译文必须始终省略 `navigation.order` 和 `navigation.visible`，尝试设置任意一项都会被拒绝。文章未设置 `date` 或 `created` 时，会继承默认语言笔记由 Git 推导的发布时间。`updated` 不会从 Git 推导；只有默认语言笔记明确声明更新日期时才应设置。仅提交译文不会改变文章时间顺序或 Blog 排序。
 
 ## 理解本地化 URL 与资源
 
@@ -130,7 +129,6 @@ Wikilink、嵌入、反向链接和源码操作会优先在当前语言中解析
 | --- | --- |
 | 缺少默认语言 | 把顶层 `lang` 加入 `website.i18n.locales`。 |
 | 语言清单缺失或无效 | 在每个语言根目录添加 `_locale.yml`，填写 `name`，并检查 `hreflang`、`dir` 与文案值。 |
-| 译文未发布 | 在译文中添加 YAML 布尔值 `publish: true`。 |
 | 存在孤立译文 | 在相同相对路径创建默认语言笔记，或删除该译文。 |
 | 译文覆盖了结构 | 从译文中移除结构属性，或使其与默认语言笔记完全一致。 |
 | 不支持本地化附件 | 把二进制附件移到默认内容树，并引用该共享文件。 |

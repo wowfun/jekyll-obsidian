@@ -6,6 +6,8 @@ import { initialiseLanguageSwitcher } from "./language-switcher";
 import { initialiseComments } from "./comments";
 import { initialiseArchiveFilters } from "./archive-filters";
 import { initialisePriorityNavigation } from "./priority-navigation";
+import { initialisePageActions } from "./page-actions";
+import { initialiseTweets } from "./tweets";
 
 const DOCS_PAGE_CHANGE_EVENT = "website:docs-page-change";
 let pageFeatureGeneration = 0;
@@ -19,10 +21,14 @@ function initialisePageFeatures(): void {
   const cleanupOutline = initialiseOutline();
   const cleanupComments = initialiseComments();
   const cleanupArchiveFilters = initialiseArchiveFilters();
+  const cleanupPageActions = initialisePageActions();
+  const cleanupTweets = initialiseTweets();
   cleanupPageFeatures = () => {
     cleanupOutline();
     cleanupComments();
     cleanupArchiveFilters();
+    cleanupPageActions();
+    cleanupTweets();
   };
 
   if (readSiteUrl("preview")) {

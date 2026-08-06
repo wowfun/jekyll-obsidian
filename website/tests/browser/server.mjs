@@ -69,6 +69,11 @@ function commentsFixture() {
   return featureFixture("minimal", "none").replace("</article>", `${comments}</article>`);
 }
 
+function tweetFixture() {
+  const tweet = `<figure class="website-tweet" data-website-tweet="1580548874246443010"><div class="website-tweet__mount" data-website-tweet-mount></div><a class="website-tweet__fallback" data-website-tweet-fallback href="https://x.com/obsdmd/status/1580548874246443010">View post on X</a></figure>`;
+  return featureFixture("minimal", "none").replace("</article>", `${tweet}</article>`);
+}
+
 const json = {
   "/data/catalog.v1.json": {
     schema_version: 1,
@@ -142,6 +147,7 @@ const contentTypes = {
   ".css": "text/css; charset=utf-8",
   ".js": "text/javascript; charset=utf-8",
   ".json": "application/json; charset=utf-8",
+  ".md": "text/markdown; charset=utf-8",
   ".xml": "application/xml; charset=utf-8",
   ".svg": "image/svg+xml",
   ".woff2": "font/woff2"
@@ -199,6 +205,11 @@ const server = createServer(async (request, response) => {
   if (pathname === "/__fixture__/comments/") {
     response.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
     response.end(commentsFixture());
+    return;
+  }
+  if (pathname === "/__fixture__/tweet/") {
+    response.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+    response.end(tweetFixture());
     return;
   }
   if (pathname in json) {

@@ -42,9 +42,10 @@ default_host=$new_host_path
 "$default_host/website/bin/integrate" >/dev/null
 "$default_host/website/bin/integrate" --check >/dev/null
 grep -Fqx "  source: 'docs'" "$default_host/.github/jekyll-obsidian.yml" || fail "default source was not generated."
-grep -Fqx "  theme: 'docs'" "$default_host/.github/jekyll-obsidian.yml" || fail "default theme was not generated."
+grep -Fqx "  theme: 'minimal'" "$default_host/.github/jekyll-obsidian.yml" || fail "default theme was not generated."
 grep -Fqx 'title: My Project Documentation' "$default_host/.github/jekyll-obsidian.yml" || fail "editable host defaults were not generated."
 grep -Fqx '  repository: ""' "$default_host/.github/jekyll-obsidian.yml" || fail "repository auto-detection default was not generated."
+grep -Fqx '    publish_by_default: []' "$default_host/.github/jekyll-obsidian.yml" || fail "new hosts must require explicit publication by default."
 grep -Fqx '    default_type: doc' "$default_host/.github/jekyll-obsidian.yml" || fail "the default host content was not classified as documentation."
 grep -Fqx '      post: []' "$default_host/.github/jekyll-obsidian.yml" || fail "the default host post directories were not reset."
 grep -Fqx '      doc: []' "$default_host/.github/jekyll-obsidian.yml" || fail "the default host doc directories were not rooted at website.source."

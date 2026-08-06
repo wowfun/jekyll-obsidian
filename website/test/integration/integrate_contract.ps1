@@ -67,6 +67,9 @@ try {
         $roots[$adapter] = $root
         [void](Invoke-Adapter $adapter $root @())
         [void](Invoke-Adapter $adapter $root @("--check"))
+        $defaultConfig = [System.IO.File]::ReadAllText((Join-Path $root ".github\jekyll-obsidian.yml"))
+        if (-not $defaultConfig.Contains("  theme: 'minimal'")) { Fail "$adapter did not generate the Minimal default theme" }
+        if (-not $defaultConfig.Contains("    publish_by_default: []")) { Fail "$adapter did not preserve explicit publication defaults" }
         Assert-LfWithoutBom (Join-Path $root ".github\jekyll-obsidian.yml")
         Assert-LfWithoutBom (Join-Path $root ".github\workflows\pages.yml")
 

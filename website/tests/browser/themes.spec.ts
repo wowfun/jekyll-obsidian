@@ -18,6 +18,79 @@ for (const theme of themes) {
   });
 }
 
+for (const theme of themes) {
+  test(`${theme} copies the exact generated Markdown resource`, async ({ page }) => {
+    await page.addInitScript(() => {
+      Object.defineProperty(navigator, "clipboard", {
+        configurable: true,
+        value: {
+          async writeText(value: string) {
+            (window as typeof window & { __copiedMarkdown?: string }).__copiedMarkdown = value;
+          }
+        }
+      });
+    });
+    const route = theme === "minimal"
+      ? "/blog/One%20vault%2C%20three%20readings/"
+      : "/docs/Getting%20Started/";
+    await page.goto(site(theme, route));
+
+    const actions = page.locator("[data-page-actions]");
+    await expect(actions.locator(".page-actions__primary")).toBeVisible();
+    const view = actions.locator("a.page-actions__item[href]");
+    const markdownUrl = await view.getAttribute("href");
+    expect(markdownUrl).toBeTruthy();
+    const markdownResponse = await page.request.get(markdownUrl!);
+    expect(markdownResponse.ok()).toBe(true);
+    expect(markdownResponse.headers()["content-type"]).toContain("text/markdown");
+    const markdown = await markdownResponse.text();
+    expect(markdown).not.toMatch(/^---\s*(?:\r?\n)/);
+    expect(markdown.endsWith("\n")).toBe(true);
+    expect(markdown.endsWith("\n\n")).toBe(false);
+
+    await actions.locator(".page-actions__primary").click();
+    await expect(actions.locator("[role='status']")).toHaveText("Copied");
+    expect(await page.evaluate(() =>
+      (window as typeof window & { __copiedMarkdown?: string }).__copiedMarkdown
+    )).toBe(markdown);
+
+    await actions.locator("summary").click();
+    await expect(view).toBeVisible();
+    await expect(actions.getByRole("link", { name: /View as Markdown/ })).toBeVisible();
+    await expect(view).toHaveAttribute("target", "_blank");
+    await expect(view).toHaveAttribute("rel", "noopener");
+  });
+}
+
+test("View as Markdown remains reachable without JavaScript", async ({ browser }, testInfo) => {
+  test.skip(testInfo.project.name !== "desktop-chromium", "one no-JS browser contract is sufficient");
+  const context = await browser.newContext({ javaScriptEnabled: false });
+  const page = await context.newPage();
+  await page.goto(site("minimal", "/blog/One%20vault%2C%20three%20readings/"));
+
+  const actions = page.locator("[data-page-actions]");
+  await expect(actions.locator(".page-actions__primary")).toBeHidden();
+  await actions.locator("summary").click();
+  await expect(actions.getByRole("button", { name: "Copy page" })).toHaveCount(0);
+  const view = actions.getByRole("link", { name: /View as Markdown/ });
+  await expect(view).toBeVisible();
+  await expect(view).toHaveAttribute("href", /\.md$/);
+  await context.close();
+});
+
+test("Copy failure opens a visible Markdown fallback", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "desktop-chromium", "one visible failure contract is sufficient");
+  await page.goto(site("minimal", "/blog/One%20vault%2C%20three%20readings/"));
+  await page.route(/\.md$/, (route) => route.fulfill({ status: 503, body: "Unavailable" }));
+
+  const actions = page.locator("[data-page-actions]");
+  await actions.locator(".page-actions__primary").click();
+
+  await expect(actions.locator("[data-copy-page-error]")).toBeVisible();
+  await expect(actions.locator("[data-copy-page-error]")).toContainText("View as Markdown");
+  await expect(actions.getByRole("link", { name: /View as Markdown/ })).toBeVisible();
+});
+
 test("Minimal Home combines authored content with at most six recent posts", async ({ page }, testInfo) => {
   await page.goto(site("minimal"));
 
@@ -327,6 +400,7 @@ test("search loads on demand and finds CJK content", async ({ page }) => {
   await page.keyboard.press("ControlOrMeta+k");
   const dialog = page.locator('dialog[data-dialog="search"]');
   await expect(dialog).toBeVisible();
+  await expect(dialog).toHaveAttribute("data-search-ready", "true");
   const headerNavigation = page.locator(".site-header [data-priority-navigation-item]");
   const searchNavigation = dialog.locator("[data-search-navigation] [data-navigation-id]");
   await expect(searchNavigation).toHaveCount(await headerNavigation.count());
@@ -569,6 +643,7 @@ test("feed discovery stays out of primary navigation", async ({ page }, testInfo
 
 test("localized docs language navigation and fallback metadata remain correct", async ({ page }) => {
   await page.goto(localizedDocs("/zh-CN/docs/Getting%20Started/"));
+  await expect(page.locator(".site-mark__name")).toHaveText("Browser i18n fixture");
   await expect(page.locator("html")).toHaveAttribute("lang", "zh-CN");
   const switcher = page.locator("[data-language-switcher]");
   await switcher.locator("summary").click();
@@ -593,6 +668,33 @@ test("localized docs search loads the locale index and finds CJK content", async
   await dialog.locator("input").fill("快速");
   await expect(dialog.getByRole("link", { name: "快速开始" })).toBeVisible();
   await expect(dialog.locator("[data-search-status]")).toHaveText(/找到 \d+ 篇笔记。/);
+});
+
+test("Tweet embeds load near the viewport with DNT and keep a static fallback", async ({ page }) => {
+  await page.route("https://platform.twitter.com/widgets.js", async (route) => {
+    await route.fulfill({
+      contentType: "text/javascript",
+      body: `window.twttr = { widgets: { createTweet(id, target, options) {
+        target.dataset.renderedTweet = id;
+        target.dataset.dnt = String(options.dnt);
+        target.dataset.theme = options.theme;
+        target.textContent = "Rendered post";
+        return Promise.resolve(target);
+      } } };`
+    });
+  });
+  await page.goto("/__fixture__/tweet/");
+
+  const tweet = page.locator("[data-website-tweet]");
+  const mount = tweet.locator("[data-website-tweet-mount]");
+  await expect(mount).toHaveAttribute("data-rendered-tweet", "1580548874246443010");
+  await expect(mount).toHaveAttribute("data-dnt", "true");
+  await expect(mount).toHaveAttribute("data-theme", /^(light|dark)$/);
+  await expect(tweet.locator("[data-website-tweet-fallback]")).toBeHidden();
+  await expect(page.locator("script[data-website-x-widgets]")).toHaveAttribute(
+    "src",
+    "https://platform.twitter.com/widgets.js"
+  );
 });
 
 for (const fixture of [
@@ -686,6 +788,13 @@ test.describe("without JavaScript", () => {
     const comments = page.getByRole("region", { name: "Comments" });
     await expect(comments.locator("script[data-website-comments-client]")).toHaveCount(0);
     await expect(comments.getByRole("link", { name: "Open discussions on GitHub" })).toBeVisible();
+  });
+
+  test("Tweet embeds retain the X fallback", async ({ page }) => {
+    await page.goto("/__fixture__/tweet/");
+    await expect(page.locator("script[data-website-x-widgets]")).toHaveCount(0);
+    await expect(page.getByRole("link", { name: "View post on X" }))
+      .toHaveAttribute("href", "https://x.com/obsdmd/status/1580548874246443010");
   });
 
   test("documentation graphs and mobile context have server-rendered fallbacks", async ({ page }, testInfo) => {

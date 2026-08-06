@@ -11,9 +11,9 @@
 - `minimal` 将自定义 Home 页面、最近文章、完整 Blog、文档和显式配置的自定义栏目组合为个人或组织站点。
 - `docs` 提供文档目录树以及上一篇、下一篇导航。
 
-两个主题均默认启用搜索、Wiki 链接阅读预览、页面大纲、笔记关系和交互式局部图谱。每篇笔记的局部图谱位于右侧上下文栏顶部。图谱上的两个控件可分别打开完整公开图谱，或放大当前笔记的邻接关系。站点不会生成独立的 `/graph/` 页面。
+两个主题均默认启用搜索、Wiki 链接阅读预览、页面大纲、笔记关系和交互式局部图谱。当笔记与另一篇公开笔记存在链接或嵌入关系时，局部图谱位于右侧上下文栏顶部；孤立笔记和仅自链笔记不显示它。图谱上的两个控件可分别打开完整公开图谱，或放大当前笔记的邻接关系。完整图谱仍包含所有公开笔记；站点不会生成独立的 `/graph/` 页面。
 
-切换主题不会改变笔记 URL。默认构建主题为 `docs`。两个主题都支持通过 `_translations/<locale>/` 发布语言覆盖层，也可以为文章接入 GitHub Discussions 评论。存在对应配置但省略 `enabled` 时，本地化仅在 `docs` 中默认启用，评论仅在 `minimal` 中默认启用。
+切换主题不会改变笔记 URL。默认构建和部署主题为 `minimal`。两个主题都支持通过 `_translations/<locale>/` 发布语言覆盖层，也可以为文章接入 GitHub Discussions 评论。存在对应配置但省略 `enabled` 时，本地化仅在 `docs` 中默认启用，评论仅在 `minimal` 中默认启用。
 
 语言清单、默认语言与译文的职责边界、回退页面和 SEO 行为详见[本地化指南](website/docs/docs/Localization.md)。
 
@@ -21,7 +21,7 @@
 
 使用 GitHub Pages 部署时，本地计算机无需安装 Ruby、Node.js、Bundler、npm 或浏览器。生成的 GitHub Actions 工作流会安装完整构建工具链。
 
-`publish: true` 决定哪些内容进入生成的站点，但不会让仓库中其他已提交文件变成私密内容。任何能读取仓库的人同样可以读取未发布笔记，因此不要提交密钥、个人记录或其他私密资料。
+发布策略决定哪些内容进入生成的站点，但不会让仓库中其他已提交文件变成私密内容。任何能读取仓库的人同样可以读取未发布笔记，因此不要提交密钥、个人记录或其他私密资料。
 
 公开笔记链接到 Canvas 或 Bases 文件时，这些文件会作为下载内容发布。提交前请检查其中是否包含未发布材料的摘录或引用。
 
@@ -34,16 +34,16 @@
 在 macOS、Linux 或 WSL 中运行：
 
 ```sh
-website/bin/integrate --source docs --theme docs
+website/bin/integrate --source docs
 ```
 
 在原生 Windows 的 PowerShell 中运行：
 
 ```powershell
-.\website\bin\integrate.cmd --source docs --theme docs
+.\website\bin\integrate.cmd --source docs
 ```
 
-该命令默认使用 `--source docs --theme docs`。它无需安装依赖或访问 GitHub，即可生成 `.github/jekyll-obsidian.yml` 和 `.github/workflows/pages.yml`。
+该命令默认使用 `--source docs --theme minimal`。它无需安装依赖或访问 GitHub，即可生成 `.github/jekyll-obsidian.yml` 和 `.github/workflows/pages.yml`。
 
 你的仓库将具有以下结构：
 
@@ -81,7 +81,7 @@ repository/
 
 两个主题都可以通过 Giscus 将文章评论存储在 GitHub Discussions 中。评论默认使用发布仓库，也可以指向另一个公开仓库。存在 `website.comments` 但省略 `enabled` 时，`minimal` 默认启用评论；`docs` 需要显式设置 `website.comments.enabled: true`。在 Discussions 或 Giscus App 尚未就绪时启用评论不会导致构建失败；Giscus 配置不完整时会产生警告，并显示非交互式回退内容。仓库设置、讨论串标识、隐私边界和故障排查详见[评论指南](website/docs/docs/Comments.md)。
 
-直接使用 Obsidian 打开内容目录。只有 frontmatter 中包含 YAML 布尔值 `publish: true` 的笔记才会进入站点：
+直接使用 Obsidian 打开内容目录。默认情况下，只有 frontmatter 中包含 YAML 布尔值 `publish: true` 的笔记才会进入站点：
 
 ```yaml
 ---
@@ -92,7 +92,7 @@ tags:
 ---
 ```
 
-字符串 `"true"` 和 `"yes"` 不会被接受。生成内容快照前会排除 Obsidian 的 `.obsidian/` 状态目录和 `.trash/` 目录。
+字符串 `"true"` 和 `"yes"` 不会被接受。如需递归发布整个文件夹，请把相对于内容根目录的路径加入 `website.content.publish_by_default`；使用 `.` 可选择完整内容树。默认发布范围内的单篇笔记仍可通过 YAML 布尔值 `publish: false` 排除。生成内容快照前会排除 Obsidian 的 `.obsidian/` 状态目录和 `.trash/` 目录。
 
 内容根目录及其所有子目录都可以不包含 `index.md`。Minimal 会先在 Home 页面显示公开的根 `index.md`，再显示最近六篇文章；没有根页面时，Home 仍可显示文章流。缺少索引的文件夹会链接到排序后的第一个公开页面。内容目录中没有任何公开笔记时，构建仍会失败。
 
@@ -108,6 +108,8 @@ website/bin/dev
 ```
 
 本地服务器默认地址为 `http://127.0.0.1:58000/`。`website/bin/dev` 默认使用 Minimal 主题；传入 `--theme docs` 可预览独立文档手册。
+
+在仓库根目录运行 `website/bin/clean` 可删除生成站点、Jekyll 与前端缓存、测试报告、覆盖率结果和构建临时目录；已安装的 Ruby 与 Node.js 依赖会保留。
 
 ## 使用指南
 

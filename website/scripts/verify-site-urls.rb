@@ -7,6 +7,8 @@ require "pathname"
 require "set"
 require "uri"
 
+require_relative "../lib/jekyll_obsidian/external_media"
+
 class SiteUrlVerifier
   URL_ATTRIBUTES = [
     %w[a href],
@@ -27,7 +29,7 @@ class SiteUrlVerifier
     "script-src" => ["'self'"],
     "style-src" => ["'self'", "'unsafe-inline'"],
     "img-src" => ["'self'", "https:"],
-    "media-src" => ["'self'", "https:"],
+    "media-src" => ["'self'"],
     "object-src" => ["'self'"],
     "font-src" => ["'self'"],
     "connect-src" => ["'self'"],
@@ -39,6 +41,7 @@ class SiteUrlVerifier
     "frame-src" => ["'self'", "https://giscus.app"]
   ).freeze
   GISCUS_ORIGIN = "https://giscus.app"
+  X_WIDGET_ORIGIN = "https://platform.twitter.com"
 
   def initialize(site_dir, origin, baseurl)
     @site_dir = File.realpath(site_dir)
@@ -85,7 +88,7 @@ class SiteUrlVerifier
     csp = csp_node&.[]("content").to_s
     add_error("#{relative}: missing production meta CSP") if csp.empty?
     comments = !document.at_css("[data-website-comments-load]").nil?
-    verify_csp(csp, relative, comments:) unless csp.empty?
+    verify_csp(csp, relative, comments:, document:) unless csp.empty?
 
     canonical = document.at_css("link[rel~='canonical']")&.[]("href")
     expected_canonical = "#{@origin}#{public_path(route)}"
@@ -114,6 +117,7 @@ class SiteUrlVerifier
     end
 
     verify_external_embeds(document, relative, comments:)
+    verify_external_media(document, relative)
 
     URL_ATTRIBUTES.each do |element, attribute|
       document.css("#{element}[#{attribute}]").each do |node|
@@ -215,7 +219,7 @@ class SiteUrlVerifier
     add_error("#{source}: invalid fragment ##{fragment}")
   end
 
-  def verify_csp(value, source, comments:)
+  def verify_csp(value, source, comments:, document:)
     pairs = value.split(";").filter_map do |part|
       name, *tokens = part.strip.split(/\s+/)
       [name, tokens] unless name.to_s.empty?
@@ -223,7 +227,13 @@ class SiteUrlVerifier
     duplicates = pairs.group_by(&:first).select { |_name, items| items.length > 1 }.keys
     duplicates.each { |name| add_error("#{source}: CSP directive #{name} must appear exactly once") }
     directives = pairs.to_h
-    expected_directives = comments ? COMMENTS_CSP_DIRECTIVES : CSP_DIRECTIVES
+    expected_directives = (comments ? COMMENTS_CSP_DIRECTIVES : CSP_DIRECTIVES).transform_values(&:dup)
+    tweet = !document.at_css("[data-website-tweet]").nil?
+    expected_directives["script-src"] << X_WIDGET_ORIGIN if tweet
+    expected_directives["media-src"] += external_origins(document, "video[src], audio[src], video source[src], audio source[src]")
+    expected_directives["frame-src"] += external_origins(document, "iframe[src]")
+    expected_directives["frame-src"] << X_WIDGET_ORIGIN if tweet
+    expected_directives.transform_values! { |tokens| tokens.uniq.sort }
     (directives.keys - expected_directives.keys).sort.each do |name|
       add_error("#{source}: unsupported CSP directive #{name}")
     end
@@ -243,12 +253,111 @@ class SiteUrlVerifier
 
       default_port = uri.scheme == "https" ? 443 : 80
       port = uri.port == default_port ? "" : ":#{uri.port}"
-      allowed = comments && "#{uri.scheme}://#{uri.host}#{port}" == GISCUS_ORIGIN
-      allowed &&= node.name == "iframe" || uri.path == "/client.js"
-      add_error("#{source}: external #{node.name} source is not allowed: #{value.inspect}") unless allowed
-    rescue URI::InvalidURIError
+      source_origin = "#{uri.scheme}://#{uri.host}#{port}"
+      if comments && source_origin == GISCUS_ORIGIN && (node.name == "iframe" || uri.path == "/client.js")
+        next
+      end
+      if node.name == "iframe"
+        if node["data-website-external-player"]
+          verify_player_frame(node, value, source)
+        elsif node["data-website-external-frame"] == "web"
+          verify_web_frame(node, value, source)
+        else
+          add_error("#{source}: external iframe is missing a compiler-owned marker: #{value.inspect}")
+        end
+      else
+        add_error("#{source}: external script source is not allowed: #{value.inspect}")
+      end
+    rescue URI::InvalidURIError, JekyllObsidian::ExternalMedia::Invalid
       add_error("#{source}: invalid external #{node.name} source #{value.inspect}")
     end
+    verify_tweets(document, source)
+  end
+
+  def verify_player_frame(node, value, source)
+    descriptor = JekyllObsidian::ExternalMedia.resolve_frame(value)
+    expected_class = "website-external-player--#{descriptor.provider}"
+    checks = {
+      "canonical src" => value == descriptor.source_url,
+      "compiler marker" => node["data-website-external-player"] == descriptor.provider.to_s,
+      "player class" => node["class"].to_s.split.include?("website-external-player") &&
+        node["class"].to_s.split.include?(expected_class),
+      "title" => !node["title"].to_s.strip.empty?,
+      "lazy loading" => node["loading"] == "lazy",
+      "referrer policy" => node["referrerpolicy"] == "strict-origin-when-cross-origin",
+      "permissions" => node["allow"].to_s == descriptor.iframe_allow.to_s,
+      "fullscreen" => node.key?("allowfullscreen")
+    }
+    checks.each do |label, valid|
+      add_error("#{source}: external iframe has invalid #{label}: #{value.inspect}") unless valid
+    end
+  end
+
+  def verify_web_frame(node, value, source)
+    descriptor = JekyllObsidian::ExternalMedia.resolve_frame(value)
+    checks = {
+      "canonical src" => descriptor.kind == :web_frame && value == descriptor.source_url,
+      "web frame class" => node["class"].to_s.split.include?("website-external-frame__viewport"),
+      "title" => !node["title"].to_s.strip.empty?,
+      "lazy loading" => node["loading"] == "lazy",
+      "referrer policy" => node["referrerpolicy"] == "strict-origin-when-cross-origin",
+      "sandbox" => node["sandbox"] == JekyllObsidian::ExternalMedia::IFRAME_SANDBOX,
+      "height" => node["height"].to_s.match?(/\A[1-9]\d*\z/),
+      "permissions" => !node.key?("allow"),
+      "fullscreen" => node.key?("allowfullscreen")
+    }
+    checks.each do |label, valid|
+      add_error("#{source}: external iframe has invalid #{label}: #{value.inspect}") unless valid
+    end
+    dangerous = node.attribute_nodes.map(&:name).grep(/\Aon/i) + %w[srcdoc style].select { |name| node.key?(name) }
+    add_error("#{source}: external iframe retained unsafe attributes: #{dangerous.join(', ')}") unless dangerous.empty?
+    wrapper = node.ancestors("figure").find { |candidate| candidate["class"].to_s.split.include?("website-external-frame") }
+    fallback = wrapper&.at_css("a.website-external-frame__fallback")
+    unless fallback && fallback["href"] == descriptor.fallback_url && fallback["target"] == "_blank" &&
+        fallback["rel"].to_s.split.sort == %w[noopener noreferrer]
+      add_error("#{source}: external iframe is missing its canonical fallback link: #{value.inspect}")
+    end
+  end
+
+  def verify_tweets(document, source)
+    document.css("[data-website-tweet]").each do |node|
+      identifier = node["data-website-tweet"].to_s
+      mount = node.at_css("[data-website-tweet-mount]")
+      fallback = node.at_css("a[data-website-tweet-fallback]")
+      begin
+        descriptor = JekyllObsidian::ExternalMedia.resolve(fallback&.[]("href"))
+        valid = identifier.match?(/\A[1-9]\d*\z/) && descriptor&.kind == :tweet &&
+          descriptor.identifier == identifier && mount && node.css("script, iframe").empty?
+        add_error("#{source}: Tweet embed is not canonical or contains active authored content") unless valid
+      rescue JekyllObsidian::ExternalMedia::Invalid
+        add_error("#{source}: Tweet embed has an invalid fallback URL")
+      end
+    end
+  end
+
+  def verify_external_media(document, source)
+    document.css("video[src], audio[src], video source[src], audio source[src]").each do |node|
+      value = node["src"].to_s
+      uri = URI.parse(value)
+      next unless uri.scheme
+      unless uri.scheme == "https"
+        add_error("#{source}: external media must use HTTPS: #{value.inspect}")
+        next
+      end
+
+      descriptor = JekyllObsidian::ExternalMedia.resolve(value)
+      unless descriptor&.kind == :direct_video && node.name != "audio" && node.ancestors("audio").empty?
+        add_error("#{source}: external media source is not a supported direct video: #{value.inspect}")
+      end
+    rescue URI::InvalidURIError, JekyllObsidian::ExternalMedia::Invalid
+      add_error("#{source}: invalid external media source #{value.inspect}")
+    end
+  end
+
+  def external_origins(document, selector)
+    document.css(selector).filter_map do |node|
+      JekyllObsidian::ExternalMedia.https_origin(node["src"])
+    end.uniq.sort
   end
 
   def srcset_urls(value)
