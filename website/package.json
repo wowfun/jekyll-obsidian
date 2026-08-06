@@ -23,7 +23,7 @@
   "dependencies": {
     "d3": "7.9.0",
     "mathjax-full": "3.2.2",
-    "mermaid": "11.16.0",
+    "mermaid": "11.16.1",
     "minisearch": "7.2.0"
   },
   "devDependencies": {
