@@ -6,7 +6,7 @@ tags:
   - guide/customization
 description: Adjust site identity, visual tokens, navigation, and repository links.
 created: 2026-07-31
-updated: 2026-08-06
+updated: 2026-08-07
 ---
 
 # Customization
@@ -15,7 +15,7 @@ The bundled example defaults live in `website/_config.yml`. Host repositories sh
 
 ```yaml
 title: My Site
-description: Built from an Obsidian vault
+description: Built from Markdown
 lang: en
 url: ""
 baseurl: ""
@@ -46,6 +46,8 @@ website:
 
 The canonical commands merge `website/_config.yml`, then `.github/jekyll-obsidian.yml`, then temporary command-line or Pages values. The integration command owns only the marked `source` and `theme` lines in the host file; titles, repository links, content classification, and feature overrides remain editable around that block. `bin/build` pins the Jekyll source, implementation directories, caches, destination, and safety settings to `website/`. Direct `jekyll` commands do not load the host overlay or these ownership safeguards and are not a supported entrypoint.
 
+`website.theme` selects `minimal` or `docs`. `website.syntax_profile` pins the Markdown contract and currently accepts only `ofm@1`. `website.edit_branch` selects the branch used by Edit and other host source links; it defaults to `main`.
+
 ## Publication defaults
 
 `website.content.publish_by_default` is an array of directories relative to `website.source`. Each entry selects Markdown files in that directory and its descendants. The default is an empty array, which keeps `publish: true` as the required opt-in. Use `.` when every Markdown file in the content tree should publish unless it opts out:
@@ -61,11 +63,11 @@ An explicit YAML boolean always wins. `publish: false` excludes one note from a 
 
 ## Site identity
 
-`title`, `description`, and `lang` feed the shell, metadata, Atom, and accessibility labels. Set `website.repository` to an `owner/repository` pair to show Edit, History, View source, and Report issue links. If it is blank, the build checks `GITHUB_REPOSITORY` and the local `origin` remote. The links stay hidden when no repository can be identified.
+`title`, `description`, and `lang` feed the shell, metadata, Atom, and accessibility labels. Set `website.repository` to an `owner/repository` pair to show the Edit link. If it is blank, the build checks `GITHUB_REPOSITORY` and the local `origin` remote. The action stays hidden when no repository can be identified. This host repository setting never changes the Built by Jekyll Obsidian footer link, which always identifies the official project at `https://github.com/wowfun/jekyll-obsidian`.
 
-Minimal Home renders the public root `index.md`, followed by the six most recent posts in a two-column grid. Each summary can show `image`, `subtitle`, a body excerpt, authors, and its publication date. A post without an image uses the full card width instead of a placeholder. The Blog link opens the complete reverse-chronological list at `/blog/`.
+Minimal Home renders the public root `index.md`, followed by the six most recent posts as editorial rows. A row with an image places a 16:9 thumbnail beside its summary on wide screens and above it on narrow screens; a row without an image uses the full width with no placeholder. Each summary can also show `subtitle`, a body excerpt, authors, and its publication date. The Blog link opens the complete reverse-chronological list at `/blog/`.
 
-Add `website.contacts` to place contact links after the recent-post section. Each entry requires a short `label` and an `https:`, `mailto:`, or `tel:` URL; omit the list to hide the contact section. Labels are rendered as text so any provider or community can be represented without an icon-specific configuration vocabulary.
+Add `website.contacts` to place contact links after the recent-post section. Each entry requires a short `label` and an `https:`, `mailto:`, or `tel:` URL; use an empty list or omit it when the base configuration does not define contacts. Email, phone, GitHub, LinkedIn, X/Twitter, Mastodon, Bluesky, Instagram, YouTube, Telegram, RSS, and Website links receive an accessible icon automatically. Other providers keep their label as text, so the configuration stays provider-neutral and needs no icon field.
 
 ## Site themes
 
@@ -96,7 +98,7 @@ website:
 
 ## Minimal navigation
 
-Minimal begins with Home, Blog, and Docs, ordered at `0`, `10`, and `20`. Blog and Docs disappear automatically when the content tree has no public post or documentation page. Override their labels, order, or visibility under `website.navigation`; `visible: false` removes only the tab and leaves its pages public:
+Minimal begins with Home, Blog, Docs, and Portfolio, ordered at `0`, `10`, `20`, and `30`. Blog and Docs disappear automatically when the content tree has no public post or documentation page. Portfolio uses the source-relative `portfolio` folder by default and appears when that folder contains at least one visible published project. An empty or unpublished folder adds no tab. Override built-in labels, order, visibility, or the Portfolio path under `website.navigation`:
 
 ```yaml
 website:
@@ -108,19 +110,30 @@ website:
       visible: true
     blog:
       label: Writing
-      order: 30
+      order: 10
       visible: true
     docs:
       label: Handbook
       order: 20
       visible: true
+    portfolio:
+      path: work
+      label: Work
+      order: 30
+      visible: true
     folders:
-      - path: portfolio
-        label: Portfolio
+      - path: team
+        label: Team
         order: 40
 ```
 
-A folder path is relative to `website.source` and selects published pages whose effective `content_type` is `page`. Its public `index.md` is the tab destination when present; otherwise the tab opens the first visible page after `nav_order`, title, and path sorting. A folder label defaults to its index title when present, then to a readable form of its last path segment. Custom folder order defaults to `100`, and `visible` defaults to `true`. Ordinary folders never become tabs unless listed here.
+The Portfolio path is relative to `website.source`; an explicit path replaces the default `portfolio` path. Published Markdown descendants become Portfolio pages, so an explicit `content_type` within that path must be `page`. A public `<path>/index.md` keeps its authored introduction above the project grid. When it is absent, the compiler generates the Portfolio index at that route. The index itself is not a project. Projects are ordered by `nav_order`, then title, then path. Set `nav_exclude: true` on a project to omit its card, or set `website.navigation.portfolio.visible: false` to hide only the tab while keeping the Portfolio index and project pages public.
+
+Each project card uses its `image`, title, and `description`, falling back to a preview from the body when no description is present. Local GIF, WebP, AVIF, and APNG files are copied byte for byte and rendered with `<img>`, which preserves animation. The compiler does not transcode them or generate thumbnails.
+
+A project can replace its local body with a public GitHub Markdown file by setting `github_markdown`. The local wrapper continues to own card metadata and its route, while the resolved remote body supplies the detail page, outline, Search text, preview, and Markdown endpoint. See [[Portfolio|Portfolio]] for the accepted URL and mapping forms, empty-body rule, branch refresh behavior, content limits, relative URLs, localization, and security boundary.
+
+A custom folder path is also relative to `website.source`, but selects published pages whose effective `content_type` is `page`. Its public `index.md` is the tab destination when present; otherwise the tab opens the first visible page after `nav_order`, title, and path sorting. A folder label defaults to its index title when present, then to a readable form of its last path segment. Custom folder order defaults to `100`, and `visible` defaults to `true`. Ordinary folders never become tabs unless listed here. A custom folder cannot reuse the active Portfolio path.
 
 A public standalone page can opt into the same navigation directly from frontmatter:
 
@@ -188,6 +201,28 @@ Local development does not connect to Giscus. It shows a publication-only notice
 
 See [[Comments|Comments with GitHub Discussions]] for thread identity, origin restrictions, privacy boundaries, and troubleshooting.
 
+## Analytics
+
+Analytics is off when `website.analytics` is absent. A production site can select Cloudflare Web Analytics:
+
+```yaml
+website:
+  analytics:
+    provider: cloudflare
+    token: SITE_TOKEN
+```
+
+Or it can select one Google Analytics 4 property:
+
+```yaml
+website:
+  analytics:
+    provider: google
+    measurement_id: G-XXXXXXXXXX
+```
+
+Only one provider may be active. Local development and redirect pages do not load either client. `website/bin/integrate` preserves this mapping but does not create it. See [[Analytics|Analytics]] for provider setup, Docs navigation tracking, Content Security Policy sources, privacy differences, and troubleshooting.
+
 ## Localization
 
 Both themes can opt into static localization by listing locales under `website.i18n`. The mapping enables localization by default for Docs and stays disabled by default for Minimal; set `enabled: true` there. The top-level `lang` is the default locale and must appear in the list when localization is enabled:
@@ -235,9 +270,9 @@ The compiler accepts this fixed set of note properties:
 - `permalink`, `image`, and `cssclasses`
 - `created` and `updated`
 - `content_type`, `date`, `nav_order`, `nav_exclude`, and `navigation`
-- `comments`
+- `comments` and `github_markdown`
 
-Unknown keys never flow into Liquid or generated data. `aliases`, `tags`, `author`, `categories`, and `cssclasses` are string arrays; `subtitle` is a string. `publish`, `nav_exclude`, and `comments` use YAML booleans. `navigation` is the closed mapping documented above. Dates use ISO 8601. A note title comes from `title`, its first level-one heading, or its filename, in that order.
+Unknown keys never flow into Liquid or generated data. `aliases`, `tags`, `author`, `categories`, and `cssclasses` are string arrays; `subtitle` is a string. `publish`, `nav_exclude`, and `comments` use YAML booleans. `navigation` is the closed mapping documented above. `github_markdown` accepts only the URL or mapping documented in [[Portfolio|Portfolio]], and only on a Portfolio project wrapper. Dates use ISO 8601. A note title comes from `title`, its first level-one heading, or its filename, in that order.
 
 `updated` is optional and appears in page metadata only when the author supplies it; the compiler never infers an update date from Git. A post's publication time uses `date`, then `created`, then its first Git commit. Atom entries use explicit `updated` when present and otherwise use that publication time for posts. A non-post note without `updated` is omitted from the feed.
 

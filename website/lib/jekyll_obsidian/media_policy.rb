@@ -4,6 +4,7 @@ module JekyllObsidian
   module MediaPolicy
     TYPES = {
       ".3gp" => [:audio, "audio/3gpp"],
+      ".apng" => [:image, "image/apng"],
       ".avif" => [:image, "image/avif"],
       ".base" => [:download, "application/json"],
       ".bmp" => [:image, "image/bmp"],

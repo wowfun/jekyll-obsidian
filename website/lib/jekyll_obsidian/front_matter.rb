@@ -5,10 +5,10 @@ require "psych"
 
 module JekyllObsidian
   class FrontMatter
-    XML_INVALID_CHARACTER = /[^\u{9}\u{A}\u{D}\u{20}-\u{D7FF}\u{E000}-\u{FFFD}\u{10000}-\u{10FFFF}]/u
+    XML_INVALID_CHARACTER = OutputText::INVALID_CHARACTER
     SUPPORTED = %w[
       publish title subtitle aliases tags author categories description permalink image cssclasses created updated
-      content_type date nav_order nav_exclude navigation comments
+      content_type date nav_order nav_exclude navigation comments github_markdown
     ].freeze
     ARRAY_PROPERTIES = %w[aliases tags author categories cssclasses].freeze
     LINK_ARRAY_PROPERTIES = %w[author categories].freeze
@@ -23,7 +23,7 @@ module JekyllObsidian
     end
 
     def self.valid_output_text?(value)
-      value.is_a?(String) && value.valid_encoding? && !value.match?(XML_INVALID_CHARACTER)
+      OutputText.valid?(value)
     end
 
     def self.parse_wiki_link(value)
@@ -139,6 +139,17 @@ module JekyllObsidian
         when "navigation"
           normalized = validate_navigation(value)
           properties[key] = normalized if normalized
+        when "github_markdown"
+          begin
+            reference = GitHubMarkdown.normalize(value)
+            properties[key] = {
+              "repository" => reference.repository,
+              "ref" => reference.ref,
+              "path" => reference.path
+            }
+          rescue GitHubMarkdown::Invalid => exception
+            error("invalid_property", exception.message)
+          end
         end
       end
       properties

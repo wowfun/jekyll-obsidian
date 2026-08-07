@@ -68,9 +68,7 @@ module JekyllObsidian
           pages: pages,
           artifacts: artifacts,
           shared_files: shared_files,
-          site_data: {
-            "website_repository_url" => repository_url(config)
-          }.compact,
+          site_data: {},
           feed_note_ids: feed_notes.sort_by(&:id).map(&:id),
           reserved_namespaces: namespaces
         )
@@ -91,7 +89,7 @@ module JekyllObsidian
           "aliases" => Array(properties["aliases"]),
           "subtitle" => properties["subtitle"],
           "tags" => Array(properties["tags"]),
-          "author" => Array(properties["author"]),
+          "authors" => note.topics.select { |topic| topic.fetch("kind") == "author" },
           "categories" => Array(properties["categories"]),
           "cssclasses" => Array(properties["cssclasses"]),
           "created" => note.created,
@@ -103,11 +101,7 @@ module JekyllObsidian
           "routes" => { "home" => home_route },
           "theme" => config.theme,
           "features" => config.features.merge(note.feature_flags),
-          "content_security" => {
-            "media_sources" => note.content_security.media_sources,
-            "frame_sources" => note.content_security.frame_sources,
-            "script_sources" => note.content_security.script_sources
-          },
+          "content_security" => content_security_data(note.content_security, config),
           "theme_data" => theme_data,
           "tag_links" => Array(note.properties["tags"]).filter_map do |tag|
             anchor = topic_anchors[topic_identity("name" => tag)]
@@ -121,6 +115,7 @@ module JekyllObsidian
         website["local_graph"] = local_graph if local_graph
         website["has_context"] = context_present?(website)
         website["comments"] = comments if comments
+        website["analytics"] = analytics_data(config.analytics) unless config.analytics.provider.empty?
         data = {
           "title" => note.title,
           "description" => properties["description"] || note.preview,
@@ -155,6 +150,7 @@ module JekyllObsidian
               "kind" => kind,
               "theme" => config.theme,
               "features" => config.features,
+              "content_security" => content_security_data(nil, config),
               "theme_data" => system_theme_data.merge(theme_data),
               "route" => route,
               "href" => config.url_builder.href(route),
@@ -162,7 +158,9 @@ module JekyllObsidian
               "home_route" => home_route,
               "home_url" => home_url,
               "routes" => { "home" => home_route }
-            }.merge(website_data)
+            }.merge(website_data).tap do |website|
+              website["analytics"] = analytics_data(config.analytics) unless config.analytics.provider.empty?
+            end
           }
         )
       end
@@ -178,6 +176,41 @@ module JekyllObsidian
           home_route: home_route,
           home_url: home_url
         )
+      end
+
+      def analytics_data(analytics)
+        {
+          "provider" => analytics.provider,
+          "identifier" => analytics.identifier,
+          "load" => analytics.load
+        }
+      end
+
+      def content_security_data(content_security, config)
+        media_sources = Array(content_security&.media_sources).dup
+        frame_sources = Array(content_security&.frame_sources).dup
+        script_sources = Array(content_security&.script_sources).dup
+        connect_sources = Array(content_security&.connect_sources).dup
+        if config.analytics.load
+          case config.analytics.provider
+          when "cloudflare"
+            script_sources << "https://static.cloudflareinsights.com"
+            connect_sources << "https://cloudflareinsights.com"
+          when "google"
+            script_sources << "https://www.googletagmanager.com"
+            connect_sources.concat(%w[
+              https://*.analytics.google.com
+              https://*.google-analytics.com
+              https://www.googletagmanager.com
+            ])
+          end
+        end
+        {
+          "media_sources" => media_sources.uniq.sort,
+          "frame_sources" => frame_sources.uniq.sort,
+          "script_sources" => script_sources.uniq.sort,
+          "connect_sources" => connect_sources.uniq.sort
+        }
       end
 
       def build_tag_groups(notes, anchors, config)
@@ -322,13 +355,6 @@ module JekyllObsidian
           %w[links backlinks embedded_by].any? { |key| !website.fetch(key).empty? }
       end
 
-      def repository_url(config)
-        repository = config.site.repository.to_s
-        return unless repository.match?(/\A[\w.-]+\/[\w.-]+\z/)
-
-        "https://github.com/#{repository}"
-      end
-
       def page_comments(note, config)
         comments = config.comments
         return unless comments.enabled && note.content_type == "post"
@@ -412,6 +438,7 @@ module JekyllObsidian
         website["active_navigation_id"] = active_id
         routes = navigation.items.to_h { |item| [item.fetch("id"), item.fetch("url")] }
         routes["home"] ||= website.fetch("home_url")
+        routes["portfolio"] = config.url_builder.href(navigation.portfolio.route) if navigation.portfolio
         routes["tags"] = config.url_builder.href("/tags/") if config.theme == "docs" && config.features.fetch("tags")
         routes["feed"] = config.url_builder.href("/feed.xml") if config.features.fetch("feed")
         website["routes"] = routes
@@ -427,6 +454,8 @@ module JekyllObsidian
         taxonomy = taxonomy_for(posts, config)
         timeline = timeline_for(displayed, &:published_at)
         documentation = config.navigation
+        portfolio = documentation.portfolio
+        portfolio_projects = portfolio_project_cards(portfolio, model, config)
         linked_docs = documentation.docs_note_ids.filter_map { |id| model.notes_by_id[id] }
         linked_doc_positions = linked_docs.each_with_index.to_h { |note, index| [note.id, index] }
         post_positions = posts.each_with_index.to_h { |post, index| [post.id, index] }
@@ -472,7 +501,13 @@ module JekyllObsidian
         root = model.notes_by_id["index.md"]
         home_modules = home_theme_data(displayed, config, taxonomy)
         theme_data[root.id] = theme_data.fetch(root.id).merge(home_modules) if root
-        home = home_page(displayed, config, system_theme_data, taxonomy) if !root && displayed.any?
+        if portfolio&.index_note_id
+          theme_data[portfolio.index_note_id] = theme_data.fetch(portfolio.index_note_id).merge(
+            "portfolio_projects" => portfolio_projects
+          )
+        end
+        authored_root_route = model.notes.any? { |note| note.route == "/" }
+        home = home_page(displayed, config, system_theme_data, taxonomy) if !root && !authored_root_route && displayed.any?
         groups = archive_groups(displayed, config, taxonomy)
         blog = if displayed.any?
           system_page(
@@ -491,9 +526,29 @@ module JekyllObsidian
             home_url: config.url_builder.href("/")
           )
         end
-        theme_pages = [home, blog].compact
-        unless root || home
+        portfolio_page = if portfolio && !portfolio.index_note_id
+          system_page(
+            config,
+            portfolio.route,
+            navigation_label(config, "portfolio", "Portfolio"),
+            "portfolio-index",
+            system_theme_data,
+            { "portfolio_projects" => portfolio_projects },
+            home_route: "/",
+            home_url: config.url_builder.href("/")
+          )
+        end
+        theme_pages = [home, blog, portfolio_page].compact
+        root_route_claimed = authored_root_route || theme_pages.any? { |page| page.route == "/" }
+        unless root || home || root_route_claimed
           destination = config.navigation.items.first
+          if !destination && portfolio
+            destination = {
+              "id" => "portfolio",
+              "label" => navigation_label(config, "portfolio", "Portfolio"),
+              "url" => config.url_builder.href(portfolio.route)
+            }
+          end
           theme_pages << redirect_to(destination, config) if destination
         end
         project(
@@ -568,6 +623,7 @@ module JekyllObsidian
             "description" => config.site.description.to_s,
             "website" => {
               "kind" => "redirect",
+              "redirect_navigation_id" => item.fetch("id"),
               "theme" => config.theme,
               "features" => config.features,
               "route" => "/",
@@ -607,6 +663,21 @@ module JekyllObsidian
       def navigation_label(config, id, fallback)
         config.navigation.items.find { |item| item.fetch("id") == id }&.fetch("label") ||
           config.site.navigation&.dig(id, "label") || fallback
+      end
+
+      def portfolio_project_cards(portfolio, model, config)
+        return [] unless portfolio
+
+        portfolio.project_note_ids.map do |id|
+          note = model.notes_by_id.fetch(id)
+          {
+            "id" => note.id,
+            "title" => note.title,
+            "url" => config.url_builder.href(note.route),
+            "image" => note.image_url,
+            "summary" => note.properties["description"] || note.preview
+          }
+        end
       end
 
       def chronology_key(value)

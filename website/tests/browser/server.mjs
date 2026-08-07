@@ -33,7 +33,7 @@ function featureFixture(theme, feature) {
         ["blog", "Blog", "/blog/"],
         ["docs", "Docs", "/docs/"],
         ["page:about.md", "About", "/about/"],
-        ["folder:portfolio", "Portfolio", "/portfolio/"],
+        ["portfolio", "Portfolio", "/portfolio/"],
         ["page:projects.md", "Projects", "/projects/"],
         ["folder:team", "Team", "/team/"],
         ["page:contact.md", "Contact", "/contact/"]
@@ -69,9 +69,24 @@ function commentsFixture() {
   return featureFixture("minimal", "none").replace("</article>", `${comments}</article>`);
 }
 
+function analyticsFixture(provider) {
+  const analytics = provider === "cloudflare"
+    ? '<meta name="website:analytics" data-provider="cloudflare" content="site-token-123">'
+    : '<meta name="website:analytics" data-provider="google" content="G-ABC123XYZ9">';
+  return featureFixture("docs", "navigation").replace(
+    "<title>Feature overrides</title>",
+    `${analytics}<title>Feature overrides</title>`
+  );
+}
+
 function tweetFixture() {
   const tweet = `<figure class="website-tweet" data-website-tweet="1580548874246443010"><div class="website-tweet__mount" data-website-tweet-mount></div><a class="website-tweet__fallback" data-website-tweet-fallback href="https://x.com/obsdmd/status/1580548874246443010">View post on X</a></figure>`;
   return featureFixture("minimal", "none").replace("</article>", `${tweet}</article>`);
+}
+
+function postCardFixture() {
+  const entry = manifest.entries.minimal;
+  return `<!doctype html><html class="no-js" lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Post card</title><link rel="stylesheet" href="/assets/website/${entry.css}"></head><body class="theme-minimal"><main class="minimal-shell minimal-shell--system"><article class="minimal-entry"><div class="note-content"><section class="minimal-recent"><div class="minimal-recent__grid"><article class="minimal-post-card minimal-post-card--with-image"><div class="minimal-post-card__media"><img alt="" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='320' height='180'/%3E"></div><div class="minimal-post-card__body"><h3><a href="/__fixture__/post-target/">A complete card target</a></h3><p class="minimal-post-card__excerpt">The excerpt shares the article destination.</p><footer><span>Posted by <a href="/__fixture__/author-target/">Ada</a></span></footer></div></article></div></section></div></article></main></body></html>`;
 }
 
 const json = {
@@ -207,9 +222,25 @@ const server = createServer(async (request, response) => {
     response.end(commentsFixture());
     return;
   }
+  const analyticsMatch = pathname.match(/^\/__fixture__\/analytics\/(cloudflare|google)\/$/);
+  if (analyticsMatch) {
+    response.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+    response.end(analyticsFixture(analyticsMatch[1]));
+    return;
+  }
   if (pathname === "/__fixture__/tweet/") {
     response.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
     response.end(tweetFixture());
+    return;
+  }
+  if (pathname === "/__fixture__/post-card/") {
+    response.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+    response.end(postCardFixture());
+    return;
+  }
+  if (pathname === "/__fixture__/post-target/" || pathname === "/__fixture__/author-target/") {
+    response.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+    response.end("<!doctype html><title>Card destination</title>");
     return;
   }
   if (pathname in json) {

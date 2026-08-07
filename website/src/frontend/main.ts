@@ -8,6 +8,7 @@ import { initialiseArchiveFilters } from "./archive-filters";
 import { initialisePriorityNavigation } from "./priority-navigation";
 import { initialisePageActions } from "./page-actions";
 import { initialiseTweets } from "./tweets";
+import { initialiseAnalytics } from "./analytics";
 
 const DOCS_PAGE_CHANGE_EVENT = "website:docs-page-change";
 let pageFeatureGeneration = 0;
@@ -80,6 +81,7 @@ export function initialiseWebsite(): void {
   initialiseColorScheme();
   initialiseLanguageSwitcher();
   initialisePriorityNavigation();
+  initialiseAnalytics();
   initialisePageFeatures();
   document.addEventListener(DOCS_PAGE_CHANGE_EVENT, initialisePageFeatures);
 

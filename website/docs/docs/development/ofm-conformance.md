@@ -10,7 +10,7 @@ tags:
   - specification
 description: The pinned ofm@1 compatibility contract for notes, embeds, media, plugins, and build errors.
 created: 2026-07-31
-updated: 2026-08-06
+updated: 2026-08-07
 ---
 
 # OFM v1 Conformance
@@ -40,7 +40,7 @@ Each feature has one of three outcomes:
 | CJK emphasis | render | Commonmarker CJK emphasis is enabled. Search adds deterministic CJK unigrams and bigrams. |
 | Standard and relaxed task states | render | Standard and custom task markers keep their original state in `data-task`; each disabled checkbox has an accessible state label. |
 | Tags and nested tags | render | Inline and frontmatter tags join one tag index. Nested tags use stable anchors on that page. |
-| Properties in the supported allowlist | render | `publish`, `title`, `subtitle`, `aliases`, `tags`, `author`, `categories`, `description`, `permalink`, `image`, `cssclasses`, `created`, `updated`, `content_type`, `date`, `nav_order`, `nav_exclude`, `navigation`, and `comments` are accepted with strict types. `updated` is optional and never inferred from Git. `navigation` is a closed mapping of optional `label`, `order`, and `visible` values and is available only to public pages. `author` and `categories` are string arrays; wiki-link entries must be double-quoted and resolve through the public-note linker. `image` must resolve to a local published image and supplies the public `og:image` URL. |
+| Properties in the supported allowlist | render | `publish`, `title`, `subtitle`, `aliases`, `tags`, `author`, `categories`, `description`, `permalink`, `image`, `cssclasses`, `created`, `updated`, `content_type`, `date`, `nav_order`, `nav_exclude`, `navigation`, `comments`, and `github_markdown` are accepted with strict types. `updated` is optional and never inferred from Git. `navigation` is a closed mapping of optional `label`, `order`, and `visible` values and is available only to public pages. `github_markdown` is limited to Portfolio project wrappers and replaces an empty local body with one public GitHub Markdown file. `author` and `categories` are string arrays; wiki-link entries must be double-quoted and resolve through the public-note linker. `image` must resolve to a local published image and supplies the public `og:image` URL. |
 | Unknown properties and Jekyll control keys | unsupported | They are excluded from page data, HTML, JSON, and XML. |
 
 ## Callouts and comments
@@ -61,7 +61,7 @@ Each feature has one of three outcomes:
 | Markdown links to notes | render | Internal URLs use the same resolver and URL builder as wikilinks. |
 | External HTTP and HTTPS links | render | Preserved with context-safe escaping. |
 | `javascript:`, `data:`, `file:`, and `vbscript:` Markdown URLs | unsupported | Rejected. |
-| Images: AVIF, BMP, GIF, JPEG, PNG, SVG, WebP | render | Local files publish only when reached from public authored content or its transclusion closure. HTTPS images and GIFs remain remote. Wikilink dimensions and Markdown alt suffixes such as `alt\|320x180` are supported for both. |
+| Images: APNG, AVIF, BMP, GIF, JPEG, PNG, SVG, WebP | render | Local files publish only when reached from public authored content or its transclusion closure. HTTPS images and GIFs remain remote. Wikilink dimensions and Markdown alt suffixes such as `alt\|320x180` are supported for both. Animated formats are copied without transcoding. |
 | Audio: 3GP, FLAC, M4A, MP3, OGG, WAV | render | Rendered with native controls when local and reachable. In v1, `.3gp` is always audio. |
 | Video: MKV, MOV, MP4, OGV, WebM | render | Local reachable files and direct HTTPS video URLs render with native controls. In v1, `.webm` is always video; browser codec support still applies. |
 | PDF embeds | render | Native PDF objects support page and height options. Only local published attachments are embedded. |

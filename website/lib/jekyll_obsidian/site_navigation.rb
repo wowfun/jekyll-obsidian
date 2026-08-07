@@ -5,12 +5,20 @@ module JekyllObsidian
   # navigation declarations, and folder configuration into one immutable model
   # consumed by every presentation surface.
   module SiteNavigation
+    PortfolioProjection = ImmutableRecord.define(
+      :path,
+      :route,
+      :index_note_id,
+      :project_note_ids
+    )
+
     Result = ImmutableRecord.define(
       :items,
       :active_by_note_id,
       :docs_tree,
       :docs_note_ids,
       :docs_home_url,
+      :portfolio,
       :diagnostics
     )
 
@@ -38,7 +46,9 @@ module JekyllObsidian
 
       def build
         documentation = documentation_navigation
-        items = @theme == "minimal" ? minimal_items(documentation) : docs_items(documentation)
+        portfolio = @theme == "minimal" ? portfolio_projection : nil
+        @portfolio_projection = portfolio
+        items = @theme == "minimal" ? minimal_items(documentation, portfolio) : docs_items(documentation)
         items = validate_items(items)
         active = active_notes(items)
 
@@ -48,24 +58,26 @@ module JekyllObsidian
           docs_tree: documentation.fetch("tree"),
           docs_note_ids: documentation.fetch("linked_notes").map(&:id),
           docs_home_url: documentation.fetch("home_url"),
+          portfolio: portfolio,
           diagnostics: @diagnostics
         )
       end
 
       private
 
-      def minimal_items(documentation)
+      def minimal_items(documentation, portfolio)
         items = []
         posts = @model.notes.select { |note| note.content_type == "post" }
         docs = @model.notes.select { |note| note.content_type == "doc" }
         root = @model.notes_by_id["index.md"]
+        portfolio_owns_root_navigation = portfolio&.route == "/" && @settings.fetch("portfolio").fetch("visible")
 
         add_builtin(
           items,
           "home",
           "Home",
           @url_builder.href("/"),
-          root || posts.any?,
+          !portfolio_owns_root_navigation && (root || posts.any?),
           note_ids: root ? [root.id] : [],
           routes: ["/"]
         )
@@ -87,6 +99,17 @@ module JekyllObsidian
           note_ids: docs.map(&:id),
           routes: []
         )
+        if portfolio
+          add_builtin(
+            items,
+            "portfolio",
+            "Portfolio",
+            @url_builder.href(portfolio.route),
+            true,
+            note_ids: @portfolio_note_ids,
+            routes: [portfolio.route]
+          )
+        end
         add_folder_items(items)
         add_page_items(items)
         items
@@ -135,6 +158,16 @@ module JekyllObsidian
         @settings.fetch("folders").each do |setting|
           path = setting.fetch("path")
           folded = path.downcase(:fold)
+          portfolio_setting = @settings.fetch("portfolio")
+          portfolio_path = @portfolio_projection && portfolio_setting.fetch("visible") && portfolio_setting.fetch("path")
+          if portfolio_path && folded == portfolio_path.downcase(:fold)
+            navigation_error(
+              "duplicate_navigation_folder",
+              "navigation folder conflicts with the built-in portfolio path",
+              path
+            )
+            next
+          end
           if seen.key?(folded)
             navigation_error("duplicate_navigation_folder", "navigation folder is configured more than once", path)
             next
@@ -258,7 +291,7 @@ module JekyllObsidian
 
       def active_notes(items)
         active = {}
-        builtins = items.select { |item| %w[home blog docs].include?(item.fetch("id")) }
+        builtins = items.select { |item| %w[home blog docs portfolio].include?(item.fetch("id")) }
         folders = items.select { |item| item.fetch("id").start_with?("folder:") }.sort_by do |item|
           item.fetch("id").count("/")
         end
@@ -280,6 +313,29 @@ module JekyllObsidian
           "note_ids" => note_ids.uniq.sort,
           "routes" => routes.uniq.sort
         }
+      end
+
+      def portfolio_projection
+        path = @settings.fetch("portfolio").fetch("path")
+        notes = @model.notes.select { |note| note.id.start_with?("#{path}/") }
+        index = notes.find { |note| note.id == "#{path}/index.md" }
+        projects = notes.reject { |note| note.id == index&.id || note.nav_exclude }.sort_by do |note|
+          portfolio_sort_key(note)
+        end
+        return if projects.empty?
+
+        @portfolio_note_ids = notes.map(&:id)
+        PortfolioProjection.new(
+          path: path,
+          route: index ? index.route : @url_builder.route_for_note("#{path}/index.md"),
+          index_note_id: index&.id,
+          project_note_ids: projects.map(&:id)
+        )
+      end
+
+      def portfolio_sort_key(note)
+        order = note.nav_order
+        [order.nil? ? 1 : 0, order || 0, note.title.downcase, note.title, note.id]
       end
 
       def navigation_source(item)

@@ -1,0 +1,20 @@
+{% assign projects = include.projects | default: page.website.theme_data.portfolio_projects %}
+{% if projects.size > 0 %}
+  {% assign ui = page.website.i18n.messages %}
+  <section class="minimal-portfolio" aria-labelledby="portfolio-projects-heading">
+    <h2 class="minimal-portfolio__heading" id="portfolio-projects-heading">{{ ui.projects | default: 'Projects' | escape }}</h2>
+    <ul class="minimal-portfolio__grid">
+      {% for project in projects %}
+        <li>
+          <a class="minimal-portfolio-card" href="{{ project.url | escape }}">
+            {% if project.image %}<span class="minimal-portfolio-card__media"><img src="{{ project.image | escape }}" alt="" loading="lazy" decoding="async"></span>{% endif %}
+            <div class="minimal-portfolio-card__body">
+              <h3 class="minimal-portfolio-card__title">{{ project.title | escape }}</h3>
+              {% if project.summary %}<p class="minimal-portfolio-card__summary">{{ project.summary | escape }}</p>{% endif %}
+            </div>
+          </a>
+        </li>
+      {% endfor %}
+    </ul>
+  </section>
+{% endif %}

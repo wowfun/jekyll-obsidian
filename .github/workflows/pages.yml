@@ -50,7 +50,7 @@ jobs:
           fetch-depth: 0
 
       - name: Restore executable scripts
-        run: chmod +x bin/build bin/dev bin/integrate bin/setup bin/test scripts/*.sh test/integration/*.sh
+        run: chmod +x bin/build bin/dev bin/integrate bin/setup bin/test bin/update scripts/*.sh test/integration/*.sh
 
       - name: Check host integration
         run: bin/integrate --check
@@ -104,12 +104,23 @@ jobs:
       - name: Validate the host content
         env:
           JEKYLL_ENV: production
+          JEKYLL_OBSIDIAN_GITHUB_MARKDOWN_MANIFEST_OUT: .jekyll-obsidian-cache/github-markdown-run.json
         run: >-
           bin/build
           --url https://example.invalid
           --baseurl /host-preview
           --destination _site-host-content
           --skip-assets
+
+      - name: Freeze GitHub Markdown inputs for deployment
+        if: github.event_name != 'pull_request'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: github-markdown-${{ github.run_id }}
+          path: website/.jekyll-obsidian-cache/github-markdown-run.json
+          if-no-files-found: error
+          include-hidden-files: true
+          retention-days: 1
 
   build_pages:
     if: >-
@@ -127,7 +138,7 @@ jobs:
           fetch-depth: 0
 
       - name: Restore executable scripts
-        run: chmod +x bin/build bin/dev bin/integrate bin/setup bin/test scripts/*.sh test/integration/*.sh
+        run: chmod +x bin/build bin/dev bin/integrate bin/setup bin/test bin/update scripts/*.sh test/integration/*.sh
 
       - name: Set up Ruby
         uses: ruby/setup-ruby@95ef2b042f9d7a56d8268cba8559e2842e2ad01b
@@ -146,6 +157,12 @@ jobs:
       - name: Install Node dependencies
         run: npm ci
 
+      - name: Restore verified GitHub Markdown inputs
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: github-markdown-${{ github.run_id }}
+          path: website/.jekyll-obsidian-cache
+
       - name: Read Pages metadata
         id: pages
         uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d
@@ -155,6 +172,7 @@ jobs:
           JEKYLL_ENV: production
           PAGES_ORIGIN: ${{ steps.pages.outputs.origin }}
           PAGES_BASE_PATH: ${{ steps.pages.outputs.base_path }}
+          JEKYLL_OBSIDIAN_GITHUB_MARKDOWN_MANIFEST_IN: .jekyll-obsidian-cache/github-markdown-run.json
         run: >-
           bin/build
           --url "$PAGES_ORIGIN"

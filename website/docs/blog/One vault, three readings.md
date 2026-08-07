@@ -15,4 +15,4 @@ Minimal combines an authored Home page, a chronological Blog, documentation, and
 
 `jekyll-obsidian` keeps one publication and OFM contract, then gives each site model a distinct presenter. Authored URLs stay stable while navigation changes around them.
 
-Read [[docs/development/architecture#Theme presenter seam|Architecture]] for the module seam or [[docs/Customization#Site themes|Customization]] to switch the active theme.
+Read [[docs/development/architecture#Theme presenter seam|Architecture]] for the module seam or [[docs/Customization|Customization]] to switch the active theme.

@@ -42,6 +42,20 @@ class SiteUrlVerifier
   ).freeze
   GISCUS_ORIGIN = "https://giscus.app"
   X_WIDGET_ORIGIN = "https://platform.twitter.com"
+  ANALYTICS_CSP = {
+    "cloudflare" => {
+      "script-src" => ["https://static.cloudflareinsights.com"],
+      "connect-src" => ["https://cloudflareinsights.com"]
+    },
+    "google" => {
+      "script-src" => ["https://www.googletagmanager.com"],
+      "connect-src" => [
+        "https://*.analytics.google.com",
+        "https://*.google-analytics.com",
+        "https://www.googletagmanager.com"
+      ]
+    }
+  }.freeze
 
   def initialize(site_dir, origin, baseurl)
     @site_dir = File.realpath(site_dir)
@@ -88,7 +102,8 @@ class SiteUrlVerifier
     csp = csp_node&.[]("content").to_s
     add_error("#{relative}: missing production meta CSP") if csp.empty?
     comments = !document.at_css("[data-website-comments-load]").nil?
-    verify_csp(csp, relative, comments:, document:) unless csp.empty?
+    analytics = verify_analytics(document, relative)
+    verify_csp(csp, relative, comments:, analytics:, document:) unless csp.empty?
 
     canonical = document.at_css("link[rel~='canonical']")&.[]("href")
     expected_canonical = "#{@origin}#{public_path(route)}"
@@ -121,24 +136,30 @@ class SiteUrlVerifier
 
     URL_ATTRIBUTES.each do |element, attribute|
       document.css("#{element}[#{attribute}]").each do |node|
-        verify_reference(node[attribute], route, relative)
+        image = element == "img" || (element == "source" && node.ancestors.any? { |ancestor| ancestor.name == "picture" })
+        verify_reference(node[attribute], route, relative, image:)
       end
     end
     document.css("img[srcset], source[srcset]").each do |node|
-      srcset_urls(node["srcset"]).each { |value| verify_reference(value, route, relative) }
+      image = node.name == "img" || node.ancestors.any? { |ancestor| ancestor.name == "picture" }
+      srcset_urls(node["srcset"]).each { |value| verify_reference(value, route, relative, image:) }
     end
-    document.css("meta[name^='website:'][content]").each do |node|
+    document.css("meta[name^='website:'][content]:not([name='website:analytics'])").each do |node|
       verify_reference(node["content"], route, relative)
     end
   rescue StandardError => exception
     add_error("#{relative || path}: could not inspect HTML: #{exception.class}: #{exception.message}")
   end
 
-  def verify_reference(value, current_route, source)
+  def verify_reference(value, current_route, source, image: false)
     return if value.nil? || value.empty?
     return if value.start_with?("mailto:", "tel:")
 
     scheme = value[/\A([a-z][a-z0-9+.-]*):/i, 1]&.downcase
+    if image && scheme == "http" && !same_origin_url?(value)
+      add_error("#{source}: image URL must use HTTPS: #{value.inspect}")
+      return
+    end
     return if %w[http https].include?(scheme)
     if scheme || value.start_with?("//")
       add_error("#{source}: unsupported URL #{value.inspect}")
@@ -167,6 +188,16 @@ class SiteUrlVerifier
     end
   rescue ArgumentError => exception
     add_error("#{source}: invalid URL #{value.inspect}: #{exception.message}")
+  end
+
+  def same_origin_url?(value)
+    return false if @origin.empty?
+
+    reference = URI.parse(value)
+    origin = URI.parse(@origin)
+    reference.scheme == origin.scheme && reference.host == origin.host && reference.port == origin.port
+  rescue URI::InvalidURIError
+    false
   end
 
   def verify_noindex_canonical(value, source)
@@ -219,7 +250,7 @@ class SiteUrlVerifier
     add_error("#{source}: invalid fragment ##{fragment}")
   end
 
-  def verify_csp(value, source, comments:, document:)
+  def verify_csp(value, source, comments:, analytics:, document:)
     pairs = value.split(";").filter_map do |part|
       name, *tokens = part.strip.split(/\s+/)
       [name, tokens] unless name.to_s.empty?
@@ -228,6 +259,9 @@ class SiteUrlVerifier
     duplicates.each { |name| add_error("#{source}: CSP directive #{name} must appear exactly once") }
     directives = pairs.to_h
     expected_directives = (comments ? COMMENTS_CSP_DIRECTIVES : CSP_DIRECTIVES).transform_values(&:dup)
+    ANALYTICS_CSP.fetch(analytics, {}).each do |name, tokens|
+      expected_directives[name] += tokens
+    end
     tweet = !document.at_css("[data-website-tweet]").nil?
     expected_directives["script-src"] << X_WIDGET_ORIGIN if tweet
     expected_directives["media-src"] += external_origins(document, "video[src], audio[src], video source[src], audio source[src]")
@@ -243,6 +277,30 @@ class SiteUrlVerifier
 
       add_error("#{source}: CSP directive #{name} must be exactly #{expected.join(" ")}")
     end
+  end
+
+  def verify_analytics(document, source)
+    nodes = document.css("meta[name='website:analytics']")
+    if nodes.length > 1
+      add_error("#{source}: website analytics meta must appear at most once")
+      return nil
+    end
+    return nil if nodes.empty?
+
+    node = nodes.first
+    provider = node["data-provider"].to_s
+    identifier = node["content"].to_s
+    unless ANALYTICS_CSP.key?(provider)
+      add_error("#{source}: unsupported website analytics provider #{provider.inspect}")
+      return nil
+    end
+    valid_identifier = if provider == "google"
+      identifier.match?(/\AG-[A-Z0-9]+\z/)
+    else
+      !identifier.empty? && identifier.length <= 256 && !identifier.match?(/[\s<>"']/)
+    end
+    add_error("#{source}: invalid #{provider} analytics identifier") unless valid_identifier
+    provider
   end
 
   def verify_external_embeds(document, source, comments:)

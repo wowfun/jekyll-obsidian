@@ -45,6 +45,9 @@ grep -Fqx "  source: 'docs'" "$default_host/.github/jekyll-obsidian.yml" || fail
 grep -Fqx "  theme: 'minimal'" "$default_host/.github/jekyll-obsidian.yml" || fail "default theme was not generated."
 grep -Fqx 'title: My Project Documentation' "$default_host/.github/jekyll-obsidian.yml" || fail "editable host defaults were not generated."
 grep -Fqx '  repository: ""' "$default_host/.github/jekyll-obsidian.yml" || fail "repository auto-detection default was not generated."
+if grep -Eq '^  analytics:' "$default_host/.github/jekyll-obsidian.yml"; then
+  fail "new hosts must keep analytics disabled until the user configures a provider."
+fi
 grep -Fqx '    publish_by_default: []' "$default_host/.github/jekyll-obsidian.yml" || fail "new hosts must require explicit publication by default."
 grep -Fqx '    default_type: doc' "$default_host/.github/jekyll-obsidian.yml" || fail "the default host content was not classified as documentation."
 grep -Fqx '      post: []' "$default_host/.github/jekyll-obsidian.yml" || fail "the default host post directories were not reset."
@@ -69,14 +72,55 @@ before_workflow=$(cksum "$default_host/.github/workflows/pages.yml")
 config_tmp=$(mktemp "$default_host/.github/.custom-config.XXXXXX")
 awk '
   /^title:/ { print "title: Preserved host title"; next }
-  /^  repository:/ { print "  repository: owner/project"; next }
+  /^  repository:/ {
+    print "  repository: owner/project"
+    print "  analytics:"
+    print "    provider: cloudflare"
+    print "    token: site-token-123"
+    next
+  }
   { print }
 ' "$default_host/.github/jekyll-obsidian.yml" > "$config_tmp"
 mv -- "$config_tmp" "$default_host/.github/jekyll-obsidian.yml"
 "$default_host/website/bin/integrate" --theme minimal >/dev/null
 grep -Fqx 'title: Preserved host title' "$default_host/.github/jekyll-obsidian.yml" || fail "top-level host configuration was lost."
 grep -Fqx '  repository: owner/project' "$default_host/.github/jekyll-obsidian.yml" || fail "website host configuration was lost."
+grep -Fqx '  analytics:' "$default_host/.github/jekyll-obsidian.yml" || fail "analytics configuration was lost."
+grep -Fqx '    provider: cloudflare' "$default_host/.github/jekyll-obsidian.yml" || fail "analytics provider was lost."
+grep -Fqx '    token: site-token-123' "$default_host/.github/jekyll-obsidian.yml" || fail "analytics identifier was lost."
 grep -Fqx "  theme: 'minimal'" "$default_host/.github/jekyll-obsidian.yml" || fail "theme was not updated."
+
+new_host
+byte_preserving_host=$new_host_path
+mkdir -p "$byte_preserving_host/.github"
+{
+  printf '%s\n' \
+    'title: Byte-preserving host' \
+    'website:' \
+    '  # jekyll-obsidian:managed-start' \
+    "  source: 'docs'" \
+    "  theme: 'minimal'" \
+    '  # jekyll-obsidian:managed-end'
+  printf '%s' '  repository: owner/project'
+} > "$byte_preserving_host/.github/jekyll-obsidian.yml"
+"$byte_preserving_host/website/bin/integrate" --theme docs >/dev/null
+expected_config="$byte_preserving_host/.github/expected.yml"
+{
+  printf '%s\n' \
+    'title: Byte-preserving host' \
+    'website:' \
+    '  # jekyll-obsidian:managed-start' \
+    "  source: 'docs'" \
+    "  theme: 'docs'" \
+    '  # jekyll-obsidian:managed-end'
+  printf '%s' '  repository: owner/project'
+} > "$expected_config"
+cmp -s "$expected_config" "$byte_preserving_host/.github/jekyll-obsidian.yml" ||
+  fail "updating the managed block changed configuration bytes outside it."
+before_check=$(cksum "$byte_preserving_host/.github/jekyll-obsidian.yml")
+"$byte_preserving_host/website/bin/integrate" --check >/dev/null
+[ "$before_check" = "$(cksum "$byte_preserving_host/.github/jekyll-obsidian.yml")" ] ||
+  fail "--check rewrote a byte-preserving host configuration."
 
 new_host
 detached_markers_host=$new_host_path

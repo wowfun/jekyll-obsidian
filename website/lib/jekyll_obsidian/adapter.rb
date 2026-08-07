@@ -14,8 +14,10 @@ require_relative "workspace_layout"
 module JekyllObsidian
   module Adapter
     BUNDLED_FEATURE_IDS = %w[search graph previews math mermaid].freeze
-    CONFIG_KEYS = %w[source syntax_profile theme repository edit_branch content features i18n comments contacts navigation].freeze
+    CONFIG_KEYS = %w[source syntax_profile theme repository edit_branch content features i18n comments analytics contacts navigation].freeze
     GIT_FIRST_COMMIT_CACHE_VERSION = 1
+    GITHUB_MARKDOWN_MANIFEST_INPUT = "JEKYLL_OBSIDIAN_GITHUB_MARKDOWN_MANIFEST_IN"
+    GITHUB_MARKDOWN_MANIFEST_OUTPUT = "JEKYLL_OBSIDIAN_GITHUB_MARKDOWN_MANIFEST_OUT"
     IGNORED_CONTENT_DIRECTORIES = %w[.obsidian .trash].freeze
     STAGING_BASENAME_PATTERN = /\Avault-assets\.[A-Za-z0-9.-]+\z/
     StagingLease = Struct.new(:parent, :path, keyword_init: true)
@@ -168,6 +170,7 @@ module JekyllObsidian
         "features" => configured["features"],
         "i18n" => configured["i18n"],
         "comments" => configured["comments"],
+        "analytics" => configured["analytics"],
         "contacts" => configured["contacts"],
         "navigation" => configured["navigation"]
       }
@@ -395,6 +398,7 @@ module JekyllObsidian
           features: website.fetch("features"),
           i18n: website.fetch("i18n"),
           comments: website.fetch("comments"),
+          analytics: website.fetch("analytics"),
           contacts: website.fetch("contacts"),
           navigation: website.fetch("navigation"),
           repository: repository.to_s,
@@ -402,7 +406,54 @@ module JekyllObsidian
           environment: ENV.fetch("JEKYLL_ENV", "development")
         )
       )
-      VaultCompiler.compile(request)
+      ensure_runtime_directory!(layout.application_cache_root, "Application cache")
+      manifest_input = github_markdown_manifest_path(layout, GITHUB_MARKDOWN_MANIFEST_INPUT)
+      manifest = manifest_input && read_regular_cache_file(manifest_input, "GitHub Markdown manifest")
+      fatal("GitHub Markdown manifest does not exist") if manifest_input && manifest.nil?
+      result = SiteCompilation.compile(
+        request,
+        transport: GitHubMarkdown::HttpTransport.new,
+        cache_root: layout.application_cache_root,
+        manifest: manifest
+      )
+      manifest_output = github_markdown_manifest_path(layout, GITHUB_MARKDOWN_MANIFEST_OUTPUT)
+      if result.success? && manifest_output
+        content = result.github_markdown_manifest || GitHubMarkdown.dump_manifest([])
+        write_github_markdown_manifest(manifest_output, content)
+      end
+      result
+    end
+
+    def github_markdown_manifest_path(layout, environment_key)
+      raw = ENV.fetch(environment_key, "").to_s
+      return nil if raw.empty?
+
+      path = File.expand_path(raw, layout.site_root)
+      unless File.dirname(path) == layout.application_cache_root &&
+          File.basename(path).match?(/\A[A-Za-z0-9][A-Za-z0-9._-]*\.json\z/)
+        fatal("#{environment_key} must name a JSON file directly inside the application cache")
+      end
+      path
+    end
+
+    def write_github_markdown_manifest(path, content)
+      if File.exist?(path) || File.symlink?(path)
+        stat = File.lstat(path)
+        fatal("GitHub Markdown manifest output must be a non-symlink regular file") unless stat.file? && !stat.symlink?
+      end
+      temporary = Tempfile.create(["github-markdown-manifest.", ".tmp"], File.dirname(path))
+      temporary_path = temporary.path
+      temporary.binmode
+      temporary.write(content)
+      temporary.flush
+      temporary.fsync
+      temporary.close
+      File.rename(temporary_path, path)
+    rescue SystemCallError => exception
+      fatal("cannot write GitHub Markdown manifest: #{exception.message}")
+    ensure
+      temporary.close if defined?(temporary) && temporary && !temporary.closed?
+      FileUtils.rm_f(temporary_path) if defined?(temporary_path) && temporary_path
     end
 
     def stage_vault_assets(site, layout, result)

@@ -127,6 +127,102 @@ class LocalizedCompilerTest < Minitest::Test
     assert_equal "Writing", page(configured, "/zh-CN/blog/").data.fetch("title")
   end
 
+  def test_minimal_portfolio_localizes_the_generated_index_and_preserves_its_hidden_route
+    result = compile(
+      note("index.md", "---\npublish: true\n---\n# Home"),
+      note("work/alpha.md", "---\npublish: true\n---\n# Alpha"),
+      *manifests("  portfolio: 作品集\n  projects: 项目\n"),
+      note("_translations/zh-CN/work/alpha.md", "---\npublish: true\ntitle: 甲\n---\n# 甲"),
+      theme: "minimal",
+      i18n: I18N.merge("enabled" => true),
+      baseurl: "/manual",
+      navigation: { "portfolio" => { "path" => "work", "visible" => false } },
+      content: {
+        "default_type" => "doc",
+        "directories" => { "doc" => ["work"], "post" => [] }
+      }
+    )
+
+    assert result.success?, result.diagnostics.map(&:message).join("\n")
+    default_index = page(result, "/work/")
+    localized_index = page(result, "/zh-CN/work/")
+    assert_equal "portfolio-index", default_index.data.dig("website", "kind")
+    assert_equal "Portfolio", default_index.data.fetch("title")
+    assert_equal "作品集", localized_index.data.fetch("title")
+    assert_equal "/manual/zh-CN/work/", localized_index.data.dig("website", "routes", "portfolio")
+    assert_equal "项目", localized_index.data.dig("website", "i18n", "messages", "projects")
+    assert_equal "page", page(result, "/zh-CN/work/alpha/").data.dig("website", "content_type")
+  end
+
+  def test_minimal_portfolio_uses_each_locales_title_as_the_stable_ordering_tiebreaker
+    result = compile(
+      note("portfolio/a.md", "---\npublish: true\ntitle: Alpha\n---\n# Alpha"),
+      note("portfolio/b.md", "---\npublish: true\ntitle: Beta\n---\n# Beta"),
+      *manifests,
+      note("_translations/zh-CN/portfolio/a.md", "---\npublish: true\ntitle: Zulu\n---\n# Zulu"),
+      note("_translations/zh-CN/portfolio/b.md", "---\npublish: true\ntitle: Alpha\n---\n# Alpha"),
+      theme: "minimal",
+      i18n: I18N.merge("enabled" => true)
+    )
+
+    assert result.success?, result.diagnostics.map(&:message).join("\n")
+    assert_equal %w[portfolio/a.md portfolio/b.md], page(result, "/portfolio/").data.dig(
+      "website", "theme_data", "portfolio_projects"
+    ).map { |project| project.fetch("id") }
+    assert_equal %w[portfolio/b.md portfolio/a.md], page(result, "/zh-CN/portfolio/").data.dig(
+      "website", "theme_data", "portfolio_projects"
+    ).map { |project| project.fetch("id") }
+  end
+
+  def test_hidden_indexless_portfolio_redirect_uses_its_localized_route_and_title
+    result = compile(
+      note("work/alpha.md", "---\npublish: true\n---\n# Alpha"),
+      *manifests("  portfolio: 作品集\n"),
+      theme: "minimal",
+      i18n: I18N.merge("enabled" => true),
+      baseurl: "/manual",
+      navigation: { "portfolio" => { "path" => "work", "visible" => false } }
+    )
+
+    assert result.success?, result.diagnostics.map(&:message).join("\n")
+    default_redirect = page(result, "/")
+    localized_redirect = page(result, "/zh-CN/")
+    assert_equal "redirect", default_redirect.data.dig("website", "kind")
+    assert_equal "Portfolio", default_redirect.data.fetch("title")
+    assert_equal "portfolio", localized_redirect.data.dig("website", "redirect_navigation_id")
+    assert_equal "作品集", localized_redirect.data.fetch("title")
+    assert_equal "/manual/zh-CN/work/", localized_redirect.data.dig("website", "redirect_url")
+    assert_equal "/manual/zh-CN/work/", localized_redirect.data.dig("website", "routes", "portfolio")
+  end
+
+  def test_portfolio_translation_navigation_uses_effective_page_ownership_from_the_compiler
+    result = compile(
+      note("index.md", "---\npublish: true\n---\n# Home"),
+      note(
+        "work/alpha.md",
+        "---\npublish: true\nnavigation:\n  label: Featured project\n---\n# Alpha"
+      ),
+      *manifests,
+      note(
+        "_translations/zh-CN/work/alpha.md",
+        "---\npublish: true\ntitle: 甲\nnavigation:\n  label: 特选项目\n---\n# 甲"
+      ),
+      theme: "minimal",
+      i18n: I18N.merge("enabled" => true),
+      navigation: { "portfolio" => { "path" => "work" } },
+      content: {
+        "default_type" => "doc",
+        "directories" => { "doc" => ["work"], "post" => [] }
+      }
+    )
+
+    assert result.success?, result.diagnostics.map(&:message).join("\n")
+    translated = page(result, "/zh-CN/work/alpha/")
+    assert_equal "page", translated.data.dig("website", "content_type")
+    item = translated.data.dig("website", "navigation").find { |entry| entry.fetch("id") == "page:work/alpha.md" }
+    assert_equal "特选项目", item.fetch("label")
+  end
+
   def test_real_translations_have_reciprocal_hreflang_and_fallbacks_are_omitted_from_sitemap
     result = compile(*default_notes, *manifests, *translations, theme: "docs", i18n: I18N)
     assert result.success?, result.diagnostics.map(&:message).join("\n")
@@ -352,7 +448,10 @@ class LocalizedCompilerTest < Minitest::Test
     assert_equal "/translated-description", translated.data.fetch("description")
     assert_equal "/translated-subtitle", translated.data.dig("website", "subtitle")
     assert_equal ["/translated-tag"], translated.data.dig("website", "tags")
-    assert_equal ["/translated-author"], translated.data.dig("website", "author")
+    assert_equal [
+      { "kind" => "author", "name" => "/translated-author" }
+    ], translated.data.dig("website", "authors")
+    refute translated.data.dig("website").key?("author")
     assert_equal ["/translated-category"], translated.data.dig("website", "categories")
     assert_includes translated.content, "/translated-body"
 

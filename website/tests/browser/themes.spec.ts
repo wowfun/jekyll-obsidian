@@ -13,6 +13,8 @@ for (const theme of themes) {
     await page.goto(site(theme, route));
     await expect(page.locator("body")).toHaveClass(new RegExp(`theme-${theme}`));
     await expect(page.locator("main")).toBeVisible();
+    await expect(page.locator(".site-footer__github"))
+      .toHaveAttribute("href", "https://github.com/wowfun/jekyll-obsidian");
     const results = await new AxeBuilder({ page }).analyze();
     expect(results.violations).toEqual([]);
   });
@@ -91,14 +93,58 @@ test("Copy failure opens a visible Markdown fallback", async ({ page }, testInfo
   await expect(actions.getByRole("link", { name: /View as Markdown/ })).toBeVisible();
 });
 
+test("Mobile Copy page keeps a dynamic accessible name while showing only its icon", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "mobile-chromium", "one mobile rendering contract is sufficient");
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { async writeText() {} }
+    });
+  });
+
+  await page.setViewportSize({ width: 520, height: 900 });
+  await page.goto(site("minimal", "/blog/One%20vault%2C%20three%20readings/"));
+  const actions = page.locator("[data-page-actions]");
+  const primary = actions.locator(".page-actions__primary");
+  const primaryLabel = primary.locator("[data-copy-page-label]");
+  await expect(primary).toHaveAccessibleName("Copy page");
+  await expect(primary.locator("svg")).toBeVisible();
+  const mobileBox = await primary.boundingBox();
+  expect(mobileBox?.width).toBeCloseTo(40.8, 0);
+  expect(mobileBox?.height).toBeGreaterThanOrEqual(40);
+  expect(await primaryLabel.evaluate((element) => {
+    const box = element.getBoundingClientRect();
+    return box.width <= 1 && box.height <= 1 && getComputedStyle(element).clipPath === "inset(50%)";
+  })).toBe(true);
+
+  await actions.locator("summary").click();
+  await expect(actions.locator(".page-actions__item [data-copy-page-label]")).toBeVisible();
+  await expect(actions.locator(".page-actions__item [data-copy-page-label]")).toHaveText("Copy page");
+  await actions.locator("summary").click();
+  await primary.click();
+  await expect(primary).toHaveAccessibleName("Copied");
+
+  await page.setViewportSize({ width: 521, height: 900 });
+  await expect(primaryLabel).toBeVisible();
+  expect((await primaryLabel.boundingBox())?.width).toBeGreaterThan(1);
+});
+
 test("Minimal Home combines authored content with at most six recent posts", async ({ page }, testInfo) => {
   await page.goto(site("minimal"));
 
   const article = page.locator(".minimal-entry");
   await expect(article).toHaveClass(/website-home/);
-  await expect(article.getByRole("heading", { level: 1, name: "One vault, two ways to publish" })).toBeVisible();
-  await expect(article).toContainText("Minimal combines a Home page, Blog, Docs, and custom sections");
-  await expect(article.locator(".source-actions")).toBeVisible();
+  await expect(article.getByRole("heading", { level: 1, name: "One Markdown folder, two ways to publish" })).toBeVisible();
+  await expect(article).toContainText("A complete blog or documentation site from a Markdown folder.");
+  await expect(article).toContainText("with nothing to install or run locally");
+  await expect(article).toContainText("the included workflow builds the selected theme and publishes it to Pages");
+  const sourceActions = article.locator(".source-actions");
+  const edit = sourceActions.getByRole("link", { name: "Edit", exact: true });
+  await expect(edit).toBeVisible();
+  await expect(sourceActions.getByRole("link")).toHaveCount(1);
+  await expect(edit.locator(".source-actions__icon[aria-hidden='true']")).toBeVisible();
+  expect(await edit.evaluate((element) => getComputedStyle(element).borderTopWidth)).toBe("0px");
+  expect((await sourceActions.boundingBox())!.height).toBeLessThanOrEqual(40);
 
   const recent = page.locator(".minimal-recent");
   await expect(recent.getByRole("heading", { level: 2, name: "Recent posts" })).toBeVisible();
@@ -118,6 +164,19 @@ test("Minimal Home combines authored content with at most six recent posts", asy
     .toHaveCount(0);
   await expect(page.locator(".blog-post-feed, .blog-pager, link[rel='next']")).toHaveCount(0);
 
+  const contacts = page.getByRole("navigation", { name: "Contact" });
+  await expect(contacts.locator(".minimal-contact--icon")).toHaveCount(2);
+  const github = contacts.getByRole("link", { name: "GitHub" });
+  const x = contacts.getByRole("link", { name: "X", exact: true });
+  await expect(github).toHaveAttribute("href", "https://github.com/wowfun");
+  await expect(x).toHaveAttribute("href", "https://x.com/wowfuna");
+  for (const link of [github, x]) {
+    await expect(link.locator("svg[aria-hidden='true']")).toBeVisible();
+    const box = await link.boundingBox();
+    expect(Math.abs(box!.width - box!.height)).toBeLessThanOrEqual(1);
+  }
+  expect((await new AxeBuilder({ page }).include(".minimal-contacts").analyze()).violations).toEqual([]);
+
   if (testInfo.project.name === "desktop-chromium") {
     const firstTitle = cards.getByRole("heading", { level: 3 }).first();
     expect(Number.parseFloat(await firstTitle.evaluate((element) => getComputedStyle(element).fontSize)))
@@ -125,13 +184,116 @@ test("Minimal Home combines authored content with at most six recent posts", asy
   }
 });
 
-test("Minimal navigation defaults to Home, Blog, Docs and marks the active scope", async ({ page }, testInfo) => {
+test("Minimal recent post cards expose one article link across the whole card", async ({ page }) => {
+  await page.goto(site("minimal"));
+  const generatedCard = page.locator(".minimal-post-card").first();
+  const generatedTitle = generatedCard.getByRole("link", { name: "One vault, two site models" });
+  const generatedHref = await generatedTitle.getAttribute("href");
+  expect(generatedHref).toBeTruthy();
+  await expect(generatedCard.locator(`a[href="${generatedHref}"]`)).toHaveCount(1);
+  await expect(generatedCard.locator(".minimal-post-card__media")).not.toHaveAttribute("href", /.+/);
+  await expect(generatedCard.locator(".minimal-post-card__media img")).toHaveAttribute("alt", "");
+
+  await page.goto("/__fixture__/post-card/");
+  const card = page.locator(".minimal-post-card");
+  const title = card.getByRole("link", { name: "A complete card target" });
+  await title.focus();
+  await expect(title).toBeFocused();
+  expect(await card.evaluate((element) => getComputedStyle(element).boxShadow)).not.toBe("none");
+  await page.keyboard.press("Enter");
+  await expect(page).toHaveURL(/\/__fixture__\/post-target\/$/);
+
+  await page.goBack();
+  const mediaBox = await page.locator(".minimal-post-card__media").boundingBox();
+  expect(mediaBox).toBeTruthy();
+  await page.mouse.click(mediaBox!.x + mediaBox!.width / 2, mediaBox!.y + mediaBox!.height / 2);
+  await expect(page).toHaveURL(/\/__fixture__\/post-target\/$/);
+
+  await page.goBack();
+  const excerptBox = await page.locator(".minimal-post-card__excerpt").boundingBox();
+  expect(excerptBox).toBeTruthy();
+  await page.mouse.click(excerptBox!.x + excerptBox!.width / 2, excerptBox!.y + excerptBox!.height / 2);
+  await expect(page).toHaveURL(/\/__fixture__\/post-target\/$/);
+
+  await page.goBack();
+  await page.getByRole("link", { name: "Ada" }).click();
+  await expect(page).toHaveURL(/\/__fixture__\/author-target\/$/);
+});
+
+test("Minimal Portfolio presents the bundled project as one accessible responsive card", async ({ page }) => {
+  await page.goto(site("minimal", "/portfolio/"));
+
+  await expect(page.getByRole("heading", { level: 1, name: "Portfolio" })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 2, name: "Projects" })).toBeVisible();
+  await expect(page.locator(".site-header [data-navigation-id='portfolio'] a"))
+    .toHaveAttribute("aria-current", "page");
+
+  const grid = page.locator(".minimal-portfolio__grid");
+  const card = grid.locator("a.minimal-portfolio-card");
+  await expect(card).toHaveCount(1);
+  await expect(card.locator("div.minimal-portfolio-card__body")).toHaveCount(1);
+  await expect(card.getByRole("heading", { level: 3, name: "Jekyll Obsidian" })).toBeVisible();
+  await expect(card.locator(".minimal-portfolio-card__summary"))
+    .toHaveText("Publish any Markdown folder as a complete site. Nothing to install or build locally.");
+  await expect(card).toHaveAttribute("href", site("minimal", "/portfolio/jekyll-obsidian/"));
+  await expect(grid.locator("a")).toHaveCount(1);
+
+  const image = card.locator(".minimal-portfolio-card__media img");
+  await expect(image).toHaveAttribute("src", /\/__site__\/minimal\/assets\/vault\/assets\/research-folio\.svg$/);
+  await expect(image).toHaveAttribute("alt", "");
+  await expect(image).toHaveAttribute("loading", "lazy");
+  await expect(image).toHaveAttribute("decoding", "async");
+
+  const columns = await grid.evaluate((element) =>
+    getComputedStyle(element).gridTemplateColumns.split(" ").filter(Boolean).length
+  );
+  expect(columns).toBe((page.viewportSize()?.width ?? 0) <= 720 ? 1 : 2);
+  const media = await card.locator(".minimal-portfolio-card__media").boundingBox();
+  expect(media).toBeTruthy();
+  expect(media!.width / media!.height).toBeCloseTo(1.6, 1);
+
+  await card.focus();
+  await expect(card).toBeFocused();
+  expect(await card.evaluate((element) => getComputedStyle(element).boxShadow)).not.toBe("none");
+  await page.keyboard.press("Enter");
+  await expect(page).toHaveURL(site("minimal", "/portfolio/jekyll-obsidian/"));
+  await expect(page.getByRole("heading", { level: 1, name: "Imported Jekyll Obsidian" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "View imported Markdown" })).toHaveAttribute(
+    "href",
+    "https://github.com/wowfun/jekyll-obsidian/blob/0123456789abcdef0123456789abcdef01234567/README.md"
+  );
+});
+
+test("Minimal recent posts use editorial rows without reserving an empty media column", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "desktop-chromium", "responsive layout contract");
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.goto(site("minimal"));
+  const cards = page.locator(".minimal-post-card");
+  const firstCard = (await cards.first().boundingBox())!;
+  const secondCard = (await cards.nth(1).boundingBox())!;
+  expect(secondCard.y).toBeGreaterThanOrEqual(firstCard.y + firstCard.height - 1);
+
+  const media = (await cards.first().locator(".minimal-post-card__media").boundingBox())!;
+  const imagedBody = (await cards.first().locator(".minimal-post-card__body").boundingBox())!;
+  expect(media.x + media.width).toBeLessThanOrEqual(imagedBody.x);
+  expect(media.width / media.height).toBeCloseTo(16 / 9, 1);
+  await expect(cards.nth(1).locator(".minimal-post-card__media")).toHaveCount(0);
+  const textOnlyBody = (await cards.nth(1).locator(".minimal-post-card__body").boundingBox())!;
+  expect(textOnlyBody.width).toBeCloseTo(secondCard.width, 0);
+
+  await page.setViewportSize({ width: 720, height: 1000 });
+  const stackedMedia = (await cards.first().locator(".minimal-post-card__media").boundingBox())!;
+  const stackedBody = (await cards.first().locator(".minimal-post-card__body").boundingBox())!;
+  expect(stackedBody.y).toBeGreaterThanOrEqual(stackedMedia.y + stackedMedia.height);
+});
+
+test("Minimal navigation discovers Portfolio and marks each built-in scope", async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== "desktop-chromium", "desktop primary navigation assertion");
 
-  for (const [route, current] of [["/", "Home"], ["/blog/", "Blog"], ["/docs/Getting%20Started/", "Docs"]] as const) {
+  for (const [route, current] of [["/", "Home"], ["/blog/", "Blog"], ["/docs/Getting%20Started/", "Docs"], ["/portfolio/", "Portfolio"]] as const) {
     await page.goto(site("minimal", route));
     const navigation = page.getByRole("navigation", { name: "Primary navigation" });
-    await expect(navigation.locator(":scope > ul > li > a")).toHaveText(["Home", "Blog", "Docs"]);
+    await expect(navigation.locator(":scope > ul > li > a")).toHaveText(["Home", "Blog", "Docs", "Portfolio"]);
     await expect(navigation.getByRole("link", { name: current, exact: true })).toHaveAttribute("aria-current", "page");
   }
 });
@@ -321,7 +483,7 @@ test("Minimal Docs puts primary and documentation navigation into the mobile Bro
   const dialog = page.locator('dialog[data-dialog="browse"]');
   await expect(dialog).toBeVisible();
   await expect(dialog.getByRole("navigation", { name: "Primary navigation" }).getByRole("link"))
-    .toHaveText(["Home", "Blog", "Docs"]);
+    .toHaveText(["Home", "Blog", "Docs", "Portfolio"]);
   await expect(dialog.getByRole("navigation", { name: "Documentation" })
     .getByRole("link", { name: "Syntax" })).toBeVisible();
 });
@@ -361,7 +523,7 @@ test("priority navigation folds custom tabs into an accessible More menu", async
   const overflowIds = await navigation.locator("[data-priority-navigation-overflow] > li")
     .evaluateAll((items) => items.map((item) => item.getAttribute("data-navigation-id")));
   expect([...primaryIds, ...overflowIds]).toEqual([
-    "home", "blog", "docs", "page:about.md", "folder:portfolio", "page:projects.md", "folder:team", "page:contact.md"
+    "home", "blog", "docs", "page:about.md", "portfolio", "page:projects.md", "folder:team", "page:contact.md"
   ]);
 
   const summary = more.locator("summary");
@@ -496,6 +658,47 @@ test("graph nodes have no frame and darken only on interaction", async ({ page }
   await expect.poll(() => targetCircle.evaluate((element) => getComputedStyle(element).fill)).not.toBe(quiet);
 });
 
+test("Analytics initializes each provider once across Docs history events", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "desktop-chromium", "one browser lifecycle contract is sufficient");
+  const requests = { cloudflare: 0, google: 0 };
+  await page.route("https://static.cloudflareinsights.com/beacon.min.js", async (route) => {
+    requests.cloudflare += 1;
+    await route.fulfill({ contentType: "text/javascript", body: "" });
+  });
+  await page.route(/https:\/\/www\.googletagmanager\.com\/gtag\/js\?.*/, async (route) => {
+    requests.google += 1;
+    await route.fulfill({ contentType: "text/javascript", body: "" });
+  });
+
+  for (const provider of ["cloudflare", "google"] as const) {
+    await page.goto(`/__fixture__/analytics/${provider}/`);
+    const script = page.locator(`script[data-website-analytics="${provider}"]`);
+    await expect(script).toHaveCount(1);
+    await expect.poll(() => requests[provider]).toBe(1);
+
+    await page.evaluate(() => {
+      history.pushState({}, "", `${location.pathname}?view=next`);
+      document.dispatchEvent(new CustomEvent("website:docs-page-change"));
+      dispatchEvent(new PopStateEvent("popstate"));
+      location.hash = "fragment-only";
+    });
+
+    await expect(script).toHaveCount(1);
+    expect(requests[provider]).toBe(1);
+  }
+});
+
+test("A blocked analytics client does not interrupt site interaction", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "desktop-chromium", "one blocked-client contract is sufficient");
+  await page.route("https://static.cloudflareinsights.com/beacon.min.js", (route) => route.abort());
+  await page.setViewportSize({ width: 390, height: 760 });
+  await page.goto("/__fixture__/analytics/cloudflare/");
+
+  await expect(page.locator('script[data-website-analytics="cloudflare"]')).toHaveCount(1);
+  await page.locator('button[data-dialog-open="browse"]').click();
+  await expect(page.locator('dialog[data-dialog="browse"]')).toBeVisible();
+});
+
 test("Comments use the managed Giscus client and remain narrow-layout safe", async ({ page }) => {
   let requestedClient = false;
   await page.addInitScript(() => localStorage.setItem("website:color-scheme", "dark"));
@@ -598,7 +801,7 @@ test("themes use neutral dark surfaces, warm paper light, and one restrained typ
     expect(paper[0]!, theme).toBeGreaterThan(paper[2]!);
 
     const title = page.getByRole("heading", { level: 1, name: "Getting Started" });
-    const section = page.getByRole("heading", { level: 2, name: "Install the toolchain" });
+    const section = page.getByRole("heading", { level: 2, name: "Publish through GitHub Actions" });
     const paragraph = page.locator(".note-content > p").first();
     const typography = (locator: typeof title) => locator.evaluate((element) => {
       const style = getComputedStyle(element);
@@ -620,7 +823,7 @@ test("Minimal omits decorative reading chrome", async ({ page }) => {
   await expect(page.locator(".note-kicker, .breadcrumbs")).toHaveCount(0);
   await expect(page.locator(".note-header")).toHaveCSS("border-bottom-width", "0px");
   await expect(page.locator(".site-header")).toHaveCSS("border-top-width", "0px");
-  const section = page.getByRole("heading", { level: 2, name: "Install the toolchain" });
+  const section = page.getByRole("heading", { level: 2, name: "Publish through GitHub Actions" });
   expect(await section.evaluate((element) => getComputedStyle(element, "::before").content)).toBe("none");
 });
 
@@ -642,6 +845,14 @@ test("feed discovery stays out of primary navigation", async ({ page }, testInfo
 });
 
 test("localized docs language navigation and fallback metadata remain correct", async ({ page }) => {
+  await page.goto(localizedDocs());
+  await expect(page.locator(".minimal-contacts, a[href='https://github.com/wowfun'], a[href='https://x.com/wowfuna']"))
+    .toHaveCount(0);
+
+  await page.goto(localizedDocs("/zh-CN/"));
+  await expect(page.locator("main")).toContainText("把 Markdown 文件夹直接变成完整的博客或文档站。");
+  await expect(page.locator("main")).toContainText("无需在本地运行构建命令");
+
   await page.goto(localizedDocs("/zh-CN/docs/Getting%20Started/"));
   await expect(page.locator(".site-mark__name")).toHaveText("Browser i18n fixture");
   await expect(page.locator("html")).toHaveAttribute("lang", "zh-CN");
@@ -655,10 +866,66 @@ test("localized docs language navigation and fallback metadata remain correct", 
   await expect(switcher.locator("summary")).toBeFocused();
 
   await page.goto(localizedDocs("/zh-CN/docs/Customization/"));
+  await expect(page.getByRole("heading", { level: 1, name: "自定义" })).toBeVisible();
+  await expect(page.locator(".translation-fallback")).toHaveCount(0);
+
+  await page.goto(localizedDocs("/zh-CN/portfolio/jekyll-obsidian/"));
+  await expect(page.getByRole("heading", { level: 1, name: "导入的 Jekyll Obsidian" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "查看导入的 Markdown" })).toHaveAttribute(
+    "href",
+    "https://github.com/wowfun/jekyll-obsidian/blob/0123456789abcdef0123456789abcdef01234567/README.zh-CN.md"
+  );
+
+  await page.goto(localizedDocs("/zh-CN/docs/Architecture/"));
   await expect(page.locator(".translation-fallback")).toContainText("本页尚无译文");
   await expect(page.locator(".note-content")).toHaveAttribute("lang", "en");
   await expect(page.locator('meta[name="robots"]')).toHaveAttribute("content", "noindex");
   await expect(page.locator('link[rel="alternate"][hreflang]')).toHaveCount(0);
+});
+
+test("Mobile site titles wrap without clipping at narrow viewport widths", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "mobile-chromium", "one mobile rendering contract is sufficient");
+
+  for (const width of [320, 360, 412]) {
+    await page.setViewportSize({ width, height: 900 });
+    for (const route of [site("minimal"), site("docs"), localizedDocs("/docs/Getting%20Started/")]) {
+      await page.goto(route);
+      const title = page.locator(".site-mark__name");
+      await expect(title).not.toHaveText("");
+      const dimensions = await title.evaluate((element) => {
+        const style = getComputedStyle(element);
+        return {
+          clientWidth: element.clientWidth,
+          scrollWidth: element.scrollWidth,
+          overflow: style.overflow,
+          whiteSpace: style.whiteSpace
+        };
+      });
+      expect(dimensions.scrollWidth, `${route} title at ${width}px`).toBeLessThanOrEqual(dimensions.clientWidth);
+      expect(dimensions.overflow, `${route} title at ${width}px`).toBe("visible");
+      expect(dimensions.whiteSpace, `${route} title at ${width}px`).toBe("normal");
+      expect(await page.locator(".site-header").evaluate((element) => element.scrollWidth <= element.clientWidth),
+        `${route} header at ${width}px`).toBe(true);
+    }
+  }
+});
+
+test("desktop themes use the wider canvas without lengthening prose lines", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "desktop-chromium", "desktop layout contract");
+  await page.setViewportSize({ width: 1920, height: 1080 });
+
+  await page.goto(site("minimal"));
+  expect((await page.locator(".minimal-recent__grid").boundingBox())!.width).toBeGreaterThanOrEqual(900);
+  expect((await page.locator(".note-content > p").first().boundingBox())!.width).toBeLessThanOrEqual(780);
+
+  await page.goto(site("docs", "/docs/Getting%20Started/"));
+  const sidebar = (await page.locator(".docs-sidebar").boundingBox())!;
+  const main = (await page.locator(".docs-main").boundingBox())!;
+  const context = (await page.locator(".docs-context").boundingBox())!;
+  expect(main.width).toBeGreaterThanOrEqual(880);
+  expect((await page.locator(".note-content > p").first().boundingBox())!.width).toBeLessThanOrEqual(640);
+  expect(sidebar.x + sidebar.width).toBeLessThanOrEqual(main.x);
+  expect(main.x + main.width).toBeLessThanOrEqual(context.x);
 });
 
 test("localized docs search loads the locale index and finds CJK content", async ({ page }) => {

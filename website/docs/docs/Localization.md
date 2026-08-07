@@ -7,7 +7,7 @@ tags:
   - i18n
 description: Publish locale overlays with localized navigation, search, and SEO metadata.
 created: 2026-08-04
-updated: 2026-08-06
+updated: 2026-08-07
 ---
 
 # Localization
@@ -58,7 +58,7 @@ content/
 
 Relative paths pair translations. In this example, `_translations/zh-CN/guide/Advanced.md` translates `guide/Advanced.md`. A translated note without a default note at the same path is an orphan and fails the build. Locale roots do not require `index.md`; each one redirects to its localized form of the default tree's first ordered page.
 
-The default tree owns site structure. It decides which notes exist, how they are classified and ordered, and which public routes they use. Translations supply localized content without creating a separate information architecture.
+The default tree owns site structure. It decides which notes exist, how they are classified, their structural `nav_order`, and which public routes they use. Translations supply localized content without creating a separate information architecture. Presentation lists may use each locale's rendered title as a stable tie-breaker; for example, Portfolio projects with the same `nav_order` follow their localized titles.
 
 ## Define a locale manifest
 
@@ -91,6 +91,8 @@ tags:
 
 A translation can replace the body and the translatable properties `title`, `subtitle`, `description`, `tags`, `author`, `categories`, `image`, and `cssclasses`. When the default page opts into top-level navigation, its translation may also replace `navigation.label`. It inherits omitted values from the default note. Set the YAML boolean `publish: false` on a translation to disable only that translation and serve the default-language fallback at its localized URL.
 
+A translated Portfolio wrapper may select its own `github_markdown` file or provide a local body. The remote property does not carry into a physical translation that supplies its own content. When the translated wrapper is absent, the ordinary fallback page uses the default-language project and its imported body. See [[Portfolio#Import a GitHub Markdown file|Portfolio]] for the source contract.
+
 Structural properties belong to the default note. This includes `permalink`, `content_type`, `date`, `created`, `updated`, `nav_order`, `nav_exclude`, `aliases`, and `comments`. Omit these properties from the translation; if present, they must exactly match the default value. Always omit `navigation.order` and `navigation.visible` from a translation because any attempt to set them is rejected. A post without `date` or `created` inherits the default note's Git-derived publication date. `updated` is never derived from Git; omit it unless the default note declares an explicit update date. Committing only a translation therefore changes neither post chronology nor the Blog order.
 
 ## Understand localized URLs and resources
@@ -111,7 +113,7 @@ Each locale receives its own instances of the active theme's navigation, previou
 
 ## Link notes and share attachments
 
-Wikilinks, embeds, backlinks, and source actions resolve in the current locale first. When a translated target is unavailable, the compiler uses the default note. Edit and history actions point to the source file that supplied the displayed content.
+Wikilinks, embeds, backlinks, and source actions resolve in the current locale first. When a translated target is unavailable, the compiler uses the default note. The Edit action points to the source file that supplied the displayed content.
 
 Binary attachments remain shared in the default content tree. Do not put locale-specific images, PDFs, Canvas files, or other binary assets under `_translations/`. A translated note can continue to reference a shared attachment from the default tree.
 

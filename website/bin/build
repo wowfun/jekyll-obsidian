@@ -129,7 +129,11 @@ if [ -L "$HOST_DIR/.github" ] || [ -L "$host_config" ]; then
   fail "host configuration must not use symbolic links."
 fi
 config_files=$PROJECT_DIR/_config.yml
-if [ "$example_mode" -eq 0 ] && [ -e "$host_config" ]; then
+if [ "$example_mode" -eq 1 ]; then
+  example_config=$PROJECT_DIR/scripts/example-config.yml
+  [ -f "$example_config" ] && [ ! -L "$example_config" ] || fail "bundled example configuration is missing."
+  config_files=$config_files,$example_config
+elif [ -e "$host_config" ]; then
   [ -f "$host_config" ] || fail ".github/jekyll-obsidian.yml must be a regular file."
   config_files=$config_files,$host_config
 fi

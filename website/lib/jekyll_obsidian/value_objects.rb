@@ -54,7 +54,8 @@ module JekyllObsidian
     :device,
     :inode,
     :mtime_ns,
-    :first_committed_at
+    :first_committed_at,
+    :external_document
   )
 
   Snapshot = ImmutableRecord.define(:entries)
@@ -75,6 +76,7 @@ module JekyllObsidian
     :features,
     :i18n,
     :comments,
+    :analytics,
     :contacts,
     :navigation
   )
@@ -87,7 +89,7 @@ module JekyllObsidian
   GeneratedFile = ImmutableRecord.define(:route, :content, :media_type)
   CopiedAsset = ImmutableRecord.define(:source_path, :route, :media_type, :size, :device, :inode, :mtime_ns)
   NoteOutput = ImmutableRecord.define(:id, :title, :route, :properties)
-  ContentSecurityNeeds = ImmutableRecord.define(:media_sources, :frame_sources, :script_sources)
+  ContentSecurityNeeds = ImmutableRecord.define(:media_sources, :frame_sources, :script_sources, :connect_sources)
 
   # Internal, immutable hand-off between the OFM compiler and the built-in
   # theme presenters. Keeping rendered note content and all relation-derived
@@ -139,11 +141,14 @@ module JekyllObsidian
     :load
   )
 
+  AnalyticsConfig = ImmutableRecord.define(:provider, :identifier, :load)
+
   EffectiveThemeConfig = ImmutableRecord.define(
     :theme,
     :features,
     :content,
     :comments,
+    :analytics,
     :contacts,
     :navigation,
     :site,
@@ -168,7 +173,8 @@ module JekyllObsidian
     :notes,
     :theme,
     :features,
-    :site_data
+    :site_data,
+    :github_markdown_manifest
   )
 
   class BuildSuccess < BuildSuccessBase
