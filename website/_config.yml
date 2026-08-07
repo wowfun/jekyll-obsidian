@@ -19,7 +19,6 @@ website:
       doc:
         - docs
   features: {}
-
 strict_front_matter: true
 safe: false
 incremental: false

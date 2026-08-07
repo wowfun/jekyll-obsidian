@@ -6,3 +6,5 @@
 *.ps1 text eol=crlf
 *.cmd text eol=crlf
 website/bin/integrate text eol=lf
+website/.jekyll-obsidian-release text eol=lf
+.github/jekyll-obsidian.lock text eol=lf

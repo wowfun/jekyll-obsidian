@@ -39,6 +39,17 @@ module JekyllObsidian
       }
     }.freeze
     COMMONMARK_PLUGINS = { syntax_highlighter: { theme: "" } }.freeze
+    REMOTE_COMMONMARK_OPTIONS = {
+      parse: COMMONMARK_OPTIONS.fetch(:parse),
+      render: COMMONMARK_OPTIONS.fetch(:render).merge(unsafe: false),
+      extension: {
+        strikethrough: true,
+        table: true,
+        autolink: true,
+        tasklist: true,
+        footnotes: true
+      }
+    }.freeze
     DANGEROUS_SCHEMES = %w[data file javascript vbscript].freeze
     EXTERNAL_SCHEMES = %w[http https mailto tel].freeze
     NOTE_EXTENSION = ".md"
@@ -46,14 +57,34 @@ module JekyllObsidian
     THEMES = BuiltInThemes::IDS
     FEATURE_KEYS = %w[search tags feed graph relations previews outline].freeze
     COMMENT_KEYS = %w[enabled repository repository_id category category_id].freeze
+    ANALYTICS_PROVIDERS = %w[cloudflare google].freeze
     CONTACT_KEYS = %w[label url].freeze
+    CONTACT_HOST_ICONS = {
+      "github.com" => "github",
+      "linkedin.com" => "linkedin",
+      "x.com" => "x",
+      "twitter.com" => "x",
+      "mastodon.social" => "mastodon",
+      "bsky.app" => "bluesky",
+      "bsky.social" => "bluesky",
+      "instagram.com" => "instagram",
+      "youtube.com" => "youtube",
+      "youtu.be" => "youtube",
+      "t.me" => "telegram",
+      "telegram.me" => "telegram",
+      "telegram.org" => "telegram"
+    }.freeze
     NAVIGATION_BUILTINS = {
       "home" => { "order" => 0, "visible" => true }.freeze,
       "blog" => { "order" => 10, "visible" => true }.freeze,
       "docs" => { "order" => 20, "visible" => true }.freeze
     }.freeze
+    PORTFOLIO_NAVIGATION_DEFAULTS = {
+      "path" => "portfolio", "order" => 30, "visible" => true
+    }.freeze
     NAVIGATION_OVERRIDE_KEYS = %w[label order visible].freeze
-    NAVIGATION_KEYS = (NAVIGATION_BUILTINS.keys + %w[folders]).freeze
+    NAVIGATION_KEYS = (NAVIGATION_BUILTINS.keys + %w[portfolio folders]).freeze
+    PORTFOLIO_NAVIGATION_KEYS = (NAVIGATION_OVERRIDE_KEYS + %w[path]).freeze
     NAVIGATION_FOLDER_KEYS = (NAVIGATION_OVERRIDE_KEYS + %w[path]).freeze
     CUSTOM_NAVIGATION_DEFAULTS = { "order" => 100, "visible" => true }.freeze
     MAX_CONTACTS = 12
@@ -95,6 +126,7 @@ module JekyllObsidian
       :nav_exclude,
       :feature_flags,
       :topics,
+      :external_document,
       keyword_init: true
     )
 
@@ -158,6 +190,7 @@ module JekyllObsidian
       @content_policy = ContentPolicy.resolve(nil).policy
       @content = @content_policy.settings
       @comments = disabled_comments_config
+      @analytics = disabled_analytics_config
       @contacts = []
       @navigation_config = default_navigation_config
     end
@@ -187,6 +220,7 @@ module JekyllObsidian
         features: @features,
         content: @content,
         comments: @comments,
+        analytics: @analytics,
         contacts: @contacts,
         navigation: navigation,
         site: @config,
@@ -236,6 +270,7 @@ module JekyllObsidian
       resolve_theme_config
       resolve_content_config
       resolve_comments_config
+      resolve_analytics_config
       resolve_contacts_config
       resolve_navigation_config
       @url_builder = UrlBuilder.new(origin: @config.url, baseurl: @config.baseurl)
@@ -353,6 +388,43 @@ module JekyllObsidian
       )
     end
 
+    def resolve_analytics_config
+      raw = @config.analytics
+      return @analytics = disabled_analytics_config if raw.nil?
+      unless raw.is_a?(Hash) && raw.keys.all? { |key| key.is_a?(String) }
+        error("invalid_analytics", "website.analytics must be a mapping with string keys")
+        return @analytics = disabled_analytics_config
+      end
+
+      provider = raw["provider"]
+      unless ANALYTICS_PROVIDERS.include?(provider)
+        error("invalid_analytics", "analytics.provider must be one of: #{ANALYTICS_PROVIDERS.join(', ')}")
+        return @analytics = disabled_analytics_config
+      end
+
+      identifier_key = provider == "cloudflare" ? "token" : "measurement_id"
+      (raw.keys - ["provider", identifier_key]).sort.each do |key|
+        error("invalid_analytics", "unknown analytics setting #{key.inspect} for provider #{provider.inspect}")
+      end
+      value = raw[identifier_key]
+      unless value.is_a?(String) && !value.empty? && value.length <= 256 &&
+          value == value.strip && !value.match?(/[\s<>"']/) && FrontMatter.valid_output_text?(value)
+        error("invalid_analytics", "analytics.#{identifier_key} must be a non-empty output-safe token of at most 256 characters")
+        return @analytics = disabled_analytics_config
+      end
+      identifier = value
+      if provider == "google" && !identifier.match?(/\AG-[A-Z0-9]+\z/)
+        error("invalid_analytics", "analytics.measurement_id must begin with G- and contain only uppercase ASCII letters and digits")
+        return @analytics = disabled_analytics_config
+      end
+
+      @analytics = AnalyticsConfig.new(provider: provider, identifier: identifier, load: production?)
+    end
+
+    def disabled_analytics_config
+      AnalyticsConfig.new(provider: "", identifier: "", load: false)
+    end
+
     def resolve_contacts_config
       raw = @config.contacts
       return @contacts = [] if raw.nil?
@@ -381,7 +453,10 @@ module JekyllObsidian
           next
         end
 
-        { "label" => label, "url" => url }
+        contact = { "label" => label, "url" => url }
+        icon = contact_icon(label, url)
+        contact["icon"] = icon if icon
+        contact
       end
     end
 
@@ -405,6 +480,11 @@ module JekyllObsidian
         end
         [name, value]
       end
+      normalized["portfolio"] = if raw.key?("portfolio")
+        normalize_portfolio_navigation(raw["portfolio"])
+      else
+        PORTFOLIO_NAVIGATION_DEFAULTS.dup
+      end
       folders = raw.fetch("folders", [])
       unless folders.is_a?(Array)
         error("invalid_navigation_config", "website.navigation.folders must be an array")
@@ -418,8 +498,28 @@ module JekyllObsidian
 
     def default_navigation_config
       DeepFreeze.call(
-        NAVIGATION_BUILTINS.transform_values(&:dup).merge("folders" => [])
+        NAVIGATION_BUILTINS.transform_values(&:dup).merge(
+          "portfolio" => PORTFOLIO_NAVIGATION_DEFAULTS.dup,
+          "folders" => []
+        )
       )
+    end
+
+    def normalize_portfolio_navigation(value)
+      path = "website.navigation.portfolio"
+      unless value.is_a?(Hash) && value.keys.all? { |key| key.is_a?(String) }
+        error("invalid_navigation_config", "#{path} must be a mapping with string keys")
+        return PORTFOLIO_NAVIGATION_DEFAULTS.dup
+      end
+
+      (value.keys - PORTFOLIO_NAVIGATION_KEYS).sort.each do |key|
+        error("invalid_navigation_config", "unknown #{path} setting #{key.inspect}")
+      end
+      normalized = normalize_navigation_fields(value, path, PORTFOLIO_NAVIGATION_DEFAULTS)
+      return normalized unless value.key?("path")
+
+      folder_path = normalize_navigation_folder_path(value["path"], "#{path}.path")
+      folder_path ? normalized.merge("path" => folder_path) : normalized
     end
 
     def normalize_navigation_override(value, path, defaults)
@@ -522,6 +622,31 @@ module JekyllObsidian
       false
     end
 
+    def contact_icon(label, value)
+      uri = URI.parse(value)
+      scheme = uri.scheme&.downcase
+      return "email" if scheme == "mailto"
+      return "phone" if scheme == "tel"
+
+      host = uri.host.to_s.downcase.delete_suffix(".")
+      CONTACT_HOST_ICONS.each do |domain, icon|
+        return icon if host == domain || host.end_with?(".#{domain}")
+      end
+
+      normalized_label = label.downcase.strip
+      return "mastodon" if normalized_label.match?(/\bmastodon\b/)
+      return "rss" if normalized_label.match?(/\b(?:rss|feed|atom)\b/) || feed_url_path?(uri.path)
+      return "website" if normalized_label.match?(/\A(?:website|web[ -]?site|site|homepage|home[ -]?page)\z/)
+
+      nil
+    rescue URI::InvalidURIError
+      nil
+    end
+
+    def feed_url_path?(path)
+      path.to_s.downcase.match?(%r{(?:\A|/)(?:feed|rss|atom)(?:\.(?:xml|rss|atom))?(?:/|\z)})
+    end
+
     def resolve_content_config
       resolution = ContentPolicy.resolve(@config.content)
       @diagnostics.concat(resolution.diagnostics)
@@ -567,14 +692,23 @@ module JekyllObsidian
             next
           end
 
+          external_document = entry.external_document
+          if external_document && !parsed.body.strip.empty?
+            error(
+              "github_markdown_body_conflict",
+              "a github_markdown project wrapper must have an empty local body",
+              path
+            )
+          end
           @notes[path] = MutableNote.new(
             id: path,
             entry: entry,
             properties: parsed.properties,
-            body: parsed.body,
+            body: external_document ? external_document.markdown : parsed.body,
             occurrences: [],
             outline: [],
-            feature_flags: {}
+            feature_flags: {},
+            external_document: external_document
           )
         when :attachment
           @attachments[path] = entry
@@ -613,7 +747,7 @@ module JekyllObsidian
         if note.id == "index.md" && note.properties["content_type"] && note.properties["content_type"] != "page"
           error("invalid_root_content_type", "the public root index must have content_type: page", note.id)
         end
-        note.content_type = @content_policy.classify(note.id, note.properties)
+        note.content_type = effective_content_type(note)
         note.nav_order = note.properties["nav_order"]
         note.nav_exclude = note.properties["nav_exclude"] == true
         note.published_at = published_at(note)
@@ -647,20 +781,103 @@ module JekyllObsidian
       note.properties["date"] || note.properties["created"] || note.entry.first_committed_at
     end
 
+    def effective_content_type(note)
+      classified = @content_policy.classify(note.id, note.properties)
+      return classified unless portfolio_note?(note.id)
+
+      explicit = note.properties["content_type"]
+      if explicit && explicit != "page"
+        error(
+          "portfolio_content_type_conflict",
+          "published notes inside the portfolio path must use content_type: page",
+          note.id
+        )
+      end
+      "page"
+    end
+
+    def portfolio_note?(note_id)
+      return false unless @theme == "minimal"
+
+      path = @navigation_config.fetch("portfolio").fetch("path")
+      note_id.start_with?("#{path}/")
+    end
+
     def parse_markdown_once
       @notes.values.sort_by(&:id).each do |note|
-        prepared = OfmScanner.prepare(note.body)
+        prepared = OfmScanner.prepare(note.external_document ? "" : note.body)
         note.scanner = prepared
         merged_tags = (Array(note.properties["tags"]) + prepared.tags).uniq.sort
         note.properties = note.properties.merge("tags" => merged_tags)
-        note.document = Commonmarker.parse(prepared.markdown, options: COMMONMARK_OPTIONS)
+        markdown = (note.external_document ? note.body : prepared.markdown).dup.force_encoding(Encoding::UTF_8)
+        options = note.external_document ? REMOTE_COMMONMARK_OPTIONS : COMMONMARK_OPTIONS
+        note.document = Commonmarker.parse(markdown, options: options)
+        if note.external_document
+          rewrite_github_markdown_urls(note)
+          note.body = note.document.to_commonmark(options: { render: { width: 0 } })
+        end
         note.has_h1 = note.document.any? { |node| node.type == :heading && node.header_level == 1 }
         note.title = note.properties["title"] || first_h1(note.document) || filename_title(note.id)
         build_anchor_registry(note)
-        annotate_occurrences(note)
+        annotate_occurrences(note) unless note.external_document
         annotate_frontmatter_topics(note)
         annotate_code_markers(note)
       end
+    end
+
+    def rewrite_github_markdown_urls(note)
+      note.document.walk.each do |node|
+        next unless %i[link image].include?(node.type)
+
+        rewritten = github_markdown_url(note, node.url.to_s, image: node.type == :image)
+        node.url = rewritten if rewritten
+      end
+    end
+
+    def github_markdown_url(note, raw_url, image:)
+      return raw_url if raw_url.empty? || raw_url.start_with?("#")
+
+      uri = URI.parse(raw_url)
+      if uri.scheme
+        if image && uri.scheme.downcase != "https"
+          error("invalid_github_markdown_image", "GitHub Markdown images must use HTTPS", note.id)
+          return note.external_document.source_url
+        end
+        return raw_url
+      end
+      if uri.host || raw_url.start_with?("//")
+        error("invalid_github_markdown_link", "protocol-relative GitHub Markdown links are not supported", note.id)
+        return note.external_document.source_url
+      end
+
+      decoded = URI.decode_uri_component(uri.path.to_s)
+      if decoded.include?("\\") || decoded.include?("\0")
+        error("invalid_github_markdown_link", "GitHub Markdown links must use safe POSIX paths", note.id)
+        return note.external_document.source_url
+      end
+      base = decoded.start_with?("/") ? "" : File.dirname(note.external_document.path)
+      candidate = Pathname.new(File.join(base, decoded.delete_prefix("/"))).cleanpath.to_s.tr("\\", "/")
+      if candidate == ".." || candidate.start_with?("../")
+        error("invalid_github_markdown_link", "GitHub Markdown links must not escape the repository root", note.id)
+        return note.external_document.source_url
+      end
+
+      encoded = candidate == "." ? "" : candidate.split("/").map { |part| URI.encode_uri_component(part) }.join("/")
+      repository = note.external_document.repository
+      commit = note.external_document.resolved_commit
+      target = if image
+        "https://raw.githubusercontent.com/#{repository}/#{commit}"
+      else
+        directory = uri.path.to_s.end_with?("/")
+        "https://github.com/#{repository}/#{directory ? 'tree' : 'blob'}/#{commit}"
+      end
+      target = "#{target}/#{encoded}" unless encoded.empty?
+      target = "#{target}?#{uri.query}" if uri.query
+      target = "#{target}##{uri.fragment}" if uri.fragment
+      target
+    rescue URI::InvalidURIError, ArgumentError
+      error("invalid_github_markdown_link", "GitHub Markdown contains an invalid relative URL", note.id)
+      note.external_document.source_url
     end
 
     def build_anchor_registry(note)
@@ -677,7 +894,8 @@ module JekyllObsidian
         chain = heading_stack.map { |item| item.fetch(:label) } + [label]
         base = @url_builder.slug(label)
         used_heading_ids[base] += 1
-        identifier = used_heading_ids[base] == 1 ? base : "#{base}-#{used_heading_ids[base]}"
+        duplicate_number = note.external_document ? used_heading_ids[base] - 1 : used_heading_ids[base]
+        identifier = used_heading_ids[base] == 1 ? base : "#{base}-#{duplicate_number}"
         anchor = Anchor.new(kind: :heading, id: identifier, label: label, level: level, chain: chain)
         anchors << anchor
         identifiers[identifier] = anchor
@@ -1061,7 +1279,8 @@ module JekyllObsidian
 
     def render_authored_documents
       @notes.values.sort_by(&:id).each do |note|
-        html = note.document.to_html(options: COMMONMARK_OPTIONS, plugins: COMMONMARK_PLUGINS)
+        options = note.external_document ? REMOTE_COMMONMARK_OPTIONS : COMMONMARK_OPTIONS
+        html = note.document.to_html(options: options, plugins: COMMONMARK_PLUGINS)
         fragment = Nokogiri::HTML5.fragment(html)
         bind_occurrence_nodes(note, fragment)
         normalize_document(note, fragment)
@@ -1457,7 +1676,7 @@ module JekyllObsidian
           feature_flags: note.feature_flags,
           content_security: content_security_needs(content),
           image_url: published_image_url(note),
-          source_links: repository_links(note.id),
+          source_links: published_source_links(note),
           topics: published_topics(note),
           links: relation_cards(direct.fetch(note.id, []).select { |item| item.kind == :link }),
           backlinks: relation_cards(backlinks.fetch(note.id, []), source: true),
@@ -1488,7 +1707,8 @@ module JekyllObsidian
       ContentSecurityNeeds.new(
         media_sources: media_sources,
         frame_sources: (frame_sources + (tweet ? ["https://platform.twitter.com"] : [])).uniq.sort,
-        script_sources: tweet ? ["https://platform.twitter.com"] : []
+        script_sources: tweet ? ["https://platform.twitter.com"] : [],
+        connect_sources: []
       )
     end
 
@@ -1734,6 +1954,12 @@ module JekyllObsidian
         "source" => "#{base}/blob/#{branch}/#{source}",
         "issue" => "#{base}/issues/new?title=#{URI.encode_uri_component("Issue with #{path}")}"
       }
+    end
+
+    def published_source_links(note)
+      links = repository_links(note.id)
+      links = links.merge("imported" => note.external_document.source_url) if note.external_document
+      links
     end
 
     def build_generated_files(pages, model, theme_output)

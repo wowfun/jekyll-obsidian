@@ -245,18 +245,23 @@ escaped_glob_for_awk=$(printf '%s' "$escaped_glob" | sed 's/\\/\\\\/g')
 render_config() {
   destination=$1
   if [ -e "$CONFIG_PATH" ]; then
-    awk -v start="$CONFIG_START" -v finish="$CONFIG_END" \
-      -v source="$escaped_source" -v theme="$escaped_theme" '
-      $0 == start {
-        print
-        print "  source: " sprintf("%c", 39) source sprintf("%c", 39)
-        print "  theme: " sprintf("%c", 39) theme sprintf("%c", 39)
-        inside = 1
-        next
-      }
-      $0 == finish { inside = 0; print; next }
-      !inside { print }
-    ' "$CONFIG_PATH" > "$destination"
+    start_match=$(LC_ALL=C grep -nFx "$CONFIG_START" "$CONFIG_PATH")
+    finish_match=$(LC_ALL=C grep -nFx "$CONFIG_END" "$CONFIG_PATH")
+    start_line=${start_match%%:*}
+    finish_line=${finish_match%%:*}
+    prefix_lines=$((start_line - 1))
+    suffix_line=$((finish_line + 1))
+    {
+      if [ "$prefix_lines" -gt 0 ]; then
+        head -n "$prefix_lines" "$CONFIG_PATH"
+      fi
+      printf '%s\n' \
+        "$CONFIG_START" \
+        "  source: '$escaped_source'" \
+        "  theme: '$escaped_theme'" \
+        "$CONFIG_END"
+      tail -n +"$suffix_line" "$CONFIG_PATH"
+    } > "$destination"
   else
     awk -v source="$escaped_source" -v theme="$escaped_theme" '
       /__JEKYLL_WEBSITE_SOURCE__/ {

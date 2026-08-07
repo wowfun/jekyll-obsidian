@@ -8,11 +8,13 @@ class VersionContractTest < Minitest::Test
     project_root = File.expand_path("../..", __dir__)
     package = JSON.parse(File.read(File.join(project_root, "package.json")))
     lockfile = JSON.parse(File.read(File.join(project_root, "package-lock.json")))
+    release = File.read(File.join(project_root, ".jekyll-obsidian-release"))
     version = JekyllObsidian::VERSION
 
     assert_equal version, package.fetch("version")
     assert_equal version, lockfile.fetch("version")
     assert_equal version, lockfile.dig("packages", "", "version")
+    assert_equal "format=1\nversion=#{version}\nupdater_protocol=1\n", release
     assert_match(/\A\d{4}\.(?:[1-9]|1[0-2])\.(?:[1-9]|[12]\d|3[01])\z/, version)
 
     year, month, day = version.split(".").map { |part| Integer(part, 10) }

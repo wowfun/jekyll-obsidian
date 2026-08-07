@@ -27,9 +27,11 @@ new_host() {
     "$new_host_path/.github" \
     "$new_host_path/docs/_plugins" \
     "$new_host_path/website/bin" \
+    "$new_host_path/website/scripts" \
     "$new_host_path/fake-bin"
   cp "$SITE_DIR/bin/build" "$new_host_path/website/bin/build"
   cp "$SITE_DIR/_config.yml" "$new_host_path/website/_config.yml"
+  cp "$SITE_DIR/scripts/example-config.yml" "$new_host_path/website/scripts/example-config.yml"
   : > "$new_host_path/website/Gemfile"
   cat > "$new_host_path/fake-bin/bundle" <<'SH'
 #!/usr/bin/env sh
@@ -108,6 +110,7 @@ fi
 if grep -Fq '.github/jekyll-obsidian.yml' "$example_host/config-paths.txt"; then
   fail "the bundled-example build still loaded host overrides."
 fi
+grep -Fq '/website/scripts/example-config.yml' "$example_host/config-paths.txt" || fail "the bundled-example build omitted its project-only configuration."
 grep -Fqx '  source: "website/docs"' "$example_host/overlay.yml" || fail "the bundled-example build did not select website/docs."
 
 printf '%s\n' "Build integration contract passed."

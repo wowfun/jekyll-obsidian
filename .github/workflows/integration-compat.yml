@@ -6,8 +6,13 @@ on:
       - 'website/bin/integrate'
       - 'website/bin/integrate.cmd'
       - 'website/bin/integrate.ps1'
+      - 'website/bin/update'
+      - 'website/bin/update.cmd'
+      - 'website/bin/update.ps1'
+      - 'website/.jekyll-obsidian-release'
       - 'website/scripts/templates/**'
       - 'website/test/integration/integrate_contract.*'
+      - 'website/test/integration/update_contract.*'
       - 'website/.gitattributes'
       - '.gitattributes'
       - '.github/workflows/integration-compat.yml'
@@ -16,8 +21,13 @@ on:
       - 'website/bin/integrate'
       - 'website/bin/integrate.cmd'
       - 'website/bin/integrate.ps1'
+      - 'website/bin/update'
+      - 'website/bin/update.cmd'
+      - 'website/bin/update.ps1'
+      - 'website/.jekyll-obsidian-release'
       - 'website/scripts/templates/**'
       - 'website/test/integration/integrate_contract.*'
+      - 'website/test/integration/update_contract.*'
       - 'website/.gitattributes'
       - '.gitattributes'
       - '.github/workflows/integration-compat.yml'
@@ -40,6 +50,9 @@ jobs:
       - name: Exercise the POSIX adapter
         run: website/test/integration/integrate_contract.sh
 
+      - name: Exercise the POSIX updater
+        run: website/test/integration/update_contract.sh
+
   windows:
     runs-on: windows-latest
     steps:
@@ -58,3 +71,7 @@ jobs:
         env:
           INTEGRATION_REFERENCE_DIR: .integration-reference
         run: .\website\test\integration\integrate_contract.ps1
+
+      - name: Exercise the Windows updater adapters
+        shell: pwsh
+        run: .\website\test\integration\update_contract.ps1

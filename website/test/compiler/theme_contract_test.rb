@@ -11,21 +11,11 @@ class ThemeContractTest < Minitest::Test
     assert_equal "minimal", default_result.theme
     assert_equal "website-minimal", page(default_result, "/").data.fetch("layout")
     assert_equal "minimal", page(default_result, "/").data.dig("website", "theme")
-    assert_equal "https://github.com/example/garden", default_result.site_data.fetch("website_repository_url")
+    assert_empty default_result.site_data
 
     invalid_result = compile(home, theme: "magazine")
     refute invalid_result.success?
     assert invalid_result.diagnostics.any? { |item| item.code == "invalid_theme" }
-  end
-
-  def test_invalid_repository_does_not_publish_a_github_url
-    result = compile(
-      note("index.md", "---\npublish: true\nupdated: 2026-07-30\n---\n# Home"),
-      repository: "https://example.test/not-github"
-    )
-
-    assert result.success?, result.diagnostics.map(&:message).join("\n")
-    refute result.site_data.key?("website_repository_url")
   end
 
   def test_missing_root_index_keeps_recent_posts_home_or_redirects_to_first_visible_section
@@ -291,7 +281,11 @@ class ThemeContractTest < Minitest::Test
 
     note_page = page(result, "/blog/post/").data.fetch("website")
     assert_equal "A field note about software", note_page.fetch("subtitle")
-    assert_equal ["[[people/Ada|Ada]]", "Editorial team"], note_page.fetch("author")
+    assert_equal [
+      { "kind" => "author", "name" => "Ada", "url" => "/people/Ada/" },
+      { "kind" => "author", "name" => "Editorial team" }
+    ], note_page.fetch("authors")
+    refute note_page.key?("author")
     assert_equal ["[[AI]]", "Engineering"], note_page.fetch("categories")
   end
 
@@ -359,7 +353,10 @@ class ThemeContractTest < Minitest::Test
     assert_equal 6, home.data.dig("website", "theme_data", "recent_posts").length
     assert_equal %w[blog/post-12.md blog/post-11.md], home.data.dig("website", "theme_data", "recent_posts").first(2).map { |post| post.fetch("id") }
     assert_equal "Summary 12", home.data.dig("website", "theme_data", "recent_posts", 0, "summary")
-    assert_equal contacts, home.data.dig("website", "theme_data", "contacts")
+    assert_equal [
+      { "label" => "GitHub", "url" => "https://github.com/example", "icon" => "github" },
+      { "label" => "Email", "url" => "mailto:hello@example.test", "icon" => "email" }
+    ], home.data.dig("website", "theme_data", "contacts")
     assert_equal "https://example.test/assets/vault/media/cover.png", home.data.fetch("image")
     assert_equal ["authored-home"], home.data.dig("website", "cssclasses")
     assert_equal "index.md", home.data.dig("website", "local_graph", "current_id")
@@ -373,6 +370,109 @@ class ThemeContractTest < Minitest::Test
     refute_includes result.pages.map(&:route), "/index/"
   end
 
+  def test_minimal_authored_portfolio_keeps_the_note_and_projects_cards_after_its_intro
+    result = compile(
+      note("index.md", "---\npublish: true\n---\n# Home"),
+      note(
+        "portfolio/index.md",
+        "---\npublish: true\n---\n# Selected work\n\nAn authored introduction."
+      ),
+      note(
+        "portfolio/featured.md",
+        "---\npublish: true\nnav_order: 1\ndescription: Front matter summary\nimage: media/demo.gif\n---\n# Featured project\n\nThis preview must not replace the description."
+      ),
+      note(
+        "portfolio/preview.md",
+        "---\npublish: true\ntitle: Preview project\nnav_order: 2\n---\nPreview from the project body."
+      ),
+      note("portfolio/hidden.md", "---\npublish: true\nnav_exclude: true\n---\n# Hidden project"),
+      attachment("media/demo.gif", "GIF89a", media_type: "image/gif"),
+      theme: "minimal"
+    )
+
+    assert result.success?, result.diagnostics.map(&:message).join("\n")
+    portfolio = page(result, "/portfolio/")
+    assert_equal "note", portfolio.data.dig("website", "kind")
+    assert_includes portfolio.content, "An authored introduction."
+    assert portfolio.data.dig("website", "source_links", "edit")
+    assert_equal [
+      {
+        "id" => "portfolio/featured.md",
+        "title" => "Featured project",
+        "url" => "/portfolio/featured/",
+        "image" => "https://example.test/assets/vault/media/demo.gif",
+        "summary" => "Front matter summary"
+      },
+      {
+        "id" => "portfolio/preview.md",
+        "title" => "Preview project",
+        "url" => "/portfolio/preview/",
+        "image" => nil,
+        "summary" => "Preview from the project body."
+      }
+    ], portfolio.data.dig("website", "theme_data", "portfolio_projects")
+  end
+
+  def test_minimal_generates_a_portfolio_index_without_exposing_note_actions
+    result = compile(
+      note("index.md", "---\npublish: true\n---\n# Home"),
+      note("work/alpha.md", "---\npublish: true\ndescription: Alpha summary\n---\n# Alpha"),
+      note("work/beta.md", "---\npublish: true\n---\n# Beta"),
+      theme: "minimal",
+      baseurl: "/site",
+      navigation: {
+        "portfolio" => { "path" => "work", "label" => "Case studies", "visible" => false }
+      }
+    )
+
+    assert result.success?, result.diagnostics.map(&:message).join("\n")
+    portfolio = page(result, "/work/")
+    assert_equal "portfolio-index", portfolio.data.dig("website", "kind")
+    assert_equal "Case studies", portfolio.data.fetch("title")
+    assert_equal "/site/work/", portfolio.data.dig("website", "routes", "portfolio")
+    refute portfolio.data.fetch("website").key?("id")
+    refute portfolio.data.fetch("website").key?("markdown_url")
+    refute portfolio.data.fetch("website").key?("source_links")
+    refute portfolio.data.fetch("website").key?("comments")
+    refute portfolio.data.dig("website", "navigation").any? { |item| item.fetch("id") == "portfolio" }
+    assert_equal %w[work/alpha.md work/beta.md], portfolio.data.dig(
+      "website", "theme_data", "portfolio_projects"
+    ).map { |project| project.fetch("id") }
+    assert_equal "/site/work/alpha/", portfolio.data.dig(
+      "website", "theme_data", "portfolio_projects", 0, "url"
+    )
+  end
+
+  def test_minimal_root_fallback_reaches_a_hidden_portfolio_without_replacing_an_authored_root_route
+    hidden_portfolio = compile(
+      note("work/alpha.md", "---\npublish: true\n---\n# Alpha"),
+      theme: "minimal",
+      navigation: {
+        "portfolio" => { "path" => "work", "label" => "Case studies", "visible" => false }
+      }
+    )
+
+    assert hidden_portfolio.success?, hidden_portfolio.diagnostics.map(&:message).join("\n")
+    redirect = page(hidden_portfolio, "/")
+    assert_equal "redirect", redirect.data.dig("website", "kind")
+    assert_equal "portfolio", redirect.data.dig("website", "redirect_navigation_id")
+    assert_equal "/work/", redirect.data.dig("website", "redirect_url")
+    assert_equal "https://example.test/work/", redirect.data.dig("website", "canonical_url")
+
+    authored_root = compile(
+      note(
+        "landing.md",
+        "---\npublish: true\npermalink: /\n---\n# Authored landing"
+      ),
+      note("blog/post.md", "---\npublish: true\ncontent_type: post\ndate: 2026-08-07\n---\n# Post"),
+      theme: "minimal"
+    )
+
+    assert authored_root.success?, authored_root.diagnostics.map(&:message).join("\n")
+    assert_equal 1, authored_root.pages.count { |candidate| candidate.route == "/" }
+    assert_equal "note", page(authored_root, "/").data.dig("website", "kind")
+  end
+
   def test_contacts_reject_unknown_shapes_and_unsafe_urls
     home = note("index.md", "---\npublish: true\nupdated: 2026-07-30\n---\n# Home")
 
@@ -383,6 +483,43 @@ class ThemeContractTest < Minitest::Test
     unsafe_url = compile(home, theme: "minimal", contacts: [{ "label" => "Run", "url" => "javascript:alert(1)" }])
     refute unsafe_url.success?
     assert unsafe_url.diagnostics.any? { |item| item.code == "invalid_contacts" }
+  end
+
+  def test_contacts_project_stable_icons_without_expanding_the_configuration_shape
+    home = note("index.md", "---\npublish: true\nupdated: 2026-07-30\n---\n# Home")
+    contacts = [
+      { "label" => "Phone", "url" => "tel:+12025550123" },
+      { "label" => "LinkedIn", "url" => "https://www.linkedin.com/in/example" },
+      { "label" => "X", "url" => "https://twitter.com/example" },
+      { "label" => "Mastodon", "url" => "https://social.example/@example" },
+      { "label" => "Bluesky", "url" => "https://bsky.app/profile/example.test" },
+      { "label" => "Instagram", "url" => "https://instagram.com/example" },
+      { "label" => "YouTube", "url" => "https://youtu.be/example" },
+      { "label" => "Telegram", "url" => "https://t.me/example" },
+      { "label" => "Syndication", "url" => "https://example.test/feed.xml" },
+      { "label" => "Website", "url" => "https://example.test" },
+      { "label" => "Community", "url" => "https://community.example.test" }
+    ]
+
+    result = compile(home, theme: "minimal", contacts: contacts)
+
+    assert result.success?, result.diagnostics.map(&:message).join("\n")
+    projected = page(result, "/").data.dig("website", "theme_data", "contacts").map do |contact|
+      [contact.fetch("label"), contact["icon"]]
+    end
+    assert_equal [
+      ["Phone", "phone"],
+      ["LinkedIn", "linkedin"],
+      ["X", "x"],
+      ["Mastodon", "mastodon"],
+      ["Bluesky", "bluesky"],
+      ["Instagram", "instagram"],
+      ["YouTube", "youtube"],
+      ["Telegram", "telegram"],
+      ["Syndication", "rss"],
+      ["Website", "website"],
+      ["Community", nil]
+    ], projected
   end
 
   def test_theme_projection_is_deeply_immutable_and_deterministic_through_compile

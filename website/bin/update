@@ -1,0 +1,1260 @@
+#!/usr/bin/env sh
+set -eu
+export GIT_OPTIONAL_LOCKS=0
+
+OFFICIAL_ORIGIN=https://github.com/wowfun/jekyll-obsidian.git
+check_only=0
+requested_version=""
+to_was_set=0
+discovery_dir=""
+transaction_dir=""
+transaction_active=0
+preparing_dir=""
+run_lock_dir=""
+run_lock_owned=0
+
+usage() {
+  cat <<'USAGE'
+Usage: website/bin/update [--check] [--to YYYY.M.D]
+
+Update the managed website snapshot from an official stable release.
+
+Options:
+  --check             Report whether an update is available without writing
+  --to YYYY.M.D       Update to a specific stable release
+  --help, -h          Show this help
+USAGE
+}
+
+fail() {
+  printf '%s\n' "Update error: $1" >&2
+  exit 1
+}
+
+cleanup() {
+  if [ "${transaction_active:-0}" -eq 1 ]; then
+    rollback_transaction || printf '%s\n' 'Update error: automatic rollback failed; recovery is required.' >&2
+  fi
+  if [ -n "${preparing_dir:-}" ] && [ -d "$preparing_dir" ] && [ ! -L "$preparing_dir" ]; then
+    rm -rf -- "$preparing_dir"
+  fi
+  [ -z "$discovery_dir" ] || rm -rf -- "$discovery_dir"
+  if [ "${run_lock_owned:-0}" -eq 1 ]; then
+    if ! release_run_lock; then
+      printf '%s\n' 'Update error: the update command lock could not be released safely.' >&2
+    fi
+  fi
+}
+trap cleanup EXIT
+trap 'exit 1' HUP INT TERM
+
+is_calver() {
+  LC_ALL=C awk -v value="$1" '
+    BEGIN {
+      count = split(value, part, ".")
+      if (count != 3 || part[1] !~ /^[0-9][0-9][0-9][0-9]$/ ||
+          part[2] !~ /^[0-9]+$/ || part[3] !~ /^[0-9]+$/) exit 1
+      year = part[1] + 0
+      month = part[2] + 0
+      day = part[3] + 0
+      if (value != sprintf("%04d.%d.%d", year, month, day)) exit 1
+      if (year < 1 || month < 1 || month > 12 || day < 1) exit 1
+      days = 31
+      if (month == 4 || month == 6 || month == 9 || month == 11) days = 30
+      if (month == 2) {
+        leap = (year % 4 == 0 && (year % 100 != 0 || year % 400 == 0))
+        days = leap ? 29 : 28
+      }
+      exit day <= days ? 0 : 1
+    }
+  ' </dev/null
+}
+
+is_oid() {
+  case "$1" in
+    *[!0-9a-f]*) return 1 ;;
+  esac
+  [ "${#1}" -eq 40 ] || [ "${#1}" -eq 64 ]
+}
+
+read_release_metadata() {
+  metadata_path=$1
+  [ -f "$metadata_path" ] && [ ! -L "$metadata_path" ] || return 1
+  [ "$(wc -l <"$metadata_path" | tr -d ' ')" -eq 3 ] || return 1
+  [ "$(sed -n '1p' "$metadata_path")" = 'format=1' ] || return 1
+  metadata_version_line=$(sed -n '2p' "$metadata_path")
+  case "$metadata_version_line" in
+    version=*) metadata_version=${metadata_version_line#version=} ;;
+    *) return 1 ;;
+  esac
+  is_calver "$metadata_version" || return 1
+  [ "$(sed -n '3p' "$metadata_path")" = 'updater_protocol=1' ] || return 1
+  printf '%s\n' "$metadata_version"
+}
+
+read_package_version() {
+  awk -F '"' '
+    /^  "version": "[^"]+",?$/ { value = $4; count++ }
+    END { if (count != 1) exit 1; print value }
+  ' "$1"
+}
+
+read_package_lock_versions() {
+  awk -F '"' '
+    NR == 3 && /^  "version": "[^"]+",?$/ { root = $4 }
+    NR == 9 && /^      "version": "[^"]+",?$/ { package = $4 }
+    END { if (root == "" || package == "") exit 1; print root " " package }
+  ' "$1"
+}
+
+read_ruby_version() {
+  awk -F '"' '
+    /^  VERSION = "[^"]+"$/ { value = $2; count++ }
+    END { if (count != 1) exit 1; print value }
+  ' "$1"
+}
+
+verify_version_contract() {
+  contract_site=$1
+  contract_version=$2
+  package_version=$(read_package_version "$contract_site/package.json") || return 1
+  lock_versions=$(read_package_lock_versions "$contract_site/package-lock.json") || return 1
+  ruby_version=$(read_ruby_version "$contract_site/lib/jekyll_obsidian.rb") || return 1
+  [ "$package_version" = "$contract_version" ] || return 1
+  [ "$lock_versions" = "$contract_version $contract_version" ] || return 1
+  [ "$ruby_version" = "$contract_version" ] || return 1
+}
+
+version_relation() {
+  LC_ALL=C awk -v left="$1" -v right="$2" '
+    BEGIN {
+      split(left, a, "."); split(right, b, ".")
+      for (i = 1; i <= 3; i++) {
+        if (a[i] + 0 < b[i] + 0) { print -1; exit }
+        if (a[i] + 0 > b[i] + 0) { print 1; exit }
+      }
+      print 0
+    }
+  ' </dev/null
+}
+
+read_lock() {
+  lock_file=$1
+  [ -f "$lock_file" ] && [ ! -L "$lock_file" ] || return 1
+  [ "$(wc -l <"$lock_file" | tr -d ' ')" -eq 7 ] || return 1
+  normalized_lock=$(awk '
+    BEGIN { valid = 1; style = -1 }
+    {
+      has_cr = sub(/\r$/, "", $0)
+      if (index($0, "\r")) valid = 0
+      if (style == -1) style = has_cr
+      else if (style != has_cr) valid = 0
+      print
+    }
+    END { if (!valid || NR != 7) exit 1 }
+  ' "$lock_file") || return 1
+  [ "$(printf '%s\n' "$normalized_lock" | sed -n '1p')" = 'format=1' ] || return 1
+  lock_origin_line=$(printf '%s\n' "$normalized_lock" | sed -n '2p')
+  lock_version_line=$(printf '%s\n' "$normalized_lock" | sed -n '3p')
+  lock_tag_line=$(printf '%s\n' "$normalized_lock" | sed -n '4p')
+  lock_tag_object_line=$(printf '%s\n' "$normalized_lock" | sed -n '5p')
+  lock_commit_line=$(printf '%s\n' "$normalized_lock" | sed -n '6p')
+  lock_tree_line=$(printf '%s\n' "$normalized_lock" | sed -n '7p')
+  case "$lock_origin_line" in origin=*) lock_origin=${lock_origin_line#origin=} ;; *) return 1 ;; esac
+  case "$lock_version_line" in version=*) lock_version=${lock_version_line#version=} ;; *) return 1 ;; esac
+  case "$lock_tag_line" in tag=*) lock_tag=${lock_tag_line#tag=} ;; *) return 1 ;; esac
+  case "$lock_tag_object_line" in tag_object=*) lock_tag_object=${lock_tag_object_line#tag_object=} ;; *) return 1 ;; esac
+  case "$lock_commit_line" in commit=*) lock_commit=${lock_commit_line#commit=} ;; *) return 1 ;; esac
+  case "$lock_tree_line" in website_tree=*) lock_tree=${lock_tree_line#website_tree=} ;; *) return 1 ;; esac
+  [ "$lock_origin" = "$OFFICIAL_ORIGIN" ] || return 1
+  is_calver "$lock_version" || return 1
+  [ "$lock_tag" = "v$lock_version" ] || return 1
+  is_oid "$lock_tag_object" && is_oid "$lock_commit" && is_oid "$lock_tree" || return 1
+}
+
+write_lock() {
+  lock_destination=$1
+  lock_write_version=$2
+  lock_write_tag_object=$3
+  lock_write_commit=$4
+  lock_write_tree=$5
+  umask 022
+  {
+    printf '%s\n' 'format=1'
+    printf '%s\n' "origin=$OFFICIAL_ORIGIN"
+    printf '%s\n' "version=$lock_write_version"
+    printf '%s\n' "tag=v$lock_write_version"
+    printf '%s\n' "tag_object=$lock_write_tag_object"
+    printf '%s\n' "commit=$lock_write_commit"
+    printf '%s\n' "website_tree=$lock_write_tree"
+  } >"$lock_destination"
+}
+
+atomic_install() {
+  install_source=$1
+  install_destination=$2
+  install_parent=${install_destination%/*}
+  mkdir -p -- "$install_parent"
+  [ -n "$transaction_dir" ] && [ -d "$transaction_dir" ] && [ ! -L "$transaction_dir" ] || return 1
+  install_staging=$transaction_dir/install
+  if [ -e "$install_staging" ] || [ -L "$install_staging" ]; then
+    [ -d "$install_staging" ] && [ ! -L "$install_staging" ] || return 1
+  else
+    mkdir -- "$install_staging"
+  fi
+  install_tmp=$install_staging/next.$$
+  rm -f -- "$install_tmp"
+  cp -p -- "$install_source" "$install_tmp"
+  if [ "${test_fail_at:-}" = crash_after_install_copy ]; then
+    kill -KILL "$$"
+  fi
+  mv -f -- "$install_tmp" "$install_destination"
+}
+
+read_run_lock() {
+  inspected_lock=$1
+  [ -d "$inspected_lock" ] && [ ! -L "$inspected_lock" ] || return 1
+  [ -f "$inspected_lock/owner" ] && [ ! -L "$inspected_lock/owner" ] || return 1
+  [ "$(find "$inspected_lock" -mindepth 1 -maxdepth 1 -print | wc -l | tr -d ' ')" -eq 1 ] || return 1
+  [ "$(wc -l <"$inspected_lock/owner" | tr -d ' ')" -eq 2 ] || return 1
+  [ "$(sed -n '1p' "$inspected_lock/owner")" = 'format=1' ] || return 1
+  run_lock_pid_line=$(sed -n '2p' "$inspected_lock/owner")
+  case "$run_lock_pid_line" in pid=*) observed_run_lock_pid=${run_lock_pid_line#pid=} ;; *) return 1 ;; esac
+  case "$observed_run_lock_pid" in ''|*[!0-9]*) return 1 ;; esac
+  [ "$observed_run_lock_pid" -gt 1 ] || return 1
+}
+
+set_run_lock_dir() {
+  run_lock_key=$(printf '%s\n' "$HOST_DIR" | git -C "$HOST_DIR" hash-object --stdin 2>/dev/null) ||
+    fail "the update command lock identity could not be calculated."
+  is_oid "$run_lock_key" || fail "the update command lock identity is invalid."
+  run_lock_dir=/tmp/jekyll-obsidian-update-lock.$run_lock_key
+}
+
+release_run_lock() {
+  [ "$run_lock_owned" -eq 1 ] || return 0
+  read_run_lock "$run_lock_dir" && [ "$observed_run_lock_pid" -eq "$$" ] || return 1
+  run_lock_tombstone=$run_lock_dir.complete.$$
+  [ ! -e "$run_lock_tombstone" ] && [ ! -L "$run_lock_tombstone" ] || return 1
+  mv -- "$run_lock_dir" "$run_lock_tombstone" || return 1
+  run_lock_owned=0
+  rm -rf -- "$run_lock_tombstone"
+}
+
+acquire_run_lock() {
+  while :; do
+    if mkdir -m 700 -- "$run_lock_dir" 2>/dev/null; then
+      run_lock_owned=1
+      {
+        printf '%s\n' 'format=1'
+        printf '%s\n' "pid=$$"
+      } >"$run_lock_dir/owner" || fail "the update command lock could not be initialized."
+      return 0
+    fi
+    read_run_lock "$run_lock_dir" ||
+      fail "recovery_required: the update command lock is malformed."
+    if kill -0 "$observed_run_lock_pid" 2>/dev/null; then
+      fail "another jekyll-obsidian update command is running."
+    fi
+    stale_run_lock=$run_lock_dir.stale.$$
+    [ ! -e "$stale_run_lock" ] && [ ! -L "$stale_run_lock" ] ||
+      fail "recovery_required: the stale update command lock could not be claimed."
+    if mv -- "$run_lock_dir" "$stale_run_lock" 2>/dev/null; then
+      rm -rf -- "$stale_run_lock"
+    fi
+  done
+}
+
+assert_no_run_lock_for_check() {
+  if [ -e "$run_lock_dir" ] || [ -L "$run_lock_dir" ]; then
+    if read_run_lock "$run_lock_dir" && kill -0 "$observed_run_lock_pid" 2>/dev/null; then
+      fail "another jekyll-obsidian update command is running."
+    fi
+    fail "recovery_required: --check cannot recover an unfinished update command; run website/bin/update without --check."
+  fi
+}
+
+host_path_parents_are_safe() {
+  checked_path=$1
+  checked_parent=${checked_path%/*}
+  while [ "$checked_parent" != website ] && [ "$checked_parent" != . ]; do
+    if [ -e "$HOST_DIR/$checked_parent" ] || [ -L "$HOST_DIR/$checked_parent" ]; then
+      [ -d "$HOST_DIR/$checked_parent" ] && [ ! -L "$HOST_DIR/$checked_parent" ] || return 1
+    fi
+    checked_parent=${checked_parent%/*}
+  done
+  [ -d "$HOST_DIR/website" ] && [ ! -L "$HOST_DIR/website" ]
+}
+
+remove_transaction_atomically() {
+  [ -n "$transaction_dir" ] && [ -d "$transaction_dir" ] && [ ! -L "$transaction_dir" ] || return 1
+  transaction_tombstone=$HOST_DIR/.jekyll-obsidian-update.completed
+  [ ! -e "$transaction_tombstone" ] && [ ! -L "$transaction_tombstone" ] || return 1
+  mv -- "$transaction_dir" "$transaction_tombstone" || return 1
+  transaction_dir=""
+  if [ "${test_fail_at:-}" = crash_after_transaction_rename ]; then
+    kill -KILL "$$"
+  fi
+  rm -rf -- "$transaction_tombstone"
+}
+
+restore_completed_transaction() {
+  completed_transaction=$HOST_DIR/.jekyll-obsidian-update.completed
+  if [ -e "$completed_transaction" ] || [ -L "$completed_transaction" ]; then
+    [ ! -e "$transaction_dir" ] && [ ! -L "$transaction_dir" ] ||
+      fail "recovery_required: active and completed update transactions both exist."
+    [ -d "$completed_transaction" ] && [ ! -L "$completed_transaction" ] ||
+      fail "recovery_required: the completed update transaction path is unsafe."
+    [ "$check_only" -eq 0 ] ||
+      fail "recovery_required: --check cannot recover a completed update transaction; run website/bin/update without --check."
+    mv -- "$completed_transaction" "$transaction_dir" ||
+      fail "recovery_required: the completed update transaction could not be restored for verification."
+  fi
+}
+
+verify_installed_integration() {
+  sh "$SITE_DIR/bin/integrate" --check >/dev/null 2>&1
+}
+
+rollback_transaction() {
+  [ -n "$transaction_dir" ] && [ -d "$transaction_dir" ] && [ ! -L "$transaction_dir" ] || return 1
+  if [ -f "$transaction_dir/new-paths" ]; then
+    while IFS= read -r rollback_path; do
+      [ -n "$rollback_path" ] || continue
+      rm -f -- "$HOST_DIR/$rollback_path"
+    done <"$transaction_dir/new-paths"
+  fi
+  if [ -f "$transaction_dir/old-paths" ]; then
+    while IFS= read -r rollback_path; do
+      [ -n "$rollback_path" ] || continue
+      [ -f "$transaction_dir/backup/$rollback_path" ] && [ ! -L "$transaction_dir/backup/$rollback_path" ] || return 1
+      atomic_install "$transaction_dir/backup/$rollback_path" "$HOST_DIR/$rollback_path" || return 1
+    done <"$transaction_dir/old-paths"
+  fi
+  for rollback_path in .github/jekyll-obsidian.yml .github/workflows/pages.yml .github/jekyll-obsidian.lock; do
+    if [ -f "$transaction_dir/backup/$rollback_path" ] && [ ! -L "$transaction_dir/backup/$rollback_path" ]; then
+      atomic_install "$transaction_dir/backup/$rollback_path" "$HOST_DIR/$rollback_path" || return 1
+    else
+      rm -f -- "$HOST_DIR/$rollback_path"
+    fi
+  done
+  transaction_active=0
+  remove_transaction_atomically
+}
+
+validate_transaction_paths() {
+  transaction_paths=$1
+  [ -f "$transaction_paths" ] && [ ! -L "$transaction_paths" ] || return 1
+  awk '
+    BEGIN { valid = 1 }
+    $0 !~ /^website\// || $0 ~ /^"/ || $0 ~ /(^|\/)\.\.?(\/|$)/ { valid = 0 }
+    { if (seen[$0]++) valid = 0 }
+    END { if (!valid || NR == 0) exit 1 }
+  ' "$transaction_paths"
+}
+
+validate_target_manifest() {
+  target_manifest_file=$1
+  new_paths_file=$2
+  [ -f "$target_manifest_file" ] && [ ! -L "$target_manifest_file" ] || return 1
+  awk -F '\t' '
+    BEGIN { valid = 1 }
+    ( $1 != "100644" && $1 != "100755" ) ||
+    $2 !~ /^[0-9a-f]+$/ || (length($2) != 40 && length($2) != 64) ||
+    $3 !~ /^website\// || $3 ~ /^"/ || $3 ~ /(^|\/)\.\.?(\/|$)/ { valid = 0 }
+    { if (seen[$3]++) valid = 0 }
+    END { if (!valid || NR == 0) exit 1 }
+  ' "$target_manifest_file" || return 1
+  [ "$(wc -l <"$target_manifest_file" | tr -d ' ')" -eq "$(wc -l <"$new_paths_file" | tr -d ' ')" ] || return 1
+  while IFS="$(printf '\t')" read -r manifest_mode manifest_oid manifest_path; do
+    grep -Fxq "$manifest_path" "$new_paths_file" || return 1
+  done <"$target_manifest_file"
+}
+
+recover_transaction() {
+  [ -e "$transaction_dir" ] || return 0
+  [ -d "$transaction_dir" ] && [ ! -L "$transaction_dir" ] ||
+    fail "recovery_required: the update transaction path is not a regular directory."
+  [ "$check_only" -eq 0 ] ||
+    fail "recovery_required: --check cannot recover an unfinished update transaction; run website/bin/update without --check."
+  journal=$transaction_dir/journal
+  preparing_marker=$transaction_dir/preparing
+  marker_valid=0
+  if [ -f "$preparing_marker" ] && [ ! -L "$preparing_marker" ] &&
+     [ "$(wc -l <"$preparing_marker" | tr -d ' ')" -eq 2 ] &&
+     [ "$(sed -n '1p' "$preparing_marker")" = 'format=1' ] &&
+     [ "$(sed -n '2p' "$preparing_marker")" = 'state=preparing' ]; then
+    marker_valid=1
+  fi
+  [ "$marker_valid" -eq 1 ] ||
+    fail "recovery_required: the unfinished transaction has no valid preparing marker."
+  if [ ! -e "$journal" ]; then
+    if find "$transaction_dir" -type l -print | grep -q .; then
+      fail "recovery_required: the preparing transaction contains a symbolic link."
+    fi
+    remove_transaction_atomically || fail "recovery_required: the preparing transaction could not be finalized."
+    printf '%s\n' 'Discarded an incomplete jekyll-obsidian preparing transaction.'
+    return 0
+  fi
+  if find "$transaction_dir" -type l -print | grep -q .; then
+    fail "recovery_required: the unfinished transaction contains a symbolic link."
+  fi
+  [ -f "$journal" ] && [ ! -L "$journal" ] ||
+    fail "recovery_required: the unfinished transaction has no valid journal."
+  [ "$(wc -l <"$journal" | tr -d ' ')" -eq 4 ] ||
+    fail "recovery_required: the unfinished transaction journal is malformed."
+  [ "$(sed -n '1p' "$journal")" = 'format=1' ] ||
+    fail "recovery_required: the unfinished transaction journal is malformed."
+  recovery_state_line=$(sed -n '2p' "$journal")
+  recovery_old_line=$(sed -n '3p' "$journal")
+  recovery_new_line=$(sed -n '4p' "$journal")
+  case "$recovery_state_line" in state=prepared|state=applying|state=verified) recovery_state=${recovery_state_line#state=} ;; *) fail "recovery_required: the unfinished transaction journal is malformed." ;; esac
+  case "$recovery_old_line" in old_version=*) recovery_old=${recovery_old_line#old_version=} ;; *) fail "recovery_required: the unfinished transaction journal is malformed." ;; esac
+  case "$recovery_new_line" in new_version=*) recovery_new=${recovery_new_line#new_version=} ;; *) fail "recovery_required: the unfinished transaction journal is malformed." ;; esac
+  is_calver "$recovery_old" && is_calver "$recovery_new" ||
+    fail "recovery_required: the unfinished transaction versions are malformed."
+  validate_transaction_paths "$transaction_dir/old-paths" &&
+    validate_transaction_paths "$transaction_dir/new-paths" ||
+    fail "recovery_required: the unfinished transaction manifests are unsafe."
+  validate_target_manifest "$transaction_dir/target-paths" "$transaction_dir/new-paths" ||
+    fail "recovery_required: the unfinished target manifest is unsafe."
+
+  old_matches=1
+  while IFS= read -r recovery_path; do
+    [ -f "$transaction_dir/backup/$recovery_path" ] && [ ! -L "$transaction_dir/backup/$recovery_path" ] &&
+      [ -f "$HOST_DIR/$recovery_path" ] && [ ! -L "$HOST_DIR/$recovery_path" ] &&
+      host_path_parents_are_safe "$recovery_path" &&
+      cmp -s "$transaction_dir/backup/$recovery_path" "$HOST_DIR/$recovery_path" || old_matches=0
+  done <"$transaction_dir/old-paths"
+  while IFS= read -r recovery_path; do
+    if ! grep -Fxq "$recovery_path" "$transaction_dir/old-paths" &&
+       { [ -e "$HOST_DIR/$recovery_path" ] || [ -L "$HOST_DIR/$recovery_path" ]; }; then
+      old_matches=0
+    fi
+  done <"$transaction_dir/new-paths"
+  for recovery_path in .github/jekyll-obsidian.yml .github/workflows/pages.yml .github/jekyll-obsidian.lock; do
+    if [ -f "$transaction_dir/backup/$recovery_path" ]; then
+      [ ! -L "$transaction_dir/backup/$recovery_path" ] &&
+        [ -f "$HOST_DIR/$recovery_path" ] && [ ! -L "$HOST_DIR/$recovery_path" ] &&
+        cmp -s "$transaction_dir/backup/$recovery_path" "$HOST_DIR/$recovery_path" || old_matches=0
+    elif [ -e "$HOST_DIR/$recovery_path" ] || [ -L "$HOST_DIR/$recovery_path" ]; then
+      old_matches=0
+    fi
+  done
+
+  if [ "$recovery_state" = prepared ]; then
+    [ "$old_matches" -eq 1 ] ||
+      fail "recovery_required: the prepared transaction no longer matches the complete old snapshot; files were preserved at $transaction_dir."
+    remove_transaction_atomically || fail "recovery_required: the unapplied transaction could not be finalized."
+    printf '%s\n' "Discarded an unapplied jekyll-obsidian $recovery_old -> $recovery_new transaction."
+    return 0
+  fi
+
+  new_matches=1
+  target_manifest=$transaction_dir/target-paths
+  if [ "$new_matches" -eq 1 ]; then
+    while IFS="$(printf '\t')" read -r recovery_mode recovery_blob recovery_path; do
+      case "$recovery_path" in website/*) ;; *) new_matches=0; continue ;; esac
+      if [ ! -f "$HOST_DIR/$recovery_path" ] || [ -L "$HOST_DIR/$recovery_path" ]; then
+        new_matches=0
+        continue
+      fi
+      host_path_parents_are_safe "$recovery_path" || {
+        new_matches=0
+        continue
+      }
+      recovery_actual=$(git -C "$HOST_DIR" hash-object "$HOST_DIR/$recovery_path" 2>/dev/null) || {
+        new_matches=0
+        continue
+      }
+      [ "$recovery_actual" = "$recovery_blob" ] || new_matches=0
+    done <"$target_manifest"
+  fi
+  while IFS= read -r recovery_path; do
+    if ! grep -Fxq "$recovery_path" "$transaction_dir/new-paths" &&
+       { [ -e "$HOST_DIR/$recovery_path" ] || [ -L "$HOST_DIR/$recovery_path" ]; }; then
+      new_matches=0
+    fi
+  done <"$transaction_dir/old-paths"
+  for recovery_path in .github/jekyll-obsidian.yml .github/workflows/pages.yml .github/jekyll-obsidian.lock; do
+    [ -f "$transaction_dir/new/$recovery_path" ] && [ ! -L "$transaction_dir/new/$recovery_path" ] &&
+      [ -f "$HOST_DIR/$recovery_path" ] && [ ! -L "$HOST_DIR/$recovery_path" ] &&
+      cmp -s "$transaction_dir/new/$recovery_path" "$HOST_DIR/$recovery_path" || new_matches=0
+  done
+
+  if [ "$new_matches" -eq 1 ]; then
+    if [ "$recovery_state" = applying ]; then
+      verify_version_contract "$SITE_DIR" "$recovery_new" &&
+        read_lock "$LOCK_PATH" && [ "$lock_version" = "$recovery_new" ] &&
+        verify_installed_integration ||
+        fail "recovery_required: the completely applied snapshot failed post-update integration verification; files were preserved at $transaction_dir."
+    fi
+    recovery_changed_output=""
+    if [ -f "$transaction_dir/changed-paths" ] && [ ! -L "$transaction_dir/changed-paths" ]; then
+      recovery_changed_output=$(sed 's/^/  /' "$transaction_dir/changed-paths")
+    fi
+    remove_transaction_atomically || fail "recovery_required: the completed transaction could not be finalized."
+    printf '%s\n' "Recovered completed jekyll-obsidian update $recovery_old -> $recovery_new."
+    if [ -n "$recovery_changed_output" ]; then
+      printf '%s\n' 'Changed managed paths:'
+      printf '%s\n' "$recovery_changed_output"
+    fi
+    printf '%s\n' 'Review the managed changes with git diff, then run website/bin/setup before a local preview.'
+    exit 0
+  fi
+  if [ "$old_matches" -eq 1 ]; then
+    remove_transaction_atomically || fail "recovery_required: the rolled-back transaction could not be finalized."
+    printf '%s\n' "Recovered rolled-back jekyll-obsidian update $recovery_old -> $recovery_new."
+    return 0
+  fi
+  fail "recovery_required: the unfinished transaction is neither a complete old nor complete new snapshot; files were preserved at $transaction_dir."
+}
+
+apply_prepared_transaction() {
+  transaction_active=1
+  {
+    printf '%s\n' 'format=1'
+    printf '%s\n' 'state=applying'
+    printf '%s\n' "old_version=$installed_version"
+    printf '%s\n' "new_version=$target_version"
+  } >"$transaction_dir/journal.next"
+  mv -f -- "$transaction_dir/journal.next" "$transaction_dir/journal"
+
+  changed_install_count=0
+  while IFS= read -r new_path; do
+    [ -n "$new_path" ] || continue
+    host_path_parents_are_safe "$new_path" || fail "release path has a non-directory or linked parent: $new_path"
+    install_was_changed=0
+    if [ ! -f "$HOST_DIR/$new_path" ] || ! cmp -s "$candidate_root/$new_path" "$HOST_DIR/$new_path"; then
+      install_was_changed=1
+    fi
+    atomic_install "$candidate_root/$new_path" "$HOST_DIR/$new_path"
+    if [ "$install_was_changed" -eq 1 ]; then
+      changed_install_count=$((changed_install_count + 1))
+      if [ "$changed_install_count" -eq 1 ] && [ "$test_fail_at" = fail_after_first_file ]; then
+        fail "injected transaction failure after the first changed managed file."
+      fi
+      if [ "$changed_install_count" -eq 1 ] && [ "$test_fail_at" = crash_after_first_file ]; then
+        kill -KILL "$$"
+      fi
+    fi
+  done <"$transaction_dir/new-paths"
+  while IFS= read -r old_path; do
+    [ -n "$old_path" ] || continue
+    if ! grep -Fxq "$old_path" "$transaction_dir/new-paths"; then
+      rm -f -- "$HOST_DIR/$old_path"
+    fi
+  done <"$transaction_dir/old-paths"
+  atomic_install "$transaction_dir/new/.github/jekyll-obsidian.yml" "$CONFIG_PATH"
+  atomic_install "$transaction_dir/new/.github/workflows/pages.yml" "$WORKFLOW_PATH"
+  atomic_install "$transaction_dir/new/.github/jekyll-obsidian.lock" "$LOCK_PATH"
+  if [ "$test_fail_at" = crash_after_last_rename ]; then
+    kill -KILL "$$"
+  fi
+
+  while IFS="$(printf '\t')" read -r expected_mode expected_blob verify_path; do
+    [ -n "$verify_path" ] || continue
+    actual_blob=$(git -C "$HOST_DIR" hash-object "$HOST_DIR/$verify_path") || fail "could not verify installed file: $verify_path"
+    [ "$actual_blob" = "$expected_blob" ] || fail "installed file failed verification: $verify_path"
+  done <"$target_paths"
+  verify_version_contract "$SITE_DIR" "$target_version" || fail "the installed release version contract failed verification."
+  read_lock "$LOCK_PATH" || fail "the installed provenance lock failed verification."
+  [ "$lock_version" = "$target_version" ] && [ "$lock_tag_object" = "$target_tag_object" ] &&
+    [ "$lock_commit" = "$target_commit" ] && [ "$lock_tree" = "$target_tree" ] ||
+    fail "the installed provenance lock does not match the target release."
+  cmp -s "$transaction_dir/new/.github/jekyll-obsidian.yml" "$CONFIG_PATH" ||
+    fail "the updated host configuration failed byte verification."
+  cmp -s "$transaction_dir/new/.github/workflows/pages.yml" "$WORKFLOW_PATH" ||
+    fail "the updated Pages workflow failed byte verification."
+  verify_installed_integration || fail "the updated host failed post-update integration verification."
+
+  {
+    printf '%s\n' 'format=1'
+    printf '%s\n' 'state=verified'
+    printf '%s\n' "old_version=$installed_version"
+    printf '%s\n' "new_version=$target_version"
+  } >"$transaction_dir/journal.next"
+  mv -f -- "$transaction_dir/journal.next" "$transaction_dir/journal"
+  if [ "$test_fail_at" = crash_verified ]; then
+    kill -KILL "$$"
+  fi
+  changed_paths_output=$(sed 's/^/  /' "$transaction_dir/changed-paths")
+  transaction_active=0
+  remove_transaction_atomically || fail "the verified update transaction could not be finalized."
+  printf '%s\n' "Updated jekyll-obsidian from $installed_version to $target_version."
+  printf '%s\n' 'Changed managed paths:'
+  printf '%s\n' "$changed_paths_output"
+  printf '%s\n' 'Review the managed changes with git diff, then run website/bin/setup before a local preview.'
+}
+
+if [ "${JEKYLL_OBSIDIAN_UPDATE_INTERNAL_WORKER:-0}" = 1 ]; then
+  command -v git >/dev/null 2>&1 || fail "Git is required."
+  internal_host=${JEKYLL_OBSIDIAN_UPDATE_INTERNAL_HOST:-}
+  case "$internal_host" in /*) ;; *) fail "the private update worker host is invalid." ;; esac
+  HOST_DIR=$(CDPATH= cd -- "$internal_host" 2>/dev/null && pwd -P) || fail "the private update worker host is unavailable."
+  set_run_lock_dir
+  read_run_lock "$run_lock_dir" && [ "$observed_run_lock_pid" -eq "$$" ] || fail "the private update worker does not own the update command lock."
+  run_lock_owned=1
+  transaction_dir=$HOST_DIR/.jekyll-obsidian-update
+  worker_dir=$(CDPATH= cd -- "$(dirname -- "$0")" 2>/dev/null && pwd -P) || fail "the private update worker location is invalid."
+  [ "$worker_dir" = "$transaction_dir" ] && [ "${0##*/}" = worker ] || fail "the private update worker is outside its transaction."
+  [ -d "$transaction_dir" ] && [ ! -L "$transaction_dir" ] || fail "the private update transaction is invalid."
+  SITE_DIR=$HOST_DIR/website
+  CONFIG_PATH=$HOST_DIR/.github/jekyll-obsidian.yml
+  WORKFLOW_PATH=$HOST_DIR/.github/workflows/pages.yml
+  LOCK_PATH=$HOST_DIR/.github/jekyll-obsidian.lock
+  [ -d "$HOST_DIR/.github" ] && [ ! -L "$HOST_DIR/.github" ] || fail ".github must be a regular directory."
+  [ -d "$HOST_DIR/.github/workflows" ] && [ ! -L "$HOST_DIR/.github/workflows" ] || fail ".github/workflows must be a regular directory."
+  candidate_root=$transaction_dir/new-snapshot
+  target_paths=$transaction_dir/target-paths
+  journal=$transaction_dir/journal
+  [ "$(sed -n '1p' "$journal")" = 'format=1' ] && [ "$(sed -n '2p' "$journal")" = 'state=prepared' ] ||
+    fail "the private update worker journal is invalid."
+  installed_version_line=$(sed -n '3p' "$journal")
+  target_version_line=$(sed -n '4p' "$journal")
+  case "$installed_version_line" in old_version=*) installed_version=${installed_version_line#old_version=} ;; *) fail "the private update worker journal is invalid." ;; esac
+  case "$target_version_line" in new_version=*) target_version=${target_version_line#new_version=} ;; *) fail "the private update worker journal is invalid." ;; esac
+  is_calver "$installed_version" && is_calver "$target_version" || fail "the private update worker versions are invalid."
+  validate_transaction_paths "$transaction_dir/old-paths" &&
+    validate_transaction_paths "$transaction_dir/new-paths" &&
+    validate_target_manifest "$target_paths" "$transaction_dir/new-paths" ||
+    fail "the private update worker manifests are invalid."
+  read_lock "$transaction_dir/new/.github/jekyll-obsidian.lock" || fail "the private update target lock is invalid."
+  [ "$lock_version" = "$target_version" ] || fail "the private update target version is inconsistent."
+  target_tag_object=$lock_tag_object
+  target_commit=$lock_commit
+  target_tree=$lock_tree
+  test_fail_at=${JEKYLL_OBSIDIAN_UPDATE_INTERNAL_FAIL_AT:-}
+  internal_discovery=${JEKYLL_OBSIDIAN_UPDATE_INTERNAL_DISCOVERY:-}
+  case "$internal_discovery" in */jekyll-obsidian-update-discovery.*) ;; *) fail "the private update worker temporary path is invalid." ;; esac
+  [ -d "$internal_discovery" ] && [ ! -L "$internal_discovery" ] || fail "the private update worker temporary directory is unavailable."
+  discovery_dir=$internal_discovery
+  apply_prepared_transaction
+  exit 0
+fi
+
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --check)
+      [ "$check_only" -eq 0 ] || fail "--check may only be specified once."
+      check_only=1
+      shift
+      ;;
+    --to)
+      [ "$to_was_set" -eq 0 ] || fail "--to may only be specified once."
+      [ "$#" -ge 2 ] || fail "--to requires a value."
+      requested_version=$2
+      to_was_set=1
+      shift 2
+      ;;
+    --help|-h)
+      usage
+      exit 0
+      ;;
+    *)
+      fail "unknown option: $1"
+      ;;
+  esac
+done
+
+if [ "$to_was_set" -eq 1 ] && ! is_calver "$requested_version"; then
+  fail "invalid release version: $requested_version"
+fi
+
+transport_origin=$OFFICIAL_ORIGIN
+test_fail_at=""
+testing_flag=${JEKYLL_OBSIDIAN_UPDATE_TESTING:-}
+test_origin=${JEKYLL_OBSIDIAN_UPDATE_TEST_ORIGIN:-}
+test_failure=${JEKYLL_OBSIDIAN_UPDATE_TEST_FAIL_AT:-}
+if [ "$testing_flag" = 1 ]; then
+  [ -n "$test_origin" ] || fail "the internal test transport is missing its origin."
+  case "$test_origin" in
+    file:///*) transport_origin=$test_origin ;;
+    *) fail "the internal test transport must be an absolute file:// URI." ;;
+  esac
+  case "$test_failure" in
+    ''|fail_after_first_file|crash_after_first_file|crash_after_install_copy|crash_after_last_rename|crash_preparing|crash_prepared|crash_verified|crash_after_transaction_rename|wait_after_claim) ;;
+    *) fail "the internal failure injection point is invalid." ;;
+  esac
+  test_fail_at=$test_failure
+elif [ -n "$testing_flag" ] || [ -n "$test_origin" ] || [ -n "$test_failure" ]; then
+  fail "the internal test transport is disabled."
+fi
+
+command -v git >/dev/null 2>&1 || fail "Git is required."
+
+SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)
+SITE_DIR=$(CDPATH= cd -- "$SCRIPT_DIR/.." && pwd -P)
+HOST_DIR=$(CDPATH= cd -- "$SITE_DIR/.." && pwd -P)
+CONFIG_PATH=$HOST_DIR/.github/jekyll-obsidian.yml
+WORKFLOW_PATH=$HOST_DIR/.github/workflows/pages.yml
+LOCK_PATH=$HOST_DIR/.github/jekyll-obsidian.lock
+transaction_dir=$HOST_DIR/.jekyll-obsidian-update
+set_run_lock_dir
+
+[ "${SITE_DIR##*/}" = website ] || fail "the managed site directory must be named website at the host repository root."
+[ ! -L "$SITE_DIR" ] || fail "website must not be a symbolic link."
+git_root=$(git -C "$HOST_DIR" rev-parse --show-toplevel 2>/dev/null) || fail "the host must be a Git worktree."
+git_root=$(CDPATH= cd -- "$git_root" && pwd -P)
+[ "$git_root" = "$HOST_DIR" ] || fail "website must be at the Git worktree root."
+[ -d "$HOST_DIR/.github" ] && [ ! -L "$HOST_DIR/.github" ] || fail ".github must be a regular directory."
+[ -d "$HOST_DIR/.github/workflows" ] && [ ! -L "$HOST_DIR/.github/workflows" ] || fail ".github/workflows must be a regular directory."
+if [ "$check_only" -eq 1 ]; then
+  assert_no_run_lock_for_check
+else
+  acquire_run_lock
+fi
+restore_completed_transaction
+recover_transaction
+transaction_dir=$HOST_DIR/.jekyll-obsidian-update
+
+discovery_dir=$(mktemp -d "${TMPDIR:-/tmp}/jekyll-obsidian-update-discovery.XXXXXX")
+host_index_path=$(git -C "$HOST_DIR" rev-parse --git-path index 2>/dev/null) || fail "the host Git index is unavailable."
+case "$host_index_path" in /*) ;; *) host_index_path=$HOST_DIR/$host_index_path ;; esac
+[ -f "$host_index_path" ] && [ ! -L "$host_index_path" ] || fail "the host Git index must be a regular file."
+isolated_host_index=$discovery_dir/host-index
+cp -p -- "$host_index_path" "$isolated_host_index" || fail "the host Git index could not be isolated."
+host_git() {
+  GIT_INDEX_FILE=$isolated_host_index git -C "$HOST_DIR" "$@"
+}
+release_git() (
+  unset GIT_DIR GIT_WORK_TREE GIT_COMMON_DIR GIT_OBJECT_DIRECTORY GIT_ALTERNATE_OBJECT_DIRECTORIES
+  unset GIT_CONFIG GIT_CONFIG_PARAMETERS
+  GIT_CONFIG_NOSYSTEM=1
+  GIT_CONFIG_GLOBAL=/dev/null
+  GIT_CONFIG_SYSTEM=/dev/null
+  GIT_CONFIG_COUNT=0
+  export GIT_CONFIG_NOSYSTEM GIT_CONFIG_GLOBAL GIT_CONFIG_SYSTEM GIT_CONFIG_COUNT
+  git -C "$discovery_dir" "$@"
+)
+remote_refs=$discovery_dir/remote-refs
+release_candidates=$discovery_dir/releases
+if ! release_git ls-remote --tags "$transport_origin" 'refs/tags/v*' >"$remote_refs" 2>/dev/null; then
+  fail "could not list official releases."
+fi
+
+awk '$2 ~ /^refs\/tags\/v/ && $2 !~ /\^\{\}$/ { reference = $2; sub(/^refs\/tags\/v/, "", reference); print reference }' \
+  "$remote_refs" >"$discovery_dir/named-releases"
+while IFS= read -r named_version; do
+  [ -n "$named_version" ] || continue
+  if printf '%s\n' "$named_version" | LC_ALL=C grep -Eq '^[0-9]{4}\.[0-9]+\.[0-9]+$' &&
+     ! is_calver "$named_version"; then
+    fail "invalid calendar release tag: v$named_version"
+  fi
+done <"$discovery_dir/named-releases"
+
+awk '
+  $2 ~ /^refs\/tags\/v/ {
+    reference = $2
+    if (reference ~ /\^\{\}$/) {
+      sub(/\^\{\}$/, "", reference)
+      peeled[reference] = $1
+    } else {
+      tagged[reference] = $1
+    }
+  }
+  END {
+    for (reference in tagged) {
+      if (reference in peeled && tagged[reference] != peeled[reference]) {
+        sub(/^refs\/tags\/v/, "", reference)
+        print reference "\t" tagged["refs/tags/v" reference] "\t" peeled["refs/tags/v" reference]
+      }
+    }
+  }
+' "$remote_refs" >"$discovery_dir/unvalidated-releases"
+
+awk '
+  $2 ~ /^refs\/tags\/v/ {
+    reference = $2
+    if (reference ~ /\^\{\}$/) {
+      sub(/\^\{\}$/, "", reference)
+      peeled[reference] = 1
+    } else {
+      tagged[reference] = 1
+    }
+  }
+  END {
+    for (reference in tagged) {
+      if (!(reference in peeled)) {
+        sub(/^refs\/tags\/v/, "", reference)
+        print reference
+      }
+    }
+  }
+' "$remote_refs" >"$discovery_dir/lightweight-releases"
+while IFS= read -r lightweight_version; do
+  [ -n "$lightweight_version" ] || continue
+  if is_calver "$lightweight_version"; then
+    fail "release-shaped tag v$lightweight_version must be an annotated tag."
+  fi
+done <"$discovery_dir/lightweight-releases"
+
+: >"$release_candidates"
+while IFS="	" read -r version tag_object commit; do
+  [ -n "$version" ] || continue
+  if is_calver "$version" && is_oid "$tag_object" && is_oid "$commit"; then
+    printf '%s\t%s\t%s\n' "$version" "$tag_object" "$commit" >>"$release_candidates"
+  fi
+done <"$discovery_dir/unvalidated-releases"
+
+[ -s "$release_candidates" ] || fail "no annotated stable release tags were found."
+
+if [ "$to_was_set" -eq 1 ]; then
+  target_record=$(awk -F '\t' -v wanted="$requested_version" '$1 == wanted { print; found = 1 } END { if (!found) exit 1 }' "$release_candidates") ||
+    fail "official annotated release not found: v$requested_version"
+else
+  target_record=$(sort -t . -k1,1n -k2,2n -k3,3n "$release_candidates" | tail -n 1)
+fi
+
+target_version=$(printf '%s\n' "$target_record" | awk -F '\t' '{ print $1 }')
+target_tag_object=$(printf '%s\n' "$target_record" | awk -F '\t' '{ print $2 }')
+target_advertised_commit=$(printf '%s\n' "$target_record" | awk -F '\t' '{ print $3 }')
+
+installed_version=$(read_release_metadata "$SITE_DIR/.jekyll-obsidian-release") ||
+  fail "website release metadata is malformed."
+verify_version_contract "$SITE_DIR" "$installed_version" ||
+  fail "installed website version metadata is inconsistent."
+
+[ "$(version_relation "$target_version" "$installed_version")" -ge 0 ] ||
+  fail "downgrades are not supported: $installed_version -> $target_version"
+
+object_repo=$discovery_dir/objects.git
+release_git init --bare --quiet "$object_repo"
+
+fetch_release() {
+  fetch_version=$1
+  fetch_record=$(awk -F '\t' -v wanted="$fetch_version" '$1 == wanted { print; found = 1 } END { if (!found) exit 1 }' "$release_candidates") ||
+    return 1
+  fetch_tag_object=$(printf '%s\n' "$fetch_record" | awk -F '\t' '{ print $2 }')
+  fetch_advertised_commit=$(printf '%s\n' "$fetch_record" | awk -F '\t' '{ print $3 }')
+  release_git --git-dir="$object_repo" fetch --quiet --no-tags "$transport_origin" \
+    "refs/tags/v$fetch_version:refs/tags/v$fetch_version" 2>/dev/null || return 1
+  fetched_tag_object=$(release_git --git-dir="$object_repo" rev-parse "refs/tags/v$fetch_version" 2>/dev/null) || return 1
+  [ "$fetched_tag_object" = "$fetch_tag_object" ] || return 1
+  [ "$(release_git --git-dir="$object_repo" cat-file -t "$fetched_tag_object" 2>/dev/null)" = tag ] || return 1
+  fetched_commit=$(release_git --git-dir="$object_repo" rev-parse "refs/tags/v$fetch_version^{commit}" 2>/dev/null) || return 1
+  [ "$fetched_commit" = "$fetch_advertised_commit" ] || return 1
+  tag_header=$(release_git --git-dir="$object_repo" cat-file tag "$fetched_tag_object" 2>/dev/null |
+    awk '
+      $0 == "" { header_done = 1 }
+      !header_done && /^object / { object = substr($0, 8); objects++ }
+      !header_done && /^type / { type = substr($0, 6); types++ }
+      !header_done && /^tag / { tag = substr($0, 5); tags++ }
+      END {
+        if (objects != 1 || types != 1 || tags != 1) exit 1
+        print object "\t" type "\t" tag
+      }
+    ') || return 1
+  tag_direct_object=$(printf '%s\n' "$tag_header" | awk -F '\t' '{ print $1 }')
+  tag_direct_type=$(printf '%s\n' "$tag_header" | awk -F '\t' '{ print $2 }')
+  tag_name=$(printf '%s\n' "$tag_header" | awk -F '\t' '{ print $3 }')
+  [ "$tag_direct_object" = "$fetched_commit" ] && [ "$tag_direct_type" = commit ] &&
+    [ "$tag_name" = "v$fetch_version" ] || return 1
+  fetched_tree=$(release_git --git-dir="$object_repo" rev-parse "$fetched_commit:website" 2>/dev/null) || return 1
+  [ "$(release_git --git-dir="$object_repo" cat-file -t "$fetched_tree" 2>/dev/null)" = tree ] || return 1
+  printf '%s\t%s\t%s\n' "$fetched_tag_object" "$fetched_commit" "$fetched_tree"
+}
+
+target_verified=$(fetch_release "$target_version") || fail "official release v$target_version failed provenance verification."
+target_tag_object=$(printf '%s\n' "$target_verified" | awk -F '\t' '{ print $1 }')
+target_commit=$(printf '%s\n' "$target_verified" | awk -F '\t' '{ print $2 }')
+target_tree=$(printf '%s\n' "$target_verified" | awk -F '\t' '{ print $3 }')
+
+target_entries=$discovery_dir/target-entries
+target_paths=$discovery_dir/target-paths
+release_git --git-dir="$object_repo" -c core.quotePath=false ls-tree -r "$target_commit" website >"$target_entries"
+validate_tree_entries() {
+  entries_input=$1
+  paths_output=$2
+  awk -F '\t' '
+    BEGIN { valid = 1 }
+    {
+      split($1, header, " ")
+      path = $2
+      if ((header[1] != "100644" && header[1] != "100755") || header[2] != "blob" ||
+          path !~ /^website\// || path ~ /^"/ || path ~ /(^|\/)\.\.?(\/|$)/) valid = 0
+      relative = substr(path, 9)
+      count = split(relative, component, "/")
+      for (part_number = 1; part_number <= count; part_number++) {
+        name = component[part_number]
+        folded_name = tolower(name)
+        base = folded_name
+        sub(/\..*$/, "", base)
+        if (name == "" || name ~ /[<>:"|?*]/ || index(name, "\\") ||
+            name ~ /[. ]$/ || folded_name == ".git" ||
+            base == "con" || base == "prn" || base == "aux" || base == "nul" ||
+            base == "conin$" || base == "conout$" ||
+            base ~ /^com[1-9]$/ || base ~ /^lpt[1-9]$/) valid = 0
+      }
+      folded = tolower(relative)
+      if (folded in seen && seen[folded] != relative) valid = 0
+      seen[folded] = relative
+      print header[1] "\t" header[3] "\t" path
+    }
+    END { if (!valid || NR == 0) exit 1 }
+  ' "$entries_input" >"$paths_output"
+}
+
+validate_tree_entries "$target_entries" "$target_paths" || fail "release v$target_version contains an unsafe website tree."
+for required_component in \
+  .jekyll-obsidian-release \
+  bin/build \
+  bin/integrate \
+  bin/integrate.cmd \
+  bin/integrate.ps1 \
+  bin/setup \
+  bin/test \
+  bin/update \
+  bin/update.cmd \
+  bin/update.ps1 \
+  scripts/example-config.yml \
+  scripts/templates/host-config.yml \
+  scripts/templates/pages.yml; do
+  awk -F '\t' -v expected="website/$required_component" '$3 == expected { found = 1 } END { if (!found) exit 1 }' "$target_paths" ||
+    fail "release v$target_version is missing required component: website/$required_component"
+done
+for executable_component in bin/build bin/integrate bin/setup bin/test bin/update; do
+  awk -F '\t' -v expected="website/$executable_component" '$1 == "100755" && $3 == expected { found = 1 } END { if (!found) exit 1 }' "$target_paths" ||
+    fail "release v$target_version does not contain executable website/$executable_component."
+done
+
+candidate_root=$discovery_dir/candidate
+mkdir -p "$candidate_root"
+release_git --git-dir="$object_repo" archive "$target_commit" website | tar -xf - -C "$candidate_root" ||
+  fail "release v$target_version could not be staged."
+candidate_version=$(read_release_metadata "$candidate_root/website/.jekyll-obsidian-release") ||
+  fail "release v$target_version has malformed release metadata."
+[ "$candidate_version" = "$target_version" ] ||
+  fail "release tag v$target_version does not match website metadata $candidate_version."
+verify_version_contract "$candidate_root/website" "$target_version" ||
+  fail "release v$target_version has inconsistent package or Ruby versions."
+
+extract_managed_config_block() {
+  awk '
+    $0 == "  # jekyll-obsidian:managed-start" {
+      if (inside || started || finished) invalid = 1
+      inside = 1
+      started = 1
+    }
+    inside { print }
+    $0 == "  # jekyll-obsidian:managed-end" {
+      if (!inside || finished) invalid = 1
+      inside = 0
+      finished = 1
+    }
+    END { if (invalid || !started || !finished || inside) exit 1 }
+  ' "$1"
+}
+
+managed_source() {
+  awk '
+    BEGIN { inside = 0; found = 0; quote = sprintf("%c", 39) }
+    $0 == "  # jekyll-obsidian:managed-start" { inside = 1; next }
+    $0 == "  # jekyll-obsidian:managed-end" { inside = 0; next }
+    inside && index($0, "  source: " quote) == 1 && substr($0, length($0), 1) == quote {
+      prefix = "  source: " quote
+      value = substr($0, length(prefix) + 1, length($0) - length(prefix) - 1)
+      doubled = quote quote
+      gsub(doubled, quote, value)
+      print value
+      found++
+    }
+    END { if (inside || found != 1) exit 1 }
+  ' "$1"
+}
+
+managed_marker_range() {
+  awk '
+    $0 == "  # jekyll-obsidian:managed-start" { start = NR; starts++ }
+    $0 == "  # jekyll-obsidian:managed-end" { finish = NR; finishes++ }
+    END { if (starts != 1 || finishes != 1 || start >= finish) exit 1; print start " " finish " " NR }
+  ' "$1"
+}
+
+host_git diff --quiet -- website || fail "website has unstaged changes; commit or discard them before updating."
+host_git diff --cached --quiet -- website || fail "website has staged changes; commit them before updating."
+untracked_website=$(host_git -c core.quotePath=false ls-files --others --exclude-standard -- website)
+[ -z "$untracked_website" ] || fail "website has non-ignored untracked files; commit or remove them before updating."
+host_git ls-files --error-unmatch .github/workflows/pages.yml >/dev/null 2>&1 ||
+  fail ".github/workflows/pages.yml must be committed before updating."
+host_git diff --quiet -- .github/workflows/pages.yml || fail "the managed Pages workflow has unstaged changes."
+host_git diff --cached --quiet -- .github/workflows/pages.yml || fail "the managed Pages workflow has staged changes."
+[ -f "$CONFIG_PATH" ] && [ ! -L "$CONFIG_PATH" ] || fail "missing regular host configuration."
+[ -f "$WORKFLOW_PATH" ] && [ ! -L "$WORKFLOW_PATH" ] || fail "missing regular managed Pages workflow."
+host_git show HEAD:.github/jekyll-obsidian.yml >"$discovery_dir/config-head" 2>/dev/null ||
+  fail ".github/jekyll-obsidian.yml must be committed before updating."
+host_git show :.github/jekyll-obsidian.yml >"$discovery_dir/config-index" 2>/dev/null ||
+  fail ".github/jekyll-obsidian.yml must remain in the index while updating."
+extract_managed_config_block "$discovery_dir/config-head" >"$discovery_dir/config-head-managed" ||
+  fail "the committed host configuration has a malformed managed block."
+extract_managed_config_block "$discovery_dir/config-index" >"$discovery_dir/config-index-managed" ||
+  fail "the staged host configuration has a malformed managed block."
+extract_managed_config_block "$CONFIG_PATH" >"$discovery_dir/config-worktree-managed" ||
+  fail "the host configuration has a malformed managed block."
+cmp -s "$discovery_dir/config-head-managed" "$discovery_dir/config-index-managed" ||
+  fail "the managed host configuration block has staged changes."
+cmp -s "$discovery_dir/config-index-managed" "$discovery_dir/config-worktree-managed" ||
+  fail "the managed host configuration block has unstaged changes."
+current_source=$(managed_source "$CONFIG_PATH") || fail "the managed source entry is malformed."
+case "$current_source" in
+  ""|.|/*|[A-Za-z]:/*|*//*|*/|*'/./'*|*'/../'*|./*|../*) fail "the managed source path is unsafe." ;;
+esac
+current_source_path=$HOST_DIR
+old_ifs=$IFS
+IFS=/
+set -f
+for source_segment in $current_source; do
+  current_source_path=$current_source_path/$source_segment
+  [ ! -L "$current_source_path" ] || fail "the managed source path crosses a symbolic link."
+done
+set +f
+IFS=$old_ifs
+[ -d "$current_source_path" ] || fail "the managed source directory does not exist: $current_source"
+resolved_source=$(CDPATH= cd -- "$current_source_path" && pwd -P)
+[ "$resolved_source" = "$HOST_DIR/$current_source" ] || fail "the managed source path casing does not match the repository."
+
+current_shadow=$discovery_dir/current-shadow
+mkdir -p "$current_shadow/.github/workflows"
+host_git archive HEAD website | tar -xf - -C "$current_shadow"
+cp -p -- "$CONFIG_PATH" "$current_shadow/.github/jekyll-obsidian.yml"
+cp -p -- "$WORKFLOW_PATH" "$current_shadow/.github/workflows/pages.yml"
+if [ "$current_source" != website/docs ]; then
+  mkdir -p -- "$current_shadow/$current_source"
+fi
+sh "$current_shadow/website/bin/integrate" >/dev/null || fail "current host integration could not be rendered."
+sh "$current_shadow/website/bin/integrate" --check >/dev/null || fail "current host integration is invalid."
+extract_managed_config_block "$current_shadow/.github/jekyll-obsidian.yml" >"$discovery_dir/config-current-rendered-managed" ||
+  fail "current host integration rendered a malformed managed block."
+cmp -s "$discovery_dir/config-worktree-managed" "$discovery_dir/config-current-rendered-managed" ||
+  fail "current managed host configuration is out of sync."
+cmp -s "$WORKFLOW_PATH" "$current_shadow/.github/workflows/pages.yml" ||
+  fail "current managed Pages workflow is out of sync."
+
+current_verified=$(fetch_release "$installed_version") ||
+  fail "installed version v$installed_version has no valid official annotated release."
+current_tag_object=$(printf '%s\n' "$current_verified" | awk -F '\t' '{ print $1 }')
+current_commit=$(printf '%s\n' "$current_verified" | awk -F '\t' '{ print $2 }')
+current_tree=$(printf '%s\n' "$current_verified" | awk -F '\t' '{ print $3 }')
+host_head_tree=$(host_git rev-parse HEAD:website 2>/dev/null) || fail "website must be committed before updating."
+current_entries=$discovery_dir/current-entries
+current_paths=$discovery_dir/current-paths
+host_entries=$discovery_dir/host-entries
+host_paths=$discovery_dir/host-paths
+release_git --git-dir="$object_repo" -c core.quotePath=false ls-tree -r "$current_commit" website >"$current_entries"
+validate_tree_entries "$current_entries" "$current_paths" || fail "official release v$installed_version contains an unsafe website tree."
+host_git -c core.quotePath=false ls-tree -r HEAD website >"$host_entries"
+validate_tree_entries "$host_entries" "$host_paths" || fail "the committed website contains unsupported entries."
+cut -f 2- "$current_paths" | LC_ALL=C sort >"$discovery_dir/current-canonical"
+cut -f 2- "$host_paths" | LC_ALL=C sort >"$discovery_dir/host-canonical"
+host_matches_current=0
+if cmp -s "$discovery_dir/current-canonical" "$discovery_dir/host-canonical"; then
+  host_matches_current=1
+fi
+
+has_lock=0
+if [ ! -e "$LOCK_PATH" ]; then
+  if host_git ls-files --error-unmatch .github/jekyll-obsidian.lock >/dev/null 2>&1; then
+    fail "the committed provenance lock is missing from the worktree."
+  fi
+  [ "$host_matches_current" -eq 1 ] ||
+    fail "the installed website is not an exact official v$installed_version snapshot; provenance cannot be established."
+  if [ "$check_only" -eq 1 ] && [ "$target_version" = "$installed_version" ]; then
+    printf '%s\n' "Provenance can be established for $installed_version."
+    exit 2
+  fi
+else
+  has_lock=1
+  read_lock "$LOCK_PATH" || fail "the provenance lock is malformed."
+  host_git ls-files --error-unmatch .github/jekyll-obsidian.lock >/dev/null 2>&1 ||
+    fail "the provenance lock must be committed before updating."
+  host_git diff --quiet -- .github/jekyll-obsidian.lock || fail "the provenance lock has unstaged changes."
+  host_git diff --cached --quiet -- .github/jekyll-obsidian.lock || fail "the provenance lock has staged changes."
+  [ "$lock_version" = "$installed_version" ] || fail "the provenance lock version does not match the installed website."
+  [ "$lock_tag_object" = "$current_tag_object" ] &&
+    [ "$lock_commit" = "$current_commit" ] &&
+    [ "$lock_tree" = "$current_tree" ] ||
+    fail "the installed release tag moved or its provenance no longer matches."
+  [ "$host_matches_current" -eq 1 ] || fail "the committed website does not match its provenance lock."
+fi
+
+if [ "$target_version" = "$installed_version" ]; then
+  if [ "$has_lock" -eq 0 ]; then
+    [ "$check_only" -eq 0 ] || exit 2
+    [ ! -L "$HOST_DIR/.github" ] && [ -d "$HOST_DIR/.github" ] || fail ".github must be a regular directory."
+    lock_tmp=$(mktemp "$HOST_DIR/.github/.jekyll-obsidian.lock.tmp.XXXXXX")
+    if ! write_lock "$lock_tmp" "$installed_version" "$current_tag_object" "$current_commit" "$current_tree"; then
+      rm -f -- "$lock_tmp"
+      fail "could not render the provenance lock."
+    fi
+    mv -f -- "$lock_tmp" "$LOCK_PATH" || {
+      rm -f -- "$lock_tmp"
+      fail "could not install the provenance lock."
+    }
+    printf '%s\n' "Recorded jekyll-obsidian provenance for $installed_version."
+    printf '%s\n' 'Changed managed paths:'
+    printf '%s\n' '  .github/jekyll-obsidian.lock'
+  else
+    printf '%s\n' "jekyll-obsidian $installed_version is current."
+  fi
+  exit 0
+fi
+
+shadow_root=$discovery_dir/shadow
+mkdir -p "$shadow_root/.github/workflows"
+cp -Rp -- "$candidate_root/website" "$shadow_root/website"
+cp -p -- "$CONFIG_PATH" "$shadow_root/.github/jekyll-obsidian.yml"
+cp -p -- "$WORKFLOW_PATH" "$shadow_root/.github/workflows/pages.yml"
+shadow_source=$(managed_source "$CONFIG_PATH") || fail "the managed source entry is malformed."
+case "$shadow_source" in
+  ""|.|/*|[A-Za-z]:/*|*//*|*/|*'/./'*|*'/../'*|./*|../*) fail "the managed source path is unsafe." ;;
+esac
+if [ "$shadow_source" != website/docs ]; then
+  mkdir -p -- "$shadow_root/$shadow_source"
+fi
+sh "$shadow_root/website/bin/integrate" >/dev/null || fail "release v$target_version could not render host integration."
+sh "$shadow_root/website/bin/integrate" --check >/dev/null || fail "release v$target_version generated invalid host integration."
+
+current_range=$(managed_marker_range "$CONFIG_PATH") || fail "the current managed configuration range is malformed."
+candidate_range=$(managed_marker_range "$shadow_root/.github/jekyll-obsidian.yml") || fail "the target managed configuration range is malformed."
+current_start=$(printf '%s\n' "$current_range" | awk '{ print $1 }')
+current_finish=$(printf '%s\n' "$current_range" | awk '{ print $2 }')
+current_lines=$(printf '%s\n' "$current_range" | awk '{ print $3 }')
+candidate_start=$(printf '%s\n' "$candidate_range" | awk '{ print $1 }')
+candidate_finish=$(printf '%s\n' "$candidate_range" | awk '{ print $2 }')
+rendered_config=$discovery_dir/rendered-host-config
+: >"$rendered_config"
+if [ "$current_start" -gt 1 ]; then
+  head -n "$((current_start - 1))" "$CONFIG_PATH" >>"$rendered_config"
+fi
+sed -n "${candidate_start},${candidate_finish}p" "$shadow_root/.github/jekyll-obsidian.yml" >>"$rendered_config"
+if [ "$current_finish" -lt "$current_lines" ]; then
+  tail -n "+$((current_finish + 1))" "$CONFIG_PATH" >>"$rendered_config"
+fi
+
+changed_paths=$discovery_dir/changed-paths
+awk -F '\t' '
+  NR == FNR { old_blob[$3] = $2; next }
+  { new_path[$3] = 1; if (!($3 in old_blob) || old_blob[$3] != $2) print $3 }
+  END { for (path in old_blob) if (!(path in new_path)) print path }
+' "$host_paths" "$target_paths" >"$changed_paths.unsorted"
+if ! cmp -s "$CONFIG_PATH" "$rendered_config"; then
+  printf '%s\n' '.github/jekyll-obsidian.yml' >>"$changed_paths.unsorted"
+fi
+if ! cmp -s "$WORKFLOW_PATH" "$shadow_root/.github/workflows/pages.yml"; then
+  printf '%s\n' '.github/workflows/pages.yml' >>"$changed_paths.unsorted"
+fi
+write_lock "$discovery_dir/target.lock" "$target_version" "$target_tag_object" "$target_commit" "$target_tree"
+if [ ! -f "$LOCK_PATH" ] || ! cmp -s "$LOCK_PATH" "$discovery_dir/target.lock"; then
+  printf '%s\n' '.github/jekyll-obsidian.lock' >>"$changed_paths.unsorted"
+fi
+LC_ALL=C sort -u "$changed_paths.unsorted" >"$changed_paths"
+[ -s "$changed_paths" ] || fail "release v$target_version has no managed changes."
+
+ignored_current=$discovery_dir/ignored-current
+ignored_target=$discovery_dir/ignored-target
+host_git -c core.quotePath=false ls-files --others -i --exclude-standard -- website >"$ignored_current"
+if grep -q '^"' "$ignored_current"; then
+  fail "ignored website state contains unsupported control characters."
+fi
+ignore_host=$discovery_dir/ignore-host
+mkdir -p "$ignore_host/website"
+git -C "$ignore_host" init --quiet
+if [ -f "$HOST_DIR/.gitignore" ] && [ ! -L "$HOST_DIR/.gitignore" ]; then
+  cp -p -- "$HOST_DIR/.gitignore" "$ignore_host/.gitignore"
+fi
+host_exclude=$(host_git rev-parse --git-path info/exclude 2>/dev/null || true)
+case "$host_exclude" in /*) ;; "") ;; *) host_exclude=$HOST_DIR/$host_exclude ;; esac
+if [ -n "$host_exclude" ] && [ -f "$host_exclude" ] && [ ! -L "$host_exclude" ]; then
+  cp -p -- "$host_exclude" "$ignore_host/.git/info/exclude"
+fi
+while IFS="$(printf '\t')" read -r ignore_mode ignore_blob ignore_candidate; do
+  case "$ignore_candidate" in
+    website/.gitignore|website/*/.gitignore)
+      mkdir -p -- "$ignore_host/${ignore_candidate%/*}"
+      cp -p -- "$candidate_root/$ignore_candidate" "$ignore_host/$ignore_candidate"
+      ;;
+  esac
+done <"$target_paths"
+ignore_status=0
+git -C "$ignore_host" -c core.quotePath=false check-ignore --no-index --stdin \
+  <"$ignored_current" >"$ignored_target" 2>/dev/null || ignore_status=$?
+[ "$ignore_status" -eq 0 ] || [ "$ignore_status" -eq 1 ] || fail "target ignore rules could not be validated."
+LC_ALL=C sort "$ignored_current" >"$discovery_dir/ignored-current.sorted"
+LC_ALL=C sort "$ignored_target" >"$discovery_dir/ignored-target.sorted"
+cmp -s "$discovery_dir/ignored-current.sorted" "$discovery_dir/ignored-target.sorted" ||
+  fail "some ignored website state would no longer be ignored by v$target_version."
+
+cut -f 3 "$host_paths" >"$discovery_dir/old-paths"
+cut -f 3 "$target_paths" >"$discovery_dir/new-paths"
+awk -F '\t' '
+  NR == FNR { old_name[tolower($3)] = $3; next }
+  { folded = tolower($3); if (folded in old_name && old_name[folded] != $3) exit 1 }
+' "$host_paths" "$target_paths" || fail "release v$target_version contains a cross-version case-only path rename."
+while IFS= read -r target_path; do
+  [ -n "$target_path" ] || continue
+  if ! grep -Fxq "$target_path" "$discovery_dir/old-paths" &&
+     { [ -e "$HOST_DIR/$target_path" ] || [ -L "$HOST_DIR/$target_path" ]; }; then
+    fail "release file conflicts with preserved local state: $target_path"
+  fi
+  host_path_parents_are_safe "$target_path" || fail "release path has a non-directory or linked parent: $target_path"
+done <"$discovery_dir/new-paths"
+
+if [ "$check_only" -eq 1 ]; then
+  printf '%s\n' "Update available: $installed_version -> $target_version."
+  exit 2
+fi
+
+[ ! -L "$transaction_dir" ] || fail "the update transaction path must not be a symbolic link."
+if ! mkdir -m 700 -- "$transaction_dir" 2>/dev/null; then
+  fail "an unfinished update transaction requires recovery."
+fi
+{
+  printf '%s\n' 'format=1'
+  printf '%s\n' 'state=preparing'
+} >"$transaction_dir/preparing"
+if [ "$test_fail_at" = wait_after_claim ]; then
+  while [ ! -f "$transaction_dir/test-continue" ]; do
+    sleep 1
+  done
+fi
+if [ "$test_fail_at" = crash_preparing ]; then
+  kill -KILL "$$"
+fi
+mkdir -p "$transaction_dir/backup/website" "$transaction_dir/backup/.github/workflows" \
+  "$transaction_dir/new/.github/workflows" "$transaction_dir/new-snapshot"
+cp -p -- "$0" "$transaction_dir/worker"
+cp -Rp -- "$candidate_root/website" "$transaction_dir/new-snapshot/website"
+cp -p -- "$discovery_dir/old-paths" "$transaction_dir/old-paths"
+cp -p -- "$discovery_dir/new-paths" "$transaction_dir/new-paths"
+cp -p -- "$target_paths" "$transaction_dir/target-paths"
+cp -p -- "$changed_paths" "$transaction_dir/changed-paths"
+while IFS= read -r old_path; do
+  [ -n "$old_path" ] || continue
+  mkdir -p -- "$transaction_dir/backup/${old_path%/*}"
+  cp -p -- "$HOST_DIR/$old_path" "$transaction_dir/backup/$old_path"
+done <"$transaction_dir/old-paths"
+cp -p -- "$CONFIG_PATH" "$transaction_dir/backup/.github/jekyll-obsidian.yml"
+cp -p -- "$WORKFLOW_PATH" "$transaction_dir/backup/.github/workflows/pages.yml"
+if [ -e "$LOCK_PATH" ]; then
+  cp -p -- "$LOCK_PATH" "$transaction_dir/backup/.github/jekyll-obsidian.lock"
+fi
+cp -p -- "$rendered_config" "$transaction_dir/new/.github/jekyll-obsidian.yml"
+cp -p -- "$shadow_root/.github/workflows/pages.yml" "$transaction_dir/new/.github/workflows/pages.yml"
+write_lock "$transaction_dir/new/.github/jekyll-obsidian.lock" "$target_version" \
+  "$target_tag_object" "$target_commit" "$target_tree"
+{
+  printf '%s\n' 'format=1'
+  printf '%s\n' 'state=prepared'
+  printf '%s\n' "old_version=$installed_version"
+  printf '%s\n' "new_version=$target_version"
+} >"$transaction_dir/journal.next"
+mv -f -- "$transaction_dir/journal.next" "$transaction_dir/journal"
+if [ "$test_fail_at" = crash_prepared ]; then
+  kill -KILL "$$"
+fi
+
+JEKYLL_OBSIDIAN_UPDATE_INTERNAL_WORKER=1 \
+JEKYLL_OBSIDIAN_UPDATE_INTERNAL_HOST=$HOST_DIR \
+JEKYLL_OBSIDIAN_UPDATE_INTERNAL_DISCOVERY=$discovery_dir \
+JEKYLL_OBSIDIAN_UPDATE_INTERNAL_FAIL_AT=$test_fail_at \
+  exec "$transaction_dir/worker"

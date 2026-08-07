@@ -66,6 +66,7 @@ class NavigationConfigurationTest < Minitest::Test
         "home" => { "order" => 0, "visible" => true },
         "blog" => { "order" => 10, "visible" => true },
         "docs" => { "order" => 20, "visible" => true },
+        "portfolio" => { "path" => "portfolio", "order" => 30, "visible" => true },
         "folders" => []
       },
       navigation
@@ -79,6 +80,7 @@ class NavigationConfigurationTest < Minitest::Test
     navigation, diagnostics = normalized_navigation(
       "home" => { "label" => "Start", "visible" => false },
       "blog" => { "order" => 30 },
+      "portfolio" => { "path" => "selected-work", "label" => "Work", "visible" => false },
       "folders" => [
         { "path" => "portfolio", "label" => "Work" },
         { "path" => "projects/client", "order" => 45, "visible" => false }
@@ -89,6 +91,10 @@ class NavigationConfigurationTest < Minitest::Test
     assert_equal({ "order" => 0, "visible" => false, "label" => "Start" }, navigation.fetch("home"))
     assert_equal({ "order" => 30, "visible" => true }, navigation.fetch("blog"))
     assert_equal({ "order" => 20, "visible" => true }, navigation.fetch("docs"))
+    assert_equal(
+      { "path" => "selected-work", "order" => 30, "visible" => false, "label" => "Work" },
+      navigation.fetch("portfolio")
+    )
     assert_equal(
       [
         { "path" => "portfolio", "order" => 100, "visible" => true, "label" => "Work" },
@@ -103,6 +109,7 @@ class NavigationConfigurationTest < Minitest::Test
       "unexpected" => {},
       "home" => { "label" => false, "order" => "first", "visible" => 1, "href" => "/" },
       "blog" => nil,
+      "portfolio" => { "path" => "../work", "archive" => true },
       "folders" => [
         "portfolio",
         { "label" => "Missing path" },
@@ -120,8 +127,11 @@ class NavigationConfigurationTest < Minitest::Test
     assert_includes messages, "website.navigation.home.order must be an integer"
     assert_includes messages, "website.navigation.home.visible must be a YAML boolean"
     assert_includes messages, "website.navigation.blog must be a mapping with string keys"
+    assert_includes messages, 'unknown website.navigation.portfolio setting "archive"'
+    assert_includes messages, "website.navigation.portfolio.path must not contain empty or traversal segments"
     assert_includes messages, "website.navigation.folders[0] must be a mapping with string keys"
     assert_includes messages, "website.navigation.folders[1].path must be a string"
+    assert_equal "portfolio", navigation.dig("portfolio", "path")
     assert_equal ["valid"], navigation.fetch("folders").map { |item| item.fetch("path") }
   end
 
@@ -172,7 +182,7 @@ class NavigationConfigurationTest < Minitest::Test
     )
     refute additions.success?
     assert(additions.diagnostics.any? do |item|
-      item.code == "localized_structure_override" && item.message.include?("default-language page already present")
+      item.code == "localized_structure_override" && item.message.include?("default-language note declares navigation")
     end)
 
     overrides = compile(
@@ -229,11 +239,85 @@ class NavigationConfigurationTest < Minitest::Test
     assert_equal ["docs"], navigation_for(docs_only, "/").map { |item| item.fetch("id") }
   end
 
+  def test_minimal_portfolio_claims_published_descendants_as_pages_and_adds_an_active_tab
+    result = compile(
+      note("index.md", "---\npublish: true\n---\n# Home"),
+      note("portfolio/index.md", "---\npublish: true\n---\n# Selected work"),
+      note("portfolio/alpha.md", "---\npublish: true\n---\n# Alpha"),
+      note("portfolio/hidden.md", "---\npublish: true\nnav_exclude: true\n---\n# Hidden"),
+      theme: "minimal",
+      content: {
+        "default_type" => "page",
+        "directories" => { "post" => ["portfolio"], "doc" => [] }
+      }
+    )
+
+    assert result.success?, result.diagnostics.map(&:message).join("\n")
+    portfolio = navigation_for(result, "/").find { |item| item.fetch("id") == "portfolio" }
+    assert_equal({ "id" => "portfolio", "label" => "Portfolio", "url" => "/portfolio/", "order" => 30 }, portfolio)
+    assert_equal "portfolio", current_navigation_id(result, "/portfolio/")
+    assert_equal "portfolio", current_navigation_id(result, "/portfolio/alpha/")
+    assert_equal "portfolio", current_navigation_id(result, "/portfolio/hidden/")
+    assert_equal "page", page(result, "/portfolio/alpha/").data.dig("website", "content_type")
+  end
+
+  def test_minimal_portfolio_rejects_explicit_post_and_doc_content_types
+    result = compile(
+      note("index.md", "---\npublish: true\n---\n# Home"),
+      note("portfolio/post.md", "---\npublish: true\ncontent_type: post\n---\n# Post"),
+      note("portfolio/doc.md", "---\npublish: true\ncontent_type: doc\n---\n# Doc"),
+      theme: "minimal"
+    )
+
+    refute result.success?
+    conflicts = result.diagnostics.select { |item| item.code == "portfolio_content_type_conflict" }
+    assert_equal %w[portfolio/doc.md portfolio/post.md], conflicts.map(&:path)
+    refute result.diagnostics.any? { |item| item.code == "missing_post_date" }
+  end
+
+  def test_portfolio_index_at_the_public_root_owns_the_navigation_destination_when_posts_exist
+    result = compile(
+      note("portfolio/index.md", "---\npublish: true\npermalink: /\n---\n# Selected work"),
+      note("portfolio/project.md", "---\npublish: true\n---\n# Project"),
+      note("blog/post.md", "---\npublish: true\ncontent_type: post\ndate: 2026-08-07\n---\n# Post"),
+      theme: "minimal"
+    )
+
+    assert result.success?, result.diagnostics.map(&:message).join("\n")
+    assert_equal %w[blog portfolio], navigation_for(result, "/").map { |item| item.fetch("id") }
+    assert_equal "portfolio", current_navigation_id(result, "/")
+    assert_equal "/", page(result, "/").data.dig("website", "routes", "home")
+  end
+
+  def test_manual_empty_portfolio_path_is_ignored_and_visibility_only_hides_the_builtin_tab
+    empty = compile(
+      note("index.md", "---\npublish: true\n---\n# Home"),
+      theme: "minimal",
+      navigation: { "portfolio" => { "path" => "work" } }
+    )
+    assert empty.success?, empty.diagnostics.map(&:message).join("\n")
+    refute navigation_for(empty, "/").any? { |item| item.fetch("id") == "portfolio" }
+
+    hidden = compile(
+      note("index.md", "---\npublish: true\n---\n# Home"),
+      note("work/project.md", "---\npublish: true\n---\n# Project"),
+      theme: "minimal",
+      content: {
+        "default_type" => "page",
+        "directories" => { "post" => ["work"], "doc" => [] }
+      },
+      navigation: { "portfolio" => { "path" => "work", "visible" => false } }
+    )
+    assert hidden.success?, hidden.diagnostics.map(&:message).join("\n")
+    refute navigation_for(hidden, "/").any? { |item| item.fetch("id") == "portfolio" }
+    assert_equal "page", page(hidden, "/work/project/").data.dig("website", "content_type")
+  end
+
   def test_folder_navigation_uses_index_or_first_visible_ordered_page_and_marks_its_scope
     result = compile(
       note("index.md", "---\npublish: true\n---\n# Home"),
-      note("portfolio/index.md", "---\npublish: true\ntitle: Selected work\n---\n# Portfolio"),
-      note("portfolio/earlier.md", "---\npublish: true\nnav_order: 1\n---\n# Earlier"),
+      note("showcase/index.md", "---\npublish: true\ntitle: Selected work\n---\n# Showcase"),
+      note("showcase/earlier.md", "---\npublish: true\nnav_order: 1\n---\n# Earlier"),
       note("projects/hidden.md", "---\npublish: true\nnav_order: 0\nnav_exclude: true\n---\n# Hidden"),
       note("projects/zulu.md", "---\npublish: true\nnav_order: 10\n---\n# Alpha"),
       note("projects/alpha.md", "---\npublish: true\nnav_order: 10\n---\n# Alpha"),
@@ -243,7 +327,7 @@ class NavigationConfigurationTest < Minitest::Test
       baseurl: "/site",
       navigation: {
         "folders" => [
-          { "path" => "portfolio", "order" => 30 },
+          { "path" => "showcase", "order" => 30 },
           { "path" => "projects", "order" => 40 },
           { "path" => "private-section", "visible" => false }
         ]
@@ -252,15 +336,15 @@ class NavigationConfigurationTest < Minitest::Test
 
     assert result.success?, result.diagnostics.map(&:message).join("\n")
     items = navigation_for(result, "/")
-    portfolio = items.find { |item| item.fetch("id") == "folder:portfolio" }
+    portfolio = items.find { |item| item.fetch("id") == "folder:showcase" }
     projects = items.find { |item| item.fetch("id") == "folder:projects" }
     assert_equal "Selected work", portfolio.fetch("label")
-    assert_equal "/site/portfolio/", portfolio.fetch("url")
+    assert_equal "/site/showcase/", portfolio.fetch("url")
     assert_equal "Projects", projects.fetch("label")
     assert_equal "/site/projects/alpha/", projects.fetch("url")
     assert_equal "/site/", items.find { |item| item.fetch("id") == "home" }.fetch("url")
     refute items.any? { |item| item.fetch("id") == "folder:private-section" }
-    assert_equal "folder:portfolio", current_navigation_id(result, "/portfolio/earlier/")
+    assert_equal "folder:showcase", current_navigation_id(result, "/showcase/earlier/")
     assert_equal "folder:projects", current_navigation_id(result, "/projects/zulu/")
     assert page(result, "/private-section/page/")
     refute_includes projects.fetch("url"), "/site/site/"
@@ -270,21 +354,21 @@ class NavigationConfigurationTest < Minitest::Test
     result = compile(
       note("index.md", "---\npublish: true\n---\n# Home"),
       note("about.md", "---\npublish: true\nnavigation:\n  label: About us\n  order: 5\n---\n# About"),
-      note("portfolio/index.md", "---\npublish: true\nnavigation:\n  order: 15\n---\n# Portfolio"),
-      note("portfolio/alpha.md", "---\npublish: true\nnavigation:\n  label: Featured\n  order: 16\n---\n# Alpha"),
-      note("portfolio/case-study.md", "---\npublish: true\n---\n# Case study"),
-      note("portfolio/dispatch.md", "---\npublish: true\ncontent_type: post\ndate: 2026-08-02\n---\n# Dispatch"),
+      note("section/index.md", "---\npublish: true\nnavigation:\n  order: 15\n---\n# Section"),
+      note("section/alpha.md", "---\npublish: true\nnavigation:\n  label: Featured\n  order: 16\n---\n# Alpha"),
+      note("section/case-study.md", "---\npublish: true\n---\n# Case study"),
+      note("section/dispatch.md", "---\npublish: true\ncontent_type: post\ndate: 2026-08-02\n---\n# Dispatch"),
       note("hidden.md", "---\npublish: true\nnavigation:\n  visible: false\n---\n# Hidden"),
       theme: "minimal"
     )
 
     assert result.success?, result.diagnostics.map(&:message).join("\n")
     ids = navigation_for(result, "/").map { |item| item.fetch("id") }
-    assert_equal ["home", "page:about.md", "blog", "page:portfolio/index.md", "page:portfolio/alpha.md"], ids
+    assert_equal ["home", "page:about.md", "blog", "page:section/index.md", "page:section/alpha.md"], ids
     assert_equal "page:about.md", current_navigation_id(result, "/about/")
-    assert_equal "page:portfolio/index.md", current_navigation_id(result, "/portfolio/case-study/")
-    assert_equal "page:portfolio/alpha.md", current_navigation_id(result, "/portfolio/alpha/")
-    assert_equal "blog", current_navigation_id(result, "/portfolio/dispatch/")
+    assert_equal "page:section/index.md", current_navigation_id(result, "/section/case-study/")
+    assert_equal "page:section/alpha.md", current_navigation_id(result, "/section/alpha/")
+    assert_equal "blog", current_navigation_id(result, "/section/dispatch/")
     assert page(result, "/hidden/")
     assert_nil current_navigation_id(result, "/hidden/")
   end
@@ -342,6 +426,104 @@ class NavigationConfigurationTest < Minitest::Test
     assert_raises(FrozenError) { home.fetch("active_scope").fetch("routes") << "/elsewhere/" }
   end
 
+  def test_portfolio_projection_uses_the_authored_index_route_and_sorts_visible_projects
+    index = published_note("work/index.md", "Selected work", "/selected/", "page")
+    ordered = published_note("work/ordered.md", "Later", "/work/ordered/", "page", nav_order: 5)
+    alpha = published_note("work/alpha.md", "Alpha", "/work/alpha/", "page")
+    zulu = published_note("work/zulu.md", "Zulu", "/work/zulu/", "page")
+    hidden = published_note("work/hidden.md", "Hidden", "/work/hidden/", "page", nav_exclude: true)
+    notes = [index, zulu, hidden, alpha, ordered]
+    model = JekyllObsidian::PublishedSiteModel.new(
+      notes: notes,
+      notes_by_id: notes.to_h { |note| [note.id, note] },
+      relations: [],
+      graph_edges: [],
+      graph_degrees: {}
+    )
+    navigation, diagnostics = normalized_navigation(
+      "portfolio" => { "path" => "work", "visible" => false }
+    )
+
+    projection = JekyllObsidian::SiteNavigation.build(
+      model: model,
+      settings: navigation,
+      content: JekyllObsidian::ContentPolicy::DEFAULT_SETTINGS,
+      url_builder: JekyllObsidian::UrlBuilder.new(origin: "https://example.test", baseurl: "/site"),
+      theme: "minimal"
+    )
+
+    assert_empty diagnostics
+    assert_empty projection.diagnostics
+    assert_equal "work", projection.portfolio.path
+    assert_equal "/selected/", projection.portfolio.route
+    assert_equal "work/index.md", projection.portfolio.index_note_id
+    assert_equal %w[work/ordered.md work/alpha.md work/zulu.md], projection.portfolio.project_note_ids
+    refute projection.items.any? { |item| item.fetch("id") == "portfolio" }
+    refute projection.active_by_note_id.key?("work/alpha.md")
+    assert projection.portfolio.frozen?
+  end
+
+  def test_portfolio_without_an_index_projects_a_generated_landing_route_and_all_descendant_active_ids
+    project = published_note("selected/work.md", "Work", "/selected/work/", "page")
+    hidden = published_note("selected/hidden.md", "Hidden", "/selected/hidden/", "page", nav_exclude: true)
+    notes = [hidden, project]
+    model = JekyllObsidian::PublishedSiteModel.new(
+      notes: notes,
+      notes_by_id: notes.to_h { |note| [note.id, note] },
+      relations: [],
+      graph_edges: [],
+      graph_degrees: {}
+    )
+    navigation, diagnostics = normalized_navigation("portfolio" => { "path" => "selected" })
+
+    projection = JekyllObsidian::SiteNavigation.build(
+      model: model,
+      settings: navigation,
+      content: JekyllObsidian::ContentPolicy::DEFAULT_SETTINGS,
+      url_builder: JekyllObsidian::UrlBuilder.new(origin: "https://example.test", baseurl: "/site"),
+      theme: "minimal"
+    )
+
+    assert_empty diagnostics
+    assert_equal "/selected/", projection.portfolio.route
+    assert_nil projection.portfolio.index_note_id
+    assert_equal ["selected/work.md"], projection.portfolio.project_note_ids
+    item = projection.items.find { |candidate| candidate.fetch("id") == "portfolio" }
+    assert_equal "/site/selected/", item.fetch("url")
+    assert_equal "portfolio", projection.active_by_note_id.fetch("selected/work.md")
+    assert_equal "portfolio", projection.active_by_note_id.fetch("selected/hidden.md")
+  end
+
+  def test_portfolio_index_without_a_visible_project_does_not_trigger_the_projection
+    index = published_note("portfolio/index.md", "Portfolio", "/portfolio/", "page")
+    hidden = published_note("portfolio/hidden.md", "Hidden", "/portfolio/hidden/", "page", nav_exclude: true)
+    navigation, diagnostics = normalized_navigation(nil)
+
+    [
+      [index],
+      [index, hidden]
+    ].each do |notes|
+      model = JekyllObsidian::PublishedSiteModel.new(
+        notes: notes,
+        notes_by_id: notes.to_h { |note| [note.id, note] },
+        relations: [],
+        graph_edges: [],
+        graph_degrees: {}
+      )
+      projection = JekyllObsidian::SiteNavigation.build(
+        model: model,
+        settings: navigation,
+        content: JekyllObsidian::ContentPolicy::DEFAULT_SETTINGS,
+        url_builder: JekyllObsidian::UrlBuilder.new(origin: "https://example.test", baseurl: ""),
+        theme: "minimal"
+      )
+
+      assert_nil projection.portfolio
+      refute projection.items.any? { |item| item.fetch("id") == "portfolio" }
+    end
+    assert_empty diagnostics
+  end
+
   def test_navigation_reports_duplicate_empty_reserved_and_invalid_sources
     duplicate_folder = compile(
       note("index.md", "---\npublish: true\n---\n# Home"),
@@ -353,11 +535,40 @@ class NavigationConfigurationTest < Minitest::Test
 
     duplicate_target = compile(
       note("index.md", "---\npublish: true\n---\n# Home"),
-      note("portfolio/index.md", "---\npublish: true\nnavigation:\n  label: Portfolio page\n---\n# Portfolio"),
+      note("showcase/index.md", "---\npublish: true\nnavigation:\n  label: Showcase page\n---\n# Showcase"),
       theme: "minimal",
-      navigation: { "folders" => [{ "path" => "portfolio", "label" => "Portfolio folder" }] }
+      navigation: { "folders" => [{ "path" => "showcase", "label" => "Showcase folder" }] }
     )
-    assert_diagnostic duplicate_target, "duplicate_navigation_target", "portfolio/index.md"
+    assert_diagnostic duplicate_target, "duplicate_navigation_target", "showcase/index.md"
+
+    portfolio_folder = compile(
+      note("index.md", "---\npublish: true\n---\n# Home"),
+      note("portfolio/project.md", "---\npublish: true\n---\n# Project"),
+      theme: "minimal",
+      navigation: { "folders" => [{ "path" => "portfolio" }] }
+    )
+    assert_diagnostic portfolio_folder, "duplicate_navigation_folder", "portfolio"
+
+    hidden_portfolio = compile(
+      note("index.md", "---\npublish: true\n---\n# Home"),
+      note("portfolio/project.md", "---\npublish: true\n---\n# Project"),
+      theme: "minimal",
+      navigation: {
+        "portfolio" => { "visible" => false },
+        "folders" => [{ "path" => "portfolio" }]
+      }
+    )
+    assert hidden_portfolio.success?, hidden_portfolio.diagnostics.map(&:message).join("\n")
+    assert_equal ["folder:portfolio"], navigation_for(hidden_portfolio, "/").map { |item| item.fetch("id") } - ["home"]
+
+    index_only = compile(
+      note("index.md", "---\npublish: true\n---\n# Home"),
+      note("portfolio/index.md", "---\npublish: true\n---\n# Portfolio"),
+      theme: "minimal",
+      navigation: { "folders" => [{ "path" => "portfolio" }] }
+    )
+    assert index_only.success?, index_only.diagnostics.map(&:message).join("\n")
+    assert_equal ["folder:portfolio"], navigation_for(index_only, "/").map { |item| item.fetch("id") } - ["home"]
 
     reserved = compile(
       note("index.md", "---\npublish: true\nnavigation:\n  visible: false\n---\n# Home"),
@@ -518,14 +729,15 @@ class NavigationConfigurationTest < Minitest::Test
       result.diagnostics.map { |item| "#{item.code}: #{item.path}: #{item.message}" }.join("\n")
   end
 
-  def published_note(id, title, route, content_type, properties: {})
+  def published_note(id, title, route, content_type, properties: {}, nav_order: nil, nav_exclude: false)
     JekyllObsidian::PublishedNote.new(
       id: id,
       title: title,
       route: route,
       content_type: content_type,
       properties: properties,
-      nav_exclude: false
+      nav_order: nav_order,
+      nav_exclude: nav_exclude
     )
   end
 

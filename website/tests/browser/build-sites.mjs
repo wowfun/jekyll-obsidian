@@ -9,6 +9,7 @@ const buildEnvironment = {
   ...process.env,
   GITHUB_REPOSITORY: "example/jekyll-obsidian",
   JEKYLL_ENV: "production",
+  JEKYLL_OBSIDIAN_GITHUB_MARKDOWN_MANIFEST_IN: ".jekyll-obsidian-cache/github-markdown-browser.json",
 };
 
 function build(script, arguments_) {
@@ -22,6 +23,12 @@ function build(script, arguments_) {
     throw new Error(`browser fixture build exited with ${result.status ?? result.signal}`);
   }
 }
+
+await mkdir(path.join(projectRoot, ".jekyll-obsidian-cache"), { recursive: true });
+await copyFile(
+  path.join(projectRoot, "tests/browser/fixtures/github-markdown-default.json"),
+  path.join(projectRoot, ".jekyll-obsidian-cache/github-markdown-browser.json"),
+);
 
 for (const theme of ["minimal", "docs"]) {
   build(path.join(projectRoot, "bin/build"), [
@@ -62,6 +69,10 @@ try {
   );
   await symlink(path.join(projectRoot, "vendor"), path.join(fixtureWebsite, "vendor"), "dir");
   await mkdir(path.join(fixtureWebsite, ".jekyll-obsidian-cache"));
+  await copyFile(
+    path.join(projectRoot, "tests/browser/fixtures/github-markdown-i18n.json"),
+    path.join(fixtureWebsite, ".jekyll-obsidian-cache/github-markdown-browser.json"),
+  );
   await cp(
     path.join(projectRoot, ".jekyll-obsidian-cache/assets"),
     path.join(fixtureWebsite, ".jekyll-obsidian-cache/assets"),

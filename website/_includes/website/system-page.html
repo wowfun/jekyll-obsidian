@@ -13,7 +13,7 @@
       <div class="minimal-recent__grid">
         {% for post in recent_posts limit: 6 %}
           <article class="minimal-post-card{% if post.image or post.image_url %} minimal-post-card--with-image{% endif %}">
-            {% if post.image or post.image_url %}<a class="minimal-post-card__media" href="{{ post.url | escape }}" tabindex="-1" aria-hidden="true"><img src="{{ post.image | default: post.image_url | escape }}" alt="" loading="lazy" decoding="async"></a>{% endif %}
+            {% if post.image or post.image_url %}<div class="minimal-post-card__media"><img src="{{ post.image | default: post.image_url | escape }}" alt="" loading="lazy" decoding="async"></div>{% endif %}
             <div class="minimal-post-card__body">
               <h3><a href="{{ post.url | escape }}">{{ post.title | escape }}</a></h3>
               {% if post.subtitle %}<p class="minimal-post-card__subtitle">{{ post.subtitle | escape }}</p>{% endif %}
@@ -30,7 +30,10 @@
       </div>
     </section>
   {% endif %}
-  {% if page.website.theme_data.contacts.size > 0 %}<nav class="minimal-contacts" aria-label="{{ ui.contact | default: 'Contact' | escape }}">{% for contact in page.website.theme_data.contacts %}<a href="{{ contact.url | escape }}" rel="me">{{ contact.label | escape }}</a>{% endfor %}</nav>{% endif %}
+  {% if page.website.theme_data.contacts.size > 0 %}<nav class="minimal-contacts" aria-label="{{ ui.contact | default: 'Contact' | escape }}">{% for contact in page.website.theme_data.contacts %}{% if contact.icon %}<a class="minimal-contact minimal-contact--icon" href="{{ contact.url | escape }}" rel="me" aria-label="{{ contact.label | escape }}" title="{{ contact.label | escape }}">{% include website/contact-icon.html icon=contact.icon %}</a>{% else %}<a class="minimal-contact minimal-contact--text" href="{{ contact.url | escape }}" rel="me">{{ contact.label | escape }}</a>{% endif %}{% endfor %}</nav>{% endif %}
+{% when 'portfolio-index' %}
+  <h1>{{ page.title | default: ui.portfolio | default: 'Portfolio' | escape }}</h1>
+  {% include website/portfolio-grid.html %}
 {% when 'blog-index' %}
   <h1>{{ page.title | default: ui.blog | default: 'Blog' | escape }}</h1>
   {% include website/tag-filter.html summaries=page.website.theme_data.topic_summaries total=page.website.theme_data.topic_filter_count %}

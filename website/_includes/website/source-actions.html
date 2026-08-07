@@ -1,9 +1,23 @@
 {% if page.website.source_links and page.website.source_links.size > 0 %}
   {% assign ui = page.website.i18n.messages %}
-  <nav class="source-actions" aria-label="{{ ui.contribute | default: 'Contribute to this page' | escape }}">
-    <a href="{{ page.website.source_links.edit | escape }}">{{ ui.edit | default: 'Edit' | escape }}</a>
-    <a href="{{ page.website.source_links.history | escape }}">{{ ui.history | default: 'History' | escape }}</a>
-    <a href="{{ page.website.source_links.source | escape }}">{{ ui.view_source | default: 'View source' | escape }}</a>
-    <a href="{{ page.website.source_links.issue | escape }}">{{ ui.report_issue | default: 'Report issue' | escape }}</a>
+  {% assign source_actions_label = ui.contribute | default: 'Contribute to this page' %}
+  {% unless page.website.source_links.edit %}
+    {% if page.website.source_links.imported %}
+      {% assign source_actions_label = ui.view_imported_markdown | default: 'View imported Markdown' %}
+    {% endif %}
+  {% endunless %}
+  <nav class="source-actions" aria-label="{{ source_actions_label | escape }}">
+    {% if page.website.source_links.edit %}
+      <a href="{{ page.website.source_links.edit | escape }}">
+        <svg class="source-actions__icon" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="m12.9 3.1 4 4L7 17H3v-4Z"></path><path d="m10.8 5.2 4 4"></path></svg>
+        <span>{{ ui.edit | default: 'Edit' | escape }}</span>
+      </a>
+    {% endif %}
+    {% if page.website.source_links.imported %}
+      <a href="{{ page.website.source_links.imported | escape }}">
+        <svg class="source-actions__icon" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M5 2.8h6l4 4v10.4H5Z"></path><path d="M11 2.8v4h4M7.8 10h4.4M7.8 13h4.4"></path></svg>
+        <span>{{ ui.view_imported_markdown | default: 'View imported Markdown' | escape }}</span>
+      </a>
+    {% endif %}
   </nav>
 {% endif %}

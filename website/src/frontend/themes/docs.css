@@ -6,6 +6,7 @@
     --teal-soft: #f3e4da;
     --focus-ring: 0 0 0 3px rgb(35 111 134 / 25%);
     --article-width: 760px;
+    --reading-width: 632px;
     --rail-width: 220px;
   }
 
@@ -38,7 +39,7 @@
 
   .theme-docs .site-header__inner,
   .theme-docs .site-footer__inner {
-    inline-size: min(100%, 1420px);
+    inline-size: min(100%, 1640px);
   }
 
   .theme-docs .site-mark__glyph {
@@ -49,9 +50,9 @@
 
   .docs-shell {
     display: grid;
-    grid-template-columns: 244px minmax(0, var(--article-width)) var(--rail-width);
+    grid-template-columns: 244px minmax(0, 1fr) var(--rail-width);
     justify-content: center;
-    inline-size: min(100%, 1420px);
+    inline-size: min(100%, 1640px);
     min-block-size: 72vh;
     margin-inline: auto;
     padding: 2rem var(--page-gutter) 7rem;
@@ -111,6 +112,14 @@
   .theme-docs .note-content {
     font-size: clamp(1rem, 1.2vw, 1.08rem);
     line-height: 1.7;
+  }
+
+  .docs-article > .note-header,
+  .docs-article > .source-actions,
+  .docs-article > .website-comments,
+  .docs-article > .note-content > :where(h1, h2, h3, h4, p, ul, ol, dl, blockquote) {
+    inline-size: min(100%, var(--reading-width));
+    margin-inline: auto;
   }
 
   .theme-docs .note-content h1,

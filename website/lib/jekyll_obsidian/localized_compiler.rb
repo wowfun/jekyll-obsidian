@@ -13,13 +13,13 @@ module JekyllObsidian
   class LocalizedCompiler
     TRANSLATIONS_ROOT = "_translations"
     LOCALE_MANIFEST = "_locale.yml"
-    TRANSLATABLE_PROPERTIES = %w[title subtitle description tags author categories image cssclasses].freeze
+    TRANSLATABLE_PROPERTIES = %w[title subtitle description tags author categories image cssclasses github_markdown].freeze
     STRUCTURAL_PROPERTIES = (FrontMatter::SUPPORTED - TRANSLATABLE_PROPERTIES - %w[publish navigation]).freeze
     URL_PROPERTIES = %w[
       absolute_url canonical_url discussion_url docs_home_url
       home_url href image markdown_url redirect_url route url
     ].freeze
-    SOURCE_LINK_PROPERTIES = %w[edit history issue source].freeze
+    SOURCE_LINK_PROPERTIES = %w[edit history imported issue source].freeze
     LOCALE_PATTERN = /\A[A-Za-z]{2,8}(?:-[A-Za-z0-9]{1,8})*\z/
     RESERVED_LOCALE_PREFIXES = %w[assets].freeze
     MESSAGE_DEFAULTS = {
@@ -61,6 +61,7 @@ module JekyllObsidian
       "edit" => "Edit",
       "history" => "History",
       "view_source" => "View source",
+      "view_imported_markdown" => "View imported Markdown",
       "report_issue" => "Report issue",
       "contribute" => "Contribute to this page",
       "copy_page" => "Copy page",
@@ -101,6 +102,8 @@ module JekyllObsidian
       "home" => "Home",
       "blog" => "Blog",
       "docs" => "Docs",
+      "portfolio" => "Portfolio",
+      "projects" => "Projects",
       "recent_posts" => "Recent posts",
       "view_all" => "View all",
       "more" => "More",
@@ -353,7 +356,6 @@ module JekyllObsidian
             error("localized_structure_override", "translation must not change #{property}", entry.path)
           end
           merged = merge_translation_properties(
-            logical_path,
             default_parse.properties,
             translated_parse.properties,
             entry.path
@@ -377,16 +379,17 @@ module JekyllObsidian
       snapshots
     end
 
-    def merge_translation_properties(logical_path, default_properties, translated_properties, physical_path)
+    def merge_translation_properties(default_properties, translated_properties, physical_path)
       merged = default_properties.merge(translated_properties)
+      merged = merged.reject { |key, _| key == "github_markdown" } unless translated_properties.key?("github_markdown")
       return merged unless translated_properties.key?("navigation")
 
       default_navigation = default_properties["navigation"]
       translated_navigation = translated_properties.fetch("navigation")
-      unless default_navigation && translated_page?(logical_path, default_properties)
+      unless default_navigation
         error(
           "localized_structure_override",
-          "translation may only override navigation.label for a default-language page already present in navigation",
+          "translation may only override navigation.label when the default-language note declares navigation",
           physical_path
         )
         return default_navigation ? merged.merge("navigation" => default_navigation) : merged.reject { |key, _| key == "navigation" }
@@ -403,10 +406,6 @@ module JekyllObsidian
       end
       label_override = translated_navigation.key?("label") ? { "label" => translated_navigation.fetch("label") } : {}
       merged.merge("navigation" => default_navigation.merge(label_override))
-    end
-
-    def translated_page?(logical_path, properties)
-      @content_policy.classify(logical_path, properties) == "page"
     end
 
     def combine(results)
@@ -508,9 +507,26 @@ module JekyllObsidian
       website["home_route"] = prefixed_route(website.fetch("home_route", "/"), locale)
       localize_navigation_labels!(website, locale_data.fetch("messages"))
       preserve_default_navigation_order!(website, default_navigation_order)
-      if kind == "redirect" && (destination = Array(website["navigation"]).first)
-        website["redirect_url"] = destination.fetch("url")
-        data["title"] = destination.fetch("label")
+      routes = website.fetch("routes", {}).to_h.transform_values do |url|
+        localize_url(url, locale)
+      end
+      Array(website["navigation"]).each { |item| routes[item.fetch("id")] = item.fetch("url") }
+      routes["home"] = website.fetch("home_url")
+      if website.fetch("theme") == "docs" && website.fetch("features").fetch("tags")
+        routes["tags"] = @url_builder.href(prefixed_route("/tags/", locale))
+      end
+      if website.fetch("features").fetch("feed")
+        routes["feed"] = @url_builder.href(prefixed_route("/feed.xml", locale))
+      end
+      website["routes"] = routes
+      if kind == "redirect"
+        destination = Array(website["navigation"]).first
+        if destination
+          website["redirect_url"] = destination.fetch("url")
+          data["title"] = destination.fetch("label")
+        elsif website["redirect_navigation_id"] == "portfolio"
+          data["title"] = localized_builtin_label(website, "portfolio", locale_data.fetch("messages"))
+        end
       end
       validate_localized_navigation!(website, locale)
       website["canonical_url"] = if kind == "redirect"
@@ -520,17 +536,6 @@ module JekyllObsidian
       else
         @url_builder.absolute_url(default_route)
       end
-      routes = Array(website["navigation"]).to_h do |item|
-        [item.fetch("id"), item.fetch("url")]
-      end
-      routes["home"] = website.fetch("home_url")
-      if website.fetch("theme") == "docs" && website.fetch("features").fetch("tags")
-        routes["tags"] = @url_builder.href(prefixed_route("/tags/", locale))
-      end
-      if website.fetch("features").fetch("feed")
-        routes["feed"] = @url_builder.href(prefixed_route("/feed.xml", locale))
-      end
-      website["routes"] = routes
       website["i18n"] = {
         "locale" => locale,
         "name" => locale_data.fetch("name"),
@@ -547,7 +552,9 @@ module JekyllObsidian
       end
       localize_page_copy!(data, kind, locale_data.fetch("messages"))
       if %w[note home].include?(kind) && note_id && actual && locale != @default_locale && @actual_by_locale.fetch(locale).include?(note_id)
+        imported = website.dig("source_links", "imported")
         website["source_links"] = repository_links(@physical_sources.fetch(locale).fetch(note_id), note_id)
+        website["source_links"]["imported"] = imported if imported
       end
       content = localize_html(page.content, locale)
       PageOutput.new(route: route, content: content, data: data)
@@ -797,6 +804,10 @@ module JekyllObsidian
         data["title"] = localized_builtin_label(data.fetch("website"), "blog", messages)
         return
       end
+      if kind == "portfolio-index"
+        data["title"] = localized_builtin_label(data.fetch("website"), "portfolio", messages)
+        return
+      end
       if kind == "home" && !data.dig("website", "id")
         data["title"] = localized_builtin_label(data.fetch("website"), "home", messages)
         return
@@ -813,7 +824,7 @@ module JekyllObsidian
 
     def localize_navigation_labels!(website, messages)
       labels = if website.fetch("theme") == "minimal"
-        { "home" => "home", "blog" => "blog", "docs" => "docs" }
+        { "home" => "home", "blog" => "blog", "docs" => "docs", "portfolio" => "portfolio" }
       else
         { "home" => "overview", "docs" => "documentation" }
       end

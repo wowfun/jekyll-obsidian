@@ -7,6 +7,7 @@
     --shadow: none;
     --focus-ring: 0 0 0 3px rgb(52 95 120 / 25%);
     --article-width: 780px;
+    --reading-width: 780px;
     --rail-width: 0px;
   }
 
@@ -30,14 +31,14 @@
 @layer composition {
   .theme-minimal .site-header__inner,
   .theme-minimal .site-footer__inner {
-    inline-size: min(100%, 1180px);
+    inline-size: min(100%, 1380px);
   }
 
   .minimal-shell {
     display: grid;
-    grid-template-columns: minmax(0, var(--article-width));
+    grid-template-columns: minmax(0, 1fr);
     justify-content: center;
-    inline-size: min(100%, 1180px);
+    inline-size: min(100%, 1380px);
     min-block-size: 68vh;
     margin-inline: auto;
     padding: clamp(2.5rem, 7vw, 6.5rem) var(--page-gutter) 7rem;
@@ -49,7 +50,7 @@
   }
 
   .minimal-shell:has(> .minimal-context) {
-    grid-template-columns: minmax(0, var(--article-width)) 220px;
+    grid-template-columns: minmax(0, 1fr) 220px;
   }
 
   .minimal-reading-column,
@@ -58,12 +59,12 @@
   }
 
   .minimal-shell--docs {
-    grid-template-columns: 220px minmax(0, var(--article-width));
-    inline-size: min(100%, 1420px);
+    grid-template-columns: 220px minmax(0, 1fr);
+    inline-size: min(100%, 1600px);
   }
 
   .minimal-shell--docs:has(> .minimal-context) {
-    grid-template-columns: 220px minmax(0, var(--article-width)) 220px;
+    grid-template-columns: 220px minmax(0, 1fr) 220px;
   }
 
   .minimal-docs-sidebar,
@@ -103,6 +104,14 @@
 
   .theme-minimal .note-content {
     line-height: 1.72;
+  }
+
+  .minimal-entry > .note-header,
+  .minimal-entry > .source-actions,
+  .minimal-entry > .website-comments,
+  .minimal-entry > .note-content > :where(h1, h2, h3, h4, p, ul, ol, dl, blockquote) {
+    inline-size: min(100%, var(--reading-width));
+    margin-inline: auto;
   }
 }
 
@@ -147,20 +156,31 @@
 
   .minimal-recent__grid {
     display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 0 clamp(1.25rem, 3vw, 2rem);
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .minimal-post-card {
+    position: relative;
     min-inline-size: 0;
     padding-block: clamp(1.5rem, 3vw, 2rem);
     border-block-end: 1px solid var(--line);
   }
 
+  .minimal-post-card:has(h3 a:focus-visible) {
+    border-radius: 0.2rem;
+    box-shadow: var(--focus-ring);
+  }
+
+  .minimal-post-card--with-image {
+    display: grid;
+    grid-template-columns: minmax(12rem, 17rem) minmax(0, 1fr);
+    align-items: center;
+    gap: clamp(1.25rem, 3vw, 2.25rem);
+  }
+
   .minimal-post-card__media {
     display: block;
     aspect-ratio: 16 / 9;
-    margin-block-end: 1rem;
     overflow: hidden;
     background: var(--surface);
   }
@@ -172,6 +192,7 @@
   }
 
   .minimal-post-card h3 {
+    position: static;
     margin: 0;
     font-size: clamp(1.15rem, 2.2vw, 1.42rem);
     line-height: 1.28;
@@ -184,6 +205,16 @@
 
   .minimal-post-card h3 a:hover {
     color: var(--violet);
+  }
+
+  .minimal-post-card h3 a::after {
+    position: absolute;
+    inset: 0;
+    content: "";
+  }
+
+  .minimal-post-card h3 a:focus-visible {
+    box-shadow: none;
   }
 
   .minimal-post-card__subtitle {
@@ -211,6 +242,8 @@
   }
 
   .minimal-post-card footer a {
+    position: relative;
+    z-index: 1;
     color: inherit;
     text-underline-offset: 0.15em;
   }
@@ -223,22 +256,125 @@
     gap: 0.55rem;
   }
 
-  .minimal-contacts a {
+  .minimal-contact {
     display: inline-flex;
     align-items: center;
-    min-block-size: 2.25rem;
-    padding-inline: 0.8rem;
     border: 1px solid var(--line-strong);
-    border-radius: 100vmax;
     color: var(--graphite);
-    font-size: 0.72rem;
-    font-weight: 620;
     text-decoration: none;
   }
 
-  .minimal-contacts a:hover {
+  .minimal-contact--icon {
+    justify-content: center;
+    inline-size: 2.5rem;
+    min-block-size: 2.5rem;
+    padding: 0;
+    border-radius: 0.55rem;
+  }
+
+  .minimal-contact--text {
+    min-block-size: 2.25rem;
+    padding-inline: 0.8rem;
+    border-radius: 100vmax;
+    font-size: 0.72rem;
+    font-weight: 620;
+  }
+
+  .minimal-contact__icon {
+    inline-size: 1.15rem;
+    block-size: 1.15rem;
+    fill: none;
+    stroke: currentColor;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    stroke-width: 1.6;
+  }
+
+  .minimal-contact:hover {
     border-color: color-mix(in srgb, var(--graphite) 72%, var(--line));
     color: var(--ink);
+  }
+
+  .minimal-portfolio {
+    inline-size: 100%;
+    margin-block-start: clamp(3rem, 6vw, 5rem);
+  }
+
+  .minimal-portfolio__heading {
+    margin: 0 0 1.25rem;
+    font-family: var(--font-article);
+    font-size: clamp(1.55rem, 3vw, 2rem);
+    font-weight: 650;
+    letter-spacing: -0.015em;
+  }
+
+  .minimal-portfolio__grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    margin: 0;
+    padding: 0;
+    gap: clamp(1rem, 2.5vw, 1.75rem);
+    list-style: none;
+  }
+
+  .minimal-portfolio__grid > li {
+    min-inline-size: 0;
+  }
+
+  .minimal-portfolio-card {
+    display: flex;
+    block-size: 100%;
+    flex-direction: column;
+    overflow: hidden;
+    border: 1px solid var(--line-strong);
+    border-radius: 0.45rem;
+    background: var(--surface);
+    color: var(--ink);
+    text-decoration: none;
+  }
+
+  .minimal-portfolio-card:hover {
+    border-color: color-mix(in srgb, var(--graphite) 72%, var(--line));
+  }
+
+  .minimal-portfolio-card:focus-visible {
+    border-color: var(--violet);
+  }
+
+  .minimal-portfolio-card__media {
+    display: block;
+    aspect-ratio: 16 / 10;
+    overflow: hidden;
+    background: var(--frost);
+  }
+
+  .minimal-portfolio-card__media img {
+    display: block;
+    inline-size: 100%;
+    block-size: 100%;
+    object-fit: cover;
+  }
+
+  .minimal-portfolio-card__body {
+    display: grid;
+    align-content: start;
+    padding: clamp(1rem, 2.5vw, 1.4rem);
+    gap: 0.65rem;
+  }
+
+  .minimal-portfolio-card__title {
+    margin: 0;
+    font-family: var(--font-article);
+    font-size: clamp(1.12rem, 2vw, 1.35rem);
+    font-weight: 650;
+    line-height: 1.25;
+  }
+
+  .minimal-portfolio-card__summary {
+    margin: 0;
+    color: var(--graphite);
+    font-size: 0.88rem;
+    line-height: 1.6;
   }
 
   .blog-ledger,
@@ -462,6 +598,21 @@
   .sequence-navigation a {
     min-block-size: 4.8rem;
     padding-inline: 0.75rem;
+  }
+}
+
+@media (max-width: 720px) {
+  .minimal-portfolio__grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .minimal-post-card--with-image {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0;
+  }
+
+  .minimal-post-card__media {
+    margin-block-end: 1rem;
   }
 }
 

@@ -4,6 +4,7 @@ lang: en
 website:
   source: website/docs
   theme: docs
+  contacts: []
   i18n:
     enabled: true
     locales:

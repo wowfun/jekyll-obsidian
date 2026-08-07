@@ -18,7 +18,8 @@ module CompilerTestHelpers
     edit_branch: "main",
     environment: "production",
     i18n: nil,
-    comments: nil
+    comments: nil,
+    analytics: nil
   }.freeze
 
   def note(path, body, first_committed_at: nil)

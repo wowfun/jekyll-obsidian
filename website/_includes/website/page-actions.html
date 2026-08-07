@@ -10,7 +10,7 @@
     <div class="page-actions__split">
       <button class="page-actions__primary" type="button" data-copy-page>
         <svg class="page-actions__icon" viewBox="0 0 20 20" aria-hidden="true"><rect x="6" y="5" width="10" height="11" rx="2"></rect><path d="M4 13H3.5A1.5 1.5 0 0 1 2 11.5v-8A1.5 1.5 0 0 1 3.5 2h8A1.5 1.5 0 0 1 13 3.5V4"></path></svg>
-        <span data-copy-page-label>{{ ui.copy_page | default: 'Copy page' | escape }}</span>
+        <span class="page-actions__primary-label" data-copy-page-label>{{ ui.copy_page | default: 'Copy page' | escape }}</span>
       </button>
       <details class="page-actions__menu" data-page-actions-menu>
         <summary aria-label="{{ ui.more_page_actions | default: 'More page actions' | escape }}" title="{{ ui.more_page_actions | default: 'More page actions' | escape }}">

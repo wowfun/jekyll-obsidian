@@ -8,6 +8,7 @@
   {% assign ui = page.website.i18n.messages %}
   <header class="note-header" lang="{{ page.website.i18n.content_lang | default: page.website.i18n.locale | default: site.lang | default: 'en' | escape }}" dir="{{ page.website.i18n.content_dir | default: page.website.i18n.dir | default: 'ltr' | escape }}">
     {% unless page.website.has_h1 %}<h1 class="note-title">{{ page.title | escape }}</h1>{% endunless %}
+    {% if page.website.kind == 'note' and page.website.content_type == 'post' and page.website.authors.size > 0 %}<p class="note-byline">{{ ui.posted_by | default: 'Posted by' | escape }} {% for author in page.website.authors %}{% if author.url %}<a href="{{ author.url | escape }}">{{ author.name | escape }}</a>{% else %}{{ author.name | escape }}{% endif %}{% unless forloop.last %}, {% endunless %}{% endfor %}</p>{% endif %}
     {% if page.website.subtitle %}<p class="note-subtitle">{{ page.website.subtitle | escape }}</p>{% elsif page.website.kind == 'note' and page.description %}<p class="note-description">{{ page.description | escape }}</p>{% endif %}
     {% if page.website.kind == 'note' %}
       <div class="note-meta">

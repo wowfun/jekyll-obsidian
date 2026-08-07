@@ -476,6 +476,23 @@
     line-height: 1.6;
   }
 
+  .note-byline {
+    max-inline-size: 49ch;
+    color: var(--graphite);
+    font-family: var(--font-ui);
+    font-size: 0.78rem;
+    line-height: 1.5;
+  }
+
+  .note-title + .note-byline {
+    margin-block-start: 0.8rem;
+  }
+
+  .note-byline + .note-description,
+  .note-byline + .note-subtitle {
+    margin-block-start: 1rem;
+  }
+
   .note-title + .note-description,
   .note-title + .note-subtitle {
     margin-block-start: 1.25rem;
@@ -1637,21 +1654,39 @@
   .source-actions {
     display: flex;
     flex-wrap: wrap;
-    margin-block-start: 2.5rem;
-    padding-block-start: 1rem;
+    margin-block-start: 1.5rem;
+    padding-block-start: 0.5rem;
     border-block-start: 1px solid var(--line);
     gap: 0.45rem;
   }
 
   .source-actions a {
-    padding: 0.38rem 0.58rem;
-    border: 1px solid var(--line);
-    border-radius: 0.3rem;
+    display: inline-flex;
+    align-items: center;
+    min-block-size: 1.75rem;
+    padding: 0.2rem 0;
+    border: 0;
     color: var(--graphite);
     font-family: var(--font-ui);
-    font-size: 0.66rem;
-    font-weight: 640;
+    font-size: 0.68rem;
+    font-weight: 620;
     text-decoration: none;
+    column-gap: 0.32rem;
+  }
+
+  .source-actions a:hover {
+    color: var(--ink);
+    text-decoration: underline;
+  }
+
+  .source-actions__icon {
+    inline-size: 0.84rem;
+    block-size: 0.84rem;
+    fill: none;
+    stroke: currentColor;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    stroke-width: 1.45;
   }
 
   .page-actions {
@@ -1978,9 +2013,8 @@
 @media (max-width: 520px) {
   .site-mark__name {
     max-inline-size: 14ch;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    overflow-wrap: anywhere;
+    white-space: normal;
   }
 
   .site-action__label,
@@ -2007,6 +2041,24 @@
     justify-content: flex-end;
     margin-block-end: 1.5rem;
     margin-inline-start: 0;
+  }
+
+  .page-actions__primary {
+    justify-content: center;
+    inline-size: 2.55rem;
+    padding-inline: 0;
+  }
+
+  .page-actions__primary-label {
+    position: absolute;
+    inline-size: 1px;
+    block-size: 1px;
+    padding: 0;
+    border: 0;
+    margin: -1px;
+    clip-path: inset(50%);
+    overflow: hidden;
+    white-space: nowrap;
   }
 }
 

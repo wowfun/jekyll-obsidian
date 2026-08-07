@@ -7,7 +7,7 @@ tags:
   - github-pages
 description: Test and deploy any built-in theme with the included GitHub Pages workflow.
 created: 2026-07-31
-updated: 2026-08-02
+updated: 2026-08-07
 ---
 
 # Deployment
@@ -28,6 +28,8 @@ The workflow watches the configured content directory, `website/**`, `.github/je
 ## Trusted Pages build
 
 On a trusted default-branch push or a default-branch manual run, `build_pages` waits for verification. `actions/configure-pages` supplies the authoritative `origin` and `base_path`. The workflow passes both values to `website/bin/build`, which writes a temporary Jekyll config overlay under the site directory.
+
+When Portfolio projects import GitHub Markdown, verification resolves each moving reference to a commit and exports one digest-checked materialization. The trusted Pages build consumes that same materialization instead of fetching the branch again, so verification and deployment cannot publish different revisions from one workflow run.
 
 Before upload, the audit checks that `website/_site/index.html` exists, every output path is allowed, links are regular files rather than symbolic or multiply linked files, and the site remains within GitHub Pages' 1 GB published-site limit.
 

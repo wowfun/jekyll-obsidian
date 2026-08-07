@@ -3,6 +3,38 @@
 require "test_helper"
 
 class MediaAndFeedTest < Minitest::Test
+  def test_portfolio_cards_publish_supported_animated_image_formats_without_rewriting_their_urls
+    formats = {
+      "gif" => "image/gif",
+      "webp" => "image/webp",
+      "avif" => "image/avif",
+      "png" => "image/png",
+      "apng" => "image/apng"
+    }
+    entries = [note("index.md", "---\npublish: true\n---\n# Home")]
+    formats.each_with_index do |(extension, media_type), index|
+      entries << note(
+        "portfolio/#{extension}.md",
+        "---\npublish: true\nnav_order: #{index}\nimage: media/animated.#{extension}\n---\n# #{extension.upcase}"
+      )
+      entries << attachment("media/animated.#{extension}", "#{extension}-bytes", media_type: media_type)
+    end
+
+    result = compile(*entries, theme: "minimal")
+
+    assert result.success?, result.diagnostics.map(&:message).join("\n")
+    cards = page(result, "/portfolio/").data.dig("website", "theme_data", "portfolio_projects")
+      .to_h { |card| [File.basename(card.fetch("id"), ".md"), card] }
+    assets = result.copied_assets.to_h { |asset| [File.extname(asset.source_path).delete_prefix("."), asset] }
+    formats.each do |extension, media_type|
+      assert_equal(
+        "https://example.test/assets/vault/media/animated.#{extension}",
+        cards.fetch(extension).fetch("image")
+      )
+      assert_equal media_type, assets.fetch(extension).media_type
+    end
+  end
+
   def test_only_reachable_media_is_projected
     result = compile(
       note("index.md", "---\npublish: true\nimage: media/cover.png\nupdated: 2026-07-30\n---\n# Home\n![[media/song.mp3]]\n[[files/board.canvas]]"),

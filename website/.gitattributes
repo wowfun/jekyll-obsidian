@@ -2,6 +2,7 @@
 bin/* text eol=lf
 bin/*.ps1 text eol=crlf
 bin/*.cmd text eol=crlf
+.jekyll-obsidian-release text eol=lf
 scripts/templates/*.yml text eol=lf
 test/integration/*.sh text eol=lf
 test/integration/*.ps1 text eol=crlf

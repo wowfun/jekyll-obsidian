@@ -8,6 +8,7 @@ website:
   # jekyll-obsidian:managed-end
   repository: ""
   edit_branch: main
+  contacts: []
   content:
     publish_by_default: []
     default_type: doc

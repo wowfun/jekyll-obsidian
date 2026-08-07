@@ -56,6 +56,33 @@ class SiteUrlVerifierTest < Minitest::Test
     end
   end
 
+  def test_rejects_http_images_that_the_production_csp_would_block
+    Dir.mktmpdir("website-http-image-verifier") do |site|
+      FileUtils.mkdir_p(File.join(site, "assets", "website"))
+      File.write(File.join(site, "index.html"), <<~HTML)
+        <!doctype html><html><head>
+        <meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'self'; form-action 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' https:; media-src 'self'; object-src 'self'; font-src 'self'; connect-src 'self'; frame-src 'self'">
+        <link rel="canonical" href="http://example.test/">
+        <meta property="og:url" content="http://example.test/">
+        </head><body>
+        <img alt="same origin" src="http://example.test/image.png">
+        <img alt="blocked" src="http://assets.example.test/image.png">
+        </body></html>
+      HTML
+      File.write(File.join(site, "assets", "website", "catalog.v1.json"), '{"schema_version":1,"notes":[]}')
+      File.write(File.join(site, "assets", "website", "graph.v1.json"), '{"schema_version":1,"nodes":[],"edges":[]}')
+      File.write(File.join(site, "assets", "website", "search.v1.json"), '{"schema_version":1,"documents":[]}')
+
+      script = File.expand_path("../../scripts/verify-site-urls.rb", __dir__)
+      _stdout, stderr, status = Open3.capture3(Gem.ruby, script, site, "http://example.test", "")
+
+      refute status.success?
+      assert_includes stderr, "image URL must use HTTPS"
+      assert_includes stderr, "http://assets.example.test/image.png"
+      refute_includes stderr, "http://example.test/image.png"
+    end
+  end
+
   def test_accepts_media_fragments_and_resolves_root_relative_css_from_site_root
     Dir.mktmpdir("obsidian-url-verifier") do |site|
       FileUtils.mkdir_p(File.join(site, "assets", "website"))
@@ -94,6 +121,70 @@ class SiteUrlVerifierTest < Minitest::Test
       script = File.expand_path("../../scripts/verify-site-urls.rb", __dir__)
       _stdout, stderr, status = Open3.capture3(Gem.ruby, script, site, "https://example.test", "")
       assert status.success?, stderr
+    end
+  end
+
+  def test_accepts_each_analytics_provider_with_its_exact_csp_profile
+    cases = {
+      "cloudflare" => {
+        identifier: "site-token",
+        script: "https://static.cloudflareinsights.com",
+        connect: "https://cloudflareinsights.com"
+      },
+      "google" => {
+        identifier: "G-ABC123",
+        script: "https://www.googletagmanager.com",
+        connect: "https://*.analytics.google.com https://*.google-analytics.com https://www.googletagmanager.com"
+      }
+    }
+    cases.each do |provider, values|
+      Dir.mktmpdir("website-#{provider}-analytics-verifier") do |site|
+        File.write(File.join(site, "index.html"), <<~HTML)
+          <!doctype html><html><head>
+          <meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'self'; form-action 'self'; script-src 'self' #{values.fetch(:script)}; style-src 'self' 'unsafe-inline'; img-src 'self' https:; media-src 'self'; object-src 'self'; font-src 'self'; connect-src 'self' #{values.fetch(:connect)}; frame-src 'self'">
+          <link rel="canonical" href="https://example.test/">
+          <meta property="og:url" content="https://example.test/">
+          <meta name="website:analytics" data-provider="#{provider}" content="#{values.fetch(:identifier)}">
+          </head><body>Home</body></html>
+        HTML
+
+        script = File.expand_path("../../scripts/verify-site-urls.rb", __dir__)
+        _stdout, stderr, status = Open3.capture3(Gem.ruby, script, site, "https://example.test", "")
+        assert status.success?, "#{provider}: #{stderr}"
+      end
+    end
+  end
+
+  def test_rejects_analytics_identifier_as_a_url_and_permissions_without_matching_meta
+    cases = {
+      "analytics-id-treated-as-url" => <<~HTML,
+        <!doctype html><html><head>
+        <meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'self'; form-action 'self'; script-src 'self' https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline'; img-src 'self' https:; media-src 'self'; object-src 'self'; font-src 'self'; connect-src 'self' https://cloudflareinsights.com; frame-src 'self'">
+        <link rel="canonical" href="https://example.test/"><meta property="og:url" content="https://example.test/">
+        <meta name="website:analytics" data-provider="cloudflare" content="site-token">
+        </head><body></body></html>
+      HTML
+      "permissions-without-meta" => <<~HTML
+        <!doctype html><html><head>
+        <meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'self'; form-action 'self'; script-src 'self' https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline'; img-src 'self' https:; media-src 'self'; object-src 'self'; font-src 'self'; connect-src 'self' https://cloudflareinsights.com; frame-src 'self'">
+        <link rel="canonical" href="https://example.test/"><meta property="og:url" content="https://example.test/">
+        </head><body></body></html>
+      HTML
+    }
+
+    Dir.mktmpdir("website-valid-analytics-meta") do |site|
+      File.write(File.join(site, "index.html"), cases.fetch("analytics-id-treated-as-url"))
+      script = File.expand_path("../../scripts/verify-site-urls.rb", __dir__)
+      _stdout, stderr, status = Open3.capture3(Gem.ruby, script, site, "https://example.test", "")
+      assert status.success?, stderr
+    end
+
+    Dir.mktmpdir("website-unscoped-analytics-csp") do |site|
+      File.write(File.join(site, "index.html"), cases.fetch("permissions-without-meta"))
+      script = File.expand_path("../../scripts/verify-site-urls.rb", __dir__)
+      _stdout, stderr, status = Open3.capture3(Gem.ruby, script, site, "https://example.test", "")
+      refute status.success?
+      assert_includes stderr, "CSP directive script-src"
     end
   end
 

@@ -2,7 +2,9 @@
 
 English | [简体中文](README.zh-CN.md)
 
-`jekyll-obsidian` turns an Obsidian folder into a general-purpose Jekyll site or a documentation handbook. Copy the bundled `website/` directory into your repository; your vault stays outside it and remains directly usable in Obsidian.
+`jekyll-obsidian` turns any folder of Markdown files, including an Obsidian vault, into a general-purpose Jekyll site or a documentation handbook. Your content remains editable in Obsidian or any text editor. Copy the bundled `website/` directory into your repository and push; GitHub Actions handles the build and publishes to Pages, so you do not need a local toolchain or build command.
+
+**A complete blog or documentation site from a Markdown folder. Just push to GitHub. GitHub Actions builds and publishes it, with nothing to install or run locally.**
 
 Live preview: [sinputer.top/jekyll-obsidian](https://sinputer.top/jekyll-obsidian/)
 
@@ -18,9 +20,13 @@ The default build and deployment theme is `minimal`. Both themes can publish loc
 
 See [Localization](website/docs/docs/Localization.md) for locale manifests, which content controls site structure, fallback pages, and SEO behavior.
 
+Minimal also provides Blog, tags, Atom feeds, contacts, source actions, and an automatically detected Portfolio with project cards. A project wrapper can use a public GitHub Markdown file as its body. Both themes generate Search and Graph data, canonical metadata, a sitemap, a 404 page, and frontmatter-free Markdown resources. Optional traffic measurement supports either Cloudflare Web Analytics or Google Analytics and stays off until configured.
+
 ## Before you publish
 
 Deploying with GitHub Pages does not require Ruby, Node.js, Bundler, npm, or a browser on your computer. The generated GitHub Actions workflow installs the build toolchain.
+
+[GitHub Pages is available for public repositories on GitHub Free](https://docs.github.com/en/pages/quickstart#who-can-use-this-feature), so a public `jekyll-obsidian` site needs no paid hosting.
 
 The publication policy controls what enters the generated site. It does not make other committed files private. Anyone who can read the repository can read unpublished notes too, so do not commit secrets, personal records, or other private material.
 
@@ -82,7 +88,7 @@ The configuration interface is the root `website:` mapping.
 
 Both themes can store post comments in GitHub Discussions through Giscus. Comments use the publication repository by default and can point at a separate public repository. When `website.comments` exists and omits `enabled`, `minimal` enables comments by default; `docs` requires `website.comments.enabled: true`. Enabling comments before Discussions or the Giscus App is ready does not fail the build; incomplete Giscus configuration produces a warning and a non-interactive fallback. See [Comments](website/docs/docs/Comments.md) for repository setup, thread identity, privacy boundaries, and troubleshooting.
 
-Open your content directory directly in Obsidian. By default, a note enters the site only when its frontmatter contains the YAML boolean `publish: true`:
+Open your content directory in Obsidian or any Markdown editor. By default, a note enters the site only when its frontmatter contains the YAML boolean `publish: true`:
 
 ```yaml
 ---
@@ -97,7 +103,14 @@ The strings `"true"` and `"yes"` are not accepted. To publish a whole folder rec
 
 `index.md` is optional at the content root and in every nested folder. Minimal uses a public root `index.md` above the six most recent posts on Home; without one, Home can still show the post stream. A folder without an index links to its first ordered public page. A content directory with no public notes still fails the build.
 
-When updating `jekyll-obsidian`, replace your copied `website/` directory, rerun the integration command, and commit any refreshed generated files. `website/bin/integrate --check` verifies that the host configuration and workflow remain synchronized.
+Update a tagged installation from the host repository root:
+
+```sh
+website/bin/update --check
+website/bin/update
+```
+
+The updater fetches an official calendar-version tag in an isolated temporary repository, verifies the installed snapshot, refreshes only tool-managed files, and leaves review and commit decisions to you. It never adds a remote to the host repository or runs `git pull`, `git add`, `git commit`, or `git push`. Updates require an official annotated release, and the first update of an older installation succeeds only when its committed `website/` exactly matches an official tag; otherwise replace it once with a tagged snapshot. See [Host Integration](website/docs/docs/Integration.md) for provenance, exit codes, Windows commands, and recovery behavior.
 
 ## Optional local preview
 
@@ -115,9 +128,13 @@ Run `website/bin/clean` from the repository root to remove generated sites, Jeky
 ## Guides
 
 - [Host Integration](website/docs/docs/Integration.md) covers installation and updates in another repository.
-- [Getting Started](website/docs/docs/Getting%20Started.md) covers local authoring and preview.
+- [Getting Started](website/docs/docs/Getting%20Started.md) covers GitHub Actions publishing, authoring, and optional local preview.
 - [Syntax](website/docs/docs/Syntax.md) documents the supported Obsidian-flavored Markdown.
 - [Customization](website/docs/docs/Customization.md) covers site identity, themes, navigation, and features.
+- [Portfolio](website/docs/docs/Portfolio.md) covers project collections and public GitHub Markdown bodies.
+- [Analytics](website/docs/docs/Analytics.md) covers optional Cloudflare and Google traffic measurement.
+- [Comments](website/docs/docs/Comments.md) covers GitHub Discussions setup and privacy boundaries.
+- [Localization](website/docs/docs/Localization.md) covers translations, fallback pages, and localized SEO.
 - [Deployment](website/docs/docs/Deployment.md) covers GitHub Pages, URL paths, and custom domains.
 
 Contributors can continue with the [Developer Guide](website/docs/docs/development/index.md).

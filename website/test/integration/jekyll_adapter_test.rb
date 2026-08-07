@@ -11,6 +11,9 @@ require "jekyll_obsidian/adapter"
 class JekyllAdapterTest < Minitest::Test
   def setup
     @previous_jekyll_env = ENV["JEKYLL_ENV"]
+    @previous_github_repository = ENV.delete("GITHUB_REPOSITORY")
+    @previous_github_markdown_manifest_in = ENV["JEKYLL_OBSIDIAN_GITHUB_MARKDOWN_MANIFEST_IN"]
+    @previous_github_markdown_manifest_out = ENV["JEKYLL_OBSIDIAN_GITHUB_MARKDOWN_MANIFEST_OUT"]
     ENV["JEKYLL_ENV"] = "production"
     @temporary_root = Dir.mktmpdir("jekyll-obsidian-integration")
     @site_root = File.join(@temporary_root, "website")
@@ -43,6 +46,21 @@ class JekyllAdapterTest < Minitest::Test
 
   def teardown
     @previous_jekyll_env.nil? ? ENV.delete("JEKYLL_ENV") : ENV["JEKYLL_ENV"] = @previous_jekyll_env
+    if @previous_github_repository.nil?
+      ENV.delete("GITHUB_REPOSITORY")
+    else
+      ENV["GITHUB_REPOSITORY"] = @previous_github_repository
+    end
+    if @previous_github_markdown_manifest_in.nil?
+      ENV.delete("JEKYLL_OBSIDIAN_GITHUB_MARKDOWN_MANIFEST_IN")
+    else
+      ENV["JEKYLL_OBSIDIAN_GITHUB_MARKDOWN_MANIFEST_IN"] = @previous_github_markdown_manifest_in
+    end
+    if @previous_github_markdown_manifest_out.nil?
+      ENV.delete("JEKYLL_OBSIDIAN_GITHUB_MARKDOWN_MANIFEST_OUT")
+    else
+      ENV["JEKYLL_OBSIDIAN_GITHUB_MARKDOWN_MANIFEST_OUT"] = @previous_github_markdown_manifest_out
+    end
     FileUtils.remove_entry(@temporary_root) if @temporary_root && File.exist?(@temporary_root)
   end
 
@@ -81,6 +99,69 @@ class JekyllAdapterTest < Minitest::Test
     assert_equal "/index.md", homepage.data.dig("website", "markdown_url")
   end
 
+  def test_portfolio_apng_is_copied_to_the_built_site_byte_for_byte
+    project_root = File.join(@temporary_root, "vault", "portfolio")
+    FileUtils.mkdir_p(project_root)
+    File.write(
+      File.join(project_root, "animated.md"),
+      "---\npublish: true\nimage: media/animated.apng\n---\n# Animated project"
+    )
+    bytes = "\x89PNG\r\n\x1A\n\x00\xFFAPNG\x00payload".b
+    File.binwrite(File.join(@temporary_root, "vault", "media", "animated.apng"), bytes)
+
+    build_site.process
+
+    published = File.join(destination, "assets", "vault", "media", "animated.apng")
+    assert File.file?(published)
+    assert_equal bytes, File.binread(published)
+  end
+
+  def test_github_markdown_manifest_drives_an_offline_build_and_is_exported_for_deployment
+    install_project_layout
+    project_root = File.join(@temporary_root, "vault", "portfolio")
+    FileUtils.mkdir_p(project_root)
+    File.write(
+      File.join(project_root, "remote.md"),
+      <<~MARKDOWN
+        ---
+        publish: true
+        title: Remote project
+        description: Local card metadata
+        github_markdown: https://github.com/acme/widget/blob/main/README.md
+        ---
+      MARKDOWN
+    )
+    markdown = "# Imported README\n\nRemote body.\n"
+    document = JekyllObsidian::GitHubMarkdown::Document.new(
+      repository: "acme/widget",
+      requested_ref: "main",
+      path: "README.md",
+      resolved_commit: "0123456789abcdef0123456789abcdef01234567",
+      source_url: "https://github.com/acme/widget/blob/0123456789abcdef0123456789abcdef01234567/README.md",
+      digest: Digest::SHA256.hexdigest(markdown),
+      markdown: markdown
+    )
+    cache_root = File.join(@site_root, ".jekyll-obsidian-cache")
+    input_path = File.join(cache_root, "github-markdown-input.json")
+    output_path = File.join(cache_root, "github-markdown-output.json")
+    File.write(input_path, JekyllObsidian::GitHubMarkdown.dump_manifest([document]))
+    ENV["JEKYLL_OBSIDIAN_GITHUB_MARKDOWN_MANIFEST_IN"] = ".jekyll-obsidian-cache/github-markdown-input.json"
+    ENV["JEKYLL_OBSIDIAN_GITHUB_MARKDOWN_MANIFEST_OUT"] = ".jekyll-obsidian-cache/github-markdown-output.json"
+
+    build_site("website" => website_config.merge("repository" => "")).process
+
+    html = File.read(File.join(destination, "portfolio", "remote", "index.html"))
+    assert_includes html, "Imported README"
+    assert_includes html, "View imported Markdown"
+    assert_includes html, document.source_url
+    source_actions = Nokogiri::HTML5.parse(html).at_css(".source-actions")
+    assert_equal "View imported Markdown", source_actions["aria-label"]
+    assert_nil source_actions.at_css("a[href*='/edit/']")
+    assert_equal "# Imported README\n\nRemote body.\n",
+      File.read(File.join(destination, "portfolio", "remote.md"))
+    assert_equal JSON.parse(File.read(input_path)), JSON.parse(File.read(output_path))
+  end
+
   def test_indexless_source_renders_a_verified_root_redirect_to_the_first_page
     FileUtils.rm(File.join(@temporary_root, "vault", "index.md"))
     File.write(File.join(@temporary_root, "vault", "Later.md"), "---\npublish: true\nnav_order: 20\n---\n# Later")
@@ -108,7 +189,7 @@ class JekyllAdapterTest < Minitest::Test
     assert status.success?, "#{stdout}\n#{stderr}"
   end
 
-  def test_real_footer_links_to_the_configured_github_repository
+  def test_real_footer_always_links_to_the_jekyll_obsidian_repository
     install_project_layout
     site = build_site
 
@@ -116,7 +197,8 @@ class JekyllAdapterTest < Minitest::Test
 
     index = File.read(File.join(destination, "index.html"))
     assert_includes index, 'class="site-footer__github"'
-    assert_includes index, 'href="https://github.com/example/obsidian"'
+    assert_includes index, 'href="https://github.com/wowfun/jekyll-obsidian"'
+    refute_includes index, 'class="site-footer__github" href="https://github.com/example/obsidian"'
     assert_includes index, 'aria-label="Jekyll Obsidian on GitHub"'
     assert_match(/Built by.*Jekyll Obsidian.*·.*MIT License.*·.*#{site.time.strftime("%Y")}/m, index)
   end
@@ -268,7 +350,8 @@ class JekyllAdapterTest < Minitest::Test
     install_project_layout
     contacts = [
       { "label" => "GitHub", "url" => "https://github.com/example" },
-      { "label" => "Email", "url" => "mailto:hello@example.test" }
+      { "label" => "Email", "url" => "mailto:hello@example.test" },
+      { "label" => "Community", "url" => "https://community.example.test" }
     ]
 
     build_site("website" => website_config.merge("theme" => "minimal", "contacts" => contacts)).process
@@ -281,8 +364,71 @@ class JekyllAdapterTest < Minitest::Test
     assert_includes home, 'class="minimal-contacts"'
     assert_includes home, 'href="https://github.com/example"'
     assert_includes home, 'href="mailto:hello@example.test"'
+    document = Nokogiri::HTML(home)
+    github = document.at_css('.minimal-contacts a[href="https://github.com/example"]')
+    assert_equal "minimal-contact minimal-contact--icon", github["class"]
+    assert_equal "GitHub", github["aria-label"]
+    assert_equal "GitHub", github["title"]
+    assert_equal "true", github.at_css("svg")["aria-hidden"]
+    assert_empty github.text.strip
+    community = document.at_css('.minimal-contacts a[href="https://community.example.test"]')
+    assert_equal "minimal-contact minimal-contact--text", community["class"]
+    assert_equal "Community", community.text.strip
+    assert_nil community["aria-label"]
     assert_includes home, "Literal {{ site.secret }}."
     refute_includes home, '<header class="note-header"'
+  end
+
+  def test_post_byline_uses_resolved_authors_and_preserves_each_title_owner
+    FileUtils.mkdir_p(File.join(@temporary_root, "vault", "blog"))
+    FileUtils.mkdir_p(File.join(@temporary_root, "vault", "people"))
+    File.write(File.join(@temporary_root, "vault", "people", "Ada.md"), <<~MARKDOWN)
+      ---
+      publish: true
+      title: Ada Lovelace
+      ---
+      # Ada Lovelace
+    MARKDOWN
+    File.write(File.join(@temporary_root, "vault", "blog", "template-title.md"), <<~MARKDOWN)
+      ---
+      publish: true
+      title: Template title
+      subtitle: Field notes
+      date: 2026-08-02
+      author:
+        - "[[people/Ada|Ada]]"
+        - Editorial team
+      ---
+      A post without an authored level-one heading.
+    MARKDOWN
+    File.write(File.join(@temporary_root, "vault", "blog", "authored-heading.md"), <<~MARKDOWN)
+      ---
+      publish: true
+      title: Frontmatter title
+      date: 2026-08-01
+      author:
+        - Editorial team
+      ---
+      # Authored heading
+    MARKDOWN
+    install_project_layout
+
+    build_site.process
+
+    template = Nokogiri::HTML(File.read(File.join(destination, "blog", "template-title", "index.html")))
+    template_header = template.at_css(".note-header")
+    assert_equal %w[note-title note-byline note-subtitle note-meta],
+      template_header.element_children.map { |element| element["class"] }
+    assert_equal "Posted by Ada, Editorial team", template_header.at_css(".note-byline").text.strip
+    assert_equal "/people/Ada/", template_header.at_css(".note-byline a")["href"]
+
+    authored = Nokogiri::HTML(File.read(File.join(destination, "blog", "authored-heading", "index.html")))
+    assert_nil authored.at_css(".note-header .note-title")
+    byline = authored.at_css(".note-header .note-byline")
+    heading = authored.at_css(".note-content h1")
+    assert_equal "Posted by Editorial team", byline.text.strip
+    document_order = authored.css(".minimal-entry *")
+    assert_operator document_order.index(byline), :<, document_order.index(heading)
   end
 
   def test_search_navigation_uses_the_same_compiler_owned_items_as_the_header
@@ -356,6 +502,7 @@ class JekyllAdapterTest < Minitest::Test
     assert_nil site.config.dig("website", "content")
     assert_nil site.config.dig("website", "features")
     assert_nil site.config.dig("website", "comments")
+    assert_nil site.config.dig("website", "analytics")
   end
 
   def test_legacy_obsidian_configuration_is_rejected_instead_of_using_bundled_defaults
@@ -365,6 +512,83 @@ class JekyllAdapterTest < Minitest::Test
 
     assert_includes error.message, "obsidian"
     assert_includes error.message, "website"
+  end
+
+  def test_production_analytics_reaches_both_theme_heads_with_exact_csp_permissions
+    install_project_layout
+    profiles = {
+      "cloudflare" => {
+        "configuration" => { "provider" => "cloudflare", "token" => "site-token-123" },
+        "identifier" => "site-token-123",
+        "csp" => "default-src 'self'; base-uri 'self'; form-action 'self'; script-src 'self' https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline'; img-src 'self' https:; media-src 'self'; object-src 'self'; font-src 'self'; connect-src 'self' https://cloudflareinsights.com; frame-src 'self'"
+      },
+      "google" => {
+        "configuration" => { "provider" => "google", "measurement_id" => "G-ABC123XYZ9" },
+        "identifier" => "G-ABC123XYZ9",
+        "csp" => "default-src 'self'; base-uri 'self'; form-action 'self'; script-src 'self' https://www.googletagmanager.com; style-src 'self' 'unsafe-inline'; img-src 'self' https:; media-src 'self'; object-src 'self'; font-src 'self'; connect-src 'self' https://*.analytics.google.com https://*.google-analytics.com https://www.googletagmanager.com; frame-src 'self'"
+      }
+    }
+
+    profiles.each do |provider, profile|
+      %w[minimal docs].each do |theme|
+        themed_destination = File.join(@site_root, "_site-#{theme}-#{provider}")
+        configured_analytics = profile.fetch("configuration")
+        site = build_site(
+          "destination" => themed_destination,
+          "website" => website_config.merge("theme" => theme, "analytics" => configured_analytics)
+        )
+        assert_equal configured_analytics, site.config.dig("website", "analytics"), "#{theme}/#{provider}"
+
+        site.process
+
+        ["index.html", "404.html"].each do |relative|
+          document = Nokogiri::HTML(File.read(File.join(themed_destination, relative)))
+          analytics = document.at_css('meta[name="website:analytics"]')
+          assert_equal provider, analytics["data-provider"], "#{theme}/#{provider}/#{relative}"
+          assert_equal profile.fetch("identifier"), analytics["content"], "#{theme}/#{provider}/#{relative}"
+          assert_equal profile.fetch("csp"), document.at_css("meta[data-page-csp]")["content"], "#{theme}/#{provider}/#{relative}"
+        end
+      end
+    end
+  end
+
+  def test_development_validates_analytics_but_omits_runtime_meta_and_permissions
+    install_project_layout
+    ENV["JEKYLL_ENV"] = "development"
+    analytics = { "provider" => "google", "measurement_id" => "G-ABC123XYZ9" }
+    site = build_site("website" => website_config.merge("theme" => "docs", "analytics" => analytics))
+
+    assert_equal analytics, site.config.dig("website", "analytics")
+    site.process
+
+    document = Nokogiri::HTML(File.read(File.join(destination, "index.html")))
+    assert_nil document.at_css('meta[name="website:analytics"]')
+    assert_equal(
+      "default-src 'self'; base-uri 'self'; form-action 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' https:; media-src 'self'; object-src 'self'; font-src 'self'; connect-src 'self'; frame-src 'self'",
+      document.at_css("meta[data-page-csp]")["content"]
+    )
+  end
+
+  def test_redirect_pages_never_load_configured_analytics
+    install_project_layout
+    FileUtils.rm(File.join(@temporary_root, "vault", "index.md"))
+    File.write(File.join(@temporary_root, "vault", "Start.md"), "---\npublish: true\n---\n# Start")
+    analytics = { "provider" => "cloudflare", "token" => "site-token-123" }
+
+    build_site(
+      "website" => website_config.merge("theme" => "docs", "analytics" => analytics)
+    ).process
+
+    redirect = Nokogiri::HTML(File.read(File.join(destination, "index.html")))
+    assert_equal "refresh", redirect.at_css('meta[http-equiv="refresh"]')["http-equiv"]
+    assert_nil redirect.at_css('meta[name="website:analytics"]')
+    assert_equal(
+      "default-src 'self'; base-uri 'self'; form-action 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' https:; media-src 'self'; object-src 'self'; font-src 'self'; connect-src 'self'; frame-src 'self'",
+      redirect.at_css("meta[data-page-csp]")["content"]
+    )
+
+    destination_page = Nokogiri::HTML(File.read(File.join(destination, "Start", "index.html")))
+    assert_equal "cloudflare", destination_page.at_css('meta[name="website:analytics"]')["data-provider"]
   end
 
   def test_blog_renders_comments_hook_backlink_and_conditional_csp
@@ -477,11 +701,12 @@ class JekyllAdapterTest < Minitest::Test
 
   def test_minimal_renders_explicit_i18n
     install_project_layout
-    FileUtils.mkdir_p(File.join(@temporary_root, "vault", "_translations", "zh-CN"))
+    FileUtils.mkdir_p(File.join(@temporary_root, "vault", "blog"))
+    FileUtils.mkdir_p(File.join(@temporary_root, "vault", "_translations", "zh-CN", "blog"))
     File.write(File.join(@temporary_root, "vault", "_locale.yml"), "name: English\n")
     File.write(
       File.join(@temporary_root, "vault", "_translations", "zh-CN", "_locale.yml"),
-      "name: 简体中文\nmessages:\n  home: 首页\n  notes: 笔记\n"
+      "name: 简体中文\nmessages:\n  home: 首页\n  notes: 笔记\n  posted_by: 发布者\n"
     )
     File.write(File.join(@temporary_root, "vault", "_translations", "zh-CN", "index.md"), <<~MARKDOWN)
       ---
@@ -489,6 +714,24 @@ class JekyllAdapterTest < Minitest::Test
       title: 首页
       ---
       # 首页
+    MARKDOWN
+    File.write(File.join(@temporary_root, "vault", "blog", "post.md"), <<~MARKDOWN)
+      ---
+      publish: true
+      content_type: post
+      date: 2026-08-01
+      author:
+        - Editorial team
+      ---
+      # Post
+    MARKDOWN
+    File.write(File.join(@temporary_root, "vault", "_translations", "zh-CN", "blog", "post.md"), <<~MARKDOWN)
+      ---
+      publish: true
+      author:
+        - 中文编辑部
+      ---
+      # 文章
     MARKDOWN
     i18n = { "enabled" => true, "locales" => %w[en zh-CN] }
 
@@ -498,6 +741,8 @@ class JekyllAdapterTest < Minitest::Test
       assert_includes html, '<html class="no-js" lang="zh-CN" dir="ltr">', theme
       assert_includes html, "data-language-switcher", theme
       assert_includes html, localized_label, theme
+      post = Nokogiri::HTML(File.read(File.join(destination, "zh-CN", "blog", "post", "index.html")))
+      assert_equal "发布者 中文编辑部", post.at_css(".note-byline").text.strip, theme
     end
   end
 

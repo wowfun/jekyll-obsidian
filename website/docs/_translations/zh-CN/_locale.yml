@@ -40,6 +40,7 @@ messages:
   edit: 编辑
   history: 历史
   view_source: 查看源码
+  view_imported_markdown: 查看导入的 Markdown
   report_issue: 报告问题
   contribute: 参与编辑本页
   copy_page: 复制页面
@@ -80,6 +81,8 @@ messages:
   home: 首页
   blog: 博客
   docs: 文档
+  portfolio: 作品集
+  projects: 项目
   recent_posts: 最新文章
   view_all: 查看全部
   more: 更多

@@ -46,6 +46,11 @@ test("checked-in host integration follows the distributed contract", async () =>
   const checkIntegration = workflow.indexOf("- name: Check host integration");
   assert.ok(restoreExecutables >= 0, "workflow must restore shell executable bits after Windows copies");
   assert.ok(restoreExecutables < checkIntegration, "workflow must restore executable bits before invoking scripts");
+  assert.match(
+    workflow,
+    /chmod \+x [^\n]*\bbin\/update\b/,
+    "workflow must keep the distributed update command executable",
+  );
   assert.match(configTemplate, /^title: My Project Documentation$/m);
   assert.match(configTemplate, /source: '__JEKYLL_WEBSITE_SOURCE__'/);
   assert.match(configTemplate, /theme: '__JEKYLL_WEBSITE_THEME__'/);
