@@ -901,13 +901,15 @@ git -C "$unsafe_work" tag -a v2026.8.11 -m 'Unsafe trailing-dot fixture'
 
 rm -- "$unsafe_work/website/trailing."
 bump_fixture_version "$unsafe_work" 2026.8.11 2026.8.12
-printf '%s\n' upper >"$unsafe_work/website/Case.txt"
-printf '%s\n' lower >"$unsafe_work/website/case.txt"
 git -C "$unsafe_work" add --all
+upper_blob=$(printf '%s\n' upper | git -C "$unsafe_work" hash-object -w --stdin)
+lower_blob=$(printf '%s\n' lower | git -C "$unsafe_work" hash-object -w --stdin)
+git -C "$unsafe_work" update-index --add --cacheinfo "100644,$upper_blob,website/Case.txt"
+git -C "$unsafe_work" update-index --add --cacheinfo "100644,$lower_blob,website/case.txt"
 git -C "$unsafe_work" commit --quiet -m 'Unsafe case-collision fixture'
 git -C "$unsafe_work" tag -a v2026.8.12 -m 'Unsafe case-collision fixture'
 
-rm -- "$unsafe_work/website/Case.txt" "$unsafe_work/website/case.txt"
+git -C "$unsafe_work" update-index --force-remove -- website/Case.txt website/case.txt
 replace_literal "$unsafe_work/website/.jekyll-obsidian-release" '2026\.8\.12' '2026.8.13'
 git -C "$unsafe_work" add --all
 git -C "$unsafe_work" commit --quiet -m 'Mismatched version fixture'

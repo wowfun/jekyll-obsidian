@@ -11,6 +11,7 @@ require "jekyll_obsidian/adapter"
 class JekyllAdapterTest < Minitest::Test
   def setup
     @previous_jekyll_env = ENV["JEKYLL_ENV"]
+    @previous_github_repository = ENV.delete("GITHUB_REPOSITORY")
     @previous_github_markdown_manifest_in = ENV["JEKYLL_OBSIDIAN_GITHUB_MARKDOWN_MANIFEST_IN"]
     @previous_github_markdown_manifest_out = ENV["JEKYLL_OBSIDIAN_GITHUB_MARKDOWN_MANIFEST_OUT"]
     ENV["JEKYLL_ENV"] = "production"
@@ -45,6 +46,11 @@ class JekyllAdapterTest < Minitest::Test
 
   def teardown
     @previous_jekyll_env.nil? ? ENV.delete("JEKYLL_ENV") : ENV["JEKYLL_ENV"] = @previous_jekyll_env
+    if @previous_github_repository.nil?
+      ENV.delete("GITHUB_REPOSITORY")
+    else
+      ENV["GITHUB_REPOSITORY"] = @previous_github_repository
+    end
     if @previous_github_markdown_manifest_in.nil?
       ENV.delete("JEKYLL_OBSIDIAN_GITHUB_MARKDOWN_MANIFEST_IN")
     else
