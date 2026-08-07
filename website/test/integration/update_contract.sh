@@ -145,6 +145,8 @@ test_transport="file://$release_remote"
 new_current_host() {
   current_host=$tmp_root/host-$1
   git clone --quiet "$release_work" "$current_host"
+  git -C "$current_host" config user.name 'Update Contract'
+  git -C "$current_host" config user.email 'update-contract@example.invalid'
   git -C "$current_host" checkout --quiet -B host-main 'v2026.8.6^{}'
   git -C "$current_host" remote set-url origin https://example.invalid/host.git
   printf '%s\n' "$current_host"
