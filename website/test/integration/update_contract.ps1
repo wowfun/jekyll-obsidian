@@ -491,14 +491,15 @@ try {
         try {
             $concurrencyTransaction = Join-Path $concurrencyRoot ".jekyll-obsidian-update"
             $journalPath = Join-Path $concurrencyTransaction "journal"
-            for ($attempt = 0; $attempt -lt 600 -and -not (Test-Path -LiteralPath $journalPath -PathType Leaf); $attempt++) {
+            $pausePath = Join-Path $concurrencyTransaction "test-paused"
+            for ($attempt = 0; $attempt -lt 600 -and -not (Test-Path -LiteralPath $pausePath -PathType Leaf); $attempt++) {
                 if (@("Completed", "Failed", "Stopped") -contains $winnerJob.State) {
                     $earlyWinner = @(Receive-Job -Job $winnerJob)[-1]
                     Fail "concurrent winner exited before the applying transaction pause: $($earlyWinner.Output)"
                 }
                 Start-Sleep -Milliseconds 50
             }
-            if (-not (Test-Path -LiteralPath $journalPath -PathType Leaf)) { Fail "concurrent winner did not reach the applying transaction pause" }
+            if (-not (Test-Path -LiteralPath $pausePath -PathType Leaf)) { Fail "concurrent winner did not reach the applying transaction pause" }
             $winnerEvidence = Get-TransactionEvidenceFingerprint $concurrencyTransaction
             if ([string]::IsNullOrEmpty($winnerEvidence)) { Fail "concurrent winner did not prepare journal and backups" }
             $loser = Invoke-Adapter "windows-powershell" $concurrencyRoot @()
@@ -509,6 +510,7 @@ try {
                 (Get-TransactionEvidenceFingerprint $concurrencyTransaction) -cne $winnerEvidence) {
                 Fail "concurrent loser changed or removed the winner journal or backups"
             }
+            Write-Lf (Join-Path $concurrencyTransaction "test-continue") "continue`n"
             $completedJob = Wait-Job -Job $winnerJob -Timeout 30
             if ($null -eq $completedJob) { Fail "concurrent winner did not finish" }
             $winner = @(Receive-Job -Job $winnerJob)[-1]

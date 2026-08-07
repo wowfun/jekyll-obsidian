@@ -908,7 +908,16 @@ function Apply-Update([string]$HostDir, [string]$SiteDir, [object]$Candidate, [o
     $journalPath = Join-Path $TransactionRoot "journal"
     Write-TransactionJournal $TransactionRoot "prepared" $OldVersion $NewVersion $operations.ToArray()
     Write-TransactionJournal $TransactionRoot "applying" $OldVersion $NewVersion $operations.ToArray()
-    if ($TestFailAt -ceq "pause_after_transaction_claim") { Start-Sleep -Seconds 5 }
+    if ($TestFailAt -ceq "pause_after_transaction_claim") {
+        $pausePath = Join-Path $TransactionRoot "test-paused"
+        $continuePath = Join-Path $TransactionRoot "test-continue"
+        Write-Utf8Lf $pausePath "ready`n"
+        for ($attempt = 0; $attempt -lt 600 -and -not (Test-Path -LiteralPath $continuePath -PathType Leaf); $attempt++) {
+            Start-Sleep -Milliseconds 50
+        }
+        if (-not (Test-Path -LiteralPath $continuePath -PathType Leaf)) { Fail "internal transaction pause timed out." }
+        Remove-Item -Force -LiteralPath $pausePath, $continuePath
+    }
 
     try {
         $changedInstallCount = 0
