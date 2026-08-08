@@ -249,6 +249,26 @@ class GitHubMarkdownCompilationTest < Minitest::Test
     assert result.diagnostics.any? { |item| item.code == "invalid_github_markdown_image" }
   end
 
+  def test_imported_absolute_https_links_can_use_unicode_fragments
+    url = "https://docs.github.com/zh/pages/quickstart#谁可以使用此功能"
+    rendered_url = "https://docs.github.com/zh/pages/quickstart#%E8%B0%81%E5%8F%AF%E4%BB%A5%E4%BD%BF%E7%94%A8%E6%AD%A4%E5%8A%9F%E8%83%BD"
+    @transport = transport_for(
+      { ["acme/widget", "main"] => COMMIT },
+      { ["acme/widget", COMMIT, "README.md"] => "[中文指南](#{url})\n" }
+    )
+
+    result = compile_site(
+      note(
+        "portfolio/widget.md",
+        "---\npublish: true\ngithub_markdown: https://github.com/acme/widget/blob/main/README.md\n---\n"
+      ),
+      theme: "minimal"
+    )
+
+    assert result.success?, result.diagnostics.map(&:message).join("\n")
+    assert_includes page(result, "/portfolio/widget/").content, %(href="#{rendered_url}")
+  end
+
   def test_locales_use_their_own_import_and_missing_translations_reuse_the_default_document
     @transport = transport_for(
       { ["acme/widget", "main"] => COMMIT },

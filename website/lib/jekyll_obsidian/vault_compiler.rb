@@ -837,7 +837,7 @@ module JekyllObsidian
     def github_markdown_url(note, raw_url, image:)
       return raw_url if raw_url.empty? || raw_url.start_with?("#")
 
-      uri = URI.parse(raw_url)
+      uri = parse_github_markdown_uri(raw_url)
       if uri.scheme
         if image && uri.scheme.downcase != "https"
           error("invalid_github_markdown_image", "GitHub Markdown images must use HTTPS", note.id)
@@ -878,6 +878,17 @@ module JekyllObsidian
     rescue URI::InvalidURIError, ArgumentError
       error("invalid_github_markdown_link", "GitHub Markdown contains an invalid relative URL", note.id)
       note.external_document.source_url
+    end
+
+    def parse_github_markdown_uri(raw_url)
+      ascii_url = if raw_url.ascii_only?
+        raw_url
+      else
+        raw_url.gsub(/[^\x00-\x7F]/) do |character|
+          character.bytes.map { |byte| format("%%%02X", byte) }.join
+        end
+      end
+      URI.parse(ascii_url)
     end
 
     def build_anchor_registry(note)
