@@ -105,7 +105,7 @@ replace_literal() {
 
 release_work=$tmp_root/release-work
 mkdir -p "$release_work"
-git -C "$SOURCE_ROOT" archive --format=tar HEAD website .github/jekyll-obsidian.yml .github/workflows/pages.yml |
+git -C "$SOURCE_ROOT" archive --format=tar HEAD website |
   tar -xf - -C "$release_work"
 cp -p -- "$SITE_DIR/bin/update" "$release_work/website/bin/update"
 cp -p -- "$SITE_DIR/bin/update.cmd" "$release_work/website/bin/update.cmd"
@@ -116,6 +116,10 @@ cp -p -- "$SITE_DIR/package.json" "$release_work/website/package.json"
 cp -p -- "$SITE_DIR/package-lock.json" "$release_work/website/package-lock.json"
 cp -p -- "$SITE_DIR/lib/jekyll_obsidian.rb" "$release_work/website/lib/jekyll_obsidian.rb"
 cp -p -- "$SITE_DIR/scripts/example-config.yml" "$release_work/website/scripts/example-config.yml"
+mkdir -p "$release_work/docs"
+printf '%s\n' '---' 'publish: true' '---' '# Start' >"$release_work/docs/Start.md"
+sh "$release_work/website/bin/integrate" >/dev/null || fail "the fixture host integration could not be generated."
+sh "$release_work/website/bin/integrate" --check >/dev/null || fail "the fixture host integration was invalid."
 product_version=$(sed -n 's/^version=//p' "$release_work/website/.jekyll-obsidian-release")
 [ -n "$product_version" ] || fail "the product release version could not be read."
 escaped_product_version=$(printf '%s\n' "$product_version" | sed 's/\./\\./g')
