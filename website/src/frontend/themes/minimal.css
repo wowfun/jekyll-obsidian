@@ -87,9 +87,74 @@
     gap: 1.4rem;
   }
 
+  html.js[data-auto-hide-root-scrollbar],
+  .js [data-auto-hide-scrollbar] {
+    scrollbar-color: transparent transparent;
+    scrollbar-width: thin;
+  }
+
+  html.js[data-auto-hide-root-scrollbar] body {
+    scrollbar-color: auto;
+  }
+
+  html.js[data-auto-hide-root-scrollbar][data-scrollbar-active="true"],
+  .js [data-auto-hide-scrollbar][data-scrollbar-active="true"] {
+    scrollbar-color: color-mix(in srgb, var(--graphite) 68%, transparent) transparent;
+  }
+
+  html.js[data-auto-hide-root-scrollbar]::-webkit-scrollbar-thumb,
+  .js [data-auto-hide-scrollbar]::-webkit-scrollbar-thumb {
+    background-color: transparent;
+  }
+
+  html.js[data-auto-hide-root-scrollbar][data-scrollbar-active="true"]::-webkit-scrollbar-thumb,
+  .js [data-auto-hide-scrollbar][data-scrollbar-active="true"]::-webkit-scrollbar-thumb {
+    background-color: color-mix(in srgb, var(--graphite) 68%, transparent);
+  }
+
+  @media (min-width: 1081px) {
+    .minimal-shell--blog {
+      grid-template-rows: auto auto;
+      row-gap: clamp(2.75rem, 5vw, 4rem);
+    }
+
+    .minimal-shell--blog > .minimal-reading-column {
+      display: contents;
+    }
+
+    .minimal-shell--blog > .minimal-reading-column > .minimal-entry {
+      grid-column: 1;
+      grid-row: 1;
+    }
+
+    .minimal-shell--blog > .minimal-reading-column > .archive-ledger {
+      grid-column: 1;
+      grid-row: 2;
+    }
+
+    .minimal-shell--blog > .archive-context {
+      grid-column: 2;
+      grid-row: 2;
+      padding-block-start: 0;
+    }
+  }
+
   .theme-minimal .site-mark__glyph {
     color: var(--teal);
     font-style: normal;
+  }
+}
+
+@media (forced-colors: active) {
+  html.js[data-auto-hide-root-scrollbar],
+  .js [data-auto-hide-scrollbar] {
+    scrollbar-color: auto;
+    scrollbar-width: auto;
+  }
+
+  html.js[data-auto-hide-root-scrollbar]::-webkit-scrollbar-thumb,
+  .js [data-auto-hide-scrollbar]::-webkit-scrollbar-thumb {
+    background-color: ButtonText;
   }
 }
 
@@ -111,11 +176,11 @@
   .minimal-entry > .website-comments,
   .minimal-entry > .note-content > :where(h1, h2, h3, h4, p, ul, ol, dl, blockquote, pre, .callout) {
     inline-size: min(100%, var(--reading-width));
-    margin-inline: auto;
+    margin-inline: 0 auto;
   }
 
   .minimal-entry > .page-actions {
-    margin-inline-end: max(0px, calc((100% - var(--reading-width)) / 2));
+    margin-inline-end: max(0px, calc(100% - var(--reading-width)));
   }
 }
 
@@ -125,6 +190,10 @@
   }
 
   .note-content > .minimal-recent:first-child {
+    margin-block-start: 0;
+  }
+
+  .minimal-shell--blog .note-content > .tag-filter {
     margin-block-start: 0;
   }
 
@@ -307,6 +376,10 @@
   .minimal-portfolio {
     inline-size: 100%;
     margin-block-start: clamp(3rem, 6vw, 5rem);
+  }
+
+  .minimal-portfolio--index {
+    margin-block-start: 0;
   }
 
   .minimal-portfolio__heading {
@@ -508,6 +581,13 @@
   .archive-ledger .blog-ledger {
     inline-size: 100%;
     margin-block-start: 0;
+  }
+
+  @media (min-width: 1081px) {
+    .minimal-shell--blog > .minimal-reading-column > .archive-ledger,
+    .minimal-shell--blog > .minimal-reading-column > .archive-ledger > section:first-child {
+      margin-block-start: 0;
+    }
   }
 
   .sequence-navigation {

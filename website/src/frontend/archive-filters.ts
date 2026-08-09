@@ -71,10 +71,14 @@ export function initialiseArchiveFilters(): () => void {
       const topic = link.dataset.topicAnchor ?? "";
       topic ? next.searchParams.set("topic", topic) : next.searchParams.delete("topic");
     } else if (link.hasAttribute("data-year-filter-option")) {
-      next.searchParams.set("year", link.dataset.filterYear ?? "");
+      const year = link.dataset.filterYear ?? "";
+      if (link.getAttribute("aria-current") === "page") next.searchParams.delete("year");
+      else next.searchParams.set("year", year);
       next.searchParams.delete("month");
     } else {
-      next.searchParams.set("month", link.dataset.filterMonth ?? "");
+      const month = link.dataset.filterMonth ?? "";
+      if (link.getAttribute("aria-current") === "page") next.searchParams.delete("month");
+      else next.searchParams.set("month", month);
       next.searchParams.delete("year");
     }
     window.history.pushState(null, "", `${next.pathname}${next.search}`);

@@ -32,10 +32,9 @@
   {% endif %}
   {% if page.website.theme_data.contacts.size > 0 %}<nav class="minimal-contacts" aria-label="{{ ui.contact | default: 'Contact' | escape }}">{% for contact in page.website.theme_data.contacts %}{% if contact.icon %}<a class="minimal-contact minimal-contact--icon" href="{{ contact.url | escape }}" rel="me" aria-label="{{ contact.label | escape }}" title="{{ contact.label | escape }}">{% include website/contact-icon.html icon=contact.icon %}</a>{% else %}<a class="minimal-contact minimal-contact--text" href="{{ contact.url | escape }}" rel="me">{{ contact.label | escape }}</a>{% endif %}{% endfor %}</nav>{% endif %}
 {% when 'portfolio-index' %}
-  <h1>{{ page.title | default: ui.portfolio | default: 'Portfolio' | escape }}</h1>
-  {% include website/portfolio-grid.html %}
+  {% include website/portfolio-grid.html index=true %}
 {% when 'blog-index' %}
-  <h1>{{ page.title | default: ui.blog | default: 'Blog' | escape }}</h1>
+  <h1 class="visually-hidden">{{ page.title | default: ui.blog | default: 'Blog' | escape }}</h1>
   {% include website/tag-filter.html summaries=page.website.theme_data.topic_summaries total=page.website.theme_data.topic_filter_count %}
 {% when 'tags' %}
   <h1>{{ ui.tags | default: 'Tags' | escape }}</h1>

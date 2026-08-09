@@ -1,5 +1,5 @@
 <!doctype html>
-<html class="no-js" lang="{{ page.website.i18n.locale | default: site.lang | default: 'en' | escape }}" dir="{{ page.website.i18n.dir | default: 'ltr' | escape }}">
+<html class="no-js" lang="{{ page.website.i18n.locale | default: site.lang | default: 'en' | escape }}" dir="{{ page.website.i18n.dir | default: 'ltr' | escape }}" data-auto-hide-root-scrollbar>
   <head>{% assign entry = site.data.website_assets.entries.minimal %}{% include website/head.html entry=entry %}</head>
   <body class="theme-minimal">
     {% assign ui = page.website.i18n.messages %}
@@ -19,7 +19,7 @@
     <a class="skip-link" href="#main-content">{{ ui.skip_to_content | default: 'Skip to content' | escape }}</a>
     {% include website/header.html theme='minimal' %}
 
-    <main class="minimal-shell{% unless page.website.kind == 'note' %} minimal-shell--system{% endunless %}{% if is_docs_page %} minimal-shell--docs{% endif %}" id="main-content"{% if page.website.kind == 'blog-index' %} data-filter-page{% endif %}>
+    <main class="minimal-shell{% unless page.website.kind == 'note' %} minimal-shell--system{% endunless %}{% if is_docs_page %} minimal-shell--docs{% endif %}{% if page.website.kind == 'blog-index' %} minimal-shell--blog{% endif %}" id="main-content"{% if page.website.kind == 'blog-index' %} data-filter-page{% endif %}>
       {% if is_docs_page %}
         <aside class="minimal-docs-sidebar">
           <nav class="docs-tree" aria-label="{{ ui.documentation | default: 'Documentation' | escape }}" data-docs-navigation>
@@ -63,7 +63,7 @@
           {% if page.website.has_context %}{% include website/context.html location='rail' %}{% endif %}
         </aside>
       {% elsif page.website.kind == 'blog-index' and page.website.theme_data.timeline.size > 0 %}
-        <aside class="minimal-context archive-context" data-page-context data-dialog-movable="context" aria-label="{{ ui.chronology | default: 'Chronology' | escape }}">{% include website/archive-timeline.html timeline=page.website.theme_data.timeline %}</aside>
+        <aside class="minimal-context archive-context" data-page-context data-dialog-movable="context" data-auto-hide-scrollbar aria-label="{{ ui.chronology | default: 'Chronology' | escape }}">{% include website/archive-timeline.html timeline=page.website.theme_data.timeline %}</aside>
       {% elsif page.website.kind == 'note' and page.website.has_context %}
         <aside class="minimal-context" data-page-context data-context-panel data-dialog-movable="context" aria-label="{{ ui.page_context | default: 'Page context' | escape }}">{% include website/context.html location='rail' %}</aside>
       {% endif %}

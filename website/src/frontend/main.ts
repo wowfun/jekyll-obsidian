@@ -9,6 +9,7 @@ import { initialisePriorityNavigation } from "./priority-navigation";
 import { initialisePageActions } from "./page-actions";
 import { initialiseTweets } from "./tweets";
 import { initialiseAnalytics } from "./analytics";
+import { initialiseAutoHideScrollbars } from "./scrollbars";
 
 const DOCS_PAGE_CHANGE_EVENT = "website:docs-page-change";
 let pageFeatureGeneration = 0;
@@ -82,6 +83,7 @@ export function initialiseWebsite(): void {
   initialiseLanguageSwitcher();
   initialisePriorityNavigation();
   initialiseAnalytics();
+  initialiseAutoHideScrollbars();
   initialisePageFeatures();
   document.addEventListener(DOCS_PAGE_CHANGE_EVENT, initialisePageFeatures);
 

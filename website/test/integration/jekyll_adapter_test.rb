@@ -746,7 +746,7 @@ class JekyllAdapterTest < Minitest::Test
     { "minimal" => "首页" }.each do |theme, localized_label|
       build_site("website" => website_config.merge("theme" => theme, "i18n" => i18n)).process
       html = File.read(File.join(destination, "zh-CN", "index.html"))
-      assert_includes html, '<html class="no-js" lang="zh-CN" dir="ltr">', theme
+      assert_includes html, '<html class="no-js" lang="zh-CN" dir="ltr" data-auto-hide-root-scrollbar>', theme
       assert_includes html, "data-language-switcher", theme
       assert_includes html, localized_label, theme
       post = Nokogiri::HTML(File.read(File.join(destination, "zh-CN", "blog", "post", "index.html")))

@@ -228,16 +228,18 @@ test("Minimal recent post cards expose one article link across the whole card", 
 test("Minimal Portfolio presents the bundled project as one accessible responsive card", async ({ page }) => {
   await page.goto(site("minimal", "/portfolio/"));
 
-  await expect(page.getByRole("heading", { level: 1, name: "Portfolio" })).toBeVisible();
-  await expect(page.getByRole("heading", { level: 2, name: "Projects" })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1, name: "Portfolio" })).toHaveCount(0);
+  const projectsHeading = page.getByRole("heading", { level: 1, name: "Projects" });
+  await expect(projectsHeading).toBeVisible();
   await expect(page.locator(".site-header [data-navigation-id='portfolio'] a"))
     .toHaveAttribute("aria-current", "page");
 
+  const portfolio = page.locator(".minimal-portfolio");
   const grid = page.locator(".minimal-portfolio__grid");
   const card = grid.locator("a.minimal-portfolio-card");
   await expect(card).toHaveCount(1);
   await expect(card.locator("div.minimal-portfolio-card__body")).toHaveCount(1);
-  await expect(card.getByRole("heading", { level: 3, name: "Jekyll Obsidian" })).toBeVisible();
+  await expect(card.getByRole("heading", { level: 2, name: "Jekyll Obsidian" })).toBeVisible();
   await expect(card.locator(".minimal-portfolio-card__summary"))
     .toHaveText("Publish any Markdown folder as a complete site. Nothing to install or build locally.");
   await expect(card).toHaveAttribute("href", site("minimal", "/portfolio/jekyll-obsidian/"));
@@ -248,6 +250,14 @@ test("Minimal Portfolio presents the bundled project as one accessible responsiv
   await expect(image).toHaveAttribute("alt", "");
   await expect(image).toHaveAttribute("loading", "lazy");
   await expect(image).toHaveAttribute("decoding", "async");
+
+  const entryBox = (await page.locator(".minimal-entry").boundingBox())!;
+  const portfolioBox = (await portfolio.boundingBox())!;
+  const headingBox = (await projectsHeading.boundingBox())!;
+  const gridBox = (await grid.boundingBox())!;
+  expect(portfolioBox.x).toBeCloseTo(entryBox.x, 0);
+  expect(portfolioBox.y).toBeCloseTo(entryBox.y, 0);
+  expect(headingBox.x).toBeCloseTo(gridBox.x, 0);
 
   const columns = await grid.evaluate((element) =>
     getComputedStyle(element).gridTemplateColumns.split(" ").filter(Boolean).length
@@ -330,10 +340,19 @@ test("Minimal Home owns counted Topics and article pages do not repeat them", as
 
 test("Blog filters by topic and exposes only populated chronology periods", async ({ page }, testInfo) => {
   await page.goto(site("minimal", "/blog/"));
-  await expect(page.getByRole("heading", { level: 1, name: "Blog" })).toHaveCount(1);
+  await expect(page.locator("h1:not(.visually-hidden)", { hasText: "Blog" })).toHaveCount(0);
+  const semanticTitle = page.locator("h1.visually-hidden");
+  await expect(semanticTitle).toHaveText("Blog");
+  expect((await semanticTitle.boundingBox())!.width).toBeLessThanOrEqual(1);
   await expect(page.getByRole("heading", { name: "Archive" })).toHaveCount(0);
 
   const filter = page.getByRole("navigation", { name: "Filter by topic" });
+  if (testInfo.project.name === "desktop-chromium") {
+    const entry = (await page.locator(".minimal-entry").boundingBox())!;
+    const filterBox = (await filter.boundingBox())!;
+    expect(filterBox.x).toBeCloseTo(entry.x, 0);
+    expect(filterBox.y).toBeCloseTo(entry.y, 0);
+  }
   await expect(filter.getByRole("link", { name: /^All\b/ })).toHaveAttribute("aria-current", "page");
   await filter.getByRole("link", { name: /release-notes/ }).click();
   await expect(page).toHaveURL(/\/blog\/\?topic=release-notes$/);
@@ -365,6 +384,9 @@ test("Blog filters by topic and exposes only populated chronology periods", asyn
       .toBeGreaterThanOrEqual(11.8);
 
     const chronology = page.getByRole("navigation", { name: "Chronology" });
+    const chronologyHeading = (await chronology.getByRole("heading", { name: "Chronology" }).boundingBox())!;
+    const archiveHeading = (await page.locator(".archive-ledger > section > h2").first().boundingBox())!;
+    expect(chronologyHeading.y).toBeCloseTo(archiveHeading.y, 0);
     await expect(chronology.locator('[data-filter-year="2026"] .archive-timeline__count')).toHaveText("2");
     await expect(chronology.locator('[data-filter-month="2026-08"] .archive-timeline__count')).toHaveText("1");
     await expect(chronology.locator('[data-filter-month="2026-07"] .archive-timeline__count')).toHaveText("1");
@@ -373,8 +395,18 @@ test("Blog filters by topic and exposes only populated chronology periods", asyn
     await chronology.locator('[data-filter-month="2026-07"]').click();
     await expect(page).toHaveURL(/\/blog\/\?month=2026-07$/);
     await expect(page.locator("[data-filter-item]:visible")).toHaveCount(1);
+    await expect(chronology.locator('[data-filter-month="2026-07"]')).toHaveAttribute("aria-current", "page");
+    await chronology.locator('[data-filter-month="2026-07"]').click();
+    await expect(page).toHaveURL(site("minimal", "/blog/"));
+    await expect(chronology.locator('[data-filter-month="2026-07"]')).not.toHaveAttribute("aria-current", "page");
+    await expect(page.locator("[data-filter-item]:visible")).toHaveCount(2);
     await chronology.locator('[data-filter-year="2026"]').click();
     await expect(page).toHaveURL(/\/blog\/\?year=2026$/);
+    await expect(page.locator("[data-filter-item]:visible")).toHaveCount(2);
+    await expect(chronology.locator('[data-filter-year="2026"]')).toHaveAttribute("aria-current", "page");
+    await chronology.locator('[data-filter-year="2026"]').click();
+    await expect(page).toHaveURL(site("minimal", "/blog/"));
+    await expect(chronology.locator('[data-filter-year="2026"]')).not.toHaveAttribute("aria-current", "page");
     await expect(page.locator("[data-filter-item]:visible")).toHaveCount(2);
 
     const year = page.locator(".archive-ledger > section > h2", { hasText: "2026" });
@@ -388,7 +420,46 @@ test("Blog filters by topic and exposes only populated chronology periods", asyn
     await expect(page).toHaveURL(/\/blog\/\?month=2026-07$/);
     await expect(dialog.locator('[data-filter-month="2026-07"]')).toHaveAttribute("aria-current", "page");
     await expect(page.locator("[data-filter-item]:not([hidden])")).toHaveCount(1);
+    await dialog.locator('[data-filter-month="2026-07"]').tap();
+    await expect(page).toHaveURL(site("minimal", "/blog/"));
+    await expect(dialog.locator('[data-filter-month="2026-07"]')).not.toHaveAttribute("aria-current", "page");
+    await expect(page.locator("[data-filter-item]:not([hidden])")).toHaveCount(2);
   }
+});
+
+test("Minimal reveals page and chronology scrollbars only during interaction", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "desktop-chromium", "desktop scrollbar contract");
+  await page.setViewportSize({ width: 1190, height: 260 });
+  await page.goto(site("minimal", "/blog/"));
+
+  const root = page.locator("html");
+  await expect(root).not.toHaveAttribute("data-scrollbar-active", "true");
+  const idleRootColor = await root.evaluate((element) => getComputedStyle(element).scrollbarColor);
+  await page.evaluate(() => window.scrollTo(0, 120));
+  await expect(root).toHaveAttribute("data-scrollbar-active", "true");
+  expect(await root.evaluate((element) => getComputedStyle(element).scrollbarColor)).not.toBe(idleRootColor);
+  await expect(root).not.toHaveAttribute("data-scrollbar-active", "true");
+
+  const chronology = page.locator(".archive-context");
+  await chronology.evaluate((element) => { element.style.maxBlockSize = "80px"; });
+  await expect(chronology).not.toHaveAttribute("data-scrollbar-active", "true");
+  expect(await chronology.evaluate((element) => element.scrollHeight > element.clientHeight)).toBe(true);
+  const idleChronologyColor = await chronology.evaluate((element) => getComputedStyle(element).scrollbarColor);
+  await chronology.hover();
+  await expect(chronology).toHaveAttribute("data-scrollbar-active", "true");
+  await expect(chronology).not.toHaveAttribute("data-scrollbar-active", "true");
+  expect(await chronology.evaluate((element) => getComputedStyle(element).scrollbarColor))
+    .toBe(idleChronologyColor);
+  await chronology.locator("[data-year-filter-option]").first().focus();
+  await expect(chronology).toHaveAttribute("data-scrollbar-active", "true");
+  await expect(chronology).not.toHaveAttribute("data-scrollbar-active", "true");
+  expect(await chronology.evaluate((element) => getComputedStyle(element).scrollbarColor))
+    .toBe(idleChronologyColor);
+  await chronology.evaluate((element) => { element.scrollTop = 80; });
+  await expect(chronology).toHaveAttribute("data-scrollbar-active", "true");
+  expect(await chronology.evaluate((element) => getComputedStyle(element).scrollbarColor))
+    .not.toBe(idleChronologyColor);
+  await expect(chronology).not.toHaveAttribute("data-scrollbar-active", "true");
 });
 
 test("legacy Archive, paginated Home, and Notes routes are absent", async ({ page }) => {
@@ -973,22 +1044,30 @@ test("Minimal aligns authored reading blocks and page actions to one column", as
   const title = (await page.locator(".note-content > h1").first().boundingBox())!;
   const paragraph = (await page.locator(".note-content > p").first().boundingBox())!;
   const callout = (await page.locator(".note-content > .callout").first().boundingBox())!;
+  const recent = (await page.locator(".minimal-recent").boundingBox())!;
   const actions = (await page.locator("[data-page-actions]").boundingBox())!;
   expect(title.x).toBeCloseTo(paragraph.x, 0);
   expect(title.width).toBeCloseTo(paragraph.width, 0);
   expect(callout.x).toBeCloseTo(paragraph.x, 0);
   expect(callout.width).toBeCloseTo(paragraph.width, 0);
+  expect(title.x).toBeCloseTo(recent.x, 0);
   expect(actions.x + actions.width).toBeCloseTo(callout.x + callout.width, 0);
 
   await page.goto(site("minimal", "/docs/Customization/"));
   const documentTitle = (await page.locator(".note-content > h1").first().boundingBox())!;
   const prose = (await page.locator(".note-content > p").first().boundingBox())!;
   const code = (await page.locator(".note-content > pre").first().boundingBox())!;
+  const table = (await page.locator(".note-content > table").first().boundingBox())!;
+  const entry = (await page.locator(".minimal-entry").boundingBox())!;
   const noteActions = (await page.locator("[data-page-actions]").boundingBox())!;
   expect(documentTitle.x).toBeCloseTo(prose.x, 0);
   expect(documentTitle.width).toBeCloseTo(prose.width, 0);
   expect(code.x).toBeCloseTo(prose.x, 0);
   expect(code.width).toBeCloseTo(prose.width, 0);
+  expect(table.x).toBeCloseTo(prose.x, 0);
+  expect(table.x + table.width).toBeLessThanOrEqual(entry.x + entry.width + 1);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth))
+    .toBeLessThanOrEqual(await page.evaluate(() => document.documentElement.clientWidth));
   expect(noteActions.x + noteActions.width).toBeCloseTo(prose.x + prose.width, 0);
 });
 
