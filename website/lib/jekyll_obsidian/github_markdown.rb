@@ -76,7 +76,9 @@ module JekyllObsidian
         unless before.file? && !before.symlink?
           raise CacheError, "GitHub Markdown cache entry must be a non-symlink regular file"
         end
-        flags = File::RDONLY | (File.const_defined?(:NOFOLLOW) ? File::NOFOLLOW : 0)
+        flags = File::RDONLY | File::BINARY |
+          (File.const_defined?(:NOFOLLOW) ? File::NOFOLLOW : 0) |
+          (File.const_defined?(:SHARE_DELETE) ? File::SHARE_DELETE : 0)
         File.open(target, flags) do |file|
           opened = file.stat
           unless opened.file? && opened.dev == before.dev && opened.ino == before.ino
@@ -102,7 +104,9 @@ module JekyllObsidian
         temporary.fsync
         temporary.close
         begin
-          File.rename(temporary_path, target)
+          # Publish the complete inode without replacing an entry another
+          # writer installed after the initial cache read.
+          File.link(temporary_path, target)
         rescue Errno::EEXIST, Errno::EACCES => exception
           concurrent = read(repository: repository, commit: commit, path: path)
           return concurrent if concurrent == markdown

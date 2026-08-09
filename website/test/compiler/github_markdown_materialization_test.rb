@@ -341,6 +341,39 @@ class GitHubMarkdownMaterializationTest < Minitest::Test
     refute stat.symlink?
   end
 
+  def test_late_identical_writer_does_not_replace_the_published_cache_inode
+    first = JekyllObsidian::GitHubMarkdown::Cache.new(@cache_root)
+    first.write(
+      repository: "acme/widget",
+      commit: COMMIT,
+      path: "README.md",
+      markdown: "# Shared\n"
+    )
+    target = Dir.glob(File.join(@cache_root, "github-markdown", "**", "*.md")).fetch(0)
+    before = File.lstat(target)
+    late = JekyllObsidian::GitHubMarkdown::Cache.new(@cache_root)
+    initial_read = true
+    late.define_singleton_method(:read) do |**arguments|
+      if initial_read
+        initial_read = false
+        nil
+      else
+        super(**arguments)
+      end
+    end
+
+    result = late.write(
+      repository: "acme/widget",
+      commit: COMMIT,
+      path: "README.md",
+      markdown: "# Shared\n"
+    )
+    after = File.lstat(target)
+
+    assert_equal "# Shared\n", result
+    assert_equal [before.dev, before.ino], [after.dev, after.ino]
+  end
+
   def test_does_not_fall_back_to_a_cached_commit_when_a_branch_moves
     reference = { "repository" => "acme/widget", "ref" => "main", "path" => "README.md" }
     first_transport = JekyllObsidian::GitHubMarkdown::MemoryTransport.new(
