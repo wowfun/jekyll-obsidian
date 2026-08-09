@@ -14,6 +14,7 @@ const BLOCKED_ELEMENTS = new Set([
   "SVG", "TEMPLATE", "TEXTAREA", "TRACK", "VIDEO"
 ]);
 const previewController = Symbol.for("jekyll-obsidian.preview-controller");
+const HOVER_DELAY_MS = 300;
 const FOCUSABLE_SELECTOR = [
   "a[href]",
   "button:not([disabled])",
@@ -129,7 +130,11 @@ function makePreview(note: CatalogNote): { preview: HTMLElement; body: HTMLEleme
   eyebrow.textContent = note.tags.length > 0 ? note.tags.slice(0, 2).join(" · ") : "Connected note";
   const title = document.createElement("h2");
   title.className = "note-preview__title";
-  title.textContent = note.title;
+  const titleLink = document.createElement("a");
+  titleLink.className = "note-preview__title-link";
+  titleLink.href = note.url;
+  titleLink.textContent = note.title;
+  title.append(titleLink);
   header.append(eyebrow, title);
   if (note.description) {
     const description = document.createElement("p");
@@ -186,11 +191,19 @@ export function initialisePreviews(): void {
   let activeAnchor: HTMLElement | null = null;
   let activePreview: HTMLElement | null = null;
   let activeBody: HTMLElement | null = null;
+  let pendingAnchor: HTMLElement | null = null;
+  let showTimer: number | undefined;
   let hideTimer: number | undefined;
   let requestVersion = 0;
 
   const cancelHide = () => window.clearTimeout(hideTimer);
+  const cancelShow = () => {
+    window.clearTimeout(showTimer);
+    showTimer = undefined;
+    pendingAnchor = null;
+  };
   const close = () => {
+    cancelShow();
     cancelHide();
     requestVersion += 1;
     activePreview?.remove();
@@ -208,6 +221,7 @@ export function initialisePreviews(): void {
   };
 
   const show = async (anchor: HTMLElement) => {
+    cancelShow();
     const noteId = anchor.dataset.noteId;
     cancelHide();
     if (!noteId || (activeAnchor === anchor && activePreview)) return;
@@ -240,17 +254,31 @@ export function initialisePreviews(): void {
       if (requestVersion === version) activeAnchor = null;
     }
   };
+  const scheduleShow = (anchor: HTMLElement) => {
+    if ((activeAnchor === anchor && activePreview) || pendingAnchor === anchor) return;
+    cancelShow();
+    pendingAnchor = anchor;
+    showTimer = window.setTimeout(() => {
+      pendingAnchor = null;
+      showTimer = undefined;
+      void show(anchor);
+    }, HOVER_DELAY_MS);
+  };
 
   const handlePointerOver = (event: PointerEvent) => {
     if (event.pointerType === "touch") return;
     const target = event.target;
     if (!(target instanceof Element)) return;
     const anchor = target.closest<HTMLElement>(".website-link[data-note-id]");
-    if (anchor) void show(anchor);
+    if (anchor) scheduleShow(anchor);
   };
   const handlePointerOut = (event: PointerEvent) => {
     const target = event.target;
-    if (!(target instanceof Element) || !target.closest(".website-link[data-note-id]")) return;
+    if (!(target instanceof Element)) return;
+    const anchor = target.closest<HTMLElement>(".website-link[data-note-id]");
+    if (!anchor) return;
+    if (event.relatedTarget instanceof Node && anchor.contains(event.relatedTarget)) return;
+    if (pendingAnchor === anchor) cancelShow();
     hide(event.relatedTarget);
   };
   const handleFocusIn = (event: FocusEvent) => {
@@ -275,11 +303,19 @@ export function initialisePreviews(): void {
     if (!event.shiftKey && event.target === activeAnchor && activeBody) {
       event.preventDefault();
       cancelHide();
-      activeBody.focus();
+      const firstPreviewControl = activePreview.querySelector<HTMLElement>(FOCUSABLE_SELECTOR);
+      (firstPreviewControl || activeBody).focus();
       return;
     }
     if (!(event.target instanceof Node) || !activePreview.contains(event.target)) return;
     event.preventDefault();
+    const previewControls = [...activePreview.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)];
+    const controlIndex = event.target instanceof HTMLElement ? previewControls.indexOf(event.target) : -1;
+    const adjacentControl = previewControls[controlIndex + (event.shiftKey ? -1 : 1)];
+    if (adjacentControl) {
+      adjacentControl.focus();
+      return;
+    }
     if (event.shiftKey) {
       activeAnchor.focus();
       return;

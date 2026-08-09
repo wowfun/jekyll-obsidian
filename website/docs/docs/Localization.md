@@ -7,7 +7,7 @@ tags:
   - i18n
 description: Publish locale overlays with localized navigation, search, and SEO metadata.
 created: 2026-08-04
-updated: 2026-08-07
+updated: 2026-08-09
 ---
 
 # Localization
@@ -93,7 +93,7 @@ A translation can replace the body and the translatable properties `title`, `sub
 
 A translated Portfolio wrapper may select its own `github_markdown` file or provide a local body. The remote property does not carry into a physical translation that supplies its own content. When the translated wrapper is absent, the ordinary fallback page uses the default-language project and its imported body. See [[Portfolio#Import a GitHub Markdown file|Portfolio]] for the source contract.
 
-Structural properties belong to the default note. This includes `permalink`, `content_type`, `date`, `created`, `updated`, `nav_order`, `nav_exclude`, `aliases`, and `comments`. Omit these properties from the translation; if present, they must exactly match the default value. Always omit `navigation.order` and `navigation.visible` from a translation because any attempt to set them is rejected. A post without `date` or `created` inherits the default note's Git-derived publication date. `updated` is never derived from Git; omit it unless the default note declares an explicit update date. Committing only a translation therefore changes neither post chronology nor the Blog order.
+Structural properties belong to the default note. This includes `permalink`, `content_type`, `date`, `created`, `updated`, `pinned`, `nav_order`, `nav_exclude`, `aliases`, and `comments`. Omit these properties from the translation; if present, they must exactly match the default value. Always omit `navigation.order` and `navigation.visible` from a translation because any attempt to set them is rejected. A post without `date` or `created` inherits the default note's Git-derived publication date. `updated` is never derived from Git; omit it unless the default note declares an explicit update date. Committing only a translation therefore changes neither post chronology nor the Blog order.
 
 ## Understand localized URLs and resources
 

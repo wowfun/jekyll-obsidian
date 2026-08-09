@@ -370,6 +370,8 @@ class JekyllAdapterTest < Minitest::Test
     assert_equal "GitHub", github["aria-label"]
     assert_equal "GitHub", github["title"]
     assert_equal "true", github.at_css("svg")["aria-hidden"]
+    assert_includes github.at_css("svg")["class"], "minimal-contact__icon--brand"
+    assert_equal document.at_css(".site-footer__github svg path")["d"], github.at_css("svg path")["d"]
     assert_empty github.text.strip
     community = document.at_css('.minimal-contacts a[href="https://community.example.test"]')
     assert_equal "minimal-contact minimal-contact--text", community["class"]
@@ -377,6 +379,12 @@ class JekyllAdapterTest < Minitest::Test
     assert_nil community["aria-label"]
     assert_includes home, "Literal {{ site.secret }}."
     refute_includes home, '<header class="note-header"'
+
+    blog = File.read(File.join(destination, "blog", "index.html"))
+    assert_includes blog, '<time datetime="2026-07-01T00:00:00Z">2026-07-01</time>'
+    assert_includes blog, 'class="blog-ledger__meta"'
+    assert_includes blog, 'class="blog-ledger__description"'
+    assert_includes blog, "A concise dispatch summary from the authored body."
   end
 
   def test_post_byline_uses_resolved_authors_and_preserves_each_title_owner

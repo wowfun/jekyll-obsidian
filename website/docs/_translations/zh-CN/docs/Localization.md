@@ -87,7 +87,7 @@ tags:
 
 作品集的译文项目页可以选择自己的 `github_markdown` 文件，也可以直接提供本地正文。物理译文提供了自己的内容时，不会继承默认语言的远程正文属性。没有译文项目页时，普通回退页面会使用默认语言项目及其外部正文。来源契约详见 [[Portfolio#引用 GitHub Markdown 文件|作品集]]。
 
-结构属性由默认语言笔记决定，包括 `permalink`、`content_type`、`date`、`created`、`updated`、`nav_order`、`nav_exclude`、`aliases` 和 `comments`。请在译文中省略这些属性；如果保留，其值必须与默认语言笔记完全一致。译文必须始终省略 `navigation.order` 和 `navigation.visible`，尝试设置任意一项都会被拒绝。文章未设置 `date` 或 `created` 时，会继承默认语言笔记由 Git 推导的发布时间。`updated` 不会从 Git 推导；只有默认语言笔记明确声明更新日期时才应设置。仅提交译文不会改变文章时间顺序或 Blog 排序。
+结构属性由默认语言笔记决定，包括 `permalink`、`content_type`、`date`、`created`、`updated`、`pinned`、`nav_order`、`nav_exclude`、`aliases` 和 `comments`。请在译文中省略这些属性；如果保留，其值必须与默认语言笔记完全一致。译文必须始终省略 `navigation.order` 和 `navigation.visible`，尝试设置任意一项都会被拒绝。文章未设置 `date` 或 `created` 时，会继承默认语言笔记由 Git 推导的发布时间。`updated` 不会从 Git 推导；只有默认语言笔记明确声明更新日期时才应设置。仅提交译文不会改变文章时间顺序或 Blog 排序。
 
 ## 理解本地化 URL 与资源
 

@@ -122,7 +122,7 @@ website:
         order: 40
 ```
 
-作品集路径相对于 `website.source`；显式路径会取代默认的 `portfolio`。该路径下的已发布 Markdown 后代统一变成作品集页面，因此其中显式设置的 `content_type` 必须为 `page`。公开的 `<path>/index.md` 会在项目网格上方保留自定义介绍；没有索引时，编译器会在该路由生成作品集索引。索引本身不算项目。项目依次按 `nav_order`、标题和路径排序。项目设置 `nav_exclude: true` 后不会显示卡片；设置 `website.navigation.portfolio.visible: false` 只会隐藏标签页，作品集索引和项目页面仍然公开。
+作品集路径相对于 `website.source`；显式路径会取代默认的 `portfolio`。该路径下的已发布 Markdown 后代统一变成作品集页面，因此其中显式设置的 `content_type` 必须为 `page`。公开的 `<path>/index.md` 会在项目网格上方保留自定义介绍；没有索引时，编译器会在该路由生成作品集索引。索引本身不算项目。设置了 `pinned: true` 的项目排在最前；置顶组和普通组内部再依次按 `nav_order`、标题和路径排序。项目设置 `nav_exclude: true` 后不会显示卡片；设置 `website.navigation.portfolio.visible: false` 只会隐藏标签页，作品集索引和项目页面仍然公开。
 
 项目卡片使用 `image`、标题和 `description`；未设置描述时，会回退到正文预览。本地 GIF、WebP、AVIF 与 APNG 文件会逐字节复制并通过 `<img>` 显示，从而保留动画。编译器不会转码或生成缩略图。
 
@@ -153,7 +153,7 @@ navigation:
 
 图谱左侧按钮打开完整图谱，右侧按钮放大当前笔记的局部图谱。在任一视图中，都可以在画布上滚动鼠标滚轮，以指针为中心缩放；拖动空白画布可以平移；拖动相邻节点可以改变位置。当前节点始终固定在视觉中心。单击节点可以访问对应笔记；键盘聚焦后按 Enter 或 Space 也可以打开。完整图谱 JSON 只在打开对话框时载入，并始终包含全部公开节点与关系。为了保持响应速度，SVG 查看器不会渲染超过 250 个节点或 1,000 条关系的完整图谱，而会提示读者使用局部图谱或 Search。站点不会生成 `/graph/` 页面或导航标签，因此已发布笔记可以使用该路由。
 
-鼠标悬停或键盘聚焦 Wiki 链接时，会打开阅读预览。预览先显示目录元数据，再显示目标笔记经过清理的正文。标题与摘要保持固定，正文可以独立滚动；预览中的链接只显示为文本。触摸屏点击会直接进入目标页面。设置 `previews: false` 可以关闭该行为。
+鼠标在 Wiki 链接上停留 0.3 秒，或使用键盘聚焦链接时，会打开阅读预览。在延迟结束前移出指针会取消预览；键盘聚焦仍会立即打开。预览先显示目录元数据，再以较小的可见高度显示目标笔记经过清理且可独立滚动的正文。点击预览标题可以进入目标笔记；正文中的链接仍只显示为文本。触摸屏点击原 Wiki 链接会直接进入目标页面。设置 `previews: false` 可以关闭该行为。
 
 ## GitHub Discussions 评论
 
@@ -264,10 +264,10 @@ messages:
 - `publish`、`title`、`subtitle`、`aliases`、`tags`、`author`、`categories` 和 `description`
 - `permalink`、`image` 和 `cssclasses`
 - `created` 和 `updated`
-- `content_type`、`date`、`nav_order`、`nav_exclude` 和 `navigation`
+- `content_type`、`date`、`pinned`、`nav_order`、`nav_exclude` 和 `navigation`
 - `comments` 和 `github_markdown`
 
-未知属性不会进入 Liquid 或生成数据。`aliases`、`tags`、`author`、`categories` 和 `cssclasses` 是字符串数组，`subtitle` 是字符串。`publish`、`nav_exclude` 和 `comments` 使用 YAML 布尔值。`navigation` 是前文说明的封闭映射。`github_markdown` 只接受 [[Portfolio|作品集]]中说明的 URL 或映射形式，并且只能用于作品集项目页。日期使用 ISO 8601。笔记标题依次取自 `title`、第一个一级标题和文件名。
+未知属性不会进入 Liquid 或生成数据。`aliases`、`tags`、`author`、`categories` 和 `cssclasses` 是字符串数组，`subtitle` 是字符串。`publish`、`pinned`、`nav_exclude` 和 `comments` 使用 YAML 布尔值。`navigation` 是前文说明的封闭映射。`github_markdown` 只接受 [[Portfolio|作品集]]中说明的 URL 或映射形式，并且只能用于作品集项目页。日期使用 ISO 8601。笔记标题依次取自 `title`、第一个一级标题和文件名。
 
 `updated` 可选，只有作者明确提供时才会出现在页面元数据中；编译器不会从 Git 推导更新时间。文章发布时间依次使用 `date`、`created` 和第一次 Git 提交时间。Atom 条目优先使用显式 `updated`；未提供时，文章沿用其发布时间。没有 `updated` 的非文章笔记不会进入订阅源。
 
@@ -289,7 +289,7 @@ Wiki 链接条目必须使用 YAML 双引号字符串。可见标签优先使用
 
 ## 内容与导航
 
-显式的 `content_type: post | doc | page` 优先于目录默认值。文章发布时间依次使用 `date`、`created` 和第一次 Git 提交时间。生产构建会拒绝没有确定日期的文章。
+显式的 `content_type: post | doc | page` 优先于目录默认值。文章发布时间依次使用 `date`、`created` 和第一次 Git 提交时间。生产构建会拒绝没有确定日期的文章。在 Minimal Home 和 Blog 中，设置了 `pinned: true` 的文章排在普通文章之前，两组内部都保持时间倒序。置顶只影响卡片展示，不改变 Atom Feed 的时间顺序以及上一篇、下一篇文章序列。
 
 Docs 导航沿用内容目录结构。`nav_order` 对同级文档排序，`nav_exclude: true` 只移除当前笔记链接，子页面仍然可以访问。所有层级都可以没有 `index.md`。公开的根 `index.md` 始终拥有 `/`，因此该笔记使用其他 `permalink` 会被拒绝。没有索引的文件夹会打开依次按 `nav_order`、标题和路径排序的第一个可见子页面。存在文章时，Minimal Home 可以不需要根索引；两者都不存在时，根路径会重定向到第一个可见顶层导航目标。Docs 没有根索引时会重定向到第一项导航。每个 Docs 页面都由服务器渲染完整文档树；JavaScript 导航只替换页面内容与上下文，保留共享外壳。Search 在 Web Worker 中构建索引。局部图谱由编译器投影；浏览器只在打开对话框后读取完整图谱。
 

@@ -335,7 +335,8 @@ module JekyllObsidian
 
       def portfolio_sort_key(note)
         order = note.nav_order
-        [order.nil? ? 1 : 0, order || 0, note.title.downcase, note.title, note.id]
+        pinned = note.properties["pinned"] == true
+        [pinned ? 0 : 1, order.nil? ? 1 : 0, order || 0, note.title.downcase, note.title, note.id]
       end
 
       def navigation_source(item)

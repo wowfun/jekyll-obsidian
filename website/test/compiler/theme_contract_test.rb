@@ -325,6 +325,29 @@ class ThemeContractTest < Minitest::Test
     assert_equal ["blog/undated.md"], archive.last.fetch("posts").map { |post| post.fetch("id") }
   end
 
+  def test_minimal_pins_post_cards_before_reverse_chronology
+    entries = (1..7).map do |day|
+      pinned = day == 1 ? "pinned: true\n" : ""
+      note(
+        "blog/post-#{day}.md",
+        "---\npublish: true\ncontent_type: post\ndate: 2026-07-#{format('%02d', day)}\n#{pinned}---\n# Post #{day}"
+      )
+    end
+
+    result = compile(*entries.reverse, theme: "minimal")
+
+    assert result.success?, result.diagnostics.map(&:message).join("\n")
+    recent = page(result, "/").data.dig("website", "theme_data", "recent_posts")
+    assert_equal %w[blog/post-1.md blog/post-7.md blog/post-6.md blog/post-5.md blog/post-4.md blog/post-3.md],
+      recent.map { |post| post.fetch("id") }
+    archive = page(result, "/blog/").data.dig("website", "theme_data", "archive_groups")
+    assert_equal "blog/post-1.md", archive.first.fetch("posts").first.fetch("id")
+    assert_nil page(result, "/blog/post-1/").data.dig("website", "theme_data", "previous")
+    assert_equal "blog/post-2.md", page(result, "/blog/post-1/").data.dig("website", "theme_data", "next", "id")
+    feed = result.generated_files.find { |file| file.route == "/feed.xml" }.content
+    assert_operator feed.index("<title>Post 7</title>"), :<, feed.index("<title>Post 1</title>")
+  end
+
   def test_minimal_home_combines_authored_content_six_recent_posts_and_contacts
     entries = [
       note(
@@ -383,7 +406,7 @@ class ThemeContractTest < Minitest::Test
       ),
       note(
         "portfolio/preview.md",
-        "---\npublish: true\ntitle: Preview project\nnav_order: 2\n---\nPreview from the project body."
+        "---\npublish: true\ntitle: Preview project\nnav_order: 2\npinned: true\n---\nPreview from the project body."
       ),
       note("portfolio/hidden.md", "---\npublish: true\nnav_exclude: true\n---\n# Hidden project"),
       attachment("media/demo.gif", "GIF89a", media_type: "image/gif"),
@@ -397,18 +420,18 @@ class ThemeContractTest < Minitest::Test
     assert portfolio.data.dig("website", "source_links", "edit")
     assert_equal [
       {
-        "id" => "portfolio/featured.md",
-        "title" => "Featured project",
-        "url" => "/portfolio/featured/",
-        "image" => "https://example.test/assets/vault/media/demo.gif",
-        "summary" => "Front matter summary"
-      },
-      {
         "id" => "portfolio/preview.md",
         "title" => "Preview project",
         "url" => "/portfolio/preview/",
         "image" => nil,
         "summary" => "Preview from the project body."
+      },
+      {
+        "id" => "portfolio/featured.md",
+        "title" => "Featured project",
+        "url" => "/portfolio/featured/",
+        "image" => "https://example.test/assets/vault/media/demo.gif",
+        "summary" => "Front matter summary"
       }
     ], portfolio.data.dig("website", "theme_data", "portfolio_projects")
   end
@@ -616,12 +639,13 @@ class ThemeContractTest < Minitest::Test
       date: someday
       nav_order: first
       nav_exclude: 1
+      pinned: "true"
       ---
       # Home
     MARKDOWN
 
     refute invalid.success?
-    assert_operator invalid.diagnostics.count { |item| item.code == "invalid_property" }, :>=, 4
+    assert_operator invalid.diagnostics.count { |item| item.code == "invalid_property" }, :>=, 5
 
     wrong_root = compile(note("index.md", "---\npublish: true\ncontent_type: post\ndate: 2026-07-01\n---\n# Home"))
     refute wrong_root.success?

@@ -75,15 +75,23 @@ describe("note previews", () => {
 
     const preview = document.querySelector<HTMLElement>("[data-note-preview]")!;
     expect(preview.querySelector(".note-preview__title")?.textContent).toBe("Safe note");
+    expect(preview.querySelector(".note-preview__title-link")?.getAttribute("href")).toBe("/safe/");
     expect(preview.querySelector(".note-preview__description")?.textContent).toBe("A useful summary.");
     expect(preview.querySelector(".note-preview__body")?.textContent).toContain("First paragraph.");
     expect(preview.querySelector("h1")).toBeNull();
     expect(preview.textContent).not.toContain("Repeated heading");
-    expect(preview.querySelector("a, script, iframe, form, input, video")).toBeNull();
+    expect(preview.querySelector(".note-preview__body a, script, iframe, form, input, video")).toBeNull();
     expect(preview.textContent).toContain("Plain link text");
     expect(preview.querySelector("table code")).toBeNull();
     expect(preview.querySelector("table")).not.toBeNull();
     expect(preview.querySelector("pre code")?.className).toBe("language-js");
+
+    link.focus();
+    link.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, cancelable: true, key: "Tab" }));
+    const titleLink = preview.querySelector<HTMLAnchorElement>(".note-preview__title-link")!;
+    expect(document.activeElement).toBe(titleLink);
+    titleLink.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, cancelable: true, key: "Tab" }));
+    expect(document.activeElement).toBe(preview.querySelector(".note-preview__body"));
   });
 
   it("caches successful page requests and ignores stale page responses", async () => {
@@ -131,6 +139,13 @@ describe("note previews", () => {
     const { initialisePreviews } = await import("../../src/frontend/preview");
     initialisePreviews();
     link.dispatchEvent(new PointerEvent("pointerover", { bubbles: true, pointerType: "mouse" }));
+    await new Promise((resolve) => setTimeout(resolve, 150));
+    link.dispatchEvent(new PointerEvent("pointerout", { bubbles: true, pointerType: "mouse", relatedTarget: document.body }));
+    await new Promise((resolve) => setTimeout(resolve, 180));
+    expect(document.querySelector("[data-note-preview]")).toBeNull();
+    link.dispatchEvent(new PointerEvent("pointerover", { bubbles: true, pointerType: "mouse" }));
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    expect(document.querySelector("[data-note-preview]")).toBeNull();
     await vi.waitFor(() => expect(document.querySelector("[data-note-preview]")).not.toBeNull());
     const preview = document.querySelector<HTMLElement>("[data-note-preview]")!;
     link.dispatchEvent(new PointerEvent("pointerout", { bubbles: true, pointerType: "mouse", relatedTarget: preview }));

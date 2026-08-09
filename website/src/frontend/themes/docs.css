@@ -117,9 +117,13 @@
   .docs-article > .note-header,
   .docs-article > .source-actions,
   .docs-article > .website-comments,
-  .docs-article > .note-content > :where(h1, h2, h3, h4, p, ul, ol, dl, blockquote) {
+  .docs-article > .note-content > :where(h1, h2, h3, h4, p, ul, ol, dl, blockquote, pre, .callout) {
     inline-size: min(100%, var(--reading-width));
     margin-inline: auto;
+  }
+
+  .docs-article > .page-actions {
+    margin-inline-end: max(0px, calc((100% - var(--reading-width)) / 2));
   }
 
   .theme-docs .note-content h1,

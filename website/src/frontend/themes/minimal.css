@@ -109,9 +109,13 @@
   .minimal-entry > .note-header,
   .minimal-entry > .source-actions,
   .minimal-entry > .website-comments,
-  .minimal-entry > .note-content > :where(h1, h2, h3, h4, p, ul, ol, dl, blockquote) {
+  .minimal-entry > .note-content > :where(h1, h2, h3, h4, p, ul, ol, dl, blockquote, pre, .callout) {
     inline-size: min(100%, var(--reading-width));
     margin-inline: auto;
+  }
+
+  .minimal-entry > .page-actions {
+    margin-inline-end: max(0px, calc((100% - var(--reading-width)) / 2));
   }
 }
 
@@ -269,7 +273,7 @@
     inline-size: 2.5rem;
     min-block-size: 2.5rem;
     padding: 0;
-    border-radius: 0.55rem;
+    border: 0;
   }
 
   .minimal-contact--text {
@@ -281,13 +285,18 @@
   }
 
   .minimal-contact__icon {
-    inline-size: 1.15rem;
-    block-size: 1.15rem;
+    inline-size: 1.35rem;
+    block-size: 1.35rem;
     fill: none;
     stroke: currentColor;
     stroke-linecap: round;
     stroke-linejoin: round;
     stroke-width: 1.6;
+  }
+
+  .minimal-contact__icon--brand {
+    fill: currentColor;
+    stroke: none;
   }
 
   .minimal-contact:hover {
@@ -390,11 +399,11 @@
 
   .section-heading {
     display: grid;
-    grid-template-columns: minmax(7.5rem, 0.3fr) 1fr;
+    grid-template-columns: minmax(8rem, 9.5rem) minmax(0, 1fr);
     align-items: baseline;
     padding-block-end: 0.85rem;
     border-block-end: 1px solid var(--line);
-    gap: 1rem;
+    gap: 0.75rem;
   }
 
   .blog-ledger time,
@@ -425,15 +434,23 @@
 
   .blog-ledger > ol > li {
     display: grid;
-    grid-template-columns: minmax(7.5rem, 0.3fr) 1fr;
+    grid-template-columns: minmax(8rem, 9.5rem) minmax(0, 1fr);
     min-block-size: 5.25rem;
     border-block-end: 1px solid var(--line);
-    gap: 1rem;
+    gap: 0.75rem;
+  }
+
+  .blog-ledger__meta {
+    display: grid;
+    align-content: start;
+    align-self: stretch;
+    padding-block: 1.15rem;
+    gap: 0.3rem;
   }
 
   .blog-ledger time {
-    padding-block-start: 1.3rem;
     color: var(--teal);
+    font-size: 0.74rem;
     font-variant-numeric: tabular-nums;
   }
 
@@ -452,9 +469,17 @@
     line-height: 1.22;
   }
 
-  .blog-ledger li > a span {
+  .blog-ledger__description {
     color: var(--graphite);
+    font-size: 0.82rem;
+    line-height: 1.5;
+  }
+
+  .blog-ledger__topics {
+    color: var(--graphite);
+    font-family: var(--font-ui);
     font-size: 0.7rem;
+    line-height: 1.35;
   }
 
   .blog-ledger li > a:hover strong {
@@ -583,8 +608,12 @@
     gap: 0;
   }
 
-  .blog-ledger time {
+  .blog-ledger__meta {
     padding-block: 1rem 0;
+  }
+
+  .blog-ledger li > a {
+    padding-block: 0.75rem 1.15rem;
   }
 
   .section-heading h2 {

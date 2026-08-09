@@ -37,7 +37,7 @@ Docs 会校验作品集配置，但不会生成标签页、集合索引或项目
 
 设置 `nav_exclude: true` 可以让项目不进入网格。详情路由仍然公开；直接打开该路由时，如果作品集标签页可见，它仍保持激活状态。
 
-设置了 `nav_order` 的项目排在前面，随后依次按 `nav_order`、本地化标题和源路径排序。卡片使用标题、可选的 `image` 与 `description`；未设置 `description` 时，沿用现有正文预览。缺少图片或摘要时不会显示占位内容。
+设置了 `pinned: true` 的项目排在普通项目之前。各组内部优先排列设置了 `nav_order` 的项目，再依次按 `nav_order`、本地化标题和源路径排序。卡片使用标题、可选的 `image` 与 `description`；未设置 `description` 时，沿用现有正文预览。缺少图片或摘要时不会显示占位内容。
 
 本地 GIF、WebP、AVIF 和 APNG 文件会逐字节复制，并通过普通图片元素显示。编译器不会转码或生成缩略图。
 
@@ -60,7 +60,7 @@ github_markdown: https://github.com/owner/repository/blob/main/README.md
 ---
 ```
 
-本地项目页的正文必须为空。frontmatter 后出现任何非空白内容时，构建会报告 `github_markdown_body_conflict`。发布状态、标题、描述、图片、顺序、路由和其他页面元数据仍由该项目页管理。
+本地项目页的正文必须为空。frontmatter 后出现任何非空白内容时，构建会报告 `github_markdown_body_conflict`。发布状态、标题、描述、图片、置顶、顺序、路由和其他页面元数据仍由该项目页管理。
 
 URL 简写接受公开的 GitHub `blob` URL，其中分支、tag 或 commit 引用只能包含一个路径片段。引用中包含 `/` 时，请使用映射形式：
 

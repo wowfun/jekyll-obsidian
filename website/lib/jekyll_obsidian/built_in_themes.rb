@@ -576,7 +576,9 @@ module JekyllObsidian
 
       def displayed_posts(posts)
         dated, undated = posts.partition(&:published_at)
-        dated.reverse + undated
+        displayed = dated.reverse + undated
+        pinned, remaining = displayed.partition { |note| note.properties["pinned"] == true }
+        pinned + remaining
       end
 
       def archive_groups(posts, config, taxonomy)

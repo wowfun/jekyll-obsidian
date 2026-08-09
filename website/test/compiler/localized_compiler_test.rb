@@ -338,7 +338,7 @@ class LocalizedCompilerTest < Minitest::Test
   end
 
   def test_translations_cannot_create_or_change_structure_or_add_private_assets
-    structure = note("_translations/zh-CN/docs/Guide.md", "---\npublish: true\npermalink: /different/\n---\n# 指南")
+    structure = note("_translations/zh-CN/docs/Guide.md", "---\npublish: true\npermalink: /different/\npinned: true\n---\n# 指南")
     orphan = note("_translations/zh-CN/docs/Orphan.md", "---\npublish: true\n---\n# 孤儿")
     asset = attachment("_translations/zh-CN/image.png")
     result = compile(*default_notes, *manifests, structure, orphan, asset, theme: "docs", i18n: I18N)
@@ -346,6 +346,7 @@ class LocalizedCompilerTest < Minitest::Test
     refute result.success?
     codes = result.diagnostics.map(&:code)
     assert_includes codes, "localized_structure_override"
+    assert result.diagnostics.any? { |item| item.code == "localized_structure_override" && item.message.include?("pinned") }
     assert_includes codes, "orphan_translation"
     assert_includes codes, "localized_asset_unsupported"
   end

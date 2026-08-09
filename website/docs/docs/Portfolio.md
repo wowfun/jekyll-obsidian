@@ -6,7 +6,7 @@ tags:
   - guide/portfolio
 description: Publish project pages and import a public GitHub README as a project body.
 created: 2026-08-07
-updated: 2026-08-07
+updated: 2026-08-09
 ---
 
 # Portfolio
@@ -42,7 +42,7 @@ Under Minimal, every published Markdown descendant of the active Portfolio path 
 
 Add `nav_exclude: true` to keep a project out of the grid. Its detail route remains public, and opening it still activates the Portfolio tab when that tab is visible.
 
-Projects with `nav_order` come first. The grid then sorts by `nav_order`, localized title, and source path. Each card uses its title, optional `image`, and `description`; when `description` is absent, it uses the existing body preview. Missing images and summaries leave no placeholder.
+Projects with `pinned: true` appear before unpinned projects. Within each group, projects with `nav_order` come first, followed by `nav_order`, localized title, and source path. Each card uses its title, optional `image`, and `description`; when `description` is absent, it uses the existing body preview. Missing images and summaries leave no placeholder.
 
 Local GIF, WebP, AVIF, and APNG files are copied byte for byte and shown with an ordinary image element. The compiler does not transcode them or create thumbnails.
 
@@ -65,7 +65,7 @@ github_markdown: https://github.com/owner/repository/blob/main/README.md
 ---
 ```
 
-The local wrapper body must be empty. Any non-whitespace body produces `github_markdown_body_conflict`. The wrapper still owns publication, title, description, image, order, route, and other page metadata.
+The local wrapper body must be empty. Any non-whitespace body produces `github_markdown_body_conflict`. The wrapper still owns publication, title, description, image, pinning, order, route, and other page metadata.
 
 The URL shorthand accepts a public GitHub `blob` URL with a single-segment branch, tag, or commit reference. Use the mapping form when a reference contains `/`:
 

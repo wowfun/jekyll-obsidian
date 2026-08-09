@@ -170,8 +170,13 @@ test("Minimal Home combines authored content with at most six recent posts", asy
   const x = contacts.getByRole("link", { name: "X", exact: true });
   await expect(github).toHaveAttribute("href", "https://github.com/wowfun");
   await expect(x).toHaveAttribute("href", "https://x.com/wowfuna");
+  await expect(github.locator("svg")).toHaveClass(/minimal-contact__icon--brand/);
+  await expect(x.locator("svg")).toHaveClass(/minimal-contact__icon--brand/);
+  await expect(x.locator("svg")).toHaveCSS("stroke", "none");
   for (const link of [github, x]) {
+    await expect(link).toHaveCSS("border-top-width", "0px");
     await expect(link.locator("svg[aria-hidden='true']")).toBeVisible();
+    expect((await link.locator("svg").boundingBox())!.width).toBeGreaterThanOrEqual(21);
     const box = await link.boundingBox();
     expect(Math.abs(box!.width - box!.height)).toBeLessThanOrEqual(1);
   }
@@ -338,9 +343,27 @@ test("Blog filters by topic and exposes only populated chronology periods", asyn
   await expect(page.locator("[data-filter-item]", { hasText: "从笔记到发布" })).toBeHidden();
   await filter.getByRole("link", { name: /^All\b/ }).click();
   await expect(page).toHaveURL(site("minimal", "/blog/"));
-  await expect(page.locator("[data-filter-item]:visible")).toHaveCount(2);
+  const entries = page.locator("[data-filter-item]:visible");
+  await expect(entries).toHaveCount(2);
+  await expect(entries.nth(0).locator("time")).toHaveText("2026-08-01");
+  await expect(entries.nth(1).locator("time")).toHaveText("2026-07-31");
+  await expect(entries.nth(0).locator(".blog-ledger__description"))
+    .toHaveText("Why Minimal and Docs share one compiler but not one layout.");
+  await expect(entries.nth(1).locator(".blog-ledger__description"))
+    .toHaveText("同一个 Obsidian vault 如何保持写作格式，同时生成不同的信息结构。");
+  await expect(entries.locator(".blog-ledger__topics")).toHaveCount(2);
+  await expect(entries.locator("a .blog-ledger__topics")).toHaveCount(0);
 
   if (testInfo.project.name === "desktop-chromium") {
+    const firstMeta = (await entries.nth(0).locator(".blog-ledger__meta").boundingBox())!;
+    const firstTitle = (await entries.nth(0).locator("strong").boundingBox())!;
+    const firstDate = entries.nth(0).locator("time");
+    const firstTopics = (await entries.nth(0).locator(".blog-ledger__topics").boundingBox())!;
+    expect(firstTitle.x - (firstMeta.x + firstMeta.width)).toBeLessThanOrEqual(13);
+    expect(firstTopics.y).toBeGreaterThan((await firstDate.boundingBox())!.y);
+    expect(Number.parseFloat(await firstDate.evaluate((element) => getComputedStyle(element).fontSize)))
+      .toBeGreaterThanOrEqual(11.8);
+
     const chronology = page.getByRole("navigation", { name: "Chronology" });
     await expect(chronology.locator('[data-filter-year="2026"] .archive-timeline__count')).toHaveText("2");
     await expect(chronology.locator('[data-filter-month="2026-08"] .archive-timeline__count')).toHaveText("1");
@@ -597,6 +620,8 @@ test("Minimal previews use catalog text without injecting active content", async
   await page.locator(".website-link[data-note-id='docs/中文示例.md']").focus();
   const preview = page.locator("[data-note-preview]");
   await expect(preview).toContainText("CJK Showcase");
+  await expect(preview.locator(".note-preview__title-link")).toHaveAttribute("href", /\/docs\/%E4%B8%AD%E6%96%87%E7%A4%BA%E4%BE%8B\/$/);
+  expect((await preview.locator(".note-preview__body").boundingBox())!.height).toBeLessThanOrEqual(240);
   await expect(preview.locator(".note-preview__body")).toHaveAttribute("data-preview-body-ready", "true");
   await expect(preview).toContainText("中文、日文和拉丁字母可以写在同一个知识库里");
   await expect(preview.locator("iframe, script")).toHaveCount(0);
@@ -918,14 +943,53 @@ test("desktop themes use the wider canvas without lengthening prose lines", asyn
   expect((await page.locator(".minimal-recent__grid").boundingBox())!.width).toBeGreaterThanOrEqual(900);
   expect((await page.locator(".note-content > p").first().boundingBox())!.width).toBeLessThanOrEqual(780);
 
+  await page.goto(site("minimal", "/docs/Customization/"));
+  expect((await page.locator(".note-content > pre").first().boundingBox())!.width).toBeLessThanOrEqual(780);
+
   await page.goto(site("docs", "/docs/Getting%20Started/"));
   const sidebar = (await page.locator(".docs-sidebar").boundingBox())!;
   const main = (await page.locator(".docs-main").boundingBox())!;
   const context = (await page.locator(".docs-context").boundingBox())!;
+  const docsTitle = (await page.locator(".note-content > h1").first().boundingBox())!;
+  const docsProse = (await page.locator(".note-content > p").first().boundingBox())!;
+  const docsCode = (await page.locator(".note-content > pre").first().boundingBox())!;
+  const docsActions = (await page.locator("[data-page-actions]").boundingBox())!;
   expect(main.width).toBeGreaterThanOrEqual(880);
-  expect((await page.locator(".note-content > p").first().boundingBox())!.width).toBeLessThanOrEqual(640);
+  expect(docsProse.width).toBeLessThanOrEqual(640);
+  expect(docsTitle.x).toBeCloseTo(docsProse.x, 0);
+  expect(docsTitle.width).toBeCloseTo(docsProse.width, 0);
+  expect(docsCode.x).toBeCloseTo(docsProse.x, 0);
+  expect(docsCode.width).toBeCloseTo(docsProse.width, 0);
+  expect(docsActions.x + docsActions.width).toBeCloseTo(docsProse.x + docsProse.width, 0);
   expect(sidebar.x + sidebar.width).toBeLessThanOrEqual(main.x);
   expect(main.x + main.width).toBeLessThanOrEqual(context.x);
+});
+
+test("Minimal aligns authored reading blocks and page actions to one column", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "desktop-chromium", "desktop reading-column contract");
+  await page.setViewportSize({ width: 1190, height: 900 });
+  await page.goto(site("minimal"));
+
+  const title = (await page.locator(".note-content > h1").first().boundingBox())!;
+  const paragraph = (await page.locator(".note-content > p").first().boundingBox())!;
+  const callout = (await page.locator(".note-content > .callout").first().boundingBox())!;
+  const actions = (await page.locator("[data-page-actions]").boundingBox())!;
+  expect(title.x).toBeCloseTo(paragraph.x, 0);
+  expect(title.width).toBeCloseTo(paragraph.width, 0);
+  expect(callout.x).toBeCloseTo(paragraph.x, 0);
+  expect(callout.width).toBeCloseTo(paragraph.width, 0);
+  expect(actions.x + actions.width).toBeCloseTo(callout.x + callout.width, 0);
+
+  await page.goto(site("minimal", "/docs/Customization/"));
+  const documentTitle = (await page.locator(".note-content > h1").first().boundingBox())!;
+  const prose = (await page.locator(".note-content > p").first().boundingBox())!;
+  const code = (await page.locator(".note-content > pre").first().boundingBox())!;
+  const noteActions = (await page.locator("[data-page-actions]").boundingBox())!;
+  expect(documentTitle.x).toBeCloseTo(prose.x, 0);
+  expect(documentTitle.width).toBeCloseTo(prose.width, 0);
+  expect(code.x).toBeCloseTo(prose.x, 0);
+  expect(code.width).toBeCloseTo(prose.width, 0);
+  expect(noteActions.x + noteActions.width).toBeCloseTo(prose.x + prose.width, 0);
 });
 
 test("localized docs search loads the locale index and finds CJK content", async ({ page }) => {

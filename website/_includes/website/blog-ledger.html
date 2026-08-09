@@ -5,7 +5,7 @@
     {% unless include.compact %}<header class="section-heading"><h2 id="dispatches-title">{{ ui.field_dispatches | default: 'Field dispatches' | escape }}</h2></header>{% endunless %}
     <ol>
       {% for post in include.posts %}
-        <li{% if include.filterable %} data-filter-item data-topic-anchors="{{ post.topic_anchors | join: ' ' | escape }}"{% if post.filter_month %} data-filter-month="{{ post.filter_month | escape }}"{% endif %}{% endif %}><time datetime="{{ post.published_at | escape }}">{{ post.published_at | date: "%Y · %m · %d" }}</time><a href="{{ post.url | escape }}"><strong>{{ post.title | escape }}</strong>{% if post.tags and post.tags.size > 0 %}<span>{{ post.tags | join: " · " | escape }}</span>{% endif %}</a></li>
+        <li{% if include.filterable %} data-filter-item data-topic-anchors="{{ post.topic_anchors | join: ' ' | escape }}"{% if post.filter_month %} data-filter-month="{{ post.filter_month | escape }}"{% endif %}{% endif %}><div class="blog-ledger__meta"><time datetime="{{ post.published_at | escape }}">{{ post.published_at | date: "%Y-%m-%d" }}</time>{% if post.tags and post.tags.size > 0 %}<span class="blog-ledger__topics">{{ post.tags | join: " · " | escape }}</span>{% endif %}</div><a href="{{ post.url | escape }}"><strong>{{ post.title | escape }}</strong>{% if post.summary and post.summary != '' %}<span class="blog-ledger__description">{{ post.summary | escape }}</span>{% endif %}</a></li>
       {% endfor %}
     </ol>
     {% unless include.compact %}<a class="ledger-archive-link" href="{{ blog_url | escape }}">{{ ui.view_all | default: 'View all' | escape }} <span aria-hidden="true">→</span></a>{% endunless %}
