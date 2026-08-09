@@ -18,5 +18,5 @@ require_relative "jekyll_obsidian/localized_compiler"
 require_relative "jekyll_obsidian/site_compilation"
 
 module JekyllObsidian
-  VERSION = "2026.8.6"
+  VERSION = "2026.8.9"
 end

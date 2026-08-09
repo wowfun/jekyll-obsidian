@@ -112,7 +112,20 @@ cp -p -- "$SITE_DIR/bin/update.cmd" "$release_work/website/bin/update.cmd"
 cp -p -- "$SITE_DIR/bin/update.ps1" "$release_work/website/bin/update.ps1"
 cp -p -- "$SITE_DIR/bin/integrate" "$release_work/website/bin/integrate"
 cp -p -- "$SITE_DIR/.jekyll-obsidian-release" "$release_work/website/.jekyll-obsidian-release"
+cp -p -- "$SITE_DIR/package.json" "$release_work/website/package.json"
+cp -p -- "$SITE_DIR/package-lock.json" "$release_work/website/package-lock.json"
+cp -p -- "$SITE_DIR/lib/jekyll_obsidian.rb" "$release_work/website/lib/jekyll_obsidian.rb"
 cp -p -- "$SITE_DIR/scripts/example-config.yml" "$release_work/website/scripts/example-config.yml"
+product_version=$(sed -n 's/^version=//p' "$release_work/website/.jekyll-obsidian-release")
+[ -n "$product_version" ] || fail "the product release version could not be read."
+escaped_product_version=$(printf '%s\n' "$product_version" | sed 's/\./\\./g')
+for version_file in \
+  .jekyll-obsidian-release \
+  package.json \
+  package-lock.json \
+  lib/jekyll_obsidian.rb; do
+  replace_literal "$release_work/website/$version_file" "$escaped_product_version" '2026.8.6'
+done
 printf '%s\n' alpha >"$release_work/website/update-fixture.txt"
 printf '%s\n' remove-me >"$release_work/website/update-removed-fixture.txt"
 printf '%s\n' parent-file >"$release_work/website/parent-transition"
