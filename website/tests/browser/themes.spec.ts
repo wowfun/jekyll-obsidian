@@ -237,11 +237,119 @@ for (const theme of themes) {
       const returnedDiagram = page.locator("[data-mermaid-rendered]");
       await expect(returnedDiagram).toHaveCount(1);
       await expect(returnedDiagram.locator("button[data-copy-source]")).toHaveCount(1);
+      const returnedExpand = returnedDiagram.locator("button[data-mermaid-expand]");
+      await expect(returnedExpand).toHaveCount(1);
+      await returnedExpand.click();
+      const returnedDialog = page.locator('dialog[data-dialog="mermaid"]');
+      await returnedDialog.getByRole("button", { name: "Zoom in" }).click();
+      await expect(returnedDialog.locator("[data-mermaid-zoom-status]")).toHaveText("Zoom: 125%");
+      await page.keyboard.press("Escape");
+      await expect(returnedExpand).toBeFocused();
       const returnedMath = page.locator("[data-math-rendered]");
       await expect.poll(() => returnedMath.count()).toBeGreaterThan(0);
       await expect(returnedMath.locator("button[data-copy-source]"))
         .toHaveCount(await returnedMath.count());
     }
+  });
+}
+
+for (const theme of themes) {
+  test(`${theme} opens the current Mermaid SVG in a keyboard-operable zoom dialog`, async ({ page }, testInfo) => {
+    if (testInfo.project.name === "mobile-chromium") {
+      await page.setViewportSize({ width: 320, height: 800 });
+    }
+    await page.goto(site(theme, "/docs/Syntax/"));
+    const figure = page.locator("[data-mermaid-rendered]");
+    await expect(figure).toBeVisible();
+    const expand = figure.locator("button[data-mermaid-expand]");
+    await expect(expand).toHaveAccessibleName("Expand diagram");
+    const sourceSvg = figure.locator(":scope > svg");
+    await sourceSvg.evaluate((svg) => { svg.dataset.enlargeSource = "current"; });
+
+    await figure.locator("button[data-copy-source]").click();
+    await expect(page.locator('dialog[data-dialog="mermaid"]')).not.toBeVisible();
+    await sourceSvg.click();
+
+    const dialog = page.locator('dialog[data-dialog="mermaid"]');
+    await expect(dialog).toBeVisible();
+    await expect(dialog.locator("[data-mermaid-dialog-canvas] > svg"))
+      .toHaveAttribute("data-enlarge-source", "current");
+    const zoomIn = dialog.getByRole("button", { name: "Zoom in" });
+    const reset = dialog.getByRole("button", { name: "Reset zoom" });
+    const status = dialog.locator("[data-mermaid-zoom-status]");
+    await expect(dialog.getByRole("button", { name: "Zoom out" })).toBeVisible();
+    await expect(dialog.getByRole("button", { name: "Close diagram" })).toBeVisible();
+    await expect(status).toHaveText("Zoom: 100%");
+    const controlGeometry = await dialog.locator(".mermaid-dialog__controls").evaluate((controls) => ({
+      clientWidth: controls.clientWidth,
+      scrollWidth: controls.scrollWidth,
+      buttons: [...controls.querySelectorAll("button")].map((button) => {
+        const box = button.getBoundingClientRect();
+        return { width: box.width, height: box.height };
+      })
+    }));
+    expect(controlGeometry.scrollWidth).toBeLessThanOrEqual(controlGeometry.clientWidth);
+    expect(controlGeometry.buttons.every(({ width, height }) => width >= 40 && height >= 40)).toBe(true);
+
+    await zoomIn.focus();
+    await page.keyboard.press("Enter");
+    await expect(status).toHaveText("Zoom: 125%");
+    await zoomIn.click({ clickCount: 3 });
+    const viewport = dialog.locator("[data-mermaid-dialog-viewport]");
+    expect(await viewport.evaluate((element) => element.scrollWidth > element.clientWidth)).toBe(true);
+    const dragStart = await viewport.evaluate((element) => {
+      element.scrollLeft = (element.scrollWidth - element.clientWidth) / 2;
+      return element.scrollLeft;
+    });
+    const viewportBox = (await viewport.boundingBox())!;
+    const dragY = viewportBox.y + viewportBox.height / 2;
+    await page.mouse.move(viewportBox.x + viewportBox.width / 2, dragY);
+    await page.mouse.down({ button: "left" });
+    await expect(viewport).toHaveAttribute("data-mermaid-panning", "");
+    await expect(viewport).toHaveCSS("cursor", "grabbing");
+    await page.mouse.move(viewportBox.x + viewportBox.width / 2 - 60, dragY, { steps: 4 });
+    await page.mouse.up({ button: "left" });
+    await expect(viewport).not.toHaveAttribute("data-mermaid-panning");
+    await expect(viewport).toHaveCSS("cursor", "grab");
+    const dragEnd = await viewport.evaluate((element) => element.scrollLeft);
+    expect(dragEnd).toBeGreaterThan(dragStart);
+    await page.mouse.down({ button: "right" });
+    await expect(viewport).not.toHaveAttribute("data-mermaid-panning");
+    await page.mouse.move(viewportBox.x + viewportBox.width / 2 - 90, dragY);
+    await page.mouse.up({ button: "right" });
+    expect(await viewport.evaluate((element) => element.scrollLeft)).toBe(dragEnd);
+    await reset.click();
+    await expect(status).toHaveText("Zoom: 100%");
+
+    await page.keyboard.press("Escape");
+    await expect(dialog).toBeHidden();
+    await expect(expand).toBeFocused();
+
+    await expand.click();
+    await expect(dialog).toBeVisible();
+    await page.evaluate(() => {
+      document.documentElement.dataset.colorScheme = "dark";
+      document.documentElement.style.colorScheme = "dark";
+      document.dispatchEvent(new CustomEvent("website:color-scheme-changed", {
+        detail: { scheme: "dark" }
+      }));
+    });
+    await expect(dialog).toBeHidden();
+    await expect(dialog.locator("[data-mermaid-dialog-canvas] > svg")).toHaveCount(0);
+    await expect(figure).toBeVisible();
+    await expect(expand).toBeFocused();
+    expect(await page.evaluate(() => {
+      const selector = [
+        "[data-mermaid-rendered] svg[id]",
+        "[data-mermaid-rendered] svg [id]",
+        "[data-mermaid-dialog-canvas] svg[id]",
+        "[data-mermaid-dialog-canvas] svg [id]"
+      ].join(",");
+      const ids = Array.from(document.querySelectorAll<SVGElement>(selector), (element) => element.id);
+      return new Set(ids).size === ids.length;
+    })).toBe(true);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth))
+      .toBeLessThanOrEqual(await page.evaluate(() => document.documentElement.clientWidth));
   });
 }
 
@@ -264,6 +372,16 @@ test("localized code block actions announce their state in the page language", a
   const localizedDiagramAction = page.locator("[data-mermaid-rendered] button[data-copy-source]");
   await expect(localizedDiagramAction).toHaveAccessibleName("复制图表源码");
   await expect(localizedDiagramAction).toHaveAttribute("lang", "zh-CN");
+  const localizedDiagramExpand = page.locator("[data-mermaid-rendered] button[data-mermaid-expand]");
+  await expect(localizedDiagramExpand).toHaveAccessibleName("放大图表");
+  await localizedDiagramExpand.click();
+  const localizedDiagramDialog = page.locator('dialog[data-dialog="mermaid"]');
+  await expect(localizedDiagramDialog.getByRole("button", { name: "放大" })).toBeVisible();
+  await expect(localizedDiagramDialog.getByRole("button", { name: "缩小" })).toBeVisible();
+  await expect(localizedDiagramDialog.getByRole("button", { name: "复位缩放" })).toBeVisible();
+  await expect(localizedDiagramDialog.getByRole("button", { name: "关闭图表" })).toBeVisible();
+  await expect(localizedDiagramDialog.locator("[data-mermaid-zoom-status]")).toHaveText("缩放：100%");
+  await page.keyboard.press("Escape");
   const localizedFormulaAction = page.locator("[data-math-rendered] button[data-copy-source]").first();
   await expect(localizedFormulaAction).toHaveAccessibleName("复制公式源码");
   await expect(localizedFormulaAction).toHaveAttribute("lang", "zh-CN");
@@ -421,6 +539,33 @@ test("Minimal Home combines authored content with at most six recent posts", asy
     expect(Number.parseFloat(await firstTitle.evaluate((element) => getComputedStyle(element).fontSize)))
       .toBeLessThanOrEqual(29);
   }
+});
+
+test("Minimal Home keeps recent posts in the primary flow when its context rail is taller", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "desktop-chromium", "desktop two-column geometry");
+  await page.setViewportSize({ width: 1366, height: 935 });
+  await page.goto(site("minimal"));
+
+  const entry = page.locator(".minimal-entry");
+  await entry.locator(".note-content").evaluate((content) => {
+    for (const child of Array.from(content.children)) {
+      if (child.tagName !== "H1") (child as HTMLElement).hidden = true;
+    }
+  });
+
+  const entryBox = (await entry.boundingBox())!;
+  const contextBox = (await page.locator(".minimal-home-context").boundingBox())!;
+  const readingBox = (await page.locator(".minimal-reading-column").boundingBox())!;
+  const recentBox = (await page.locator(".minimal-recent").boundingBox())!;
+  const rootFontSize = await page.locator("html").evaluate((root) =>
+    Number.parseFloat(getComputedStyle(root).fontSize)
+  );
+
+  expect(contextBox.height).toBeGreaterThan(entryBox.height);
+  expect(recentBox.x).toBeCloseTo(readingBox.x, 0);
+  expect(recentBox.width).toBeCloseTo(readingBox.width, 0);
+  expect(recentBox.y - (entryBox.y + entryBox.height)).toBeLessThanOrEqual((5 * rootFontSize) + 1);
+  expect(recentBox.y).toBeLessThan(contextBox.y + contextBox.height);
 });
 
 test("Minimal recent post cards expose one article link across the whole card", async ({ page }) => {
@@ -619,6 +764,8 @@ test("Mermaid HTML labels render and stay inside each theme reading column", asy
     )).toContain("<br/>");
     await expect(figure.locator("button[data-copy-source]")).toHaveCount(1);
     await expect(figure.locator("button[data-copy-source]")).toHaveAccessibleName("Copy diagram source");
+    await expect(figure.locator("button[data-mermaid-expand]")).toHaveCount(1);
+    await expect(figure.locator("button[data-mermaid-expand]")).toHaveAccessibleName("Expand diagram");
 
     const geometry = await figure.locator(":scope > svg").evaluate((svg) => {
       const viewBox = (svg as SVGSVGElement).viewBox.baseVal;
@@ -648,6 +795,8 @@ test("Mermaid HTML labels render and stay inside each theme reading column", asy
     await expect(redrawn.locator("foreignObject br")).toHaveCount(1);
     await expect(redrawn.locator("button[data-copy-source]")).toHaveCount(1);
     await expect(redrawn.locator("button[data-copy-source]")).toHaveAccessibleName("Copy diagram source");
+    await expect(redrawn.locator("button[data-mermaid-expand]")).toHaveCount(1);
+    await expect(redrawn.locator("button[data-mermaid-expand]")).toHaveAccessibleName("Expand diagram");
     await expect(content.locator("pre[data-mermaid-error]")).toHaveCount(0);
   }
 });
@@ -953,7 +1102,7 @@ test("localized fallback post topics separate UI and content languages", async (
   ]);
 });
 
-test("Minimal chronology fits twelve monthly capsules under Linux fallback font metrics", async ({ page }, testInfo) => {
+test("Minimal chronology fits twelve separated month entries under Linux fallback font metrics", async ({ page }, testInfo) => {
   await page.goto(site("minimal", "/blog/"));
   await page.addStyleTag({ content: ":root { --font-system: Arial, sans-serif; }" });
 
@@ -988,12 +1137,12 @@ test("Minimal chronology fits twelve monthly capsules under Linux fallback font 
     list.replaceChildren(...items);
   });
 
-  const capsules = months.locator("a[data-month-filter-option]");
-  await expect(capsules).toHaveCount(12);
-  await expect(capsules.locator(".archive-timeline__count"))
+  const monthLinks = months.locator("a[data-month-filter-option]");
+  await expect(monthLinks).toHaveCount(12);
+  await expect(monthLinks.locator(".archive-timeline__count"))
     .toHaveText(Array.from({ length: 12 }, (_, index) => String(index + 1)));
 
-  const boxes = await capsules.evaluateAll((links) => links.map((link) => {
+  const boxes = await monthLinks.evaluateAll((links) => links.map((link) => {
     const box = link.getBoundingClientRect();
     return { x: box.x, y: box.y, width: box.width, height: box.height };
   }));
@@ -1001,7 +1150,7 @@ test("Minimal chronology fits twelve monthly capsules under Linux fallback font 
   const sixth = boxes.at(5);
   const seventh = boxes.at(6);
   if (!first || !sixth || !seventh || boxes.length !== 12) {
-    throw new Error("Expected twelve measured chronology capsules");
+    throw new Error("Expected twelve measured chronology month entries");
   }
   for (const box of boxes.slice(1, 6)) expect(box.y).toBeCloseTo(first.y, 0);
   for (const box of boxes.slice(7)) expect(box.y).toBeCloseTo(seventh.y, 0);
@@ -1018,17 +1167,78 @@ test("Minimal chronology fits twelve monthly capsules under Linux fallback font 
   expect(layout.scrollWidth).toBeLessThanOrEqual(layout.clientWidth);
   expect(layout.scrollHeight).toBeLessThanOrEqual(layout.clientHeight);
 
-  const capsuleStyle = await capsules.first().evaluate((link) => {
+  const monthStyles = await monthLinks.evaluateAll((links) => links.map((link) => {
+    const style = getComputedStyle(link);
+    const countStyle = getComputedStyle(link.querySelector(".archive-timeline__count")!);
+    return {
+      borderWidths: [
+        style.borderBlockStartWidth,
+        style.borderInlineEndWidth,
+        style.borderBlockEndWidth,
+        style.borderInlineStartWidth
+      ],
+      radius: Number.parseFloat(style.borderStartStartRadius),
+      countBorderWidth: countStyle.borderInlineStartWidth
+    };
+  }));
+  for (const style of monthStyles) {
+    expect(style.borderWidths).toEqual(["0px", "0px", "0px", "0px"]);
+    expect(style.radius).toBe(0);
+    expect(style.countBorderWidth).toBe("0px");
+  }
+
+  const separators = await months.locator("li").evaluateAll((items) => items.map((item) => {
+    const style = getComputedStyle(item, "::before");
+    return {
+      borderWidth: style.borderInlineStartWidth,
+      content: style.content
+    };
+  }));
+  for (const [index, separator] of separators.entries()) {
+    const startsRow = index % 6 === 0;
+    expect(separator.borderWidth).toBe(startsRow ? "0px" : "1px");
+    expect(separator.content).toBe(startsRow ? "none" : '""');
+  }
+
+  await monthLinks.nth(1).click();
+  await expect(monthLinks.nth(1)).toHaveAttribute("aria-current", "page");
+  const selectedBackground = await monthLinks.nth(1)
+    .evaluate((link) => getComputedStyle(link).backgroundColor);
+  const unselectedBackground = await monthLinks.nth(2)
+    .evaluate((link) => getComputedStyle(link).backgroundColor);
+  expect(selectedBackground).not.toBe(unselectedBackground);
+
+  const selectedGeometry = (await monthLinks.nth(1).boundingBox())!;
+  await page.emulateMedia({ forcedColors: "active" });
+  const forcedCurrentStyle = await monthLinks.nth(1).evaluate((link) => {
     const style = getComputedStyle(link);
     return {
-      borderWidth: style.borderTopWidth,
-      radius: Number.parseFloat(style.borderTopLeftRadius),
-      height: link.getBoundingClientRect().height
+      outlineStyle: style.outlineStyle,
+      outlineWidth: Number.parseFloat(style.outlineWidth),
+      outlineOffset: Number.parseFloat(style.outlineOffset)
     };
   });
-  expect(capsuleStyle.borderWidth).toBe("1px");
-  expect(capsuleStyle.radius).toBeGreaterThanOrEqual(4);
-  expect(capsuleStyle.radius).toBeLessThan(capsuleStyle.height / 2);
+  const forcedUnselectedStyle = await monthLinks.nth(2).evaluate((link) => {
+    const style = getComputedStyle(link);
+    return {
+      outlineStyle: style.outlineStyle,
+      outlineWidth: Number.parseFloat(style.outlineWidth)
+    };
+  });
+  expect(forcedCurrentStyle.outlineStyle).toBe("solid");
+  expect(forcedCurrentStyle.outlineWidth).toBeGreaterThanOrEqual(2);
+  expect(forcedCurrentStyle.outlineOffset).toBeLessThanOrEqual(-2);
+  expect(forcedUnselectedStyle.outlineStyle).toBe("none");
+  expect(forcedUnselectedStyle.outlineWidth).toBe(0);
+
+  const forcedGeometry = (await monthLinks.nth(1).boundingBox())!;
+  expect(forcedGeometry.x).toBeCloseTo(selectedGeometry.x, 0);
+  expect(forcedGeometry.y).toBeCloseTo(selectedGeometry.y, 0);
+  expect(forcedGeometry.width).toBeCloseTo(selectedGeometry.width, 0);
+  expect(forcedGeometry.height).toBeCloseTo(selectedGeometry.height, 0);
+  expect(await months.evaluate((list) => list.scrollWidth)).toBeLessThanOrEqual(
+    await months.evaluate((list) => list.clientWidth)
+  );
 });
 
 test("Minimal navigation and Blog filters keep primary labels legible in every color mode", async ({ page }, testInfo) => {

@@ -59,12 +59,7 @@
   }
 
   .minimal-home-modules {
-    grid-column: 1 / -1;
     min-inline-size: 0;
-  }
-
-  .minimal-home-modules > .minimal-recent:first-child {
-    margin-block-start: 0;
   }
 
   .minimal-reading-column,

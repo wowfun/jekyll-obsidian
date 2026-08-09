@@ -6,22 +6,37 @@ const mermaidOutput = vi.hoisted(() => ({
 }));
 const mermaid = vi.hoisted(() => ({
   initialize: vi.fn(),
-  render: vi.fn(async () => ({ svg: mermaidOutput.svg }))
+  render: vi.fn(async (_id?: string, _code?: string) => ({ svg: mermaidOutput.svg }))
 }));
 
 vi.mock("mermaid", () => ({ default: mermaid }));
 
 import { renderMermaid } from "../../src/frontend/mermaid";
+import { initialiseDialogs } from "../../src/frontend/dialogs";
 
 describe("localized Mermaid diagrams", () => {
   beforeEach(() => {
     document.body.innerHTML = `
-      <div class="note-content" data-copy-diagram-label="复制图表源码">
+      <div class="note-content" data-copy-diagram-label="复制图表源码" data-expand-diagram-label="放大图表">
         <pre data-website-mermaid data-diagram-label="图表"><code class="language-mermaid">graph TD; A--&gt;B</code></pre>
-      </div>`;
+      </div>
+      <dialog data-dialog="mermaid" data-mermaid-zoom-level="缩放：{percent}%">
+        <button data-dialog-close>关闭</button>
+        <button data-mermaid-zoom-out>缩小</button>
+        <button data-mermaid-zoom-reset>复位</button>
+        <button data-mermaid-zoom-in>放大</button>
+        <output data-mermaid-zoom-status aria-live="polite"></output>
+        <div data-mermaid-dialog-viewport><div data-mermaid-dialog-canvas></div></div>
+      </dialog>`;
+    HTMLDialogElement.prototype.showModal = function showModal() { this.open = true; };
+    HTMLDialogElement.prototype.close = function close() {
+      this.open = false;
+      this.dispatchEvent(new Event("close"));
+    };
     mermaidOutput.svg = '<svg xmlns="http://www.w3.org/2000/svg"></svg>';
     mermaid.initialize.mockClear();
     mermaid.render.mockClear();
+    mermaid.render.mockImplementation(async () => ({ svg: mermaidOutput.svg }));
   });
 
   it("accepts Mermaid SVG HTML containing a foreignObject line break", async () => {
@@ -36,6 +51,75 @@ describe("localized Mermaid diagrams", () => {
 
     expect(document.querySelector("pre[data-mermaid-error]")).toBeNull();
     expect(document.querySelectorAll(".mermaid-diagram > svg foreignObject br")).toHaveLength(1);
+  });
+
+  it("opens an accessible clone of the current diagram without rendering Mermaid again", async () => {
+    initialiseDialogs();
+    await renderMermaid();
+
+    const figure = document.querySelector<HTMLElement>(".mermaid-diagram")!;
+    const sourceSvg = figure.querySelector<SVGSVGElement>(":scope > svg")!;
+    const expand = figure.querySelector<HTMLButtonElement>("button[data-mermaid-expand]")!;
+    expect(expand.getAttribute("aria-label")).toBe("放大图表");
+
+    expand.click();
+
+    const dialog = document.querySelector<HTMLDialogElement>('dialog[data-dialog="mermaid"]')!;
+    const enlarged = dialog.querySelector<SVGSVGElement>("[data-mermaid-dialog-canvas] > svg")!;
+    expect(dialog.open).toBe(true);
+    expect(enlarged).not.toBe(sourceSvg);
+    expect(enlarged.outerHTML).toBe(sourceSvg.outerHTML);
+    expect(mermaid.render).toHaveBeenCalledOnce();
+  });
+
+  it("bounds zoom controls and reports the current magnification", async () => {
+    initialiseDialogs();
+    await renderMermaid();
+    document.querySelector<HTMLButtonElement>("button[data-mermaid-expand]")!.click();
+
+    const dialog = document.querySelector<HTMLDialogElement>('dialog[data-dialog="mermaid"]')!;
+    const canvas = dialog.querySelector<HTMLElement>("[data-mermaid-dialog-canvas]")!;
+    const status = dialog.querySelector<HTMLOutputElement>("[data-mermaid-zoom-status]")!;
+    const zoomIn = dialog.querySelector<HTMLButtonElement>("[data-mermaid-zoom-in]")!;
+    const zoomOut = dialog.querySelector<HTMLButtonElement>("[data-mermaid-zoom-out]")!;
+    const reset = dialog.querySelector<HTMLButtonElement>("[data-mermaid-zoom-reset]")!;
+
+    for (let index = 0; index < 20; index += 1) zoomIn.click();
+    expect(canvas.dataset.mermaidZoom).toBe("3");
+    expect(status.textContent).toBe("缩放：300%");
+    expect(zoomIn.disabled).toBe(true);
+
+    for (let index = 0; index < 20; index += 1) zoomOut.click();
+    expect(canvas.dataset.mermaidZoom).toBe("0.5");
+    expect(status.textContent).toBe("缩放：50%");
+    expect(zoomOut.disabled).toBe(true);
+
+    reset.click();
+    expect(canvas.dataset.mermaidZoom).toBe("1");
+    expect(status.textContent).toBe("缩放：100%");
+    expect(zoomIn.disabled).toBe(false);
+    expect(zoomOut.disabled).toBe(false);
+  });
+
+  it("opens from the diagram, ignores source-copy clicks, and restores focus to expansion", async () => {
+    initialiseDialogs();
+    await renderMermaid();
+
+    const figure = document.querySelector<HTMLElement>(".mermaid-diagram")!;
+    const dialog = document.querySelector<HTMLDialogElement>('dialog[data-dialog="mermaid"]')!;
+    const expand = figure.querySelector<HTMLButtonElement>("button[data-mermaid-expand]")!;
+    figure.querySelector<HTMLButtonElement>("button[data-copy-source]")!.click();
+    expect(dialog.open).toBe(false);
+
+    figure.querySelector<SVGSVGElement>(":scope > svg")!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    expect(dialog.open).toBe(true);
+    dialog.close();
+    expect(document.activeElement).toBe(expand);
+
+    expand.click();
+    expect(dialog.open).toBe(true);
+    dialog.close();
+    expect(document.activeElement).toBe(expand);
   });
 
   it("waits for document fonts before Mermaid measures diagram labels", async () => {
@@ -108,5 +192,40 @@ describe("localized Mermaid diagrams", () => {
     expect(document.querySelectorAll(".mermaid-diagram button[data-copy-source]")).toHaveLength(1);
     expect(document.querySelector<HTMLTemplateElement>(".mermaid-diagram template[data-website-copy-source]")
       ?.content.textContent).toBe("graph TD; A-->B");
+  });
+
+  it("closes an enlarged diagram during color redraw and focuses its replacement", async () => {
+    document.querySelector(".note-content")?.insertAdjacentHTML(
+      "beforeend",
+      '<pre data-website-mermaid data-diagram-label="第二张图"><code class="language-mermaid">graph TD; B--&gt;C</code></pre>'
+    );
+    mermaid.render.mockImplementation(async (id?: string) => ({
+      svg: `<svg xmlns="http://www.w3.org/2000/svg" id="${id}"><defs><clipPath id="${id}-clip" /></defs><g clip-path="url(#${id}-clip)" /></svg>`
+    }));
+    initialiseDialogs();
+    await renderMermaid();
+
+    const originalExpand = document.querySelectorAll<HTMLButtonElement>("[data-mermaid-expand]")[1]!;
+    originalExpand.click();
+    const dialog = document.querySelector<HTMLDialogElement>('dialog[data-dialog="mermaid"]')!;
+    expect(dialog.open).toBe(true);
+    expect(dialog.querySelectorAll("[data-mermaid-dialog-canvas] > svg")).toHaveLength(1);
+
+    document.dispatchEvent(new CustomEvent(COLOR_SCHEME_EVENT, { detail: { scheme: "dark" } }));
+
+    expect(dialog.open).toBe(false);
+    expect(dialog.querySelectorAll("[data-mermaid-dialog-canvas] > svg")).toHaveLength(0);
+    await vi.waitFor(() => expect(mermaid.render).toHaveBeenCalledTimes(4));
+    const replacementExpand = document.querySelectorAll<HTMLButtonElement>("[data-mermaid-expand]")[1]!;
+    expect(replacementExpand).not.toBe(originalExpand);
+    expect(document.activeElement).toBe(replacementExpand);
+    expect(dialog.open).toBe(false);
+    expect(dialog.querySelectorAll("[data-mermaid-dialog-canvas] > svg")).toHaveLength(0);
+
+    const ids = Array.from(
+      document.querySelectorAll<SVGElement>("svg[id], svg [id]"),
+      (element) => element.id
+    );
+    expect(new Set(ids).size).toBe(ids.length);
   });
 });

@@ -48,6 +48,12 @@ messages:
   copy_page_description: 以 Markdown 复制页面，供 LLM 使用
   copy_code: 复制代码
   copy_diagram_source: 复制图表源码
+  expand_diagram: 放大图表
+  close_diagram: 关闭图表
+  zoom_in: 放大
+  zoom_out: 缩小
+  reset_zoom: 复位缩放
+  zoom_level: "缩放：{percent}%"
   copy_formula_source: 复制公式源码
   copy_code_failed: 复制失败
   view_as_markdown: 以 Markdown 查看
