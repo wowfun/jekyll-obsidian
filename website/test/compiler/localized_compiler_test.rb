@@ -278,6 +278,31 @@ class LocalizedCompilerTest < Minitest::Test
     assert_includes sitemap, "https://example.test/manual/zh-CN/docs/Start/"
   end
 
+  def test_minimal_blog_topics_keep_the_localized_baseurl_filter_route
+    result = compile(
+      note(
+        "blog/post.md",
+        "---\npublish: true\ncontent_type: post\ndate: 2026-08-01\ntags: [release]\ncategories: [Architecture]\n---\n# Post"
+      ),
+      *manifests,
+      note(
+        "_translations/zh-CN/blog/post.md",
+        "---\npublish: true\ntitle: 文章\ncategories: [架构]\n---\n# 文章"
+      ),
+      theme: "minimal",
+      i18n: I18N.merge("enabled" => true),
+      baseurl: "/manual"
+    )
+
+    assert result.success?, result.diagnostics.map(&:message).join("\n")
+    translated = page(result, "/zh-CN/blog/post/").data.fetch("website")
+    assert_equal "/manual/zh-CN/blog/", translated.dig("routes", "blog")
+    assert_equal ["release", "架构"], translated.fetch("topic_links").map { |topic| topic.fetch("name") }
+    assert_equal ["release", "架构"], page(result, "/zh-CN/blog/").data.dig(
+      "website", "theme_data", "archive_groups", 0, "posts", 0, "topics"
+    ).map { |topic| topic.fetch("name") }
+  end
+
   def test_locale_manifests_are_closed_and_i18n_defaults_are_theme_specific
     unknown_message = manifests("  invented: nope\n")
     result = compile(*default_notes, *unknown_message, theme: "docs", i18n: I18N)
@@ -370,6 +395,112 @@ class LocalizedCompilerTest < Minitest::Test
 
     refute result.success?
     assert result.diagnostics.any? { |item| item.code == "invalid_translation_path" }
+  end
+
+  def test_translations_inherit_and_can_override_custom_property_links_and_related
+    result = compile(
+      note("index.md", <<~MARKDOWN),
+        ---
+        publish: true
+        project: "[[docs/Target]]"
+        related:
+          - "[[docs/Target]]"
+        ---
+        # Home
+      MARKDOWN
+      note("docs/Target.md", "---\npublish: true\ncontent_type: doc\n---\n# Target"),
+      note("docs/Other.md", "---\npublish: true\ncontent_type: doc\n---\n# Other"),
+      locale_manifest("_locale.yml", "name: English\n"),
+      locale_manifest("_translations/zh-CN/_locale.yml", "name: 简体中文\n"),
+      note("_translations/zh-CN/index.md", <<~MARKDOWN),
+        ---
+        title: 首页
+        project: "[[docs/Other]]"
+        related:
+          - "[[docs/Other|另读]]"
+        ---
+        # 首页
+      MARKDOWN
+      note("_translations/zh-CN/docs/Other.md", "---\ntitle: 其他\n---\n# 其他"),
+      theme: "docs",
+      i18n: I18N
+    )
+
+    assert result.success?, result.diagnostics.map(&:message).join("\n")
+    assert_equal ["docs/Target.md"], page(result, "/").data.dig("website", "related_articles").map { |item| item.fetch("id") }
+    translated_related = page(result, "/zh-CN/").data.dig("website", "related_articles")
+    assert_equal [{ "id" => "docs/Other.md", "title" => "另读", "url" => "/zh-CN/docs/Other/" }],
+      translated_related.map { |item| item.slice("id", "title", "url") }
+    assert_equal %w[index.md index.md],
+      result.relations.select { |relation| relation.target_id == "docs/Target.md" }.map(&:source_id)
+    assert_equal ["zh-CN:index.md", "zh-CN:index.md"],
+      result.relations.select { |relation| relation.target_id == "zh-CN:docs/Other.md" }.map(&:source_id)
+  end
+
+  def test_translated_property_link_diagnostics_point_to_the_physical_translation
+    result = compile(
+      note("index.md", "---\npublish: true\n---\n# Home"),
+      locale_manifest("_locale.yml", "name: English\n"),
+      locale_manifest("_translations/zh-CN/_locale.yml", "name: 简体中文\n"),
+      note("_translations/zh-CN/index.md", <<~MARKDOWN),
+        ---
+        title: 首页
+        project: "[[docs/missing-custom]]"
+        related:
+          - "[[docs/missing-related]]"
+        ---
+        # 首页
+      MARKDOWN
+      theme: "docs",
+      i18n: I18N
+    )
+
+    refute result.success?
+    custom = result.diagnostics.find { |item| item.code == "unresolved_property_link" }
+    related = result.diagnostics.find { |item| item.code == "unresolved_related" }
+    refute_nil custom
+    refute_nil related
+    assert_equal "_translations/zh-CN/index.md", custom.path
+    assert_equal 3, custom.span.start_line
+    assert_equal "_translations/zh-CN/index.md", related.path
+    assert_equal 5, related.span.start_line
+  end
+
+  def test_translated_body_diagnostics_do_not_collide_with_inherited_property_links
+    result = compile(
+      note("index.md", <<~MARKDOWN),
+        ---
+        publish: true
+        project: "[[dup]]"
+        ---
+        # Home
+      MARKDOWN
+      note("a/dup.md", "---\npublish: true\n---\n# First duplicate"),
+      note("b/dup.md", "---\npublish: true\n---\n# Second duplicate"),
+      locale_manifest("_locale.yml", "name: English\n"),
+      locale_manifest("_translations/zh-CN/_locale.yml", "name: 简体中文\n"),
+      note("_translations/zh-CN/index.md", <<~MARKDOWN),
+        ---
+        title: 首页
+        ---
+        # 首页
+
+        xxxxxxxxx[[dup|xx]]
+      MARKDOWN
+      theme: "docs",
+      i18n: I18N,
+      environment: "development"
+    )
+
+    assert result.success?, result.diagnostics.map(&:message).join("\n")
+    ambiguous = result.diagnostics.select { |item| item.code == "ambiguous_target" }
+    assert_equal 3, ambiguous.length
+    assert_equal 2, ambiguous.count { |item| item.path == "index.md" && item.property == "project" }
+    translated_body = ambiguous.find do |item|
+      item.path == "_translations/zh-CN/index.md" && item.property.nil?
+    end
+    refute_nil translated_body
+    assert_equal 3, translated_body.span.start_line
   end
 
   def test_locale_routes_are_checked_against_default_routes

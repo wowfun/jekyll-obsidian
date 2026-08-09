@@ -91,6 +91,7 @@ module JekyllObsidian
           "tags" => Array(properties["tags"]),
           "authors" => note.topics.select { |topic| topic.fetch("kind") == "author" },
           "categories" => Array(properties["categories"]),
+          "topic_links" => blog_topic_links(note, topic_anchors),
           "cssclasses" => Array(properties["cssclasses"]),
           "created" => note.created,
           "updated" => note.updated,
@@ -108,6 +109,7 @@ module JekyllObsidian
             { "name" => tag, "anchor" => anchor } if anchor
           end,
           "outline" => note.outline,
+          "related_articles" => theme_data.fetch("related_articles", note.related || []),
           "links" => config.features.fetch("relations") ? note.links : [],
           "backlinks" => config.features.fetch("relations") ? note.backlinks : [],
           "embedded_by" => config.features.fetch("relations") ? note.embedded_by : []
@@ -275,7 +277,7 @@ module JekyllObsidian
           {
             "year" => year,
             "count" => months.sum { |month| month_counts.fetch(month) },
-            "months" => months.sort.reverse.map do |month|
+            "months" => months.sort.map do |month|
               { "key" => month, "label" => month[5, 2], "count" => month_counts.fetch(month) }
             end
           }
@@ -408,9 +410,57 @@ module JekyllObsidian
 
       def topics_for(note, config)
         topics = note.topics
-        return topics if config.theme == "minimal"
+        if config.theme == "minimal"
+          seen_names = {}
+          return topics.select do |topic|
+            next true unless %w[tag category].include?(topic.fetch("kind"))
+
+            name = topic_name_identity(topic)
+            next false if seen_names[name]
+
+            seen_names[name] = true
+          end
+        end
 
         topics.select { |topic| topic.fetch("kind") == "tag" }
+      end
+
+      def blog_topic_links(note, topic_anchors)
+        note.topics
+          .select { |topic| %w[tag category].include?(topic.fetch("kind")) }
+          .uniq { |topic| topic_name_identity(topic) }
+          .filter_map do |topic|
+            anchor = topic_anchors[topic_identity(topic)]
+            { "name" => topic.fetch("name"), "anchor" => anchor } if anchor
+          end
+      end
+
+      def topic_name_identity(topic)
+        topic.fetch("name").unicode_normalize(:nfc).downcase(:fold)
+      end
+
+      def content_card(note, config)
+        {
+          "id" => note.id,
+          "title" => note.title,
+          "url" => config.url_builder.href(note.route),
+          "published_at" => note.published_at,
+          "summary" => note.properties["description"] || note.preview,
+          "subtitle" => note.properties["subtitle"],
+          "image" => note.image_url,
+          "authors" => note.topics.select { |topic| topic.fetch("kind") == "author" },
+          "tags" => Array(note.properties["tags"])
+        }
+      end
+
+      def related_article_cards(note, model, config)
+        Array(note.related).map do |related|
+          target = model.notes_by_id.fetch(related.fetch("id"))
+          content_card(target, config).merge(
+            "title" => related.fetch("title"),
+            "url" => related.fetch("url")
+          )
+        end
       end
 
       def topic_identity(topic)
@@ -455,7 +505,14 @@ module JekyllObsidian
         timeline = timeline_for(displayed, &:published_at)
         documentation = config.navigation
         portfolio = documentation.portfolio
-        portfolio_projects = portfolio_project_cards(portfolio, model, config)
+        portfolio_notes = portfolio ? portfolio.project_note_ids.map { |id| model.notes_by_id.fetch(id) } : []
+        portfolio_taxonomy = taxonomy_for(portfolio_notes, config)
+        portfolio_projects = portfolio_project_cards(portfolio_notes, config, portfolio_taxonomy)
+        portfolio_theme_data = {
+          "portfolio_projects" => portfolio_projects,
+          "portfolio_topic_summaries" => portfolio_taxonomy.fetch("summaries"),
+          "portfolio_topic_filter_count" => portfolio_projects.length
+        }
         linked_docs = documentation.docs_note_ids.filter_map { |id| model.notes_by_id[id] }
         linked_doc_positions = linked_docs.each_with_index.to_h { |note, index| [note.id, index] }
         post_positions = posts.each_with_index.to_h { |post, index| [post.id, index] }
@@ -468,6 +525,7 @@ module JekyllObsidian
               "archive_groups" => [],
               "docs_tree" => note.content_type == "doc" ? documentation.docs_tree : [],
               "docs_home_url" => documentation.docs_home_url,
+              "related_articles" => related_article_cards(note, model, config),
               "previous" => sequence_card(
                 note,
                 post_index,
@@ -503,7 +561,7 @@ module JekyllObsidian
         theme_data[root.id] = theme_data.fetch(root.id).merge(home_modules) if root
         if portfolio&.index_note_id
           theme_data[portfolio.index_note_id] = theme_data.fetch(portfolio.index_note_id).merge(
-            "portfolio_projects" => portfolio_projects
+            portfolio_theme_data
           )
         end
         authored_root_route = model.notes.any? { |note| note.route == "/" }
@@ -533,7 +591,7 @@ module JekyllObsidian
             navigation_label(config, "portfolio", "Portfolio"),
             "portfolio-index",
             system_theme_data,
-            { "portfolio_projects" => portfolio_projects },
+            portfolio_theme_data,
             home_route: "/",
             home_url: config.url_builder.href("/")
           )
@@ -667,18 +725,30 @@ module JekyllObsidian
           config.site.navigation&.dig(id, "label") || fallback
       end
 
-      def portfolio_project_cards(portfolio, model, config)
-        return [] unless portfolio
-
-        portfolio.project_note_ids.map do |id|
-          note = model.notes_by_id.fetch(id)
-          {
+      def portfolio_project_cards(notes, config, taxonomy)
+        notes.map do |note|
+          topics = portfolio_topics_for(note, config, taxonomy)
+          card = {
             "id" => note.id,
             "title" => note.title,
             "url" => config.url_builder.href(note.route),
             "image" => note.image_url,
-            "summary" => note.properties["description"] || note.preview
+            "summary" => note.properties["description"] || note.preview,
+            "topics" => topics,
+            "topic_anchors" => topics.map { |topic| topic.fetch("anchor") }
           }
+          card["repository_url"] = note.source_links.fetch("repository") if note.source_links["repository"]
+          card
+        end
+      end
+
+      def portfolio_topics_for(note, config, taxonomy)
+        anchors = taxonomy.fetch("anchors")
+        topics_for(note, config).uniq { |topic| topic_identity(topic) }.filter_map do |topic|
+          anchor = anchors[topic_identity(topic)]
+          next unless anchor
+
+          topic.slice("name", "url").merge("anchor" => anchor).compact
         end
       end
 
@@ -689,19 +759,11 @@ module JekyllObsidian
       end
 
       def note_card(note, config, taxonomy)
-        {
-          "id" => note.id,
-          "title" => note.title,
-          "url" => config.url_builder.href(note.route),
-          "published_at" => note.published_at,
-          "summary" => note.properties["description"] || note.preview,
-          "subtitle" => note.properties["subtitle"],
-          "image" => note.image_url,
-          "authors" => note.topics.select { |topic| topic.fetch("kind") == "author" },
-          "tags" => Array(note.properties["tags"]),
+        content_card(note, config).merge(
+          "topics" => blog_topic_links(note, taxonomy.fetch("anchors")),
           "topic_anchors" => topic_anchors_for(note, taxonomy, config),
           "filter_month" => month_key(note.published_at)
-        }
+        )
       end
     end
 
@@ -720,6 +782,7 @@ module JekyllObsidian
             {
               "docs_tree" => navigation.docs_tree,
               "docs_home_url" => docs_home_url,
+              "related_articles" => related_article_cards(note, model, config),
               "previous" => index && index.positive? ? docs_card(linked[index - 1], config) : nil,
               "next" => index && index < linked.length - 1 ? docs_card(linked[index + 1], config) : nil
             }

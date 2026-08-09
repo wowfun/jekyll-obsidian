@@ -1,0 +1,16 @@
+{% for post in include.posts %}
+  <article class="minimal-post-card{% if post.image or post.image_url %} minimal-post-card--with-image{% endif %}">
+    {% if post.image or post.image_url %}<div class="minimal-post-card__media"><img src="{{ post.image | default: post.image_url | escape }}" alt="" loading="lazy" decoding="async"></div>{% endif %}
+    <div class="minimal-post-card__body">
+      <h3><a href="{{ post.url | escape }}">{{ post.title | escape }}</a></h3>
+      {% if post.subtitle %}<p class="minimal-post-card__subtitle">{{ post.subtitle | escape }}</p>{% endif %}
+      {% if post.summary and post.summary != '' %}<p class="minimal-post-card__excerpt">{{ post.summary | escape }}</p>{% endif %}
+      {% if post.authors.size > 0 or post.published_at %}
+        <footer>
+          {% if post.authors.size > 0 %}<span>{{ ui.posted_by | default: 'Posted by' | escape }} {% for author in post.authors %}{% if author.url %}<a href="{{ author.url | escape }}">{{ author.name | escape }}</a>{% else %}{{ author.name | escape }}{% endif %}{% unless forloop.last %}, {% endunless %}{% endfor %}{% if post.published_at %} {{ ui.on | default: 'on' | escape }} {% endif %}</span>{% endif %}
+          {% if post.published_at %}<time datetime="{{ post.published_at | escape }}">{% unless post.authors.size > 0 %}{{ ui.published | default: 'Published' | escape }} {% endunless %}{{ post.published_at | date: "%Y-%m-%d" }}</time>{% endif %}
+        </footer>
+      {% endif %}
+    </div>
+  </article>
+{% endfor %}

@@ -8,7 +8,7 @@ module JekyllObsidian
     XML_INVALID_CHARACTER = OutputText::INVALID_CHARACTER
     SUPPORTED = %w[
       publish title subtitle aliases tags author categories description permalink image cssclasses created updated
-      content_type date pinned nav_order nav_exclude navigation comments github_markdown
+      content_type date pinned nav_order nav_exclude navigation comments github_markdown related
     ].freeze
     ARRAY_PROPERTIES = %w[aliases tags author categories cssclasses].freeze
     LINK_ARRAY_PROPERTIES = %w[author categories].freeze
@@ -16,7 +16,7 @@ module JekyllObsidian
     CONTENT_TYPES = %w[post doc page].freeze
     NAVIGATION_KEYS = %w[label order visible].freeze
 
-    Result = Struct.new(:properties, :body, :diagnostics, keyword_init: true)
+    Result = Struct.new(:properties, :property_links, :body, :diagnostics, keyword_init: true)
 
     def self.parse(path, bytes)
       new(path, bytes).parse
@@ -47,23 +47,23 @@ module JekyllObsidian
     def parse
       unless @bytes.valid_encoding?
         error("invalid_utf8", "note must be valid UTF-8")
-        return result({}, "")
+        return result({}, [], "")
       end
 
       raw, body = split
-      return result({}, body) unless raw
+      return result({}, [], body) unless raw
 
       parsed = Psych.safe_load(raw, permitted_classes: [Date, Time], aliases: false) || {}
       unless parsed.is_a?(Hash) && parsed.keys.all? { |key| key.is_a?(String) }
         error("invalid_frontmatter", "frontmatter must be a YAML mapping with string keys")
-        return result({}, body)
+        return result({}, [], body)
       end
 
-      properties = validate(parsed, raw)
-      result(properties, body)
+      properties, property_links = validate(parsed, raw)
+      result(properties, property_links, body)
     rescue Psych::Exception => exception
       error("invalid_frontmatter", "invalid YAML frontmatter: #{exception.problem || exception.message}")
-      result({}, body || "")
+      result({}, [], body || "")
     end
 
     private
@@ -83,9 +83,29 @@ module JekyllObsidian
 
     def validate(parsed, raw)
       unquoted_wiki_links = unquoted_wiki_link_properties(raw)
+      property_nodes, property_key_nodes = frontmatter_nodes(raw)
       properties = {}
+      property_links = []
       parsed.each do |key, value|
-        next unless SUPPORTED.include?(key)
+        unless SUPPORTED.include?(key)
+          unless valid_custom_property_name?(key)
+            error(
+              "invalid_property",
+              "custom property names must be non-empty NFC text without leading, trailing, or control characters",
+              span: frontmatter_source_span(property_key_nodes[key])
+            )
+            next
+          end
+
+          valid, normalized = normalize_custom_property(key, value, property_nodes[key])
+          next unless valid
+
+          properties[key] = normalized
+          unless key == "alias"
+            property_links.concat(custom_property_links(key, normalized, property_nodes[key]))
+          end
+          next
+        end
 
         case key
         when "publish", "comments", "pinned"
@@ -112,6 +132,12 @@ module JekyllObsidian
             end
           else
             error("invalid_property", "#{key} must be an array of strings")
+          end
+        when "related"
+          normalized, links = validate_related(value, property_nodes[key])
+          if normalized
+            properties[key] = normalized
+            property_links.concat(links)
           end
         when *STRING_PROPERTIES
           if self.class.valid_output_text?(value)
@@ -156,7 +182,161 @@ module JekyllObsidian
           end
         end
       end
-      properties
+      [properties, property_links]
+    end
+
+    def valid_custom_property_name?(value)
+      self.class.valid_output_text?(value) &&
+        !value.empty? &&
+        !value.match?(/\A\p{Space}|\p{Space}\z/u) &&
+        value == value.unicode_normalize(:nfc) &&
+        !value.match?(/[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/u)
+    rescue EncodingError
+      false
+    end
+
+    def normalize_custom_property(key, value, property_node)
+      if value.is_a?(Array)
+        if value.all? { |item| custom_scalar?(item) }
+          return [true, value.map { |item| normalize_custom_scalar(item) }]
+        end
+      elsif custom_scalar?(value)
+        return [true, normalize_custom_scalar(value)]
+      end
+
+      if unquoted_wiki_link_node?(property_node)
+        error("invalid_property", "#{key} wiki links must use double-quoted YAML strings")
+      else
+        error("invalid_property", "#{key} must be a scalar or a flat array of scalars")
+      end
+      [false, nil]
+    end
+
+    def validate_related(value, property_node)
+      unless value.is_a?(Array)
+        error("invalid_property", "related must be an array of double-quoted wiki links")
+        return [nil, []]
+      end
+
+      nodes = property_node.is_a?(Psych::Nodes::Sequence) ? property_node.children : []
+      links = []
+      invalid = false
+      value.each_with_index do |item, index|
+        if item.is_a?(String) && !self.class.valid_output_text?(item)
+          error("invalid_property", "related entries must contain only output-safe Unicode characters")
+          invalid = true
+          next
+        end
+
+        parsed = self.class.parse_wiki_link(item)
+        node = nodes[index]
+        unless parsed
+          message = if unquoted_wiki_link_node?(node)
+            "related wiki links must use double-quoted YAML strings"
+          else
+            "related entries must use [[target]] or [[target|label]] syntax"
+          end
+          error("invalid_property", message)
+          invalid = true
+          next
+        end
+        unless node.is_a?(Psych::Nodes::Scalar) && node.style == Psych::Nodes::Scalar::DOUBLE_QUOTED
+          error("invalid_property", "related wiki links must use double-quoted YAML strings")
+          invalid = true
+          next
+        end
+
+        target, display = parsed
+        links << FrontMatterLink.new(
+          property: "related",
+          index: index,
+          target: target,
+          display: display,
+          source_span: frontmatter_source_span(node)
+        )
+      end
+      invalid ? [nil, []] : [value.dup, links]
+    end
+
+    def unquoted_wiki_link_node?(node)
+      return false unless node.is_a?(Psych::Nodes::Sequence)
+
+      node.children.any? do |child|
+        child.is_a?(Psych::Nodes::Sequence) &&
+          (child.children.all? { |nested| nested.is_a?(Psych::Nodes::Scalar) } || unquoted_wiki_link_node?(child))
+      end
+    end
+
+    def custom_scalar?(value)
+      return true if value.nil? || value == true || value == false || value.is_a?(Integer)
+      return value.finite? if value.is_a?(Float)
+      return true if value.is_a?(Date) || value.is_a?(DateTime) || value.is_a?(Time)
+
+      self.class.valid_output_text?(value)
+    end
+
+    def normalize_custom_scalar(value)
+      return normalize_time(value) if value.is_a?(Date) || value.is_a?(DateTime) || value.is_a?(Time)
+
+      value
+    end
+
+    def custom_property_links(property, value, property_node)
+      values = value.is_a?(Array) ? value : [value]
+      nodes = if property_node.is_a?(Psych::Nodes::Sequence)
+        property_node.children
+      else
+        [property_node]
+      end
+
+      values.each_with_index.filter_map do |item, index|
+        next unless item.is_a?(String)
+
+        parsed = self.class.parse_wiki_link(item)
+        if parsed
+          node = nodes[index]
+          unless node.is_a?(Psych::Nodes::Scalar) && node.style == Psych::Nodes::Scalar::DOUBLE_QUOTED
+            error("invalid_property", "#{property} wiki links must use double-quoted YAML strings")
+            next
+          end
+
+          target, display = parsed
+          FrontMatterLink.new(
+            property: property,
+            index: index,
+            target: target,
+            display: display,
+            source_span: frontmatter_source_span(node)
+          )
+        elsif item.start_with?("[[")
+          error("invalid_property", "#{property} wiki links must use [[target]] or [[target|label]] syntax")
+          nil
+        end
+      end
+    end
+
+    def frontmatter_nodes(raw)
+      mapping = Psych.parse(raw)&.root
+      return [{}, {}] unless mapping.is_a?(Psych::Nodes::Mapping)
+
+      property_nodes = {}
+      property_key_nodes = {}
+      mapping.children.each_slice(2) do |key_node, value_node|
+        next unless key_node.is_a?(Psych::Nodes::Scalar)
+
+        property_nodes[key_node.value] = value_node
+        property_key_nodes[key_node.value] = key_node
+      end
+      [property_nodes, property_key_nodes]
+    end
+
+    def frontmatter_source_span(node)
+      SourceSpan.new(
+        start_line: node.start_line + 2,
+        start_column: node.start_column + 1,
+        end_line: node.end_line + 2,
+        end_column: node.end_column + 1
+      )
     end
 
     def validate_navigation(value)
@@ -231,12 +411,12 @@ module JekyllObsidian
       nil
     end
 
-    def error(code, message)
-      @diagnostics << Diagnostic.new(severity: :error, code: code, message: message, path: @path, span: nil)
+    def error(code, message, span: nil)
+      @diagnostics << Diagnostic.new(severity: :error, code: code, message: message, path: @path, span: span)
     end
 
-    def result(properties, body)
-      Result.new(properties: properties, body: body, diagnostics: @diagnostics)
+    def result(properties, property_links, body)
+      Result.new(properties: properties, property_links: property_links, body: body, diagnostics: @diagnostics)
     end
   end
 end

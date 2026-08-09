@@ -89,7 +89,7 @@ tags:
 ---
 ```
 
-A translation can replace the body and the translatable properties `title`, `subtitle`, `description`, `tags`, `author`, `categories`, `image`, and `cssclasses`. When the default page opts into top-level navigation, its translation may also replace `navigation.label`. It inherits omitted values from the default note. Set the YAML boolean `publish: false` on a translation to disable only that translation and serve the default-language fallback at its localized URL.
+A translation can replace the body and the translatable properties `title`, `subtitle`, `description`, `tags`, `author`, `categories`, `image`, `cssclasses`, and `related`. Custom properties are also inherited when omitted and replaced by property name when present. When the default page opts into top-level navigation, its translation may also replace `navigation.label`. Set the YAML boolean `publish: false` on a translation to disable only that translation and serve the default-language fallback at its localized URL. Property wiki links resolve inside the active locale, including a locale-prefixed fallback URL when the target has no physical translation.
 
 A translated Portfolio wrapper may select its own `github_markdown` file or provide a local body. The remote property does not carry into a physical translation that supplies its own content. When the translated wrapper is absent, the ordinary fallback page uses the default-language project and its imported body. See [[Portfolio#Import a GitHub Markdown file|Portfolio]] for the source contract.
 

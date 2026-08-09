@@ -1,26 +1,34 @@
 {% assign projects = include.projects | default: page.website.theme_data.portfolio_projects %}
 {% if projects.size > 0 %}
   {% assign ui = page.website.i18n.messages %}
-  <section class="minimal-portfolio{% if include.index %} minimal-portfolio--index{% endif %}" aria-labelledby="portfolio-projects-heading">
+  {% assign topic_summaries = page.website.theme_data.portfolio_topic_summaries %}
+  <section class="minimal-portfolio{% if include.index %} minimal-portfolio--index{% endif %}" aria-labelledby="portfolio-projects-heading"{% if topic_summaries.size > 0 %} data-filter-page{% endif %}>
     {% if include.index %}
       <h1 class="minimal-portfolio__heading" id="portfolio-projects-heading">{{ ui.projects | default: 'Projects' | escape }}</h1>
     {% else %}
       <h2 class="minimal-portfolio__heading" id="portfolio-projects-heading">{{ ui.projects | default: 'Projects' | escape }}</h2>
     {% endif %}
+    {% include website/tag-filter.html summaries=topic_summaries total=page.website.theme_data.portfolio_topic_filter_count url=page.website.routes.portfolio %}
     <ul class="minimal-portfolio__grid">
       {% for project in projects %}
-        <li>
-          <a class="minimal-portfolio-card" href="{{ project.url | escape }}">
+        <li data-filter-item data-topic-anchors="{{ project.topic_anchors | join: ' ' | escape }}">
+          <article class="minimal-portfolio-card{% if project.image %} minimal-portfolio-card--with-image{% endif %}{% if project.repository_url %} minimal-portfolio-card--with-repository{% endif %}">
             {% if project.image %}<span class="minimal-portfolio-card__media"><img src="{{ project.image | escape }}" alt="" loading="lazy" decoding="async"></span>{% endif %}
             <div class="minimal-portfolio-card__body">
               {% if include.index %}
-                <h2 class="minimal-portfolio-card__title">{{ project.title | escape }}</h2>
+                <h2 class="minimal-portfolio-card__title"><a class="minimal-portfolio-card__main" href="{{ project.url | escape }}">{{ project.title | escape }}</a></h2>
               {% else %}
-                <h3 class="minimal-portfolio-card__title">{{ project.title | escape }}</h3>
+                <h3 class="minimal-portfolio-card__title"><a class="minimal-portfolio-card__main" href="{{ project.url | escape }}">{{ project.title | escape }}</a></h3>
               {% endif %}
               {% if project.summary %}<p class="minimal-portfolio-card__summary">{{ project.summary | escape }}</p>{% endif %}
+              {% if project.topics.size > 0 %}<ul class="minimal-portfolio-card__topics" aria-label="{{ ui.topics | default: 'Topics' | escape }}">{% for topic in project.topics %}<li>{{ topic.name | escape }}</li>{% endfor %}</ul>{% endif %}
             </div>
-          </a>
+            {% if project.repository_url %}
+              {% assign repository_label_template = ui.open_project_on_github | default: 'Open {title} on GitHub' %}
+              {% assign repository_label = repository_label_template | replace: '{title}', project.title %}
+              <a class="minimal-portfolio-card__repository" href="{{ project.repository_url | escape }}" aria-label="{{ repository_label | escape }}" title="{{ repository_label | escape }}">{% include website/github-icon.html %}</a>
+            {% endif %}
+          </article>
         </li>
       {% endfor %}
     </ul>

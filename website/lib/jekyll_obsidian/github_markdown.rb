@@ -636,7 +636,11 @@ module JekyllObsidian
 
     def source_url(repository, commit, path)
       encoded_path = path.split("/").map { |part| URI.encode_uri_component(part) }.join("/")
-      "https://github.com/#{repository}/blob/#{commit}/#{encoded_path}"
+      "#{repository_url(repository)}/blob/#{commit}/#{encoded_path}"
+    end
+
+    def repository_url(repository)
+      "https://github.com/#{normalize_repository(repository)}"
     end
 
     def normalize_markdown(raw, reference)

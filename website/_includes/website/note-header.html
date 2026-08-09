@@ -13,10 +13,16 @@
     {% if page.website.kind == 'note' %}
       <div class="note-meta">
         {% if page.website.content_type == 'post' and page.website.published_at %}<time datetime="{{ page.website.published_at | escape }}">{{ ui.published | default: 'Published' | escape }} {{ page.website.published_at | date: "%Y-%m-%d" }}</time>{% endif %}
+        {% if page.website.theme == 'minimal' and page.website.content_type == 'post' and page.website.features.tags and page.website.topic_links.size > 0 %}
+          {% assign blog_url = page.website.routes.blog %}{% unless blog_url %}{% assign blog_url = '/blog/' | relative_url %}{% endunless %}
+          <span class="note-meta__topics" aria-label="{{ ui.topics | default: 'Topics' | escape }}">{% for topic in page.website.topic_links %}<a class="tag-chip" href="{{ blog_url | escape }}?topic={{ topic.anchor | url_encode }}">{{ topic.name | escape }}</a>{% endfor %}</span>
+        {% endif %}
         {% if page.website.updated %}<time datetime="{{ page.website.updated | escape }}">{{ ui.updated | default: 'Updated' | escape }} {{ page.website.updated | date: "%Y-%m-%d" }}</time>{% endif %}
         {% if page.website.features.tags %}
-          {% if page.website.theme == 'minimal' %}{% assign tags_url = page.website.routes.blog %}{% unless tags_url %}{% assign tags_url = '/blog/' | relative_url %}{% endunless %}{% else %}{% assign tags_url = page.website.routes.tags %}{% unless tags_url %}{% assign tags_url = '/tags/' | relative_url %}{% endunless %}{% endif %}
-          {% for tag in page.website.tag_links %}<a class="tag-chip" href="{{ tags_url | escape }}{% if page.website.theme == 'docs' %}#{{ tag.anchor | escape }}{% else %}?topic={{ tag.anchor | url_encode }}{% endif %}">{{ tag.name | escape }}</a>{% endfor %}
+          {% unless page.website.theme == 'minimal' and page.website.content_type == 'post' %}
+            {% if page.website.theme == 'minimal' %}{% assign tags_url = page.website.routes.blog %}{% unless tags_url %}{% assign tags_url = '/blog/' | relative_url %}{% endunless %}{% else %}{% assign tags_url = page.website.routes.tags %}{% unless tags_url %}{% assign tags_url = '/tags/' | relative_url %}{% endunless %}{% endif %}
+            {% for tag in page.website.tag_links %}<a class="tag-chip" href="{{ tags_url | escape }}{% if page.website.theme == 'docs' %}#{{ tag.anchor | escape }}{% else %}?topic={{ tag.anchor | url_encode }}{% endif %}">{{ tag.name | escape }}</a>{% endfor %}
+          {% endunless %}
         {% endif %}
       </div>
     {% endif %}

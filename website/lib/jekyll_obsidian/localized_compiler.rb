@@ -13,13 +13,15 @@ module JekyllObsidian
   class LocalizedCompiler
     TRANSLATIONS_ROOT = "_translations"
     LOCALE_MANIFEST = "_locale.yml"
-    TRANSLATABLE_PROPERTIES = %w[title subtitle description tags author categories image cssclasses github_markdown].freeze
+    TRANSLATABLE_PROPERTIES = %w[
+      title subtitle description tags author categories image cssclasses github_markdown related
+    ].freeze
     STRUCTURAL_PROPERTIES = (FrontMatter::SUPPORTED - TRANSLATABLE_PROPERTIES - %w[publish navigation]).freeze
     URL_PROPERTIES = %w[
       absolute_url canonical_url discussion_url docs_home_url
       home_url href image markdown_url redirect_url route url
     ].freeze
-    SOURCE_LINK_PROPERTIES = %w[edit history imported issue source].freeze
+    SOURCE_LINK_PROPERTIES = %w[edit history imported issue repository source].freeze
     LOCALE_PATTERN = /\A[A-Za-z]{2,8}(?:-[A-Za-z0-9]{1,8})*\z/
     RESERVED_LOCALE_PREFIXES = %w[assets].freeze
     MESSAGE_DEFAULTS = {
@@ -62,6 +64,7 @@ module JekyllObsidian
       "history" => "History",
       "view_source" => "View source",
       "view_imported_markdown" => "View imported Markdown",
+      "open_project_on_github" => "Open {title} on GitHub",
       "report_issue" => "Report issue",
       "contribute" => "Contribute to this page",
       "copy_page" => "Copy page",
@@ -105,6 +108,7 @@ module JekyllObsidian
       "portfolio" => "Portfolio",
       "projects" => "Projects",
       "recent_posts" => "Recent posts",
+      "related_articles" => "Related articles",
       "view_all" => "View all",
       "more" => "More",
       "interactive_graph" => "Interactive graph",
@@ -163,6 +167,7 @@ module JekyllObsidian
       @locale_data = {}
       @actual_by_locale = {}
       @physical_sources = {}
+      @diagnostic_origins = {}
       @default_locale = @config.lang.to_s
       @validated_navigation_locales = Set.new
       @content_policy = ContentPolicy.resolve(nil).policy
@@ -183,7 +188,7 @@ module JekyllObsidian
       results = @locales.to_h do |locale|
         config = BuildConfig.new(**@config.to_h.merge(i18n: nil))
         result = VaultCompiler.compile_single(BuildRequest.new(snapshot: snapshots.fetch(locale), config: config))
-        @diagnostics.concat(result.diagnostics)
+        @diagnostics.concat(localized_diagnostics(result.diagnostics, locale))
         [locale, result]
       end
       return failure if results.values.any? { |result| !result.success? }
@@ -361,6 +366,15 @@ module JekyllObsidian
             entry.path
           )
           bytes = "#{Psych.dump(merged)}---\n#{translated_parse.body}"
+          register_property_link_origins(
+            locale,
+            logical_path,
+            bytes,
+            default_entry.path,
+            default_parse,
+            entry.path,
+            translated_parse
+          )
           translated[logical_path] = SnapshotEntry.new(**entry.to_h.merge(
             path: logical_path,
             bytes: bytes,
@@ -377,6 +391,57 @@ module JekyllObsidian
         snapshots[locale] = Snapshot.new(entries: overlaid)
       end
       snapshots
+    end
+
+    def register_property_link_origins(
+      locale,
+      logical_path,
+      synthetic_bytes,
+      default_path,
+      default_parse,
+      translated_path,
+      translated_parse
+    )
+      synthetic_parse = FrontMatter.parse(logical_path, synthetic_bytes)
+      origins = (@diagnostic_origins[locale] ||= {})
+      Array(synthetic_parse.property_links).each do |link|
+        translated = translated_parse.properties.key?(link.property)
+        source_parse = translated ? translated_parse : default_parse
+        source_path = translated ? translated_path : default_path
+        source_link = Array(source_parse.property_links).find do |candidate|
+          candidate.property == link.property && candidate.index == link.index
+        end
+        next unless source_link
+
+        origins[diagnostic_origin_key(logical_path, link.source_span, link.property)] = [source_path, source_link.source_span]
+      end
+    end
+
+    def localized_diagnostics(diagnostics, locale)
+      return diagnostics if locale == @default_locale
+
+      diagnostics.map do |diagnostic|
+        origin = @diagnostic_origins.fetch(locale, {})[
+          diagnostic_origin_key(diagnostic.path, diagnostic.span, diagnostic.property)
+        ]
+        path, span = if origin
+          origin
+        else
+          [@physical_sources.fetch(locale, {}).fetch(diagnostic.path, diagnostic.path), diagnostic.span]
+        end
+        Diagnostic.new(**diagnostic.to_h.merge(path: path, span: span))
+      end
+    end
+
+    def diagnostic_origin_key(path, span, property)
+      [
+        path.to_s,
+        span&.start_line,
+        span&.start_column,
+        span&.end_line,
+        span&.end_column,
+        property
+      ]
     end
 
     def merge_translation_properties(default_properties, translated_properties, physical_path)
@@ -553,8 +618,10 @@ module JekyllObsidian
       localize_page_copy!(data, kind, locale_data.fetch("messages"))
       if %w[note home].include?(kind) && note_id && actual && locale != @default_locale && @actual_by_locale.fetch(locale).include?(note_id)
         imported = website.dig("source_links", "imported")
+        repository = website.dig("source_links", "repository")
         website["source_links"] = repository_links(@physical_sources.fetch(locale).fetch(note_id), note_id)
         website["source_links"]["imported"] = imported if imported
+        website["source_links"]["repository"] = repository if repository
       end
       content = localize_html(page.content, locale)
       PageOutput.new(route: route, content: content, data: data)
@@ -892,7 +959,9 @@ module JekyllObsidian
     end
 
     def sorted_diagnostics
-      @diagnostics.sort_by { |item| [item.path.to_s.b, item.span&.start_line.to_i, item.code.to_s, item.message.to_s] }.freeze
+      @diagnostics.sort_by do |item|
+        [item.path.to_s.b, item.span&.start_line.to_i, item.property.to_s, item.code.to_s, item.message.to_s]
+      end.freeze
     end
 
     def failure

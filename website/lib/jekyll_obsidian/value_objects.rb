@@ -83,8 +83,9 @@ module JekyllObsidian
 
   BuildRequest = ImmutableRecord.define(:snapshot, :config)
   SourceSpan = ImmutableRecord.define(:start_line, :start_column, :end_line, :end_column)
-  Diagnostic = ImmutableRecord.define(:severity, :code, :message, :path, :span)
-  Relation = ImmutableRecord.define(:source_id, :target_id, :kind, :fragment, :source_span)
+  FrontMatterLink = ImmutableRecord.define(:property, :index, :target, :display, :source_span)
+  Diagnostic = ImmutableRecord.define(:severity, :code, :message, :path, :span, :property)
+  Relation = ImmutableRecord.define(:source_id, :target_id, :kind, :fragment, :source_span, :property)
   PageOutput = ImmutableRecord.define(:route, :content, :data)
   GeneratedFile = ImmutableRecord.define(:route, :content, :media_type)
   CopiedAsset = ImmutableRecord.define(:source_path, :route, :media_type, :size, :device, :inode, :mtime_ns)
@@ -117,6 +118,7 @@ module JekyllObsidian
     :image_url,
     :source_links,
     :topics,
+    :related,
     :links,
     :backlinks,
     :embedded_by

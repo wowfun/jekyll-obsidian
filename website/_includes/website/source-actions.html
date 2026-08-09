@@ -19,5 +19,10 @@
         <span>{{ ui.view_imported_markdown | default: 'View imported Markdown' | escape }}</span>
       </a>
     {% endif %}
+    {% if page.website.source_links.repository %}
+      {% assign repository_label_template = ui.open_project_on_github | default: 'Open {title} on GitHub' %}
+      {% assign repository_label = repository_label_template | replace: '{title}', page.title %}
+      <a class="source-actions__repository" href="{{ page.website.source_links.repository | escape }}" aria-label="{{ repository_label | escape }}" title="{{ repository_label | escape }}">{% include website/github-icon.html class='source-actions__github-icon' %}</a>
+    {% endif %}
   </nav>
 {% endif %}

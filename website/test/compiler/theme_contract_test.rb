@@ -209,8 +209,8 @@ class ThemeContractTest < Minitest::Test
         "year" => "2026",
         "count" => 2,
         "months" => [
-          { "key" => "2026-07", "label" => "07", "count" => 1 },
-          { "key" => "2026-06", "label" => "06", "count" => 1 }
+          { "key" => "2026-06", "label" => "06", "count" => 1 },
+          { "key" => "2026-07", "label" => "07", "count" => 1 }
         ]
       }
     ], archive.data.dig("website", "theme_data", "timeline")
@@ -228,6 +228,69 @@ class ThemeContractTest < Minitest::Test
     assert_includes feed, "Newer"
     refute_includes feed, "About"
     refute_includes feed, ">Home<"
+  end
+
+  def test_blog_chronology_has_at_most_twelve_ascending_months_per_year
+    monthly_posts = (1..12).map do |month|
+      label = format("%02d", month)
+      note(
+        "blog/month-#{label}.md",
+        "---\npublish: true\ncontent_type: post\ndate: 2026-#{label}-01\n---\n# Month #{label}"
+      )
+    end
+    result = compile(
+      *monthly_posts,
+      note("blog/another-january.md", "---\npublish: true\ncontent_type: post\ndate: 2026-01-15\n---\n# Another January"),
+      theme: "minimal"
+    )
+
+    assert result.success?, result.diagnostics.map(&:message).join("\n")
+    timeline = page(result, "/blog/").data.dig("website", "theme_data", "timeline")
+    assert_equal 1, timeline.length
+    assert_equal 13, timeline.first.fetch("count")
+    assert_equal (1..12).map { |month| format("%02d", month) }, timeline.first.fetch("months").map { |month| month.fetch("label") }
+    assert_equal 2, timeline.first.fetch("months").first.fetch("count")
+  end
+
+  def test_minimal_blog_surfaces_distinct_tag_and_category_topics_on_lists_and_posts
+    result = compile(
+      note("topics/typescript.md", "---\npublish: true\n---\n# TypeScript category"),
+      note("blog/post.md", <<~MARKDOWN),
+        ---
+        publish: true
+        content_type: post
+        date: 2026-08-05
+        author:
+          - Ada
+        tags:
+          - release-notes
+          - TypeScript
+        categories:
+          - "[[topics/typescript|TypeScript]]"
+          - AI Agent
+        ---
+        # Post
+      MARKDOWN
+      theme: "minimal"
+    )
+
+    assert result.success?, result.diagnostics.map(&:message).join("\n")
+    expected = [
+      { "name" => "TypeScript", "anchor" => "typescript" },
+      { "name" => "release-notes", "anchor" => "release-notes" },
+      { "name" => "AI Agent", "anchor" => "ai-agent" }
+    ]
+    assert_equal expected, page(result, "/blog/").data.dig(
+      "website", "theme_data", "archive_groups", 0, "posts", 0, "topics"
+    )
+    assert_equal expected, page(result, "/blog/post/").data.dig("website", "topic_links")
+    archive = page(result, "/blog/").data.dig("website", "theme_data")
+    assert_equal [
+      { "name" => "TypeScript", "anchor" => "typescript", "count" => 1 }
+    ], archive.fetch("topic_summaries").select { |topic| topic.fetch("name") == "TypeScript" }
+    assert_equal %w[typescript release-notes ada ai-agent], archive.dig(
+      "archive_groups", 0, "posts", 0, "topic_anchors"
+    )
   end
 
   def test_blog_topics_support_author_categories_and_quoted_frontmatter_wiki_links
@@ -424,14 +487,18 @@ class ThemeContractTest < Minitest::Test
         "title" => "Preview project",
         "url" => "/portfolio/preview/",
         "image" => nil,
-        "summary" => "Preview from the project body."
+        "summary" => "Preview from the project body.",
+        "topics" => [],
+        "topic_anchors" => []
       },
       {
         "id" => "portfolio/featured.md",
         "title" => "Featured project",
         "url" => "/portfolio/featured/",
         "image" => "https://example.test/assets/vault/media/demo.gif",
-        "summary" => "Front matter summary"
+        "summary" => "Front matter summary",
+        "topics" => [],
+        "topic_anchors" => []
       }
     ], portfolio.data.dig("website", "theme_data", "portfolio_projects")
   end
@@ -464,6 +531,49 @@ class ThemeContractTest < Minitest::Test
     assert_equal "/site/work/alpha/", portfolio.data.dig(
       "website", "theme_data", "portfolio_projects", 0, "url"
     )
+  end
+
+  def test_minimal_portfolio_owns_project_topics_without_polluting_blog_topics
+    result = compile(
+      note("index.md", "---\npublish: true\n---\n# Home"),
+      note(
+        "blog/post.md",
+        "---\npublish: true\ncontent_type: post\ndate: 2026-08-09\ncategories:\n  - Writing\n---\n# Post"
+      ),
+      note(
+        "portfolio/alpha.md",
+        "---\npublish: true\ncategories:\n  - Rust\n  - TypeScript\n---\n# Alpha"
+      ),
+      note(
+        "portfolio/beta.md",
+        "---\npublish: true\ncategories:\n  - TypeScript\n  - AI Agent\n---\n# Beta"
+      ),
+      theme: "minimal"
+    )
+
+    assert result.success?, result.diagnostics.map(&:message).join("\n")
+    portfolio_data = page(result, "/portfolio/").data.dig("website", "theme_data")
+    assert_equal [
+      { "name" => "TypeScript", "anchor" => "typescript", "count" => 2 },
+      { "name" => "AI Agent", "anchor" => "ai-agent", "count" => 1 },
+      { "name" => "Rust", "anchor" => "rust", "count" => 1 }
+    ], portfolio_data.fetch("portfolio_topic_summaries")
+    assert_equal 2, portfolio_data.fetch("portfolio_topic_filter_count")
+    assert_equal [
+      [
+        { "name" => "Rust", "anchor" => "rust" },
+        { "name" => "TypeScript", "anchor" => "typescript" }
+      ],
+      [
+        { "name" => "TypeScript", "anchor" => "typescript" },
+        { "name" => "AI Agent", "anchor" => "ai-agent" }
+      ]
+    ], portfolio_data.fetch("portfolio_projects").map { |project| project.fetch("topics") }
+    assert_equal [%w[rust typescript], %w[typescript ai-agent]],
+      portfolio_data.fetch("portfolio_projects").map { |project| project.fetch("topic_anchors") }
+
+    blog_topics = page(result, "/blog/").data.dig("website", "theme_data", "topic_summaries")
+    assert_equal [{ "name" => "Writing", "anchor" => "writing", "count" => 1 }], blog_topics
   end
 
   def test_minimal_root_fallback_reaches_a_hidden_portfolio_without_replacing_an_authored_root_route

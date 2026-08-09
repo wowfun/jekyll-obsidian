@@ -259,15 +259,29 @@ messages:
 
 ## 页面属性
 
-编译器只接受以下笔记属性：
+编译器为发布行为保留以下笔记属性，并按封闭结构逐项校验：
 
 - `publish`、`title`、`subtitle`、`aliases`、`tags`、`author`、`categories` 和 `description`
 - `permalink`、`image` 和 `cssclasses`
 - `created` 和 `updated`
 - `content_type`、`date`、`pinned`、`nav_order`、`nav_exclude` 和 `navigation`
-- `comments` 和 `github_markdown`
+- `comments`、`github_markdown` 和 `related`
 
-未知属性不会进入 Liquid 或生成数据。`aliases`、`tags`、`author`、`categories` 和 `cssclasses` 是字符串数组，`subtitle` 是字符串。`publish`、`pinned`、`nav_exclude` 和 `comments` 使用 YAML 布尔值。`navigation` 是前文说明的封闭映射。`github_markdown` 只接受 [[Portfolio|作品集]]中说明的 URL 或映射形式，并且只能用于作品集项目页。日期使用 ISO 8601。笔记标题依次取自 `title`、第一个一级标题和文件名。
+其他顶层属性可以使用标量或一层标量列表。自定义属性名必须是经过规范化的单行文本，且不能带首尾空白。其中完整的 Wiki 链接只有写成 YAML 双引号字符串时，才会成为普通笔记关系。自定义属性只属于编译器元数据；属性名和原始值不会进入 Liquid、HTML、Feed 或生成的 JSON。
+
+```yaml
+project: "[[portfolio/fauni-search|Fauni Search]]"
+references:
+  - background
+  - "[[docs/development/architecture]]"
+related:
+  - "[[blog/launch-notes]]"
+  - "[[docs/Getting Started|从这里开始]]"
+```
+
+`related` 是用于精选列表的专用字段。它只接受双引号 Wiki 链接列表，保留书写顺序并去除重复目标，在页面底部以「最新文章」相同的卡片样式显示。生产构建会拒绝断开的相关文章链接。其他自定义属性链接仍会进入直接链接、反向链接和关系图，但不会额外生成一张可见属性表。
+
+`aliases`、`tags`、`author`、`categories` 和 `cssclasses` 是字符串数组，`subtitle` 是字符串。`publish`、`pinned`、`nav_exclude` 和 `comments` 使用 YAML 布尔值。`navigation` 是前文说明的封闭映射。`github_markdown` 只接受 [[Portfolio|作品集]]中说明的 URL 或映射形式，并且只能用于作品集项目页。日期使用 ISO 8601。笔记标题依次取自 `title`、第一个一级标题和文件名。
 
 `updated` 可选，只有作者明确提供时才会出现在页面元数据中；编译器不会从 Git 推导更新时间。文章发布时间依次使用 `date`、`created` 和第一次 Git 提交时间。Atom 条目优先使用显式 `updated`；未提供时，文章沿用其发布时间。没有 `updated` 的非文章笔记不会进入订阅源。
 
@@ -285,7 +299,7 @@ categories:
 ---
 ```
 
-Wiki 链接条目必须使用 YAML 双引号字符串。可见标签优先使用 `|` 后的别名，没有别名时使用目标笔记标题。Home Topics 中的每个主题标签都会打开对应的 Blog 筛选；文章摘要中带 Wiki 链接的作者还可以直接打开公开作者页面。无法解析的 Wiki 链接会产生编译器警告，但仍保留为可筛选文本，不会把 `[[...]]` 泄漏到站点中。
+Wiki 链接条目必须使用 YAML 双引号字符串。可见标签优先使用 `|` 后的别名，没有别名时使用目标笔记标题。Home Topics 中的每个主题标签都会打开对应的 Blog 筛选；文章摘要中带 Wiki 链接的作者还可以直接打开公开作者页面。在 Minimal Blog 中，标签与分类会一起显示在归档列表的日期下方，并在文章页的发布日期右侧显示为筛选胶囊；`tags` 与 `categories` 中的同名项只显示一次。无法解析的 Wiki 链接会产生编译器警告，但仍保留为可筛选文本，不会把 `[[...]]` 泄漏到站点中。
 
 ## 内容与导航
 

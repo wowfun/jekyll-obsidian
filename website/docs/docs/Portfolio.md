@@ -44,6 +44,8 @@ Add `nav_exclude: true` to keep a project out of the grid. Its detail route rema
 
 Projects with `pinned: true` appear before unpinned projects. Within each group, projects with `nav_order` come first, followed by `nav_order`, localized title, and source path. Each card uses its title, optional `image`, and `description`; when `description` is absent, it uses the existing body preview. Missing images and summaries leave no placeholder.
 
+Every project occupies one row. Add `tags`, `author`, or `categories` to a project wrapper to show its Topics on the card and add counted filters to the Portfolio index. These Topics are scoped to Portfolio: they do not enter the Blog filter. The `features.tags` switch controls both Blog and Portfolio topic surfaces.
+
 Local GIF, WebP, AVIF, and APNG files are copied byte for byte and shown with an ordinary image element. The compiler does not transcode them or create thumbnails.
 
 ## Add an introduction or custom route
@@ -65,7 +67,7 @@ github_markdown: https://github.com/owner/repository/blob/main/README.md
 ---
 ```
 
-The local wrapper body must be empty. Any non-whitespace body produces `github_markdown_body_conflict`. The wrapper still owns publication, title, description, image, pinning, order, route, and other page metadata.
+The local wrapper body must be empty. Any non-whitespace body produces `github_markdown_body_conflict`. The wrapper still owns publication, title, description, image, pinning, order, route, and other page metadata. It may also declare `related` wiki links; wrapper frontmatter is compiled even though relation syntax inside the imported README is deliberately not interpreted.
 
 The URL shorthand accepts a public GitHub `blob` URL with a single-segment branch, tag, or commit reference. Use the mapping form when a reference contains `/`:
 
@@ -88,7 +90,7 @@ Imported files use a safe CommonMark and GFM profile. Raw HTML, remote frontmatt
 
 Fragment-only links stay on the project page. Relative links point to the matching file or directory at the resolved GitHub commit; write directory targets with a trailing `/`, while extensionless files such as `LICENSE` remain file links. Relative images use the raw form of that same commit. A relative path cannot escape the repository root.
 
-Edit continues to open the local wrapper. View imported Markdown opens the exact GitHub commit that supplied the body. A translated wrapper can declare a different `github_markdown` file. If the translated wrapper does not exist, the normal localized fallback displays the default-language project and remains excluded from indexing.
+Edit continues to open the local wrapper. View imported Markdown opens the exact GitHub commit that supplied the body. GitHub-backed cards and their detail-page source actions also link to the repository root; that URL is derived from the validated `github_markdown.repository`, so the wrapper does not duplicate it. A translated wrapper can declare a different `github_markdown` file. If the translated wrapper does not exist, the normal localized fallback displays the default-language project and remains excluded from indexing.
 
 ## Troubleshoot Portfolio
 

@@ -225,7 +225,7 @@ test("Minimal recent post cards expose one article link across the whole card", 
   await expect(page).toHaveURL(/\/__fixture__\/author-target\/$/);
 });
 
-test("Minimal Portfolio presents the bundled project as one accessible responsive card", async ({ page }) => {
+test("Minimal Portfolio filters one-column projects and keeps repository links independent", async ({ page }) => {
   await page.goto(site("minimal", "/portfolio/"));
 
   await expect(page.getByRole("heading", { level: 1, name: "Portfolio" })).toHaveCount(0);
@@ -236,14 +236,33 @@ test("Minimal Portfolio presents the bundled project as one accessible responsiv
 
   const portfolio = page.locator(".minimal-portfolio");
   const grid = page.locator(".minimal-portfolio__grid");
-  const card = grid.locator("a.minimal-portfolio-card");
+  const card = grid.locator("article.minimal-portfolio-card");
   await expect(card).toHaveCount(1);
   await expect(card.locator("div.minimal-portfolio-card__body")).toHaveCount(1);
   await expect(card.getByRole("heading", { level: 2, name: "Jekyll Obsidian" })).toBeVisible();
   await expect(card.locator(".minimal-portfolio-card__summary"))
     .toHaveText("Publish any Markdown folder as a complete site. Nothing to install or build locally.");
-  await expect(card).toHaveAttribute("href", site("minimal", "/portfolio/jekyll-obsidian/"));
-  await expect(grid.locator("a")).toHaveCount(1);
+  const projectLink = card.getByRole("link", { name: "Jekyll Obsidian", exact: true });
+  await expect(projectLink).toHaveAttribute("href", site("minimal", "/portfolio/jekyll-obsidian/"));
+  const repositoryLink = card.getByRole("link", { name: "Open Jekyll Obsidian on GitHub" });
+  await expect(repositoryLink).toHaveAttribute("href", "https://github.com/wowfun/jekyll-obsidian");
+  await expect(repositoryLink.locator("svg[aria-hidden='true']")).toBeVisible();
+  await expect(card.locator("a a")).toHaveCount(0);
+  await expect(card.getByRole("link")).toHaveCount(2);
+  const cardTopics = card.locator(".minimal-portfolio-card__topics");
+  await expect(cardTopics).toContainText("Ruby");
+  await expect(cardTopics).toContainText("TypeScript");
+  await expect(cardTopics).toContainText("Static Site Generator");
+
+  const filter = page.getByRole("navigation", { name: "Filter by topic" });
+  await expect(filter.getByRole("link", { name: /^All\b/ })).toHaveAttribute("aria-current", "page");
+  await expect(filter.getByRole("link", { name: /TypeScript/ })).toContainText("1");
+  await filter.getByRole("link", { name: /TypeScript/ }).click();
+  await expect(page).toHaveURL(/\/portfolio\/\?topic=typescript$/);
+  await expect(filter.getByRole("link", { name: /TypeScript/ })).toHaveAttribute("aria-current", "page");
+  await expect(grid.locator("[data-filter-item]:visible")).toHaveCount(1);
+  await filter.getByRole("link", { name: /^All\b/ }).click();
+  await expect(page).toHaveURL(site("minimal", "/portfolio/"));
 
   const image = card.locator(".minimal-portfolio-card__media img");
   await expect(image).toHaveAttribute("src", /\/__site__\/minimal\/assets\/vault\/assets\/research-folio\.svg$/);
@@ -262,17 +281,45 @@ test("Minimal Portfolio presents the bundled project as one accessible responsiv
   const columns = await grid.evaluate((element) =>
     getComputedStyle(element).gridTemplateColumns.split(" ").filter(Boolean).length
   );
-  expect(columns).toBe((page.viewportSize()?.width ?? 0) <= 720 ? 1 : 2);
+  expect(columns).toBe(1);
   const media = await card.locator(".minimal-portfolio-card__media").boundingBox();
   expect(media).toBeTruthy();
   expect(media!.width / media!.height).toBeCloseTo(1.6, 1);
 
-  await card.focus();
-  await expect(card).toBeFocused();
+  const repositoryBox = (await repositoryLink.boundingBox())!;
+  const cardBox = (await card.boundingBox())!;
+  expect(repositoryBox.width).toBeGreaterThanOrEqual(44);
+  expect(repositoryBox.height).toBeGreaterThanOrEqual(44);
+  expect(repositoryBox.x + repositoryBox.width).toBeLessThanOrEqual(cardBox.x + cardBox.width + 1);
+
+  await projectLink.focus();
+  await page.keyboard.press("Tab");
+  await expect(repositoryLink).toBeFocused();
+  expect(await repositoryLink.evaluate((element) => getComputedStyle(element).boxShadow)).not.toBe("none");
+  await page.keyboard.press("Shift+Tab");
+  await expect(projectLink).toBeFocused();
   expect(await card.evaluate((element) => getComputedStyle(element).boxShadow)).not.toBe("none");
+  const summaryBox = (await card.locator(".minimal-portfolio-card__summary").boundingBox())!;
+  await page.mouse.click(summaryBox.x + summaryBox.width / 2, summaryBox.y + summaryBox.height / 2);
+  await expect(page).toHaveURL(site("minimal", "/portfolio/jekyll-obsidian/"));
+  await page.goBack();
+  await expect(page).toHaveURL(site("minimal", "/portfolio/"));
+  await projectLink.focus();
   await page.keyboard.press("Enter");
   await expect(page).toHaveURL(site("minimal", "/portfolio/jekyll-obsidian/"));
   await expect(page.getByRole("heading", { level: 1, name: "Imported Jekyll Obsidian" })).toBeVisible();
+  const sourceActions = page.getByRole("navigation", { name: "Contribute to this page" });
+  const editLink = sourceActions.getByRole("link", { name: "Edit", exact: true });
+  const detailRepositoryLink = sourceActions.getByRole("link", { name: "Open Jekyll Obsidian on GitHub" });
+  await expect(editLink).toBeVisible();
+  await expect(detailRepositoryLink)
+    .toHaveAttribute("href", "https://github.com/wowfun/jekyll-obsidian");
+  const sourceActionsBox = (await sourceActions.boundingBox())!;
+  const editBox = (await editLink.boundingBox())!;
+  const detailRepositoryBox = (await detailRepositoryLink.boundingBox())!;
+  expect(detailRepositoryBox.x).toBeGreaterThan(editBox.x + editBox.width);
+  expect(detailRepositoryBox.x + detailRepositoryBox.width)
+    .toBeCloseTo(sourceActionsBox.x + sourceActionsBox.width, 0);
   await expect(page.getByRole("link", { name: "View imported Markdown" })).toHaveAttribute(
     "href",
     "https://github.com/wowfun/jekyll-obsidian/blob/0123456789abcdef0123456789abcdef01234567/README.md"
@@ -372,6 +419,8 @@ test("Blog filters by topic and exposes only populated chronology periods", asyn
     .toHaveText("同一个 Obsidian vault 如何保持写作格式，同时生成不同的信息结构。");
   await expect(entries.locator(".blog-ledger__topics")).toHaveCount(2);
   await expect(entries.locator("a .blog-ledger__topics")).toHaveCount(0);
+  await expect(entries.nth(0).locator(".blog-ledger__topics"))
+    .toHaveText("release-notes · themes · Architecture");
 
   if (testInfo.project.name === "desktop-chromium") {
     const firstMeta = (await entries.nth(0).locator(".blog-ledger__meta").boundingBox())!;
@@ -391,6 +440,7 @@ test("Blog filters by topic and exposes only populated chronology periods", asyn
     await expect(chronology.locator('[data-filter-month="2026-08"] .archive-timeline__count')).toHaveText("1");
     await expect(chronology.locator('[data-filter-month="2026-07"] .archive-timeline__count')).toHaveText("1");
     await expect(chronology.locator('[data-filter-month="2026-06"]')).toHaveCount(0);
+    await expect(chronology.locator("[data-month-filter-option] > span:first-child")).toHaveText(["07", "08"]);
 
     await chronology.locator('[data-filter-month="2026-07"]').click();
     await expect(page).toHaveURL(/\/blog\/\?month=2026-07$/);
@@ -425,6 +475,121 @@ test("Blog filters by topic and exposes only populated chronology periods", asyn
     await expect(dialog.locator('[data-filter-month="2026-07"]')).not.toHaveAttribute("aria-current", "page");
     await expect(page.locator("[data-filter-item]:not([hidden])")).toHaveCount(2);
   }
+});
+
+test("Minimal post metadata places distinct Blog topics beside the publication date", async ({ page }, testInfo) => {
+  await page.goto(site("minimal", "/blog/One%20vault%2C%20three%20readings/"));
+
+  const header = page.locator(".note-header");
+  const description = header.locator(".note-description");
+  const published = header.locator(".note-meta > time").first();
+  const topics = header.locator(".note-meta__topics");
+  const chips = topics.locator(".tag-chip");
+  await expect(published).toHaveText("Published 2026-08-01");
+  await expect(chips).toHaveText(["release-notes", "themes", "Architecture"]);
+  const expectedTopicUrls = [
+    site("minimal", "/blog/?topic=release-notes"),
+    site("minimal", "/blog/?topic=themes"),
+    site("minimal", "/blog/?topic=architecture")
+  ];
+  for (const [index, url] of expectedTopicUrls.entries()) {
+    await expect(chips.nth(index)).toHaveAttribute("href", url);
+  }
+
+  const headerBox = (await header.boundingBox())!;
+  const descriptionBox = (await description.boundingBox())!;
+  expect(descriptionBox.x).toBeCloseTo(headerBox.x, 0);
+  expect(descriptionBox.width).toBeCloseTo(headerBox.width, 0);
+  expect(descriptionBox.x + descriptionBox.width).toBeLessThanOrEqual(headerBox.x + headerBox.width + 1);
+
+  if (testInfo.project.name === "desktop-chromium") {
+    const publishedBox = (await published.boundingBox())!;
+    const topicsBox = (await topics.boundingBox())!;
+    expect(topicsBox.x).toBeGreaterThan(publishedBox.x + publishedBox.width);
+    expect(topicsBox.y).toBeCloseTo(publishedBox.y, 0);
+  } else {
+    for (const chip of await chips.all()) {
+      const box = (await chip.boundingBox())!;
+      expect(box.x).toBeGreaterThanOrEqual(headerBox.x - 1);
+      expect(box.x + box.width).toBeLessThanOrEqual(headerBox.x + headerBox.width + 1);
+    }
+  }
+});
+
+test("Minimal chronology lays out a full year as twelve monthly capsules in two rows", async ({ page }, testInfo) => {
+  await page.goto(site("minimal", "/blog/"));
+
+  let chronology = page.getByRole("navigation", { name: "Chronology" });
+  if (testInfo.project.name === "mobile-chromium") {
+    await page.getByRole("button", { name: "Chronology" }).tap();
+    chronology = page.locator('dialog[data-dialog="context"]')
+      .getByRole("navigation", { name: "Chronology" });
+  }
+
+  const months = chronology.locator(".archive-timeline__year").first().locator("ul");
+  await months.evaluate((list) => {
+    const example = list.querySelector("li");
+    if (!example) throw new Error("Expected at least one compiled chronology month");
+
+    const items = Array.from({ length: 12 }, (_, index) => {
+      const item = example.cloneNode(true) as HTMLLIElement;
+      const link = item.querySelector<HTMLAnchorElement>("a");
+      const labels = item.querySelectorAll("span");
+      const label = labels.item(0);
+      const count = labels.item(1);
+      const month = String(index + 1).padStart(2, "0");
+      if (!link || !label || !count || labels.length !== 2) {
+        throw new Error("Unexpected chronology month markup");
+      }
+      link.dataset.filterMonth = `2026-${month}`;
+      link.href = `/__site__/minimal/blog/?month=2026-${month}`;
+      label.textContent = month;
+      count.textContent = String(index + 1);
+      return item;
+    });
+    list.replaceChildren(...items);
+  });
+
+  const capsules = months.locator("a[data-month-filter-option]");
+  await expect(capsules).toHaveCount(12);
+  await expect(capsules.locator(".archive-timeline__count"))
+    .toHaveText(Array.from({ length: 12 }, (_, index) => String(index + 1)));
+
+  const boxes = await capsules.evaluateAll((links) => links.map((link) => {
+    const box = link.getBoundingClientRect();
+    return { x: box.x, y: box.y, width: box.width, height: box.height };
+  }));
+  const first = boxes.at(0);
+  const sixth = boxes.at(5);
+  const seventh = boxes.at(6);
+  if (!first || !sixth || !seventh || boxes.length !== 12) {
+    throw new Error("Expected twelve measured chronology capsules");
+  }
+  for (const box of boxes.slice(1, 6)) expect(box.y).toBeCloseTo(first.y, 0);
+  for (const box of boxes.slice(7)) expect(box.y).toBeCloseTo(seventh.y, 0);
+  expect(sixth.x).toBeGreaterThan(first.x);
+  expect(seventh.x).toBeCloseTo(first.x, 0);
+  expect(seventh.y).toBeGreaterThanOrEqual(first.y + first.height);
+
+  const layout = await months.evaluate((list) => ({
+    clientWidth: list.clientWidth,
+    scrollWidth: list.scrollWidth,
+    clientHeight: list.clientHeight,
+    scrollHeight: list.scrollHeight
+  }));
+  expect(layout.scrollWidth).toBeLessThanOrEqual(layout.clientWidth);
+  expect(layout.scrollHeight).toBeLessThanOrEqual(layout.clientHeight);
+
+  const capsuleStyle = await capsules.first().evaluate((link) => {
+    const style = getComputedStyle(link);
+    return {
+      borderWidth: style.borderTopWidth,
+      radius: Number.parseFloat(style.borderTopLeftRadius),
+      height: link.getBoundingClientRect().height
+    };
+  });
+  expect(capsuleStyle.borderWidth).toBe("1px");
+  expect(capsuleStyle.radius).toBeGreaterThanOrEqual(capsuleStyle.height / 2);
 });
 
 test("Minimal reveals page and chronology scrollbars only during interaction", async ({ page }, testInfo) => {
@@ -964,6 +1129,12 @@ test("localized docs language navigation and fallback metadata remain correct", 
   await page.goto(localizedDocs("/zh-CN/docs/Customization/"));
   await expect(page.getByRole("heading", { level: 1, name: "自定义" })).toBeVisible();
   await expect(page.locator(".translation-fallback")).toHaveCount(0);
+  const related = page.getByRole("navigation", { name: "相关文章" });
+  await expect(related.locator("article.minimal-post-card")).toHaveCount(2);
+  await expect(related.getByRole("link", { name: "语法", exact: true }))
+    .toHaveAttribute("href", localizedDocs("/zh-CN/docs/Syntax/"));
+  await expect(related.getByRole("link", { name: "本地化", exact: true }))
+    .toHaveAttribute("href", localizedDocs("/zh-CN/docs/Localization/"));
 
   await page.goto(localizedDocs("/zh-CN/portfolio/jekyll-obsidian/"));
   await expect(page.getByRole("heading", { level: 1, name: "导入的 Jekyll Obsidian" })).toBeVisible();
@@ -971,12 +1142,71 @@ test("localized docs language navigation and fallback metadata remain correct", 
     "href",
     "https://github.com/wowfun/jekyll-obsidian/blob/0123456789abcdef0123456789abcdef01234567/README.zh-CN.md"
   );
+  await expect(page.getByRole("link", { name: "在 GitHub 上打开 Jekyll Obsidian" }))
+    .toHaveAttribute("href", "https://github.com/wowfun/jekyll-obsidian");
 
   await page.goto(localizedDocs("/zh-CN/docs/Architecture/"));
   await expect(page.locator(".translation-fallback")).toContainText("本页尚无译文");
   await expect(page.locator(".note-content")).toHaveAttribute("lang", "en");
   await expect(page.locator('meta[name="robots"]')).toHaveAttribute("content", "noindex");
   await expect(page.locator('link[rel="alternate"][hreflang]')).toHaveCount(0);
+});
+
+test("authored related pages reuse accessible Recent-post cards at the page bottom", async ({ page }, testInfo) => {
+  if (testInfo.project.name === "mobile-chromium") {
+    await page.setViewportSize({ width: 320, height: 900 });
+  }
+
+  for (const theme of themes) {
+    await page.goto(site(theme, "/docs/Customization/"));
+    const related = page.getByRole("navigation", { name: "Related articles" });
+    const cards = related.locator("article.minimal-post-card");
+    await expect(cards).toHaveCount(2);
+    await expect(related.getByRole("heading", { level: 2, name: "Related articles" })).toBeVisible();
+    await expect(related.getByRole("link", { name: "Syntax", exact: true }))
+      .toHaveAttribute("href", site(theme, "/docs/Syntax/"));
+    await expect(related.getByRole("link", { name: "Localization", exact: true }))
+      .toHaveAttribute("href", site(theme, "/docs/Localization/"));
+    await expect(cards.first().locator(".minimal-post-card__excerpt"))
+      .toContainText("OFM v1 authoring surface");
+
+    const sourceActions = page.getByRole("navigation", { name: "Contribute to this page" });
+    expect(await sourceActions.evaluate((actions) => {
+      const navigation = document.querySelector(".related-articles");
+      return Boolean(navigation &&
+        (actions.compareDocumentPosition(navigation) & Node.DOCUMENT_POSITION_FOLLOWING));
+    })).toBe(true);
+    const sourceActionsBox = (await sourceActions.boundingBox())!;
+    const relatedBox = (await related.boundingBox())!;
+    expect(relatedBox.x).toBeCloseTo(sourceActionsBox.x, 0);
+    expect(relatedBox.width).toBeCloseTo(sourceActionsBox.width, 0);
+
+    const gridColumns = await related.locator(".minimal-recent__grid").evaluate((element) =>
+      getComputedStyle(element).gridTemplateColumns.split(" ").filter(Boolean).length
+    );
+    expect(gridColumns).toBe(1);
+    expect(await related.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth))
+      .toBe(true);
+
+    const firstCardBody = cards.first().locator(".minimal-post-card__body");
+    await firstCardBody.evaluate((body) => {
+      body.insertAdjacentHTML(
+        "beforeend",
+        '<footer>Posted by <a href="/__fixture__/author-target/">Ada</a></footer>'
+      );
+    });
+    await firstCardBody.getByRole("link", { name: "Ada" }).click();
+    await expect(page).toHaveURL(/\/__fixture__\/author-target\/$/);
+    await page.goBack();
+
+    const restoredRelated = page.getByRole("navigation", { name: "Related articles" });
+    const syntax = restoredRelated.getByRole("link", { name: "Syntax", exact: true });
+    await syntax.focus();
+    await expect(syntax).toBeFocused();
+    await page.keyboard.press("Enter");
+    await expect(page).toHaveURL(site(theme, "/docs/Syntax/"));
+  }
 });
 
 test("Mobile site titles wrap without clipping at narrow viewport widths", async ({ page }, testInfo) => {
@@ -1036,7 +1266,7 @@ test("desktop themes use the wider canvas without lengthening prose lines", asyn
   expect(main.x + main.width).toBeLessThanOrEqual(context.x);
 });
 
-test("Minimal aligns authored reading blocks and page actions to one column", async ({ page }, testInfo) => {
+test("Minimal aligns prose to one column and system-page actions to the canvas edge", async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== "desktop-chromium", "desktop reading-column contract");
   await page.setViewportSize({ width: 1190, height: 900 });
   await page.goto(site("minimal"));
@@ -1051,7 +1281,7 @@ test("Minimal aligns authored reading blocks and page actions to one column", as
   expect(callout.x).toBeCloseTo(paragraph.x, 0);
   expect(callout.width).toBeCloseTo(paragraph.width, 0);
   expect(title.x).toBeCloseTo(recent.x, 0);
-  expect(actions.x + actions.width).toBeCloseTo(callout.x + callout.width, 0);
+  expect(actions.x + actions.width).toBeCloseTo(recent.x + recent.width, 0);
 
   await page.goto(site("minimal", "/docs/Customization/"));
   const documentTitle = (await page.locator(".note-content > h1").first().boundingBox())!;

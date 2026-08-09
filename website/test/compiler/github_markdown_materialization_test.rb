@@ -57,6 +57,8 @@ class GitHubMarkdownMaterializationTest < Minitest::Test
     assert_equal "main", document.requested_ref
     assert_equal "README.md", document.path
     assert_equal COMMIT, document.resolved_commit
+    assert_equal "https://github.com/acme/widget",
+      JekyllObsidian::GitHubMarkdown.repository_url(document.repository)
     assert_equal "https://github.com/acme/widget/blob/#{COMMIT}/README.md", document.source_url
     assert_equal "# Widget\n", document.markdown
     assert documents.frozen?

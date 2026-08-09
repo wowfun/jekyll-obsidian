@@ -69,14 +69,56 @@ class GitHubMarkdownCompilationTest < Minitest::Test
     assert_empty result.relations
     assert_equal "https://github.com/acme/widget/blob/#{COMMIT}/docs/README.md",
       detail.data.dig("website", "source_links", "imported")
+    assert_equal "https://github.com/acme/widget",
+      detail.data.dig("website", "source_links", "repository")
     assert_includes detail.data.dig("website", "source_links", "edit"), "portfolio/widget.md"
 
     card = page(result, "/portfolio/").data.dig("website", "theme_data", "portfolio_projects").fetch(0)
     assert_equal "Local card title", card.fetch("title")
     assert_equal "Local card description", card.fetch("summary")
+    assert_equal "https://github.com/acme/widget", card.fetch("repository_url")
     markdown = result.generated_files.find { |file| file.route == "/portfolio/widget.md" }.content
     assert_includes markdown, "https://github.com/acme/widget/blob/#{COMMIT}/docs/guide.md"
     assert_includes markdown, "https://raw.githubusercontent.com/acme/widget/#{COMMIT}/docs/assets/screen.gif"
+  end
+
+  def test_imported_wrapper_frontmatter_can_publish_related_articles
+    @transport = transport_for(
+      { ["acme/widget", "main"] => COMMIT },
+      { ["acme/widget", COMMIT, "README.md"] => "# Imported project\n" }
+    )
+
+    result = compile_site(
+      note(
+        "portfolio/widget.md",
+        <<~MARKDOWN
+          ---
+          publish: true
+          github_markdown: https://github.com/acme/widget/blob/main/README.md
+          related:
+            - "[[blog/launch|Launch story]]"
+          ---
+        MARKDOWN
+      ),
+      note(
+        "blog/launch.md",
+        "---\npublish: true\ncontent_type: post\ndate: 2026-08-09\n---\n# Launch\n"
+      ),
+      theme: "minimal"
+    )
+
+    assert result.success?, result.diagnostics.map(&:message).join("\n")
+    related = page(result, "/portfolio/widget/").data.dig("website", "related_articles")
+    assert_equal [{ "id" => "blog/launch.md", "title" => "Launch story", "url" => "/blog/launch/" }],
+      related.map { |article| article.slice("id", "title", "url") }
+    relation = result.relations.find do |item|
+      item.source_id == "portfolio/widget.md" && item.target_id == "blog/launch.md"
+    end
+    refute_nil relation
+    assert_equal :link, relation.kind
+    assert_equal "related", relation.property
+    assert_equal ["portfolio/widget.md"],
+      page(result, "/blog/launch/").data.dig("website", "backlinks").map { |link| link.fetch("id") }
   end
 
   def test_scope_and_body_conflicts_fail_before_network_access_while_drafts_are_ignored
@@ -312,6 +354,8 @@ class GitHubMarkdownCompilationTest < Minitest::Test
     assert_includes translated.content, "中文导入"
     assert_equal "https://github.com/acme/widget/blob/#{COMMIT}/README.zh-CN.md",
       translated.data.dig("website", "source_links", "imported")
+    assert_equal "https://github.com/acme/widget",
+      translated.data.dig("website", "source_links", "repository")
     assert_includes translated.data.dig("website", "source_links", "edit"),
       "_translations/zh-CN/portfolio/widget.md"
     assert_includes fallback.content, "Default fallback"
@@ -319,6 +363,8 @@ class GitHubMarkdownCompilationTest < Minitest::Test
     assert_equal "noindex", fallback.data.dig("website", "robots")
     assert_equal "https://github.com/acme/widget/blob/#{COMMIT}/FALLBACK.md",
       fallback.data.dig("website", "source_links", "imported")
+    assert_equal "https://github.com/acme/widget",
+      fallback.data.dig("website", "source_links", "repository")
     assert_equal [["acme/widget", "main"]], @transport.resolve_calls
     assert_equal 3, @transport.fetch_calls.length
   end
@@ -347,6 +393,7 @@ class GitHubMarkdownCompilationTest < Minitest::Test
     translated = page(result, "/zh-CN/portfolio/widget/")
     assert_includes translated.content, "本地译文"
     refute translated.data.dig("website", "source_links").key?("imported")
+    refute translated.data.dig("website", "source_links").key?("repository")
     assert_equal 1, @transport.fetch_calls.length
   end
 

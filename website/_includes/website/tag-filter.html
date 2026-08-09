@@ -1,6 +1,7 @@
 {% if include.summaries and include.summaries.size > 0 %}
   {% assign ui = page.website.i18n.messages %}
-  {% if page.website.theme == 'minimal' %}{% assign filter_url = page.website.routes.blog %}{% unless filter_url %}{% assign filter_url = '/blog/' | relative_url %}{% endunless %}{% else %}{% assign filter_url = page.website.routes.tags %}{% unless filter_url %}{% assign filter_url = '/tags/' | relative_url %}{% endunless %}{% endif %}
+  {% assign filter_url = include.url %}
+  {% unless filter_url %}{% if page.website.theme == 'minimal' %}{% assign filter_url = page.website.routes.blog %}{% unless filter_url %}{% assign filter_url = '/blog/' | relative_url %}{% endunless %}{% else %}{% assign filter_url = page.website.routes.tags %}{% unless filter_url %}{% assign filter_url = '/tags/' | relative_url %}{% endunless %}{% endif %}{% endunless %}
   <nav class="tag-filter" data-topic-filter-nav aria-label="{% if page.website.theme == 'minimal' %}{{ ui.filter_by_topic | default: 'Filter by topic' | escape }}{% else %}{{ ui.filter_by_tag | default: 'Filter by tag' | escape }}{% endif %}">
     <ul class="tag-filter__list">
       <li><a href="{{ filter_url | escape }}" data-topic-filter-option data-topic-anchor="" aria-current="page"><span class="context-tag__name">{{ ui.all | default: 'All' | escape }}</span><span class="context-tag__count">{{ include.total }}</span></a></li>

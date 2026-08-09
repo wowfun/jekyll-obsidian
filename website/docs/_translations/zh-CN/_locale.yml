@@ -41,6 +41,7 @@ messages:
   history: 历史
   view_source: 查看源码
   view_imported_markdown: 查看导入的 Markdown
+  open_project_on_github: 在 GitHub 上打开 {title}
   report_issue: 报告问题
   contribute: 参与编辑本页
   copy_page: 复制页面
@@ -84,6 +85,7 @@ messages:
   portfolio: 作品集
   projects: 项目
   recent_posts: 最新文章
+  related_articles: 相关文章
   view_all: 查看全部
   more: 更多
   interactive_graph: 交互式关系图

@@ -4,6 +4,9 @@ title: Customization
 nav_order: 30
 tags:
   - guide/customization
+related:
+  - "[[docs/Syntax]]"
+  - "[[docs/Localization]]"
 description: Adjust site identity, visual tokens, navigation, and repository links.
 created: 2026-07-31
 updated: 2026-08-09
@@ -264,15 +267,29 @@ Override tokens in your own stylesheet rather than editing hashed build output. 
 
 ## Page properties
 
-The compiler accepts this fixed set of note properties:
+The compiler reserves these note properties for publication behavior and validates each one with a closed schema:
 
 - `publish`, `title`, `subtitle`, `aliases`, `tags`, `author`, `categories`, and `description`
 - `permalink`, `image`, and `cssclasses`
 - `created` and `updated`
 - `content_type`, `date`, `pinned`, `nav_order`, `nav_exclude`, and `navigation`
-- `comments` and `github_markdown`
+- `comments`, `github_markdown`, and `related`
 
-Unknown keys never flow into Liquid or generated data. `aliases`, `tags`, `author`, `categories`, and `cssclasses` are string arrays; `subtitle` is a string. `publish`, `pinned`, `nav_exclude`, and `comments` use YAML booleans. `navigation` is the closed mapping documented above. `github_markdown` accepts only the URL or mapping documented in [[Portfolio|Portfolio]], and only on a Portfolio project wrapper. Dates use ISO 8601. A note title comes from `title`, its first level-one heading, or its filename, in that order.
+Other top-level properties may contain scalar values or flat scalar lists. Custom property names must be normalized, single-line text without leading or trailing whitespace. A complete wiki link in one of those values becomes an ordinary note relation when it is a YAML double-quoted string. Custom properties remain compiler metadata: their keys and raw values never flow into Liquid, HTML, feeds, or generated JSON.
+
+```yaml
+project: "[[portfolio/fauni-search|Fauni Search]]"
+references:
+  - background
+  - "[[docs/development/architecture]]"
+related:
+  - "[[blog/launch-notes]]"
+  - "[[docs/Getting Started|Start here]]"
+```
+
+`related` is the curated list variant. It accepts only a list of double-quoted wiki links, preserves the authored order, removes repeated targets, and shows the resolved pages as Recent-post-style cards at the bottom of the page. Broken related links fail a production build. Other custom-property links still join Direct links, Backlinks, and Graph data but do not create a second visible field table.
+
+`aliases`, `tags`, `author`, `categories`, and `cssclasses` are string arrays; `subtitle` is a string. `publish`, `pinned`, `nav_exclude`, and `comments` use YAML booleans. `navigation` is the closed mapping documented above. `github_markdown` accepts only the URL or mapping documented in [[Portfolio|Portfolio]], and only on a Portfolio project wrapper. Dates use ISO 8601. A note title comes from `title`, its first level-one heading, or its filename, in that order.
 
 `updated` is optional and appears in page metadata only when the author supplies it; the compiler never infers an update date from Git. A post's publication time uses `date`, then `created`, then its first Git commit. Atom entries use explicit `updated` when present and otherwise use that publication time for posts. A non-post note without `updated` is omitted from the feed.
 
@@ -290,7 +307,7 @@ categories:
 ---
 ```
 
-Wiki-link entries must be YAML double-quoted strings. Their visible label uses the alias after `|`, or the target note title when no alias is supplied. Every Home Topics capsule opens the matching Blog filter; a wiki-linked author shown in a post summary may additionally link directly to that public author page. Unresolved wiki links produce a compiler warning and remain filterable text instead of leaking `[[...]]` into the site.
+Wiki-link entries must be YAML double-quoted strings. Their visible label uses the alias after `|`, or the target note title when no alias is supplied. Every Home Topics capsule opens the matching Blog filter; a wiki-linked author shown in a post summary may additionally link directly to that public author page. On Minimal Blog, tags and categories appear together below each archive date and as filter capsules beside the publication date on the article page. Repeating the same name across `tags` and `categories` shows one topic. Unresolved wiki links produce a compiler warning and remain filterable text instead of leaking `[[...]]` into the site.
 
 ## Content and navigation
 

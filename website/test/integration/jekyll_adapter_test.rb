@@ -262,6 +262,51 @@ class JekyllAdapterTest < Minitest::Test
     end
   end
 
+  def test_real_themes_render_related_articles_at_the_end_of_the_authored_page
+    File.write(File.join(@temporary_root, "vault", "index.md"), <<~MARKDOWN)
+      ---
+      publish: true
+      title: Integration
+      related:
+        - "[[target|Read next]]"
+      ---
+      # Integration
+      Authored body.
+    MARKDOWN
+    File.write(File.join(@temporary_root, "vault", "target.md"), <<~MARKDOWN)
+      ---
+      publish: true
+      title: Target
+      description: A related page summary.
+      ---
+      # Target
+    MARKDOWN
+    install_project_layout
+
+    %w[minimal docs].each do |theme|
+      themed_destination = File.join(@site_root, "_site-related-#{theme}")
+      config = website_config.merge(
+        "theme" => theme,
+        "features" => { "relations" => false, "graph" => false }
+      )
+      build_site("destination" => themed_destination, "website" => config).process
+
+      document = Nokogiri::HTML5.parse(File.read(File.join(themed_destination, "index.html")))
+      related = document.at_css("nav.related-articles")
+      refute_nil related, theme
+      assert_equal "Related articles", related.at_css("h2")&.text&.strip, theme
+      card = related.at_css("article.minimal-post-card")
+      refute_nil card, theme
+      assert_equal "Read next", card.at_css("h3 a")&.text&.strip, theme
+      assert_equal "/target/", card.at_css("h3 a")&.[]("href"), theme
+      assert_equal "A related page summary.", card.at_css(".minimal-post-card__excerpt")&.text&.strip, theme
+      source_actions = document.at_css(".source-actions")
+      article_children = source_actions.parent.element_children
+      assert_operator article_children.index(source_actions), :<, article_children.index(related), theme
+      assert_nil Nokogiri::HTML5.parse(File.read(File.join(themed_destination, "target", "index.html"))).at_css("nav.related-articles"), theme
+    end
+  end
+
   def test_obsidian_trash_is_not_compiled_as_public_content
     trash_root = File.join(@temporary_root, "vault", ".trash")
     FileUtils.mkdir_p(trash_root)
@@ -343,6 +388,12 @@ class JekyllAdapterTest < Minitest::Test
       date: 2026-07-01
       author:
         - Ada
+      tags:
+        - Engineering
+        - release-notes
+      categories:
+        - Engineering
+        - AI Agent
       ---
       # One dispatch
       A concise dispatch summary from the authored body.
@@ -385,6 +436,19 @@ class JekyllAdapterTest < Minitest::Test
     assert_includes blog, 'class="blog-ledger__meta"'
     assert_includes blog, 'class="blog-ledger__description"'
     assert_includes blog, "A concise dispatch summary from the authored body."
+    blog_document = Nokogiri::HTML5.parse(blog)
+    topics = blog_document.at_css(".blog-ledger__meta .blog-ledger__topics")
+    assert_equal "Engineering · release-notes · AI Agent", topics.text.strip
+    assert_operator topics.previous_element, :==, topics.parent.at_css("time")
+
+    post = Nokogiri::HTML5.parse(File.read(File.join(destination, "blog", "dispatch", "index.html")))
+    topic_links = post.css(".note-meta .tag-chip")
+    assert_equal ["Engineering", "release-notes", "AI Agent"], topic_links.map { |link| link.text.strip }
+    assert_equal [
+      "/blog/?topic=engineering",
+      "/blog/?topic=release-notes",
+      "/blog/?topic=ai-agent"
+    ], topic_links.map { |link| link["href"] }
   end
 
   def test_post_byline_uses_resolved_authors_and_preserves_each_title_owner

@@ -8,5 +8,9 @@ tags:
   - jekyll-obsidian
   - Jekyll
   - Obsidian
+categories:
+  - Ruby
+  - TypeScript
+  - Static Site Generator
 github_markdown: https://github.com/wowfun/jekyll-obsidian/blob/main/README.md
 ---

@@ -116,6 +116,7 @@
 
   .docs-article > .note-header,
   .docs-article > .source-actions,
+  .docs-article > .related-articles,
   .docs-article > .website-comments,
   .docs-article > .note-content > :where(h1, h2, h3, h4, p, ul, ol, dl, blockquote, pre, .callout) {
     inline-size: min(100%, var(--reading-width));

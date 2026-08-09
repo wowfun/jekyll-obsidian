@@ -40,6 +40,7 @@
           </div>
           {% if page.website.kind == 'note' and page.website.theme_data.portfolio_projects.size > 0 %}{% include website/portfolio-grid.html %}{% endif %}
           {% if page.website.kind == 'note' or is_authored_home %}{% include website/source-actions.html %}{% endif %}
+          {% if page.website.kind == 'note' or is_authored_home %}{% include website/related-articles.html %}{% endif %}
           {% if page.website.kind == 'note' %}{% include website/comments.html %}{% endif %}
         </article>
 

@@ -1,0 +1,7 @@
+{% if page.website.related_articles and page.website.related_articles.size > 0 %}
+  {% assign ui = page.website.i18n.messages %}
+  <nav class="related-articles minimal-recent" aria-labelledby="related-articles-title">
+    <header class="minimal-section-heading"><h2 id="related-articles-title">{{ ui.related_articles | default: 'Related articles' | escape }}</h2></header>
+    <div class="minimal-recent__grid">{% include website/post-cards.html posts=page.website.related_articles %}</div>
+  </nav>
+{% endif %}

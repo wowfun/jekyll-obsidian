@@ -106,6 +106,7 @@ module JekyllObsidian
       :id,
       :entry,
       :properties,
+      :frontmatter_links,
       :body,
       :document,
       :scanner,
@@ -704,6 +705,7 @@ module JekyllObsidian
             id: path,
             entry: entry,
             properties: parsed.properties,
+            frontmatter_links: parsed.property_links,
             body: external_document ? external_document.markdown : parsed.body,
             occurrences: [],
             outline: [],
@@ -820,6 +822,7 @@ module JekyllObsidian
         note.title = note.properties["title"] || first_h1(note.document) || filename_title(note.id)
         build_anchor_registry(note)
         annotate_occurrences(note) unless note.external_document
+        annotate_frontmatter_links(note)
         annotate_frontmatter_topics(note)
         annotate_code_markers(note)
       end
@@ -1088,17 +1091,33 @@ module JekyllObsidian
       end
     end
 
+    def annotate_frontmatter_links(note)
+      Array(note.frontmatter_links).each do |link|
+        note.occurrences << Occurrence.new(
+          index: note.occurrences.length,
+          source_id: note.id,
+          raw_target: link.target,
+          display: link.display,
+          kind: :link,
+          syntax: :frontmatter_property,
+          source_span: link.source_span,
+          property: link.property
+        )
+      end
+    end
+
     def resolve_all_occurrences
       @notes.values.sort_by(&:id).each do |note|
         note.occurrences.each do |occurrence|
           resolve_occurrence(note, occurrence) unless occurrence.resolved_type == :external_media
-          if occurrence.resolved_type == :note
+          if occurrence.resolved_type == :note && !(occurrence.property == "related" && occurrence.unresolved)
             @relations << Relation.new(
               source_id: note.id,
               target_id: occurrence.target_id,
               kind: occurrence.kind,
               fragment: occurrence.fragment,
-              source_span: occurrence.source_span
+              source_span: occurrence.source_span,
+              property: occurrence.property
             )
           elsif occurrence.resolved_type == :attachment
             @copied_asset_paths << occurrence.target_path
@@ -1126,6 +1145,18 @@ module JekyllObsidian
       occurrence.options = options
 
       if target_text.empty?
+        if occurrence.property == "related"
+          occurrence.unresolved = true
+          error_or_warning(
+            "related_self_reference",
+            "related must not link a note to itself",
+            note.id,
+            occurrence.source_span,
+            fatal: production?,
+            property: occurrence.property
+          )
+          return
+        end
         occurrence.resolved_type = :note
         occurrence.target_id = note.id
         resolve_occurrence_fragment(note, occurrence)
@@ -1139,7 +1170,8 @@ module JekyllObsidian
           "local target escapes the vault root",
           note.id,
           occurrence.source_span,
-          fatal: production?
+          fatal: production?,
+          property: occurrence.property
         )
         return
       end
@@ -1149,9 +1181,15 @@ module JekyllObsidian
         occurrence.unresolved = true
         code = "ambiguous_target"
         if production?
-          error(code, "target is ambiguous", note.id, occurrence.source_span)
+          error(code, "target is ambiguous", note.id, occurrence.source_span, property: occurrence.property)
         else
-          warning(code, "target is ambiguous; rendered as a placeholder", note.id, occurrence.source_span)
+          warning(
+            code,
+            "target is ambiguous; rendered as a placeholder",
+            note.id,
+            occurrence.source_span,
+            property: occurrence.property
+          )
         end
         return
       end
@@ -1159,18 +1197,42 @@ module JekyllObsidian
       if note_target
         occurrence.resolved_type = :note
         occurrence.target_id = note_target
+        if occurrence.property == "related" && note_target == note.id
+          occurrence.unresolved = true
+          error_or_warning(
+            "related_self_reference",
+            "related must not link a note to itself",
+            note.id,
+            occurrence.source_span,
+            fatal: production?,
+            property: occurrence.property
+          )
+          return
+        end
         resolve_occurrence_fragment(@notes.fetch(note_target), occurrence)
         return
       end
 
-      if occurrence.syntax == :frontmatter_topic
+      if %i[frontmatter_property frontmatter_topic].include?(occurrence.syntax)
         occurrence.unresolved = true
-        warning(
-          "unresolved_property_link",
-          "#{occurrence.property} wiki link target is missing or not a public note",
-          note.id,
-          occurrence.source_span
-        )
+        if occurrence.property == "related"
+          error_or_warning(
+            "unresolved_related",
+            "related wiki link target is missing or not a public note",
+            note.id,
+            occurrence.source_span,
+            fatal: production?,
+            property: occurrence.property
+          )
+        else
+          warning(
+            "unresolved_property_link",
+            "#{occurrence.property} wiki link target is missing or not a public note",
+            note.id,
+            occurrence.source_span,
+            property: occurrence.property
+          )
+        end
         return
       end
 
@@ -1228,14 +1290,25 @@ module JekyllObsidian
           "embed fragment does not exist in the public target",
           occurrence.source_id,
           occurrence.source_span,
-          fatal: production?
+          fatal: production?,
+          property: occurrence.property
+        )
+      elsif occurrence.property == "related"
+        error_or_warning(
+          "unresolved_related_fragment",
+          "related wiki link fragment does not exist in the public target",
+          occurrence.source_id,
+          occurrence.source_span,
+          fatal: production?,
+          property: occurrence.property
         )
       else
         warning(
           "unresolved_fragment",
           "link fragment does not exist in the public target; rendered as unresolved",
           occurrence.source_id,
-          occurrence.source_span
+          occurrence.source_span,
+          property: occurrence.property
         )
       end
     end
@@ -1689,7 +1762,8 @@ module JekyllObsidian
           image_url: published_image_url(note),
           source_links: published_source_links(note),
           topics: published_topics(note),
-          links: relation_cards(direct.fetch(note.id, []).select { |item| item.kind == :link }),
+          related: published_related_cards(note),
+          links: relation_cards(direct.fetch(note.id, []).select { |item| item.kind == :link && item.property != "related" }),
           backlinks: relation_cards(backlinks.fetch(note.id, []), source: true),
           embedded_by: relation_cards(embedded_by.fetch(note.id, []), source: true)
         )
@@ -1969,7 +2043,12 @@ module JekyllObsidian
 
     def published_source_links(note)
       links = repository_links(note.id)
-      links = links.merge("imported" => note.external_document.source_url) if note.external_document
+      if note.external_document
+        links = links.merge(
+          "imported" => note.external_document.source_url,
+          "repository" => GitHubMarkdown.repository_url(note.external_document.repository)
+        )
+      end
       links
     end
 
@@ -2289,6 +2368,24 @@ module JekyllObsidian
       end
     end
 
+    def published_related_cards(note)
+      seen = {}
+      note.occurrences.filter_map do |occurrence|
+        next unless occurrence.syntax == :frontmatter_property && occurrence.property == "related"
+        next unless occurrence.resolved_type == :note && !occurrence.unresolved
+        next if seen[occurrence.target_id]
+
+        seen[occurrence.target_id] = true
+        target = @notes.fetch(occurrence.target_id)
+        fragment = occurrence.anchor_id ? "^#{occurrence.anchor_id}" : occurrence.fragment
+        {
+          "id" => target.id,
+          "title" => occurrence.display || target.title,
+          "url" => @url_builder.href(target.route) + @url_builder.fragment(fragment)
+        }
+      end
+    end
+
     def token_url(index)
       "https://obsidian.invalid/ref/#{index}"
     end
@@ -2538,21 +2635,42 @@ module JekyllObsidian
       @config&.environment.to_s != "development"
     end
 
-    def error_or_warning(code, message, path = nil, span = nil, fatal:)
-      fatal ? error(code, message, path, span) : warning(code, message, path, span)
+    def error_or_warning(code, message, path = nil, span = nil, fatal:, property: nil)
+      if fatal
+        error(code, message, path, span, property: property)
+      else
+        warning(code, message, path, span, property: property)
+      end
     end
 
-    def error(code, message, path = nil, span = nil)
-      @diagnostics << Diagnostic.new(severity: :error, code: code, message: message, path: path, span: span)
+    def error(code, message, path = nil, span = nil, property: nil)
+      @diagnostics << Diagnostic.new(
+        severity: :error,
+        code: code,
+        message: message,
+        path: path,
+        span: span,
+        property: property
+      )
     end
 
-    def warning(code, message, path = nil, span = nil)
-      @diagnostics << Diagnostic.new(severity: :warning, code: code, message: message, path: path, span: span)
+    def warning(code, message, path = nil, span = nil, property: nil)
+      @diagnostics << Diagnostic.new(
+        severity: :warning,
+        code: code,
+        message: message,
+        path: path,
+        span: span,
+        property: property
+      )
     end
 
     def sorted_diagnostics
-      @diagnostics.uniq { |item| [item.severity, item.code, item.message, item.path, span_key(item.span)] }
-        .sort_by { |item| [item.path.to_s, span_key(item.span), item.severity.to_s, item.code] }
+      @diagnostics.uniq do |item|
+        [item.severity, item.code, item.message, item.path, span_key(item.span), item.property]
+      end.sort_by do |item|
+        [item.path.to_s, span_key(item.span), item.severity.to_s, item.code, item.property.to_s]
+      end
     end
 
     def h(value)

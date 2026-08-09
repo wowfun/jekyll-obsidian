@@ -83,7 +83,7 @@ tags:
 ---
 ```
 
-译文可以替换正文，以及 `title`、`subtitle`、`description`、`tags`、`author`、`categories`、`image` 和 `cssclasses` 这些可翻译属性。默认语言页面加入顶部导航后，译文也可以替换 `navigation.label`。省略的值从默认语言笔记继承。如需只停用该译文，请设置 YAML 布尔值 `publish: false`；对应的本地化 URL 会显示默认语言回退内容。
+译文可以替换正文，以及 `title`、`subtitle`、`description`、`tags`、`author`、`categories`、`image`、`cssclasses` 和 `related` 这些可翻译属性。自定义属性在省略时同样继承，出现同名属性时则整体替换。默认语言页面加入顶部导航后，译文也可以替换 `navigation.label`。如需只停用该译文，请设置 YAML 布尔值 `publish: false`；对应的本地化 URL 会显示默认语言回退内容。属性中的 Wiki 链接会在当前语言内解析；目标没有物理译文时，仍会指向带语言前缀的回退 URL。
 
 作品集的译文项目页可以选择自己的 `github_markdown` 文件，也可以直接提供本地正文。物理译文提供了自己的内容时，不会继承默认语言的远程正文属性。没有译文项目页时，普通回退页面会使用默认语言项目及其外部正文。来源契约详见 [[Portfolio#引用 GitHub Markdown 文件|作品集]]。
 
