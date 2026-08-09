@@ -1,10 +1,9 @@
 # frozen_string_literal: true
 
-require "date"
 require "test_helper"
 
 class VersionContractTest < Minitest::Test
-  def test_runtime_and_npm_metadata_share_a_valid_calver
+  def test_runtime_and_npm_metadata_share_a_stable_semver
     project_root = File.expand_path("../..", __dir__)
     package = JSON.parse(File.read(File.join(project_root, "package.json")))
     lockfile = JSON.parse(File.read(File.join(project_root, "package-lock.json")))
@@ -15,12 +14,6 @@ class VersionContractTest < Minitest::Test
     assert_equal version, lockfile.fetch("version")
     assert_equal version, lockfile.dig("packages", "", "version")
     assert_equal "format=1\nversion=#{version}\nupdater_protocol=1\n", release
-    assert_match(/\A\d{4}\.(?:[1-9]|1[0-2])\.(?:[1-9]|[12]\d|3[01])\z/, version)
-
-    year, month, day = version.split(".").map { |part| Integer(part, 10) }
-    date = Date.new(year, month, day)
-    assert_equal "#{date.year}.#{date.month}.#{date.day}", version
-  rescue Date::Error
-    flunk "#{version.inspect} is not a calendar date"
+    assert_match(/\A(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\z/, version)
   end
 end

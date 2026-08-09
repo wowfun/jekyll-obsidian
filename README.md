@@ -110,7 +110,7 @@ website/bin/update --check
 website/bin/update
 ```
 
-The updater fetches an official calendar-version tag in an isolated temporary repository, verifies the installed snapshot, refreshes only tool-managed files, and leaves review and commit decisions to you. It never adds a remote to the host repository or runs `git pull`, `git add`, `git commit`, or `git push`. Updates require an official annotated release, and the first update of an older installation succeeds only when its committed `website/` exactly matches an official tag; otherwise replace it once with a tagged snapshot. See [Host Integration](website/docs/docs/Integration.md) for provenance, exit codes, Windows commands, and recovery behavior.
+The updater fetches an official stable Semantic Versioning release from an immutable annotated `vX.Y.Z` tag in an isolated temporary repository, verifies the installed snapshot, refreshes only tool-managed files, and leaves review and commit decisions to you. Each numeric core identifier is either `0` or has no leading zeroes, and `0.y.z` denotes initial development. Prerelease and build metadata tags are outside the stable updater channel; dates belong in release notes rather than version numbers. The updater never adds a remote to the host repository or runs `git pull`, `git add`, `git commit`, or `git push`. The first update of an older installation succeeds only when its committed `website/` exactly matches an official tag; otherwise replace it once with a tagged snapshot. See [Host Integration](website/docs/docs/Integration.md) for provenance, exit codes, Windows commands, and recovery behavior.
 
 ## Optional local preview
 

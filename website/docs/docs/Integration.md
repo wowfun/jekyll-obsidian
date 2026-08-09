@@ -123,7 +123,7 @@ The copied `website/` workspace belongs to `jekyll-obsidian`, but it lives in a 
 ```sh
 website/bin/update --check
 website/bin/update
-website/bin/update --to 2026.8.1
+website/bin/update --to 0.1.0
 ```
 
 On native Windows, use the same options through the CMD launcher:
@@ -133,15 +133,15 @@ website\bin\update.cmd --check
 website\bin\update.cmd
 ```
 
-With no `--to`, the command selects the newest official annotated `vYYYY.M.D` tag. It accepts the installed version as a no-op or moves forward; it never downgrades. `--check` writes nothing and exits with `0` when the installation is already at the target, `2` when an update or first provenance record is available, and `1` for invalid usage, local drift, network failure, or an invalid release.
+With no `--to`, the command selects the newest official stable release from immutable annotated `vX.Y.Z` tags. `X.Y.Z` is a Semantic Versioning core: each numeric identifier is either `0` or starts with `1` through `9`. Releases use `0.y.z` while the public interface remains in initial development. Release dates belong in release notes, not version numbers. The updater accepts the installed version as a no-op or moves forward; it never downgrades. `--check` writes nothing and exits with `0` when the installation is already at the target, `2` when an update or first provenance record is available, and `1` for invalid usage, local drift, network failure, or an invalid release.
 
-`--to` accepts an official annotated calendar-version release without the leading `v`; `2026.8.1` above is a format example. If no stable release is available, the command reports that state without changing the host. An installation must match an official tag before strict updates can establish or verify provenance.
+`--to` accepts an official stable release's version core without the leading `v`; `0.1.0` above is a format example. Tags with prerelease identifiers or build metadata, such as `v0.2.0-rc.1` or `v0.2.0+sha.abcdef`, are not part of the official stable updater channel. They are rejected as updater targets and ignored by default selection. If no stable release is available, the command reports that state without changing the host. An installation must match an official tag before strict updates can establish or verify provenance.
 
 The updater requires Git but not Ruby or Node.js. It fetches the official repository only into an isolated transaction directory and never changes the host's remotes, refs, branch, index, commits, or GitHub settings. It updates the release-owned tracked files under `website/`, the managed configuration block, the generated Pages workflow, and `.github/jekyll-obsidian.lock`. Files ignored by both the installed and target workspace remain untouched; a new tracked path that would overwrite ignored local state causes a safe failure.
 
 Before updating, commit or revert earlier changes to the managed workspace, workflow, and lock. Unrelated content changes and configuration outside the marked block may remain uncommitted. The command rejects committed customizations inside `website/`, staged or unstaged managed changes, and non-ignored extra files; there is no force or merge mode. Move intended customization into the host configuration or content directory.
 
-An installation without a provenance lock is adopted only when its committed `website/` path and content set exactly matches the official tag for its embedded calendar version. An untagged checkout cannot prove that origin. If no matching tag exists, replace `website/` once with a complete tagged snapshot, rerun `integrate`, and run `update` again. Release tags are immutable; later deletion or movement of the installed tag is treated as an error.
+An installation without a provenance lock is adopted only when its committed `website/` path and content set exactly matches the official tag for its embedded version. An untagged checkout cannot prove that origin. If no matching tag exists, replace `website/` once with a complete tagged snapshot, rerun `integrate`, and run `update` again. Release tags are immutable; later deletion or movement of the installed tag is treated as an error.
 
 The target release renders and checks the integration files in a shadow host before the real host is changed. During apply, backups and a transaction journal support rollback. A later invocation recovers an interrupted transaction only when the recorded old or new file digests match exactly; ambiguous state is retained for inspection instead of being overwritten. After success, review `git diff`, run `website/bin/setup` before local preview, and commit the managed changes yourself.
 

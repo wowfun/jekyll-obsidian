@@ -23,9 +23,9 @@ cleanup() {
 trap cleanup EXIT HUP INT TERM
 
 help_output=$($UPDATE --help) || fail "--help did not exit successfully."
-printf '%s\n' "$help_output" | grep -Fq 'Usage: website/bin/update [--check] [--to YYYY.M.D]' || fail "--help omitted the public usage."
+printf '%s\n' "$help_output" | grep -Fq 'Usage: website/bin/update [--check] [--to X.Y.Z]' || fail "--help omitted the public usage."
 printf '%s\n' "$help_output" | grep -Fq -- '--check' || fail "--help omitted --check."
-printf '%s\n' "$help_output" | grep -Fq -- '--to YYYY.M.D' || fail "--help omitted --to."
+printf '%s\n' "$help_output" | grep -Fq -- '--to X.Y.Z' || fail "--help omitted --to."
 if printf '%s\n' "$help_output" | grep -Eqi 'origin|remote|force|adopt|recover|testing'; then
   fail "--help exposed a private transport or recovery control."
 fi
@@ -45,13 +45,13 @@ set -e
 grep -Fxq 'Update error: invalid release version: ' "$tmp_root/empty-version.err" || fail "an empty --to value was treated as latest."
 
 set +e
-$UPDATE --to '' --to 2026.8.7 >"$tmp_root/duplicate-version.out" 2>"$tmp_root/duplicate-version.err"
+$UPDATE --to '' --to 0.0.10 >"$tmp_root/duplicate-version.out" 2>"$tmp_root/duplicate-version.err"
 duplicate_version_status=$?
 set -e
 [ "$duplicate_version_status" -eq 1 ] || fail "a duplicate --to after an empty value did not exit 1."
 grep -Fxq 'Update error: --to may only be specified once.' "$tmp_root/duplicate-version.err" || fail "a duplicate --to after an empty value was not rejected as duplicate."
 
-for invalid_version in 2026.08.7 2026.2.29 2024.13.1 latest; do
+for invalid_version in 00.1.0 0.01.0 0.1.00 0.1 0.0.9.1 0.0.9-rc.1 0.0.9+build latest; do
   set +e
   $UPDATE --to "$invalid_version" >"$tmp_root/version.out" 2>"$tmp_root/version.err"
   version_status=$?
@@ -62,7 +62,7 @@ done
 
 set +e
 JEKYLL_OBSIDIAN_UPDATE_TESTING=1 \
-  $UPDATE --check --to 2026.8.6 >"$tmp_root/testing-missing.out" 2>"$tmp_root/testing-missing.err"
+  $UPDATE --check --to 0.0.9 >"$tmp_root/testing-missing.out" 2>"$tmp_root/testing-missing.err"
 testing_missing_status=$?
 set -e
 [ "$testing_missing_status" -eq 1 ] || fail "testing mode without an origin did not fail closed."
@@ -70,7 +70,7 @@ grep -Fxq 'Update error: the internal test transport is missing its origin.' "$t
 
 set +e
 JEKYLL_OBSIDIAN_UPDATE_TEST_ORIGIN=file:///tmp/not-used \
-  $UPDATE --check --to 2026.8.6 >"$tmp_root/testing-stray.out" 2>"$tmp_root/testing-stray.err"
+  $UPDATE --check --to 0.0.9 >"$tmp_root/testing-stray.out" 2>"$tmp_root/testing-stray.err"
 testing_stray_status=$?
 set -e
 [ "$testing_stray_status" -eq 1 ] || fail "a stray internal origin did not fail closed."
@@ -78,7 +78,7 @@ grep -Fxq 'Update error: the internal test transport is disabled.' "$tmp_root/te
 
 set +e
 JEKYLL_OBSIDIAN_UPDATE_TEST_FAIL_AT=fail_after_first_file \
-  $UPDATE --check --to 2026.8.6 >"$tmp_root/testing-failure-stray.out" 2>"$tmp_root/testing-failure-stray.err"
+  $UPDATE --check --to 0.0.9 >"$tmp_root/testing-failure-stray.out" 2>"$tmp_root/testing-failure-stray.err"
 testing_failure_stray_status=$?
 set -e
 [ "$testing_failure_stray_status" -eq 1 ] || fail "a stray internal failure injection did not fail closed."
@@ -93,14 +93,40 @@ JEKYLL_OBSIDIAN_UPDATE_TESTING=1 \
 empty_status=$?
 set -e
 [ "$empty_status" -eq 1 ] || fail "an origin without tags did not exit 1."
-grep -Fq 'Update error: no annotated stable release tags were found.' "$tmp_root/empty.err" || fail "an origin without tags did not fail during release discovery."
+grep -Fq 'Update error: no annotated stable SemVer release tags were found.' "$tmp_root/empty.err" || fail "an origin without tags did not fail during release discovery."
 
-replace_literal() {
-  file=$1
-  before=$2
-  after=$3
-  sed "s/$before/$after/g" "$file" >"$file.next"
-  mv -- "$file.next" "$file"
+replace_literal_count() {
+  replace_file=$1
+  replace_before=$2
+  replace_after=$3
+  replace_expected=$4
+  awk -v before="$replace_before" -v after="$replace_after" -v expected="$replace_expected" '
+    {
+      if (replaced < expected) {
+        position = index($0, before)
+        if (position > 0) {
+          $0 = substr($0, 1, position - 1) after substr($0, position + length(before))
+          replaced++
+        }
+      }
+      print
+    }
+    END { if (replaced != expected) exit 1 }
+  ' "$replace_file" >"$replace_file.next" || {
+    rm -f -- "$replace_file.next"
+    fail "could not rewrite the fixture version in $replace_file."
+  }
+  mv -- "$replace_file.next" "$replace_file"
+}
+
+set_product_version() {
+  product_site=$1
+  product_before=$2
+  product_after=$3
+  replace_literal_count "$product_site/.jekyll-obsidian-release" "version=$product_before" "version=$product_after" 1
+  replace_literal_count "$product_site/package.json" "\"version\": \"$product_before\"" "\"version\": \"$product_after\"" 1
+  replace_literal_count "$product_site/package-lock.json" "\"version\": \"$product_before\"" "\"version\": \"$product_after\"" 2
+  replace_literal_count "$product_site/lib/jekyll_obsidian.rb" "VERSION = \"$product_before\"" "VERSION = \"$product_after\"" 1
 }
 
 release_work=$tmp_root/release-work
@@ -122,14 +148,7 @@ sh "$release_work/website/bin/integrate" >/dev/null || fail "the fixture host in
 sh "$release_work/website/bin/integrate" --check >/dev/null || fail "the fixture host integration was invalid."
 product_version=$(sed -n 's/^version=//p' "$release_work/website/.jekyll-obsidian-release")
 [ -n "$product_version" ] || fail "the product release version could not be read."
-escaped_product_version=$(printf '%s\n' "$product_version" | sed 's/\./\\./g')
-for version_file in \
-  .jekyll-obsidian-release \
-  package.json \
-  package-lock.json \
-  lib/jekyll_obsidian.rb; do
-  replace_literal "$release_work/website/$version_file" "$escaped_product_version" '2026.8.6'
-done
+set_product_version "$release_work/website" "$product_version" '0.0.9'
 printf '%s\n' alpha >"$release_work/website/update-fixture.txt"
 printf '%s\n' remove-me >"$release_work/website/update-removed-fixture.txt"
 printf '%s\n' parent-file >"$release_work/website/parent-transition"
@@ -140,20 +159,17 @@ git -C "$release_work" init --quiet
 git -C "$release_work" config user.name 'Update Contract'
 git -C "$release_work" config user.email 'update-contract@example.invalid'
 git -C "$release_work" add --all
-git -C "$release_work" commit --quiet -m 'Fixture 2026.8.6'
-git -C "$release_work" tag -a v2026.8.6 -m 'Fixture 2026.8.6'
+git -C "$release_work" commit --quiet -m 'Fixture 0.0.9'
+git -C "$release_work" tag -a v0.0.9 -m 'Fixture 0.0.9'
 
-replace_literal "$release_work/website/.jekyll-obsidian-release" '2026\.8\.6' '2026.8.7'
-replace_literal "$release_work/website/package.json" '2026\.8\.6' '2026.8.7'
-replace_literal "$release_work/website/package-lock.json" '2026\.8\.6' '2026.8.7'
-replace_literal "$release_work/website/lib/jekyll_obsidian.rb" '2026\.8\.6' '2026.8.7'
+set_product_version "$release_work/website" '0.0.9' '0.0.10'
 printf '%s\n' beta >"$release_work/website/update-fixture.txt"
 printf '%s\n' added >"$release_work/website/update-added-fixture.txt"
 rm -- "$release_work/website/update-removed-fixture.txt"
 printf '%s\n' '# update-contract-generated-workflow' >>"$release_work/website/scripts/templates/pages.yml"
 git -C "$release_work" add --all
-git -C "$release_work" commit --quiet -m 'Fixture 2026.8.7'
-git -C "$release_work" tag -a v2026.8.7 -m 'Fixture 2026.8.7'
+git -C "$release_work" commit --quiet -m 'Fixture 0.0.10'
+git -C "$release_work" tag -a v0.0.10 -m 'Fixture 0.0.10'
 
 release_remote=$tmp_root/releases.git
 git clone --quiet --bare "$release_work" "$release_remote"
@@ -164,7 +180,7 @@ new_current_host() {
   git clone --quiet "$release_work" "$current_host"
   git -C "$current_host" config user.name 'Update Contract'
   git -C "$current_host" config user.email 'update-contract@example.invalid'
-  git -C "$current_host" checkout --quiet -B host-main 'v2026.8.6^{}'
+  git -C "$current_host" checkout --quiet -B host-main 'v0.0.9^{}'
   git -C "$current_host" remote set-url origin https://example.invalid/host.git
   printf '%s\n' "$current_host"
 }
@@ -173,7 +189,7 @@ new_locked_host() {
   locked_host=$(new_current_host "$1")
   JEKYLL_OBSIDIAN_UPDATE_TESTING=1 \
     JEKYLL_OBSIDIAN_UPDATE_TEST_ORIGIN="$test_transport" \
-    "$locked_host/website/bin/update" --to 2026.8.6 >/dev/null
+    "$locked_host/website/bin/update" --to 0.0.9 >/dev/null
   git -C "$locked_host" add .github/jekyll-obsidian.lock
   git -C "$locked_host" commit --quiet -m 'Record fixture provenance'
   printf '%s\n' "$locked_host"
@@ -196,7 +212,7 @@ set +e
 (
   cd "$rewrite_host"
   GIT_EXEC_PATH=$fake_git_exec \
-    "$rewrite_host/website/bin/update" --check --to 2026.8.6
+    "$rewrite_host/website/bin/update" --check --to 0.0.9
 ) >"$tmp_root/origin-rewrite.out" 2>"$tmp_root/origin-rewrite.err"
 origin_rewrite_status=$?
 set -e
@@ -210,27 +226,27 @@ adoption_host=$(new_current_host adoption)
 set +e
 JEKYLL_OBSIDIAN_UPDATE_TESTING=1 \
   JEKYLL_OBSIDIAN_UPDATE_TEST_ORIGIN="$test_transport" \
-  "$adoption_host/website/bin/update" --check --to 2026.8.6 \
+  "$adoption_host/website/bin/update" --check --to 0.0.9 \
   >"$tmp_root/adoption.out" 2>"$tmp_root/adoption.err"
 adoption_status=$?
 set -e
 [ "$adoption_status" -eq 2 ] || fail "an exact legacy snapshot was not reported as adoptable."
-grep -Fq 'Provenance can be established for 2026.8.6.' "$tmp_root/adoption.out" || fail "adoption check output was not actionable."
+grep -Fq 'Provenance can be established for 0.0.9.' "$tmp_root/adoption.out" || fail "adoption check output was not actionable."
 [ ! -e "$adoption_host/.github/jekyll-obsidian.lock" ] || fail "--check wrote a provenance lock."
 [ -z "$(git -C "$adoption_host" status --porcelain)" ] || fail "--check changed the host worktree."
 [ ! -e "$adoption_host/.jekyll-obsidian-update" ] || fail "--check left a transaction directory."
 
 JEKYLL_OBSIDIAN_UPDATE_TESTING=1 \
   JEKYLL_OBSIDIAN_UPDATE_TEST_ORIGIN="$test_transport" \
-  "$adoption_host/website/bin/update" --to 2026.8.6 \
+  "$adoption_host/website/bin/update" --to 0.0.9 \
   >"$tmp_root/adopt.out" 2>"$tmp_root/adopt.err" || fail "an exact legacy snapshot could not establish provenance."
-grep -Fq 'Recorded jekyll-obsidian provenance for 2026.8.6.' "$tmp_root/adopt.out" || fail "adoption output did not identify the recorded version."
+grep -Fq 'Recorded jekyll-obsidian provenance for 0.0.9.' "$tmp_root/adopt.out" || fail "adoption output did not identify the recorded version."
 lock_path=$adoption_host/.github/jekyll-obsidian.lock
 [ "$(wc -l <"$lock_path" | tr -d ' ')" -eq 7 ] || fail "the provenance lock was not the strict seven-line format."
 sed -n '1p' "$lock_path" | grep -Fxq 'format=1' || fail "the lock format field was malformed."
 sed -n '2p' "$lock_path" | grep -Fxq 'origin=https://github.com/wowfun/jekyll-obsidian.git' || fail "the lock exposed the test transport."
-sed -n '3p' "$lock_path" | grep -Fxq 'version=2026.8.6' || fail "the lock version was malformed."
-sed -n '4p' "$lock_path" | grep -Fxq 'tag=v2026.8.6' || fail "the lock tag was malformed."
+sed -n '3p' "$lock_path" | grep -Fxq 'version=0.0.9' || fail "the lock version was malformed."
+sed -n '4p' "$lock_path" | grep -Fxq 'tag=v0.0.9' || fail "the lock tag was malformed."
 [ "$(git -C "$adoption_host" status --porcelain)" = '?? .github/jekyll-obsidian.lock' ] || fail "adoption changed more than the provenance lock."
 [ ! -e "$adoption_host/.jekyll-obsidian-update" ] || fail "adoption left a transaction directory."
 
@@ -238,9 +254,9 @@ git -C "$adoption_host" add .github/jekyll-obsidian.lock
 git -C "$adoption_host" commit --quiet -m 'Record fixture provenance'
 JEKYLL_OBSIDIAN_UPDATE_TESTING=1 \
   JEKYLL_OBSIDIAN_UPDATE_TEST_ORIGIN="$test_transport" \
-  "$adoption_host/website/bin/update" --check --to 2026.8.6 \
+  "$adoption_host/website/bin/update" --check --to 0.0.9 \
   >"$tmp_root/current.out" 2>"$tmp_root/current.err" || fail "a locked current release was not idempotent."
-grep -Fq 'jekyll-obsidian 2026.8.6 is current.' "$tmp_root/current.out" || fail "the current-version output was unclear."
+grep -Fq 'jekyll-obsidian 0.0.9 is current.' "$tmp_root/current.out" || fail "the current-version output was unclear."
 [ -z "$(git -C "$adoption_host" status --porcelain)" ] || fail "a current-version check changed the host."
 
 set +e
@@ -251,7 +267,7 @@ JEKYLL_OBSIDIAN_UPDATE_TESTING=1 \
 available_status=$?
 set -e
 [ "$available_status" -eq 2 ] || fail "the latest release check did not exit 2."
-grep -Fq 'Update available: 2026.8.6 -> 2026.8.7.' "$tmp_root/available.out" || fail "the available update was not reported."
+grep -Fq 'Update available: 0.0.9 -> 0.0.10.' "$tmp_root/available.out" || fail "the available update was not reported."
 [ -z "$(git -C "$adoption_host" status --porcelain)" ] || fail "an available update check changed the host."
 
 mkdir -p "$adoption_host/website/node_modules/update-contract"
@@ -275,7 +291,7 @@ JEKYLL_OBSIDIAN_UPDATE_TESTING=1 \
   JEKYLL_OBSIDIAN_UPDATE_TEST_ORIGIN="$test_transport" \
   "$adoption_host/website/bin/update" \
   >"$tmp_root/update.out" 2>"$tmp_root/update.err" || fail "the locked snapshot did not update to latest."
-grep -Fq 'Updated jekyll-obsidian from 2026.8.6 to 2026.8.7.' "$tmp_root/update.out" || fail "successful update output omitted the version transition."
+grep -Fq 'Updated jekyll-obsidian from 0.0.9 to 0.0.10.' "$tmp_root/update.out" || fail "successful update output omitted the version transition."
 [ "$(cat "$adoption_host/website/update-fixture.txt")" = beta ] || fail "a tracked website file was not updated."
 [ "$(cat "$adoption_host/website/update-added-fixture.txt")" = added ] || fail "a new tracked website file was not installed."
 [ ! -e "$adoption_host/website/update-removed-fixture.txt" ] || fail "a removed tracked website file was retained."
@@ -284,7 +300,7 @@ grep -Fq 'Updated jekyll-obsidian from 2026.8.6 to 2026.8.7.' "$tmp_root/update.
 [ "$(sed -n '1p' "$adoption_host/.github/jekyll-obsidian.yml")" = '# host-owned-prefix' ] || fail "host configuration outside the managed block changed."
 cmp -s "$tmp_root/config.before-update" "$adoption_host/.github/jekyll-obsidian.yml" || fail "host configuration bytes outside an unchanged managed block changed."
 grep -Fq '# update-contract-generated-workflow' "$adoption_host/.github/workflows/pages.yml" || fail "the target integrate command did not render the workflow."
-grep -Fxq 'version=2026.8.7' "$adoption_host/.github/jekyll-obsidian.lock" || fail "the provenance lock was not advanced."
+grep -Fxq 'version=0.0.10' "$adoption_host/.github/jekyll-obsidian.lock" || fail "the provenance lock was not advanced."
 [ "$(git -C "$adoption_host" rev-parse HEAD)" = "$host_head_before" ] || fail "update changed host HEAD."
 [ "$(git -C "$adoption_host" symbolic-ref HEAD)" = "$host_branch_before" ] || fail "update changed the host branch."
 [ "$(git -C "$adoption_host" remote get-url origin)" = "$host_remote_before" ] || fail "update changed the host remote."
@@ -304,7 +320,7 @@ grep -Fq 'Update error: injected transaction failure' "$tmp_root/rollback.err" |
 [ "$(cat "$rollback_host/website/update-fixture.txt")" = alpha ] || fail "rollback did not restore an old tracked file."
 [ ! -e "$rollback_host/website/update-added-fixture.txt" ] || fail "rollback retained a target-only file."
 [ "$(cat "$rollback_host/website/update-removed-fixture.txt")" = remove-me ] || fail "rollback did not restore a removed old file."
-grep -Fxq 'version=2026.8.6' "$rollback_host/.github/jekyll-obsidian.lock" || fail "rollback did not restore the old lock."
+grep -Fxq 'version=0.0.9' "$rollback_host/.github/jekyll-obsidian.lock" || fail "rollback did not restore the old lock."
 [ -z "$(git -C "$rollback_host" status --porcelain)" ] || fail "rollback did not restore the clean old snapshot."
 [ ! -e "$rollback_host/.jekyll-obsidian-update" ] || fail "rollback retained its transaction directory."
 
@@ -369,7 +385,7 @@ set -e
 [ "$preparing_check_status" -eq 1 ] || fail "--check changed a preparing transaction."
 [ -d "$preparing_host/.jekyll-obsidian-update" ] || fail "--check removed a preparing transaction."
 JEKYLL_OBSIDIAN_UPDATE_TESTING=1 JEKYLL_OBSIDIAN_UPDATE_TEST_ORIGIN="$test_transport" \
-  "$preparing_host/website/bin/update" --to 2026.8.6 >"$tmp_root/preparing-recover.out" 2>"$tmp_root/preparing-recover.err" || fail "a preparing transaction was not safely discarded."
+  "$preparing_host/website/bin/update" --to 0.0.9 >"$tmp_root/preparing-recover.out" 2>"$tmp_root/preparing-recover.err" || fail "a preparing transaction was not safely discarded."
 grep -Fq 'Discarded an incomplete jekyll-obsidian preparing transaction.' "$tmp_root/preparing-recover.out" || fail "preparing recovery was not reported."
 [ ! -e "$preparing_host/.jekyll-obsidian-update" ] || fail "preparing recovery retained the canonical transaction directory."
 [ -z "$(git -C "$preparing_host" status --porcelain)" ] || fail "preparing recovery changed the old snapshot."
@@ -396,7 +412,7 @@ grep -Fq 'Update error: recovery_required: --check cannot recover' "$tmp_root/pr
 printf '%s\n' tampered >"$prepared_host/website/update-fixture.txt"
 set +e
 JEKYLL_OBSIDIAN_UPDATE_TESTING=1 JEKYLL_OBSIDIAN_UPDATE_TEST_ORIGIN="$test_transport" \
-  "$prepared_host/website/bin/update" --to 2026.8.6 >"$tmp_root/prepared-tampered.out" 2>"$tmp_root/prepared-tampered.err"
+  "$prepared_host/website/bin/update" --to 0.0.9 >"$tmp_root/prepared-tampered.out" 2>"$tmp_root/prepared-tampered.err"
 prepared_tampered_status=$?
 set -e
 [ "$prepared_tampered_status" -eq 1 ] || fail "prepared recovery discarded a host that no longer matched old."
@@ -406,7 +422,7 @@ printf '%s\n' alpha >"$prepared_host/website/update-fixture.txt"
 ln -s missing-target "$prepared_host/website/update-added-fixture.txt"
 set +e
 JEKYLL_OBSIDIAN_UPDATE_TESTING=1 JEKYLL_OBSIDIAN_UPDATE_TEST_ORIGIN="$test_transport" \
-  "$prepared_host/website/bin/update" --to 2026.8.6 >"$tmp_root/prepared-link.out" 2>"$tmp_root/prepared-link.err"
+  "$prepared_host/website/bin/update" --to 0.0.9 >"$tmp_root/prepared-link.out" 2>"$tmp_root/prepared-link.err"
 prepared_link_status=$?
 set -e
 [ "$prepared_link_status" -eq 1 ] || fail "prepared recovery treated a dangling target-only link as absent."
@@ -415,8 +431,8 @@ set -e
 rm -- "$prepared_host/website/update-added-fixture.txt"
 JEKYLL_OBSIDIAN_UPDATE_TESTING=1 \
   JEKYLL_OBSIDIAN_UPDATE_TEST_ORIGIN="$test_transport" \
-  "$prepared_host/website/bin/update" --to 2026.8.6 >"$tmp_root/prepared-recover.out" 2>"$tmp_root/prepared-recover.err" || fail "a prepared transaction was not safely discarded."
-grep -Fq 'Discarded an unapplied jekyll-obsidian 2026.8.6 -> 2026.8.7 transaction.' "$tmp_root/prepared-recover.out" || fail "prepared recovery was not reported."
+  "$prepared_host/website/bin/update" --to 0.0.9 >"$tmp_root/prepared-recover.out" 2>"$tmp_root/prepared-recover.err" || fail "a prepared transaction was not safely discarded."
+grep -Fq 'Discarded an unapplied jekyll-obsidian 0.0.9 -> 0.0.10 transaction.' "$tmp_root/prepared-recover.out" || fail "prepared recovery was not reported."
 [ ! -e "$prepared_host/.jekyll-obsidian-update" ] || fail "prepared recovery retained the transaction directory."
 [ -z "$(git -C "$prepared_host" status --porcelain)" ] || fail "prepared recovery changed the old snapshot."
 
@@ -433,7 +449,7 @@ set -e
 JEKYLL_OBSIDIAN_UPDATE_TESTING=1 \
   JEKYLL_OBSIDIAN_UPDATE_TEST_ORIGIN="$test_transport" \
   "$verified_host/website/bin/update" >"$tmp_root/verified-recover.out" 2>"$tmp_root/verified-recover.err" || fail "a complete new snapshot was not recovered."
-grep -Fq 'Recovered completed jekyll-obsidian update 2026.8.6 -> 2026.8.7.' "$tmp_root/verified-recover.out" || fail "verified recovery was not reported."
+grep -Fq 'Recovered completed jekyll-obsidian update 0.0.9 -> 0.0.10.' "$tmp_root/verified-recover.out" || fail "verified recovery was not reported."
 [ "$(cat "$verified_host/website/update-fixture.txt")" = beta ] || fail "verified recovery did not retain the new snapshot."
 [ ! -e "$verified_host/.jekyll-obsidian-update" ] || fail "verified recovery retained the transaction directory."
 
@@ -451,7 +467,7 @@ grep -Fxq 'state=applying' "$applying_host/.jekyll-obsidian-update/journal" || f
 JEKYLL_OBSIDIAN_UPDATE_TESTING=1 \
   JEKYLL_OBSIDIAN_UPDATE_TEST_ORIGIN="$test_transport" \
   "$applying_host/website/bin/update" >"$tmp_root/applying-recover.out" 2>"$tmp_root/applying-recover.err" || fail "an all-new applying snapshot did not pass post-update recovery verification."
-grep -Fq 'Recovered completed jekyll-obsidian update 2026.8.6 -> 2026.8.7.' "$tmp_root/applying-recover.out" || fail "all-new applying recovery was not reported."
+grep -Fq 'Recovered completed jekyll-obsidian update 0.0.9 -> 0.0.10.' "$tmp_root/applying-recover.out" || fail "all-new applying recovery was not reported."
 [ ! -e "$applying_host/.jekyll-obsidian-update" ] || fail "all-new applying recovery retained the transaction."
 
 install_copy_host=$(new_locked_host install-copy-crash)
@@ -497,7 +513,7 @@ grep -Fq 'Update error: recovery_required:' "$tmp_root/completed-check.err" || f
 [ -d "$completed_host/.jekyll-obsidian-update.completed" ] || fail "--check removed a completed transaction tombstone."
 JEKYLL_OBSIDIAN_UPDATE_TESTING=1 JEKYLL_OBSIDIAN_UPDATE_TEST_ORIGIN="$test_transport" \
   "$completed_host/website/bin/update" >"$tmp_root/completed-recover.out" 2>"$tmp_root/completed-recover.err" || fail "a completed transaction tombstone was not recovered."
-grep -Fq 'Recovered completed jekyll-obsidian update 2026.8.6 -> 2026.8.7.' "$tmp_root/completed-recover.out" || fail "completed transaction tombstone recovery was not reported."
+grep -Fq 'Recovered completed jekyll-obsidian update 0.0.9 -> 0.0.10.' "$tmp_root/completed-recover.out" || fail "completed transaction tombstone recovery was not reported."
 [ ! -e "$completed_host/.jekyll-obsidian-update.completed" ] || fail "completed transaction tombstone recovery retained the tombstone."
 
 mixed_host=$(new_locked_host mixed-crash)
@@ -526,11 +542,11 @@ git -C "$mode_host" commit --quiet -m 'Simulate a mode-only Windows checkout dif
 set +e
 JEKYLL_OBSIDIAN_UPDATE_TESTING=1 \
   JEKYLL_OBSIDIAN_UPDATE_TEST_ORIGIN="$test_transport" \
-  "$mode_host/website/bin/update" --check --to 2026.8.6 >"$tmp_root/mode.out" 2>"$tmp_root/mode.err"
+  "$mode_host/website/bin/update" --check --to 0.0.9 >"$tmp_root/mode.out" 2>"$tmp_root/mode.err"
 mode_status=$?
 set -e
 [ "$mode_status" -eq 2 ] || fail "a regular-file mode-only difference blocked exact adoption."
-grep -Fq 'Provenance can be established for 2026.8.6.' "$tmp_root/mode.out" || fail "mode-only adoption was not reported."
+grep -Fq 'Provenance can be established for 0.0.9.' "$tmp_root/mode.out" || fail "mode-only adoption was not reported."
 
 crlf_lock_host=$(new_locked_host crlf-lock)
 awk '{ printf "%s\r\n", $0 }' "$crlf_lock_host/.github/jekyll-obsidian.lock" >"$tmp_root/crlf.lock"
@@ -538,22 +554,22 @@ mv -- "$tmp_root/crlf.lock" "$crlf_lock_host/.github/jekyll-obsidian.lock"
 git -C "$crlf_lock_host" add .github/jekyll-obsidian.lock
 git -C "$crlf_lock_host" commit --quiet -m 'Simulate a CRLF host lock checkout'
 JEKYLL_OBSIDIAN_UPDATE_TESTING=1 JEKYLL_OBSIDIAN_UPDATE_TEST_ORIGIN="$test_transport" \
-  "$crlf_lock_host/website/bin/update" --check --to 2026.8.6 >"$tmp_root/crlf-lock.out" 2>"$tmp_root/crlf-lock.err" || fail "a strict CRLF provenance lock was rejected."
-grep -Fq 'jekyll-obsidian 2026.8.6 is current.' "$tmp_root/crlf-lock.out" || fail "CRLF lock current output was unclear."
+  "$crlf_lock_host/website/bin/update" --check --to 0.0.9 >"$tmp_root/crlf-lock.out" 2>"$tmp_root/crlf-lock.err" || fail "a strict CRLF provenance lock was rejected."
+grep -Fq 'jekyll-obsidian 0.0.9 is current.' "$tmp_root/crlf-lock.out" || fail "CRLF lock current output was unclear."
 [ -z "$(git -C "$crlf_lock_host" status --porcelain)" ] || fail "CRLF lock check changed the host."
 
 downgrade_host=$tmp_root/host-downgrade
 git clone --quiet "$release_work" "$downgrade_host"
-git -C "$downgrade_host" checkout --quiet -B host-main 'v2026.8.7^{}'
+git -C "$downgrade_host" checkout --quiet -B host-main 'v0.0.10^{}'
 git -C "$downgrade_host" remote set-url origin https://example.invalid/host.git
 set +e
 JEKYLL_OBSIDIAN_UPDATE_TESTING=1 \
   JEKYLL_OBSIDIAN_UPDATE_TEST_ORIGIN="$test_transport" \
-  "$downgrade_host/website/bin/update" --to 2026.8.6 >"$tmp_root/downgrade.out" 2>"$tmp_root/downgrade.err"
+  "$downgrade_host/website/bin/update" --to 0.0.9 >"$tmp_root/downgrade.out" 2>"$tmp_root/downgrade.err"
 downgrade_status=$?
 set -e
 [ "$downgrade_status" -eq 1 ] || fail "a downgrade did not exit 1."
-grep -Fq 'Update error: downgrades are not supported: 2026.8.7 -> 2026.8.6' "$tmp_root/downgrade.err" || fail "the downgrade rejection was unclear."
+grep -Fq 'Update error: downgrades are not supported: 0.0.10 -> 0.0.9' "$tmp_root/downgrade.err" || fail "the downgrade rejection was unclear."
 [ -z "$(git -C "$downgrade_host" status --porcelain)" ] || fail "downgrade rejection changed the host."
 
 unstaged_host=$(new_locked_host dirty-unstaged)
@@ -596,7 +612,7 @@ git -C "$committed_host" add website/update-fixture.txt
 git -C "$committed_host" commit --quiet -m 'Customize the managed snapshot'
 set +e
 JEKYLL_OBSIDIAN_UPDATE_TESTING=1 JEKYLL_OBSIDIAN_UPDATE_TEST_ORIGIN="$test_transport" \
-  "$committed_host/website/bin/update" --to 2026.8.6 >"$tmp_root/dirty-committed.out" 2>"$tmp_root/dirty-committed.err"
+  "$committed_host/website/bin/update" --to 0.0.9 >"$tmp_root/dirty-committed.out" 2>"$tmp_root/dirty-committed.err"
 committed_status=$?
 set -e
 [ "$committed_status" -eq 1 ] || fail "a committed website customization was accepted."
@@ -678,29 +694,25 @@ bump_fixture_version() {
   fixture_root=$1
   fixture_before=$2
   fixture_after=$3
-  escaped_before=$(printf '%s\n' "$fixture_before" | sed 's/\./\\./g')
-  replace_literal "$fixture_root/website/.jekyll-obsidian-release" "$escaped_before" "$fixture_after"
-  replace_literal "$fixture_root/website/package.json" "$escaped_before" "$fixture_after"
-  replace_literal "$fixture_root/website/package-lock.json" "$escaped_before" "$fixture_after"
-  replace_literal "$fixture_root/website/lib/jekyll_obsidian.rb" "$escaped_before" "$fixture_after"
+  set_product_version "$fixture_root/website" "$fixture_before" "$fixture_after"
 }
 
 missing_work=$tmp_root/missing-work
 git clone --quiet "$release_remote" "$missing_work"
 git -C "$missing_work" config user.name 'Update Contract'
 git -C "$missing_work" config user.email 'update-contract@example.invalid'
-git -C "$missing_work" checkout --quiet -B missing-main 'v2026.8.7^{}'
-bump_fixture_version "$missing_work" 2026.8.7 2026.8.15
+git -C "$missing_work" checkout --quiet -B missing-main 'v0.0.10^{}'
+bump_fixture_version "$missing_work" 0.0.10 0.1.9
 rm -- "$missing_work/website/scripts/example-config.yml"
 git -C "$missing_work" add --all
 git -C "$missing_work" commit --quiet -m 'Missing required component fixture'
-git -C "$missing_work" tag -a v2026.8.15 -m 'Missing required component fixture'
+git -C "$missing_work" tag -a v0.1.9 -m 'Missing required component fixture'
 missing_remote=$tmp_root/missing-releases.git
 git clone --quiet --bare "$missing_work" "$missing_remote"
 missing_host=$(new_locked_host missing-component)
 set +e
 JEKYLL_OBSIDIAN_UPDATE_TESTING=1 JEKYLL_OBSIDIAN_UPDATE_TEST_ORIGIN="file://$missing_remote" \
-  "$missing_host/website/bin/update" --check --to 2026.8.15 >"$tmp_root/missing.out" 2>"$tmp_root/missing.err"
+  "$missing_host/website/bin/update" --check --to 0.1.9 >"$tmp_root/missing.out" 2>"$tmp_root/missing.err"
 missing_status=$?
 set -e
 [ "$missing_status" -eq 1 ] || fail "a release missing example-config.yml was accepted."
@@ -708,56 +720,58 @@ grep -Fq 'missing required component: website/scripts/example-config.yml' "$tmp_
 [ -z "$(git -C "$missing_host" status --porcelain)" ] || fail "missing component rejection changed the host."
 [ ! -e "$missing_host/.jekyll-obsidian-update" ] || fail "missing component rejection created a transaction."
 
-malformed_work=$tmp_root/malformed-work
-git clone --quiet "$release_remote" "$malformed_work"
-git -C "$malformed_work" config user.name 'Update Contract'
-git -C "$malformed_work" config user.email 'update-contract@example.invalid'
-git -C "$malformed_work" tag -a v2026.08.1 'v2026.8.7^{}' -m 'Malformed calendar tag fixture'
-malformed_remote=$tmp_root/malformed-releases.git
-git clone --quiet --bare "$malformed_work" "$malformed_remote"
-malformed_host=$(new_locked_host malformed-tag)
-set +e
-JEKYLL_OBSIDIAN_UPDATE_TESTING=1 JEKYLL_OBSIDIAN_UPDATE_TEST_ORIGIN="file://$malformed_remote" \
-  "$malformed_host/website/bin/update" --check --to 2026.8.6 >"$tmp_root/malformed.out" 2>"$tmp_root/malformed.err"
-malformed_status=$?
-set -e
-[ "$malformed_status" -eq 1 ] || fail "an invalid calendar-shaped release tag was ignored."
-grep -Fq 'invalid calendar release tag: v2026.08.1' "$tmp_root/malformed.err" || fail "the invalid calendar tag rejection was unclear."
-[ -z "$(git -C "$malformed_host" status --porcelain)" ] || fail "invalid calendar tag rejection changed the host."
+for malformed_version in 0.01.0 .0.1; do
+  malformed_work=$tmp_root/malformed-work-$malformed_version
+  git clone --quiet "$release_remote" "$malformed_work"
+  git -C "$malformed_work" config user.name 'Update Contract'
+  git -C "$malformed_work" config user.email 'update-contract@example.invalid'
+  git -C "$malformed_work" tag -a "v$malformed_version" 'v0.0.10^{}' -m 'Malformed SemVer tag fixture'
+  malformed_remote=$tmp_root/malformed-releases-$malformed_version.git
+  git clone --quiet --bare "$malformed_work" "$malformed_remote"
+  malformed_host=$(new_locked_host "malformed-tag-$malformed_version")
+  set +e
+  JEKYLL_OBSIDIAN_UPDATE_TESTING=1 JEKYLL_OBSIDIAN_UPDATE_TEST_ORIGIN="file://$malformed_remote" \
+    "$malformed_host/website/bin/update" --check --to 0.0.9 >"$tmp_root/malformed-$malformed_version.out" 2>"$tmp_root/malformed-$malformed_version.err"
+  malformed_status=$?
+  set -e
+  [ "$malformed_status" -eq 1 ] || fail "an invalid stable SemVer-shaped release tag was ignored."
+  grep -Fq "invalid stable SemVer release tag: v$malformed_version" "$tmp_root/malformed-$malformed_version.err" || fail "the invalid SemVer tag rejection was unclear."
+  [ -z "$(git -C "$malformed_host" status --porcelain)" ] || fail "invalid SemVer tag rejection changed the host."
+done
 
 boundary_work=$tmp_root/boundary-work
 git clone --quiet "$release_remote" "$boundary_work"
 git -C "$boundary_work" config user.name 'Update Contract'
 git -C "$boundary_work" config user.email 'update-contract@example.invalid'
-git -C "$boundary_work" checkout --quiet -B case-main 'v2026.8.7^{}'
-bump_fixture_version "$boundary_work" 2026.8.7 2026.8.19
+git -C "$boundary_work" checkout --quiet -B case-main 'v0.0.10^{}'
+bump_fixture_version "$boundary_work" 0.0.10 0.1.13
 git -C "$boundary_work" mv website/update-fixture.txt website/Update-Fixture.txt
 git -C "$boundary_work" add --all
 git -C "$boundary_work" commit --quiet -m 'Case-only rename fixture'
-git -C "$boundary_work" tag -a v2026.8.19 -m 'Case-only rename fixture'
+git -C "$boundary_work" tag -a v0.1.13 -m 'Case-only rename fixture'
 
-git -C "$boundary_work" checkout --quiet -B parent-main 'v2026.8.7^{}'
-bump_fixture_version "$boundary_work" 2026.8.7 2026.8.20
+git -C "$boundary_work" checkout --quiet -B parent-main 'v0.0.10^{}'
+bump_fixture_version "$boundary_work" 0.0.10 0.1.14
 rm -- "$boundary_work/website/parent-transition"
 mkdir -p "$boundary_work/website/parent-transition"
 printf '%s\n' child >"$boundary_work/website/parent-transition/child.txt"
 git -C "$boundary_work" add --all
 git -C "$boundary_work" commit --quiet -m 'File-to-directory fixture'
-git -C "$boundary_work" tag -a v2026.8.20 -m 'File-to-directory fixture'
+git -C "$boundary_work" tag -a v0.1.14 -m 'File-to-directory fixture'
 
-git -C "$boundary_work" checkout --quiet -B nested-tag-main 'v2026.8.7^{}'
-bump_fixture_version "$boundary_work" 2026.8.7 2026.8.21
+git -C "$boundary_work" checkout --quiet -B nested-tag-main 'v0.0.10^{}'
+bump_fixture_version "$boundary_work" 0.0.10 0.1.15
 git -C "$boundary_work" add --all
 git -C "$boundary_work" commit --quiet -m 'Nested tag target fixture'
-git -C "$boundary_work" tag -a inner-2026.8.21 -m 'Nested tag inner object'
-git -C "$boundary_work" tag -a v2026.8.21 inner-2026.8.21 -m 'Nested official tag fixture'
+git -C "$boundary_work" tag -a inner-0.1.15 -m 'Nested tag inner object'
+git -C "$boundary_work" tag -a v0.1.15 inner-0.1.15 -m 'Nested official tag fixture'
 
 boundary_remote=$tmp_root/boundary-releases.git
 git clone --quiet --bare "$boundary_work" "$boundary_remote"
 case_rename_host=$(new_locked_host case-rename)
 set +e
 JEKYLL_OBSIDIAN_UPDATE_TESTING=1 JEKYLL_OBSIDIAN_UPDATE_TEST_ORIGIN="file://$boundary_remote" \
-  "$case_rename_host/website/bin/update" --check --to 2026.8.19 >"$tmp_root/case-rename.out" 2>"$tmp_root/case-rename.err"
+  "$case_rename_host/website/bin/update" --check --to 0.1.13 >"$tmp_root/case-rename.out" 2>"$tmp_root/case-rename.err"
 case_rename_status=$?
 set -e
 [ "$case_rename_status" -eq 1 ] || fail "a cross-version case-only path rename was accepted."
@@ -767,7 +781,7 @@ grep -Fq 'contains a cross-version case-only path rename' "$tmp_root/case-rename
 parent_transition_host=$(new_locked_host parent-transition)
 set +e
 JEKYLL_OBSIDIAN_UPDATE_TESTING=1 JEKYLL_OBSIDIAN_UPDATE_TEST_ORIGIN="file://$boundary_remote" \
-  "$parent_transition_host/website/bin/update" --check --to 2026.8.20 >"$tmp_root/parent-transition.out" 2>"$tmp_root/parent-transition.err"
+  "$parent_transition_host/website/bin/update" --check --to 0.1.14 >"$tmp_root/parent-transition.out" 2>"$tmp_root/parent-transition.err"
 parent_transition_status=$?
 set -e
 [ "$parent_transition_status" -eq 1 ] || fail "a target child beneath an old regular file passed preflight."
@@ -777,45 +791,45 @@ grep -Fq 'release path has a non-directory or linked parent: website/parent-tran
 nested_tag_host=$(new_locked_host nested-tag)
 set +e
 JEKYLL_OBSIDIAN_UPDATE_TESTING=1 JEKYLL_OBSIDIAN_UPDATE_TEST_ORIGIN="file://$boundary_remote" \
-  "$nested_tag_host/website/bin/update" --check --to 2026.8.21 >"$tmp_root/nested-tag.out" 2>"$tmp_root/nested-tag.err"
+  "$nested_tag_host/website/bin/update" --check --to 0.1.15 >"$tmp_root/nested-tag.out" 2>"$tmp_root/nested-tag.err"
 nested_tag_status=$?
 set -e
 [ "$nested_tag_status" -eq 1 ] || fail "a release tag pointing to another tag was accepted."
-grep -Fq 'official release v2026.8.21 failed provenance verification' "$tmp_root/nested-tag.err" || fail "nested annotated tag rejection was unclear."
+grep -Fq 'official release v0.1.15 failed provenance verification' "$tmp_root/nested-tag.err" || fail "nested annotated tag rejection was unclear."
 [ ! -e "$nested_tag_host/.jekyll-obsidian-update" ] || fail "nested tag rejection created a transaction."
 
 preflight_work=$tmp_root/preflight-work
 git clone --quiet "$release_remote" "$preflight_work"
 git -C "$preflight_work" config user.name 'Update Contract'
 git -C "$preflight_work" config user.email 'update-contract@example.invalid'
-git -C "$preflight_work" checkout --quiet -B preflight-main 'v2026.8.7^{}'
-bump_fixture_version "$preflight_work" 2026.8.7 2026.8.16
+git -C "$preflight_work" checkout --quiet -B preflight-main 'v0.0.10^{}'
+bump_fixture_version "$preflight_work" 0.0.10 0.1.10
 awk 'NR == 3 { print "exit 73" } { print }' "$preflight_work/website/bin/integrate" >"$preflight_work/website/bin/integrate.next"
 mv -- "$preflight_work/website/bin/integrate.next" "$preflight_work/website/bin/integrate"
 chmod +x "$preflight_work/website/bin/integrate"
 git -C "$preflight_work" add --all
 git -C "$preflight_work" commit --quiet -m 'Candidate integrate failure fixture'
-git -C "$preflight_work" tag -a v2026.8.16 -m 'Candidate integrate failure fixture'
+git -C "$preflight_work" tag -a v0.1.10 -m 'Candidate integrate failure fixture'
 
-git -C "$preflight_work" show 'v2026.8.7^{}:website/bin/integrate' >"$preflight_work/website/bin/integrate"
+git -C "$preflight_work" show 'v0.0.10^{}:website/bin/integrate' >"$preflight_work/website/bin/integrate"
 chmod +x "$preflight_work/website/bin/integrate"
-bump_fixture_version "$preflight_work" 2026.8.16 2026.8.17
+bump_fixture_version "$preflight_work" 0.1.10 0.1.11
 mkdir -p "$preflight_work/website/node_modules"
 printf '%s\n' target >"$preflight_work/website/node_modules/collision.txt"
 git -C "$preflight_work" add --all
 git -C "$preflight_work" add -f website/node_modules/collision.txt
 git -C "$preflight_work" commit --quiet -m 'Ignored collision fixture'
-git -C "$preflight_work" tag -a v2026.8.17 -m 'Ignored collision fixture'
+git -C "$preflight_work" tag -a v0.1.11 -m 'Ignored collision fixture'
 
 git -C "$preflight_work" rm --quiet -f website/node_modules/collision.txt
-bump_fixture_version "$preflight_work" 2026.8.17 2026.8.18
+bump_fixture_version "$preflight_work" 0.1.11 0.1.12
 printf '%s\n' '# state is no longer ignored' >"$preflight_work/website/nested-ignore/.gitignore"
 git -C "$preflight_work" add --all
 git -C "$preflight_work" commit --quiet -m 'Ignored state contract removal fixture'
-git -C "$preflight_work" tag -a v2026.8.18 -m 'Ignored state contract removal fixture'
+git -C "$preflight_work" tag -a v0.1.12 -m 'Ignored state contract removal fixture'
 
-git -C "$preflight_work" checkout --quiet -B real-check-main 'v2026.8.7^{}'
-bump_fixture_version "$preflight_work" 2026.8.7 2026.8.22
+git -C "$preflight_work" checkout --quiet -B real-check-main 'v0.0.10^{}'
+bump_fixture_version "$preflight_work" 0.0.10 0.1.16
 awk '
   { print }
   NR == 6 {
@@ -828,18 +842,18 @@ mv -- "$preflight_work/website/bin/integrate.next" "$preflight_work/website/bin/
 chmod +x "$preflight_work/website/bin/integrate"
 git -C "$preflight_work" add --all
 git -C "$preflight_work" commit --quiet -m 'Real host post-check failure fixture'
-git -C "$preflight_work" tag -a v2026.8.22 -m 'Real host post-check failure fixture'
+git -C "$preflight_work" tag -a v0.1.16 -m 'Real host post-check failure fixture'
 
 preflight_remote=$tmp_root/preflight-releases.git
 git clone --quiet --bare "$preflight_work" "$preflight_remote"
 integrate_failure_host=$(new_locked_host candidate-integrate-failure)
 set +e
 JEKYLL_OBSIDIAN_UPDATE_TESTING=1 JEKYLL_OBSIDIAN_UPDATE_TEST_ORIGIN="file://$preflight_remote" \
-  "$integrate_failure_host/website/bin/update" --check --to 2026.8.16 >"$tmp_root/integrate-failure.out" 2>"$tmp_root/integrate-failure.err"
+  "$integrate_failure_host/website/bin/update" --check --to 0.1.10 >"$tmp_root/integrate-failure.out" 2>"$tmp_root/integrate-failure.err"
 integrate_failure_status=$?
 set -e
 [ "$integrate_failure_status" -eq 1 ] || fail "a candidate integrate failure was accepted."
-grep -Fq 'release v2026.8.16 could not render host integration' "$tmp_root/integrate-failure.err" || fail "candidate integrate failure was not reported."
+grep -Fq 'release v0.1.10 could not render host integration' "$tmp_root/integrate-failure.err" || fail "candidate integrate failure was not reported."
 [ -z "$(git -C "$integrate_failure_host" status --porcelain)" ] || fail "candidate integrate failure changed the host."
 [ ! -e "$integrate_failure_host/.jekyll-obsidian-update" ] || fail "candidate integrate failure created a transaction."
 
@@ -847,13 +861,13 @@ real_check_host=$(new_locked_host real-host-post-check)
 printf '%s\n' fail >"$real_check_host/update-contract-real-check-failure"
 set +e
 JEKYLL_OBSIDIAN_UPDATE_TESTING=1 JEKYLL_OBSIDIAN_UPDATE_TEST_ORIGIN="file://$preflight_remote" \
-  "$real_check_host/website/bin/update" --to 2026.8.22 >"$tmp_root/real-check.out" 2>"$tmp_root/real-check.err"
+  "$real_check_host/website/bin/update" --to 0.1.16 >"$tmp_root/real-check.out" 2>"$tmp_root/real-check.err"
 real_check_status=$?
 set -e
 [ "$real_check_status" -eq 1 ] || fail "a release that failed only the real-host integrate check was accepted."
 grep -Fq 'the updated host failed post-update integration verification' "$tmp_root/real-check.err" || fail "real-host post-update integration failure was not reported."
 [ "$(cat "$real_check_host/website/update-fixture.txt")" = alpha ] || fail "real-host post-check failure did not roll back managed content."
-grep -Fxq 'version=2026.8.6' "$real_check_host/.github/jekyll-obsidian.lock" || fail "real-host post-check failure did not roll back provenance."
+grep -Fxq 'version=0.0.9' "$real_check_host/.github/jekyll-obsidian.lock" || fail "real-host post-check failure did not roll back provenance."
 [ -f "$real_check_host/update-contract-real-check-failure" ] || fail "real-host post-check failure removed host-owned state."
 [ ! -e "$real_check_host/.jekyll-obsidian-update" ] || fail "real-host post-check failure retained its transaction."
 
@@ -862,7 +876,7 @@ mkdir -p "$collision_host/website/node_modules"
 printf '%s\n' preserve >"$collision_host/website/node_modules/collision.txt"
 set +e
 JEKYLL_OBSIDIAN_UPDATE_TESTING=1 JEKYLL_OBSIDIAN_UPDATE_TEST_ORIGIN="file://$preflight_remote" \
-  "$collision_host/website/bin/update" --check --to 2026.8.17 >"$tmp_root/collision.out" 2>"$tmp_root/collision.err"
+  "$collision_host/website/bin/update" --check --to 0.1.11 >"$tmp_root/collision.out" 2>"$tmp_root/collision.err"
 collision_status=$?
 set -e
 [ "$collision_status" -eq 1 ] || fail "a target file overwrote ignored local state."
@@ -875,11 +889,11 @@ mkdir -p "$no_longer_ignored_host/website/nested-ignore/state"
 printf '%s\n' preserve >"$no_longer_ignored_host/website/nested-ignore/state/local-state.txt"
 set +e
 JEKYLL_OBSIDIAN_UPDATE_TESTING=1 JEKYLL_OBSIDIAN_UPDATE_TEST_ORIGIN="file://$preflight_remote" \
-  "$no_longer_ignored_host/website/bin/update" --check --to 2026.8.18 >"$tmp_root/no-longer-ignored.out" 2>"$tmp_root/no-longer-ignored.err"
+  "$no_longer_ignored_host/website/bin/update" --check --to 0.1.12 >"$tmp_root/no-longer-ignored.out" 2>"$tmp_root/no-longer-ignored.err"
 no_longer_ignored_status=$?
 set -e
 [ "$no_longer_ignored_status" -eq 1 ] || fail "state that lost its target ignore rule was accepted."
-grep -Fq 'some ignored website state would no longer be ignored by v2026.8.18' "$tmp_root/no-longer-ignored.err" || fail "removed ignore contract rejection was unclear."
+grep -Fq 'some ignored website state would no longer be ignored by v0.1.12' "$tmp_root/no-longer-ignored.err" || fail "removed ignore contract rejection was unclear."
 [ "$(cat "$no_longer_ignored_host/website/nested-ignore/state/local-state.txt")" = preserve ] || fail "removed ignore contract rejection changed local state."
 [ ! -e "$no_longer_ignored_host/.jekyll-obsidian-update" ] || fail "removed ignore contract rejection created a transaction."
 
@@ -887,54 +901,54 @@ unsafe_work=$tmp_root/unsafe-work
 git clone --quiet "$release_remote" "$unsafe_work"
 git -C "$unsafe_work" config user.name 'Update Contract'
 git -C "$unsafe_work" config user.email 'update-contract@example.invalid'
-git -C "$unsafe_work" checkout --quiet -B unsafe-main 'v2026.8.7^{}'
+git -C "$unsafe_work" checkout --quiet -B unsafe-main 'v0.0.10^{}'
 
-bump_fixture_version "$unsafe_work" 2026.8.7 2026.8.8
+bump_fixture_version "$unsafe_work" 0.0.10 0.1.2
 ln -s update-fixture.txt "$unsafe_work/website/unsafe-link"
 git -C "$unsafe_work" add --all
 git -C "$unsafe_work" commit --quiet -m 'Unsafe symlink fixture'
-git -C "$unsafe_work" tag -a v2026.8.8 -m 'Unsafe symlink fixture'
+git -C "$unsafe_work" tag -a v0.1.2 -m 'Unsafe symlink fixture'
 
 rm -- "$unsafe_work/website/unsafe-link"
-bump_fixture_version "$unsafe_work" 2026.8.8 2026.8.9
+bump_fixture_version "$unsafe_work" 0.1.2 0.1.3
 printf '%s\n' reserved >"$unsafe_work/website/CON"
 git -C "$unsafe_work" add --all
 git -C "$unsafe_work" commit --quiet -m 'Unsafe Windows device fixture'
-git -C "$unsafe_work" tag -a v2026.8.9 -m 'Unsafe Windows device fixture'
+git -C "$unsafe_work" tag -a v0.1.3 -m 'Unsafe Windows device fixture'
 
 rm -- "$unsafe_work/website/CON"
-bump_fixture_version "$unsafe_work" 2026.8.9 2026.8.10
+bump_fixture_version "$unsafe_work" 0.1.3 0.1.4
 printf '%s\n' stream >"$unsafe_work/website/bad:name"
 git -C "$unsafe_work" add --all
 git -C "$unsafe_work" commit --quiet -m 'Unsafe Windows stream fixture'
-git -C "$unsafe_work" tag -a v2026.8.10 -m 'Unsafe Windows stream fixture'
+git -C "$unsafe_work" tag -a v0.1.4 -m 'Unsafe Windows stream fixture'
 
 rm -- "$unsafe_work/website/bad:name"
-bump_fixture_version "$unsafe_work" 2026.8.10 2026.8.11
+bump_fixture_version "$unsafe_work" 0.1.4 0.1.5
 printf '%s\n' trailing >"$unsafe_work/website/trailing."
 git -C "$unsafe_work" add --all
 git -C "$unsafe_work" commit --quiet -m 'Unsafe trailing-dot fixture'
-git -C "$unsafe_work" tag -a v2026.8.11 -m 'Unsafe trailing-dot fixture'
+git -C "$unsafe_work" tag -a v0.1.5 -m 'Unsafe trailing-dot fixture'
 
 rm -- "$unsafe_work/website/trailing."
-bump_fixture_version "$unsafe_work" 2026.8.11 2026.8.12
+bump_fixture_version "$unsafe_work" 0.1.5 0.1.6
 git -C "$unsafe_work" add --all
 upper_blob=$(printf '%s\n' upper | git -C "$unsafe_work" hash-object -w --stdin)
 lower_blob=$(printf '%s\n' lower | git -C "$unsafe_work" hash-object -w --stdin)
 git -C "$unsafe_work" update-index --add --cacheinfo "100644,$upper_blob,website/Case.txt"
 git -C "$unsafe_work" update-index --add --cacheinfo "100644,$lower_blob,website/case.txt"
 git -C "$unsafe_work" commit --quiet -m 'Unsafe case-collision fixture'
-git -C "$unsafe_work" tag -a v2026.8.12 -m 'Unsafe case-collision fixture'
+git -C "$unsafe_work" tag -a v0.1.6 -m 'Unsafe case-collision fixture'
 
 git -C "$unsafe_work" update-index --force-remove -- website/Case.txt website/case.txt
-replace_literal "$unsafe_work/website/.jekyll-obsidian-release" '2026\.8\.12' '2026.8.13'
+replace_literal_count "$unsafe_work/website/.jekyll-obsidian-release" 'version=0.1.6' 'version=0.1.7' 1
 git -C "$unsafe_work" add --all
 git -C "$unsafe_work" commit --quiet -m 'Mismatched version fixture'
-git -C "$unsafe_work" tag -a v2026.8.13 -m 'Mismatched version fixture'
+git -C "$unsafe_work" tag -a v0.1.7 -m 'Mismatched version fixture'
 
 unsafe_remote=$tmp_root/unsafe-releases.git
 git clone --quiet --bare "$unsafe_work" "$unsafe_remote"
-for unsafe_version in 2026.8.8 2026.8.9 2026.8.10 2026.8.11 2026.8.12; do
+for unsafe_version in 0.1.2 0.1.3 0.1.4 0.1.5 0.1.6; do
   unsafe_host=$(new_locked_host "unsafe-$unsafe_version")
   set +e
   JEKYLL_OBSIDIAN_UPDATE_TESTING=1 \
@@ -952,45 +966,45 @@ mismatch_host=$(new_locked_host version-mismatch)
 set +e
 JEKYLL_OBSIDIAN_UPDATE_TESTING=1 \
   JEKYLL_OBSIDIAN_UPDATE_TEST_ORIGIN="file://$unsafe_remote" \
-  "$mismatch_host/website/bin/update" --to 2026.8.13 >"$tmp_root/mismatch.out" 2>"$tmp_root/mismatch.err"
+  "$mismatch_host/website/bin/update" --to 0.1.7 >"$tmp_root/mismatch.out" 2>"$tmp_root/mismatch.err"
 mismatch_status=$?
 set -e
 [ "$mismatch_status" -eq 1 ] || fail "a release with inconsistent package versions was accepted."
-grep -Fq 'release v2026.8.13 has inconsistent package or Ruby versions' "$tmp_root/mismatch.err" || fail "candidate version mismatch was not reported."
+grep -Fq 'release v0.1.7 has inconsistent package or Ruby versions' "$tmp_root/mismatch.err" || fail "candidate version mismatch was not reported."
 [ ! -e "$mismatch_host/.jekyll-obsidian-update" ] || fail "candidate version mismatch created a transaction."
 
 lightweight_work=$tmp_root/lightweight-work
 git clone --quiet "$release_remote" "$lightweight_work"
-git -C "$lightweight_work" tag v2026.8.14 'v2026.8.7^{}'
+git -C "$lightweight_work" tag v0.1.8 'v0.0.10^{}'
 lightweight_remote=$tmp_root/lightweight-releases.git
 git clone --quiet --bare "$lightweight_work" "$lightweight_remote"
 lightweight_host=$(new_locked_host lightweight-tag)
 set +e
 JEKYLL_OBSIDIAN_UPDATE_TESTING=1 \
   JEKYLL_OBSIDIAN_UPDATE_TEST_ORIGIN="file://$lightweight_remote" \
-  "$lightweight_host/website/bin/update" --check --to 2026.8.6 >"$tmp_root/lightweight.out" 2>"$tmp_root/lightweight.err"
+  "$lightweight_host/website/bin/update" --check --to 0.0.9 >"$tmp_root/lightweight.out" 2>"$tmp_root/lightweight.err"
 lightweight_status=$?
 set -e
 [ "$lightweight_status" -eq 1 ] || fail "a release-shaped lightweight tag was silently ignored."
-grep -Fq 'release-shaped tag v2026.8.14 must be an annotated tag' "$tmp_root/lightweight.err" || fail "lightweight tag rejection was unclear."
+grep -Fq 'release-shaped tag v0.1.8 must be an annotated tag' "$tmp_root/lightweight.err" || fail "lightweight tag rejection was unclear."
 [ -z "$(git -C "$lightweight_host" status --porcelain)" ] || fail "lightweight tag rejection changed the host."
 
 moving_work=$tmp_root/moving-work
 git clone --quiet "$release_remote" "$moving_work"
 git -C "$moving_work" config user.name 'Update Contract'
 git -C "$moving_work" config user.email 'update-contract@example.invalid'
-git -C "$moving_work" checkout --quiet -B moved-main 'v2026.8.6^{}'
+git -C "$moving_work" checkout --quiet -B moved-main 'v0.0.9^{}'
 printf '%s\n' moved >"$moving_work/moved-tag.txt"
 git -C "$moving_work" add moved-tag.txt
 git -C "$moving_work" commit --quiet -m 'Move release tag without changing website'
-git -C "$moving_work" tag -f -a v2026.8.6 -m 'Moved release tag'
+git -C "$moving_work" tag -f -a v0.0.9 -m 'Moved release tag'
 moving_remote=$tmp_root/moving-releases.git
 git clone --quiet --bare "$moving_work" "$moving_remote"
 moving_host=$(new_locked_host moved-tag)
 set +e
 JEKYLL_OBSIDIAN_UPDATE_TESTING=1 \
   JEKYLL_OBSIDIAN_UPDATE_TEST_ORIGIN="file://$moving_remote" \
-  "$moving_host/website/bin/update" --check --to 2026.8.6 >"$tmp_root/moved.out" 2>"$tmp_root/moved.err"
+  "$moving_host/website/bin/update" --check --to 0.0.9 >"$tmp_root/moved.out" 2>"$tmp_root/moved.err"
 moving_status=$?
 set -e
 [ "$moving_status" -eq 1 ] || fail "a moved locked release tag was accepted."

@@ -105,16 +105,18 @@ function New-ReleaseRepository {
     [void](Invoke-TestGit $root @("config", "user.name", "Update Contract"))
     [void](Invoke-TestGit $root @("config", "user.email", "update-contract@example.invalid"))
 
-    Write-ReleaseSite $root "2026.8.6" "current snapshot"
+    Write-ReleaseSite $root "0.1.0" "current snapshot"
     [void](Invoke-TestGit $root @("add", "website"))
     [void](Invoke-TestGit $root @("commit", "--quiet", "-m", "current release"))
-    [void](Invoke-TestGit $root @("tag", "-a", "v2026.8.6", "-m", "v2026.8.6"))
+    [void](Invoke-TestGit $root @("tag", "-a", "v0.1.0", "-m", "v0.1.0"))
 
-    Write-ReleaseSite $root "2026.8.7" "next snapshot"
+    Write-ReleaseSite $root "0.1.1" "next snapshot"
     Write-Lf (Join-Path $root "website\new-file.txt") "new release file`n"
     [void](Invoke-TestGit $root @("add", "website"))
     [void](Invoke-TestGit $root @("commit", "--quiet", "-m", "next release"))
-    [void](Invoke-TestGit $root @("tag", "-a", "v2026.8.7", "-m", "v2026.8.7"))
+    [void](Invoke-TestGit $root @("tag", "-a", "v0.1.1", "-m", "v0.1.1"))
+    [void](Invoke-TestGit $root @("tag", "-a", "v9.0.0-rc.1", "-m", "unstable prerelease"))
+    [void](Invoke-TestGit $root @("tag", "-a", "v9.0.0+build.1", "-m", "build metadata"))
     [void](Invoke-TestGit $root @("tag", "vpreview"))
 
     $bare = "$root.git"
@@ -142,7 +144,7 @@ function New-IntegratedHost([hashtable]$Release) {
     [void](Invoke-TestGit $root @("config", "user.name", "Update Contract"))
     [void](Invoke-TestGit $root @("config", "user.email", "update-contract@example.invalid"))
 
-    [void](Invoke-TestGit $Release.Work @("checkout", "--quiet", "--detach", "v2026.8.6"))
+    [void](Invoke-TestGit $Release.Work @("checkout", "--quiet", "--detach", "v0.1.0"))
     Copy-Item -Recurse -LiteralPath (Join-Path $Release.Work "website") -Destination (Join-Path $root "website")
     [System.IO.Directory]::CreateDirectory((Join-Path $root "docs")) | Out-Null
     Write-Lf (Join-Path $root "docs\Start.md") "---`npublish: true`n---`n# Start`n"
@@ -226,8 +228,8 @@ function New-SimulatedTransaction(
     $journal = [PSCustomObject]@{
         Format = 1
         State = $JournalState
-        OldVersion = "2026.8.7"
-        NewVersion = "2026.8.8"
+        OldVersion = "0.1.1"
+        NewVersion = "0.1.2"
         Operations = @($operation)
     }
     Write-Lf (Join-Path $transaction "journal") (($journal | ConvertTo-Json -Depth 6) + "`n")
@@ -241,7 +243,7 @@ try {
         $root = New-TestHost
         $help = Invoke-Adapter $adapter $root @("--help")
         if ($help.Code -ne 0) { Fail "$adapter --help exited with $($help.Code)" }
-        if (-not $help.Output.Contains("website\bin\update.cmd [--check] [--to YYYY.M.D]")) {
+        if (-not $help.Output.Contains("website\bin\update.cmd [--check] [--to X.Y.Z]")) {
             Fail "$adapter --help did not describe the public CLI"
         }
 
@@ -249,6 +251,22 @@ try {
         if ($invalid.Code -ne 1) { Fail "$adapter accepted an unsupported option" }
         if (-not $invalid.Output.Contains("unknown option: --force")) {
             Fail "$adapter did not explain the unsupported option"
+        }
+
+        foreach ($invalidVersion in @(
+            "01.2.3",
+            "1.02.3",
+            "1.2.03",
+            "1.2",
+            "1.2.3.4",
+            "1.2.3-rc.1",
+            "1.2.3+build.1"
+        )) {
+            $invalidVersionResult = Invoke-Adapter $adapter $root @("--to", $invalidVersion)
+            if ($invalidVersionResult.Code -ne 1 -or
+                -not $invalidVersionResult.Output.Contains("--to must be a stable semantic version in X.Y.Z form")) {
+                Fail "$adapter accepted non-canonical stable version $invalidVersion"
+            }
         }
     }
 
@@ -277,16 +295,16 @@ try {
         $indexPath = Invoke-TestGit $hostRoot @("rev-parse", "--git-path", "index")
         if (-not [System.IO.Path]::IsPathRooted($indexPath)) { $indexPath = Join-Path $hostRoot $indexPath }
         $indexBeforeRead = Get-Sha256 $indexPath
-        $adoptionCheck = Invoke-Adapter "windows-powershell" $hostRoot @("--check", "--to", "2026.8.6")
-        if ($adoptionCheck.Code -ne 2 -or -not $adoptionCheck.Output.Contains("Provenance can be established for 2026.8.6.")) {
+        $adoptionCheck = Invoke-Adapter "windows-powershell" $hostRoot @("--check", "--to", "0.1.0")
+        if ($adoptionCheck.Code -ne 2 -or -not $adoptionCheck.Output.Contains("Provenance can be established for 0.1.0.")) {
             Fail "--check did not distinguish provenance adoption from an update: $($adoptionCheck.Output)"
         }
         if ((Get-Sha256 $indexPath) -cne $indexBeforeRead) { Fail "--check refreshed or otherwise changed the host Git index" }
 
         $adoptionRoot = New-IntegratedHost $release
         $adoptionFingerprint = Get-ManagedFingerprint $adoptionRoot
-        $adoption = Invoke-Adapter "windows-powershell" $adoptionRoot @("--to", "2026.8.6")
-        if ($adoption.Code -ne 0 -or -not $adoption.Output.Contains("Recorded jekyll-obsidian provenance for 2026.8.6.")) {
+        $adoption = Invoke-Adapter "windows-powershell" $adoptionRoot @("--to", "0.1.0")
+        if ($adoption.Code -ne 0 -or -not $adoption.Output.Contains("Recorded jekyll-obsidian provenance for 0.1.0.")) {
             Fail "same-version adoption did not record provenance: $($adoption.Output)"
         }
         $adoptionChangedPaths = @($adoption.Output -split "`n" | Where-Object { $_.StartsWith("  ", [StringComparison]::Ordinal) })
@@ -310,8 +328,8 @@ try {
         if (-not ([System.IO.File]::ReadAllText($adoptionLockPath).Contains("`r`n"))) {
             Fail "core.autocrlf fixture did not check out the provenance lock with CRLF"
         }
-        $crlfLock = Invoke-Adapter "windows-powershell" $adoptionRoot @("--check", "--to", "2026.8.6")
-        if ($crlfLock.Code -ne 0 -or -not $crlfLock.Output.Contains("jekyll-obsidian 2026.8.6 is current.")) {
+        $crlfLock = Invoke-Adapter "windows-powershell" $adoptionRoot @("--check", "--to", "0.1.0")
+        if ($crlfLock.Code -ne 0 -or -not $crlfLock.Output.Contains("jekyll-obsidian 0.1.0 is current.")) {
             Fail "a committed CRLF provenance lock could not be read: $($crlfLock.Output)"
         }
 
@@ -319,14 +337,14 @@ try {
         [void](Invoke-TestGit $caseRoot @("mv", "website/snapshot.txt", "website/snapshot.rename-tmp"))
         [void](Invoke-TestGit $caseRoot @("mv", "website/snapshot.rename-tmp", "website/Snapshot.txt"))
         [void](Invoke-TestGit $caseRoot @("commit", "--quiet", "-m", "legacy case-only website path"))
-        $caseAdoption = Invoke-Adapter "windows-powershell" $caseRoot @("--check", "--to", "2026.8.6")
+        $caseAdoption = Invoke-Adapter "windows-powershell" $caseRoot @("--check", "--to", "0.1.0")
         if ($caseAdoption.Code -ne 1 -or -not $caseAdoption.Output.Contains("unrecorded website snapshot does not exactly match")) {
             Fail "same-blob legacy website path with different case was accepted for adoption"
         }
 
         $check = Invoke-Adapter "windows-powershell" $hostRoot @("--check")
         if ($check.Code -ne 2) { Fail "--check should report an available update with exit 2, got $($check.Code): $($check.Output)" }
-        if (-not $check.Output.Contains("Update available: 2026.8.6 -> 2026.8.7.")) { Fail "--check did not report the available release" }
+        if (-not $check.Output.Contains("Update available: 0.1.0 -> 0.1.1.")) { Fail "--check did not report the available release" }
         if (Test-Path -LiteralPath (Join-Path $hostRoot ".github\jekyll-obsidian.lock")) { Fail "--check wrote a provenance lock" }
         if ((Invoke-TestGit $hostRoot @("status", "--short", "--untracked-files=all")) -cne $statusBefore) { Fail "--check changed the host worktree" }
 
@@ -334,7 +352,7 @@ try {
         $update = Invoke-Adapter "windows-powershell" $hostRoot @()
         if ($update.Code -ne 0) { Fail "update exited with $($update.Code): $($update.Output)" }
         if ((Get-Sha256 $indexPath) -cne $indexBeforeUpdate) { Fail "update changed the host Git index" }
-        if (-not $update.Output.Contains("Updated jekyll-obsidian from 2026.8.6 to 2026.8.7.")) { Fail "update did not report the installed release" }
+        if (-not $update.Output.Contains("Updated jekyll-obsidian from 0.1.0 to 0.1.1.")) { Fail "update did not report the installed release" }
         if (-not $update.Output.Contains("Changed managed paths:") -or -not $update.Output.Contains("website/snapshot.txt") -or
             -not $update.Output.Contains(".github/jekyll-obsidian.lock")) { Fail "update did not list the managed paths that actually changed" }
         if ([System.IO.File]::ReadAllText((Join-Path $hostRoot "website\snapshot.txt")).Trim() -cne "next snapshot") { Fail "update did not install the target snapshot" }
@@ -347,7 +365,7 @@ try {
 
         $lock = [System.IO.File]::ReadAllText((Join-Path $hostRoot ".github\jekyll-obsidian.lock"))
         if ($lock -notmatch '(?m)^origin=https://github\.com/wowfun/jekyll-obsidian\.git$') { Fail "lock did not record the canonical origin" }
-        if ($lock -notmatch '(?m)^version=2026\.8\.7$') { Fail "lock did not record the installed release" }
+        if ($lock -notmatch '(?m)^version=0\.1\.1$') { Fail "lock did not record the installed release" }
         if ($lock -notmatch '(?m)^tag_object=[0-9a-f]+$' -or $lock -notmatch '(?m)^website_tree=[0-9a-f]+$') { Fail "lock omitted immutable Git provenance" }
         $lockBytes = [System.IO.File]::ReadAllBytes((Join-Path $hostRoot ".github\jekyll-obsidian.lock"))
         if ($lockBytes -contains 13 -or ($lockBytes.Length -ge 3 -and $lockBytes[0] -eq 0xef -and $lockBytes[1] -eq 0xbb -and $lockBytes[2] -eq 0xbf)) {
@@ -357,10 +375,10 @@ try {
         [void](Invoke-TestGit $hostRoot @("add", "website", ".github"))
         [void](Invoke-TestGit $hostRoot @("commit", "--quiet", "-m", "accept update"))
         $current = Invoke-Adapter "windows-powershell" $hostRoot @("--check")
-        if ($current.Code -ne 0 -or -not $current.Output.Contains("jekyll-obsidian 2026.8.7 is current.")) { Fail "committed current release was not idempotent: $($current.Output)" }
+        if ($current.Code -ne 0 -or -not $current.Output.Contains("jekyll-obsidian 0.1.1 is current.")) { Fail "committed current release was not idempotent: $($current.Output)" }
 
         $beforeDowngrade = Invoke-TestGit $hostRoot @("status", "--short", "--untracked-files=all")
-        $downgrade = Invoke-Adapter "windows-powershell" $hostRoot @("--to", "2026.8.6")
+        $downgrade = Invoke-Adapter "windows-powershell" $hostRoot @("--to", "0.1.0")
         if ($downgrade.Code -ne 1 -or -not $downgrade.Output.Contains("downgrade")) { Fail "downgrade was not rejected" }
         if ((Invoke-TestGit $hostRoot @("status", "--short", "--untracked-files=all")) -cne $beforeDowngrade) { Fail "rejected downgrade changed the host" }
 
@@ -411,7 +429,7 @@ try {
         foreach ($adapter in @($adapters | Where-Object { $_ -cne "windows-powershell" })) {
             $parityRoot = New-IntegratedHost $release
             $parityCheck = Invoke-Adapter $adapter $parityRoot @("--check")
-            if ($parityCheck.Code -ne 2 -or -not $parityCheck.Output.Contains("Update available: 2026.8.6 -> 2026.8.7.")) {
+            if ($parityCheck.Code -ne 2 -or -not $parityCheck.Output.Contains("Update available: 0.1.0 -> 0.1.1.")) {
                 Fail "$adapter did not preserve the update-available exit contract: $($parityCheck.Output)"
             }
             $parityUpdate = Invoke-Adapter $adapter $parityRoot @()
@@ -448,7 +466,7 @@ try {
             Fail "crash after all managed renames did not retain an applying journal and all-new snapshot"
         }
         $crashRecovery = Invoke-Adapter "windows-powershell" $crashRecoveryRoot @()
-        if ($crashRecovery.Code -ne 0 -or -not $crashRecovery.Output.Contains("Recovered completed jekyll-obsidian update 2026.8.6 -> 2026.8.7.") -or
+        if ($crashRecovery.Code -ne 0 -or -not $crashRecovery.Output.Contains("Recovered completed jekyll-obsidian update 0.1.0 -> 0.1.1.") -or
             (Test-Path -LiteralPath $crashTransaction)) {
             Fail "all-new applying recovery did not run post-install validation and finalize: $($crashRecovery.Output)"
         }
@@ -514,7 +532,7 @@ try {
             $completedJob = Wait-Job -Job $winnerJob -Timeout 30
             if ($null -eq $completedJob) { Fail "concurrent winner did not finish" }
             $winner = @(Receive-Job -Job $winnerJob)[-1]
-            if ($winner.Code -ne 0 -or -not $winner.Output.Contains("Updated jekyll-obsidian from 2026.8.6 to 2026.8.7.")) {
+            if ($winner.Code -ne 0 -or -not $winner.Output.Contains("Updated jekyll-obsidian from 0.1.0 to 0.1.1.")) {
                 Fail "concurrent winner could not complete after rejecting the loser: $($winner.Output)"
             }
             if ((Test-Path -LiteralPath $concurrencyTransaction) -or
@@ -536,7 +554,7 @@ try {
             Fail "--check changed or ignored a pending transaction"
         }
         $recovered = Invoke-Adapter "windows-powershell" $hostRoot @()
-        if ($recovered.Code -ne 0 -or -not $recovered.Output.Contains("Recovered rolled-back jekyll-obsidian update 2026.8.7 -> 2026.8.8.")) {
+        if ($recovered.Code -ne 0 -or -not $recovered.Output.Contains("Recovered rolled-back jekyll-obsidian update 0.1.1 -> 0.1.2.")) {
             Fail "a digest-identifiable interrupted transaction was not recovered: $($recovered.Output)"
         }
         if ([System.IO.File]::ReadAllText($snapshotPath).Trim() -cne "next snapshot" -or (Test-Path -LiteralPath $pending)) {
@@ -545,7 +563,7 @@ try {
 
         $completed = New-SimulatedTransaction $hostRoot "new" "verified"
         $completedResult = Invoke-Adapter "windows-powershell" $hostRoot @()
-        if ($completedResult.Code -ne 0 -or -not $completedResult.Output.Contains("Recovered completed jekyll-obsidian update 2026.8.7 -> 2026.8.8.")) {
+        if ($completedResult.Code -ne 0 -or -not $completedResult.Output.Contains("Recovered completed jekyll-obsidian update 0.1.1 -> 0.1.2.")) {
             Fail "a complete new interrupted state was not retained: $($completedResult.Output)"
         }
         if (-not $completedResult.Output.Contains("website/snapshot.txt")) { Fail "completed recovery did not list its changed managed path" }
@@ -587,8 +605,8 @@ try {
         $absentShapeJournal = [PSCustomObject]@{
             Format = 1
             State = "applying"
-            OldVersion = "2026.8.7"
-            NewVersion = "2026.8.8"
+            OldVersion = "0.1.1"
+            NewVersion = "0.1.2"
             Operations = @($absentShapeOperation)
         }
         Write-Lf (Join-Path $absentShapeTransaction "journal") (($absentShapeJournal | ConvertTo-Json -Depth 6) + "`n")
@@ -664,8 +682,8 @@ try {
             $reparseJournal = [PSCustomObject]@{
                 Format = 1
                 State = "applying"
-                OldVersion = "2026.8.7"
-                NewVersion = "2026.8.8"
+                OldVersion = "0.1.1"
+                NewVersion = "0.1.2"
                 Operations = @($reparseOperation)
             }
             Write-Lf (Join-Path $reparseTransaction "journal") (($reparseJournal | ConvertTo-Json -Depth 6) + "`n")
@@ -685,32 +703,32 @@ try {
         [void](Invoke-TestGit $emptyBare @("init", "--quiet", "--bare"))
         $env:JEKYLL_OBSIDIAN_UPDATE_TEST_ORIGIN = ([Uri]$emptyBare).AbsoluteUri
         $noRelease = Invoke-Adapter "windows-powershell" $hostRoot @("--check")
-        if ($noRelease.Code -ne 1 -or -not $noRelease.Output.Contains("no stable annotated CalVer releases")) { Fail "an origin without releases was not rejected" }
+        if ($noRelease.Code -ne 1 -or -not $noRelease.Output.Contains("no stable annotated SemVer releases")) { Fail "an origin without releases was not rejected" }
         $env:JEKYLL_OBSIDIAN_UPDATE_TEST_ORIGIN = $release.Origin
 
         [void](Invoke-TestGit $release.Work @("checkout", "--quiet", $release.Branch))
-        Write-ReleaseSite $release.Work "2026.8.8" "candidate integration failure"
+        Write-ReleaseSite $release.Work "0.1.2" "candidate integration failure"
         Write-Lf (Join-Path $release.Work "website\bin\integrate.ps1") "[Console]::Error.WriteLine('fixture integration failure')`nexit 1`n"
         [void](Invoke-TestGit $release.Work @("add", "website"))
         [void](Invoke-TestGit $release.Work @("commit", "--quiet", "-m", "candidate integration fails"))
-        [void](Invoke-TestGit $release.Work @("tag", "-a", "v2026.8.8", "-m", "v2026.8.8 integrate failure"))
-        [void](Invoke-TestGit $release.Work @("push", "--quiet", $release.Bare, "refs/tags/v2026.8.8"))
+        [void](Invoke-TestGit $release.Work @("tag", "-a", "v0.1.2", "-m", "v0.1.2 integrate failure"))
+        [void](Invoke-TestGit $release.Work @("push", "--quiet", $release.Bare, "refs/tags/v0.1.2"))
         $beforeIntegrateFailure = Invoke-TestGit $hostRoot @("status", "--short", "--untracked-files=all")
-        $integrateFailure = Invoke-Adapter "windows-powershell" $hostRoot @("--check", "--to", "2026.8.8")
+        $integrateFailure = Invoke-Adapter "windows-powershell" $hostRoot @("--check", "--to", "0.1.2")
         if ($integrateFailure.Code -ne 1 -or -not $integrateFailure.Output.Contains("candidate integration failed")) { Fail "candidate integrate failure was not rejected" }
         if ((Invoke-TestGit $hostRoot @("status", "--short", "--untracked-files=all")) -cne $beforeIntegrateFailure -or
             (Test-Path -LiteralPath (Join-Path $hostRoot ".jekyll-obsidian-update"))) { Fail "candidate integrate failure wrote to the host" }
 
-        Write-ReleaseSite $release.Work "2026.8.8" "target tracked conflict"
+        Write-ReleaseSite $release.Work "0.1.2" "target tracked conflict"
         Write-Lf (Join-Path $release.Work "website\node_modules\cache.txt") "target owns ignored host path`n"
         [void](Invoke-TestGit $release.Work @("add", "website"))
         [void](Invoke-TestGit $release.Work @("add", "-f", "website/node_modules/cache.txt"))
         [void](Invoke-TestGit $release.Work @("commit", "--quiet", "-m", "target conflicts with ignored host file"))
-        [void](Invoke-TestGit $release.Work @("tag", "-d", "v2026.8.8"))
-        [void](Invoke-TestGit $release.Work @("tag", "-a", "v2026.8.8", "-m", "v2026.8.8 conflict"))
-        [void](Invoke-TestGit $release.Work @("push", "--quiet", "--force", $release.Bare, "refs/tags/v2026.8.8"))
+        [void](Invoke-TestGit $release.Work @("tag", "-d", "v0.1.2"))
+        [void](Invoke-TestGit $release.Work @("tag", "-a", "v0.1.2", "-m", "v0.1.2 conflict"))
+        [void](Invoke-TestGit $release.Work @("push", "--quiet", "--force", $release.Bare, "refs/tags/v0.1.2"))
         $beforeConflict = Invoke-TestGit $hostRoot @("status", "--short", "--untracked-files=all")
-        $trackedConflict = Invoke-Adapter "windows-powershell" $hostRoot @("--check", "--to", "2026.8.8")
+        $trackedConflict = Invoke-Adapter "windows-powershell" $hostRoot @("--check", "--to", "0.1.2")
         if ($trackedConflict.Code -ne 1 -or -not $trackedConflict.Output.Contains("target release conflicts with local ignored or untracked state")) {
             Fail "target tracked conflict was not rejected during --check"
         }
@@ -718,19 +736,19 @@ try {
             (Test-Path -LiteralPath (Join-Path $hostRoot ".jekyll-obsidian-update"))) { Fail "target conflict check wrote to the host" }
 
         Remove-Item -Force -Recurse -LiteralPath (Join-Path $release.Work "website\node_modules")
-        Write-ReleaseSite $release.Work "2026.8.8" "target path has a file ancestor"
+        Write-ReleaseSite $release.Work "0.1.2" "target path has a file ancestor"
         Write-Lf (Join-Path $release.Work "website\cache\child.txt") "target child`n"
         [void](Invoke-TestGit $release.Work @("add", "website"))
         [void](Invoke-TestGit $release.Work @("commit", "--quiet", "-m", "release adds a child below a local file"))
-        [void](Invoke-TestGit $release.Work @("tag", "-d", "v2026.8.8"))
-        [void](Invoke-TestGit $release.Work @("tag", "-a", "v2026.8.8", "-m", "v2026.8.8 ancestor"))
-        [void](Invoke-TestGit $release.Work @("push", "--quiet", "--force", $release.Bare, "refs/tags/v2026.8.8"))
+        [void](Invoke-TestGit $release.Work @("tag", "-d", "v0.1.2"))
+        [void](Invoke-TestGit $release.Work @("tag", "-a", "v0.1.2", "-m", "v0.1.2 ancestor"))
+        [void](Invoke-TestGit $release.Work @("push", "--quiet", "--force", $release.Bare, "refs/tags/v0.1.2"))
         $hostExcludePath = Join-Path $hostRoot ".git\info\exclude"
         $hostExcludeBytes = [System.IO.File]::ReadAllBytes($hostExcludePath)
         try {
             [System.IO.File]::AppendAllText($hostExcludePath, "`n/website/cache`n", $Utf8NoBom)
             Write-Lf (Join-Path $hostRoot "website\cache") "ignored local file ancestor`n"
-            $ancestorConflict = Invoke-Adapter "windows-powershell" $hostRoot @("--check", "--to", "2026.8.8")
+            $ancestorConflict = Invoke-Adapter "windows-powershell" $hostRoot @("--check", "--to", "0.1.2")
             if ($ancestorConflict.Code -ne 1 -or -not $ancestorConflict.Output.Contains("managed path ancestor must be a directory")) {
                 Fail "a target path below an existing ordinary file passed --check: $($ancestorConflict.Output)"
             }
@@ -741,75 +759,92 @@ try {
             [System.IO.File]::WriteAllBytes($hostExcludePath, $hostExcludeBytes)
         }
 
-        Write-ReleaseSite $release.Work "2026.8.8" "missing required component"
+        Write-ReleaseSite $release.Work "0.1.2" "missing required component"
         Remove-Item -Force -LiteralPath (Join-Path $release.Work "website\scripts\example-config.yml")
         [void](Invoke-TestGit $release.Work @("add", "website"))
         [void](Invoke-TestGit $release.Work @("commit", "--quiet", "-m", "release misses required component"))
-        [void](Invoke-TestGit $release.Work @("tag", "-d", "v2026.8.8"))
-        [void](Invoke-TestGit $release.Work @("tag", "-a", "v2026.8.8", "-m", "v2026.8.8 incomplete"))
-        [void](Invoke-TestGit $release.Work @("push", "--quiet", "--force", $release.Bare, "refs/tags/v2026.8.8"))
+        [void](Invoke-TestGit $release.Work @("tag", "-d", "v0.1.2"))
+        [void](Invoke-TestGit $release.Work @("tag", "-a", "v0.1.2", "-m", "v0.1.2 incomplete"))
+        [void](Invoke-TestGit $release.Work @("push", "--quiet", "--force", $release.Bare, "refs/tags/v0.1.2"))
         $beforeMissingComponent = Invoke-TestGit $hostRoot @("status", "--short", "--untracked-files=all")
-        $missingComponent = Invoke-Adapter "windows-powershell" $hostRoot @("--check", "--to", "2026.8.8")
+        $missingComponent = Invoke-Adapter "windows-powershell" $hostRoot @("--check", "--to", "0.1.2")
         if ($missingComponent.Code -ne 1 -or -not $missingComponent.Output.Contains("missing required updater component website/scripts/example-config.yml")) {
             Fail "candidate missing a required component was accepted"
         }
         if ((Invoke-TestGit $hostRoot @("status", "--short", "--untracked-files=all")) -cne $beforeMissingComponent) { Fail "missing candidate component changed the host" }
 
-        Write-ReleaseSite $release.Work "2026.8.8" "missing setup command"
+        Write-ReleaseSite $release.Work "0.1.2" "missing setup command"
         Remove-Item -Force -LiteralPath (Join-Path $release.Work "website\bin\setup")
         [void](Invoke-TestGit $release.Work @("add", "website"))
         [void](Invoke-TestGit $release.Work @("commit", "--quiet", "-m", "release misses setup"))
-        [void](Invoke-TestGit $release.Work @("tag", "-d", "v2026.8.8"))
-        [void](Invoke-TestGit $release.Work @("tag", "-a", "v2026.8.8", "-m", "v2026.8.8 no setup"))
-        [void](Invoke-TestGit $release.Work @("push", "--quiet", "--force", $release.Bare, "refs/tags/v2026.8.8"))
-        $missingSetup = Invoke-Adapter "windows-powershell" $hostRoot @("--check", "--to", "2026.8.8")
+        [void](Invoke-TestGit $release.Work @("tag", "-d", "v0.1.2"))
+        [void](Invoke-TestGit $release.Work @("tag", "-a", "v0.1.2", "-m", "v0.1.2 no setup"))
+        [void](Invoke-TestGit $release.Work @("push", "--quiet", "--force", $release.Bare, "refs/tags/v0.1.2"))
+        $missingSetup = Invoke-Adapter "windows-powershell" $hostRoot @("--check", "--to", "0.1.2")
         if ($missingSetup.Code -ne 1 -or -not $missingSetup.Output.Contains("missing required updater component website/bin/setup")) {
             Fail "candidate without the setup command was accepted"
         }
 
-        Write-ReleaseSite $release.Work "2026.8.8" "non-executable POSIX updater"
+        Write-ReleaseSite $release.Work "0.1.2" "non-executable POSIX updater"
         [void](Invoke-TestGit $release.Work @("add", "website"))
         [void](Invoke-TestGit $release.Work @("update-index", "--chmod=-x", "website/bin/update"))
         [void](Invoke-TestGit $release.Work @("commit", "--quiet", "-m", "release has non-executable updater"))
-        [void](Invoke-TestGit $release.Work @("tag", "-d", "v2026.8.8"))
-        [void](Invoke-TestGit $release.Work @("tag", "-a", "v2026.8.8", "-m", "v2026.8.8 non-executable"))
-        [void](Invoke-TestGit $release.Work @("push", "--quiet", "--force", $release.Bare, "refs/tags/v2026.8.8"))
-        $nonExecutable = Invoke-Adapter "windows-powershell" $hostRoot @("--check", "--to", "2026.8.8")
+        [void](Invoke-TestGit $release.Work @("tag", "-d", "v0.1.2"))
+        [void](Invoke-TestGit $release.Work @("tag", "-a", "v0.1.2", "-m", "v0.1.2 non-executable"))
+        [void](Invoke-TestGit $release.Work @("push", "--quiet", "--force", $release.Bare, "refs/tags/v0.1.2"))
+        $nonExecutable = Invoke-Adapter "windows-powershell" $hostRoot @("--check", "--to", "0.1.2")
         if ($nonExecutable.Code -ne 1 -or -not $nonExecutable.Output.Contains("does not contain executable website/bin/update")) {
             Fail "candidate with a non-executable POSIX updater was accepted"
         }
 
-        Write-ReleaseSite $release.Work "2026.8.8" "drops a website ignore rule"
+        Write-ReleaseSite $release.Work "0.1.2" "drops a website ignore rule"
         Write-Lf (Join-Path $release.Work "website\.gitignore") "/.env`n"
         [void](Invoke-TestGit $release.Work @("add", "website"))
         [void](Invoke-TestGit $release.Work @("commit", "--quiet", "-m", "release drops ignored state rule"))
-        [void](Invoke-TestGit $release.Work @("tag", "-d", "v2026.8.8"))
-        [void](Invoke-TestGit $release.Work @("tag", "-a", "v2026.8.8", "-m", "v2026.8.8 ignores"))
-        [void](Invoke-TestGit $release.Work @("push", "--quiet", "--force", $release.Bare, "refs/tags/v2026.8.8"))
-        $droppedIgnore = Invoke-Adapter "windows-powershell" $hostRoot @("--check", "--to", "2026.8.8")
+        [void](Invoke-TestGit $release.Work @("tag", "-d", "v0.1.2"))
+        [void](Invoke-TestGit $release.Work @("tag", "-a", "v0.1.2", "-m", "v0.1.2 ignores"))
+        [void](Invoke-TestGit $release.Work @("push", "--quiet", "--force", $release.Bare, "refs/tags/v0.1.2"))
+        $droppedIgnore = Invoke-Adapter "windows-powershell" $hostRoot @("--check", "--to", "0.1.2")
         if ($droppedIgnore.Code -ne 1 -or -not $droppedIgnore.Output.Contains("ignored local state would no longer be ignored")) {
             Fail "target website ignore rules were not evaluated in the host root context"
         }
 
-        Write-ReleaseSite $release.Work "2026.8.8" "invalid version contract"
+        Write-ReleaseSite $release.Work "0.1.2" "invalid version contract"
         $badPackage = Join-Path $release.Work "website\package.json"
-        Write-Lf $badPackage ([System.IO.File]::ReadAllText($badPackage).Replace('"2026.8.8"', '"2026.8.7"'))
+        Write-Lf $badPackage ([System.IO.File]::ReadAllText($badPackage).Replace('"0.1.2"', '"0.1.1"'))
         [void](Invoke-TestGit $release.Work @("add", "website"))
         [void](Invoke-TestGit $release.Work @("commit", "--quiet", "-m", "invalid version release"))
-        [void](Invoke-TestGit $release.Work @("tag", "-d", "v2026.8.8"))
-        [void](Invoke-TestGit $release.Work @("tag", "-a", "v2026.8.8", "-m", "v2026.8.8"))
-        [void](Invoke-TestGit $release.Work @("push", "--quiet", "--force", $release.Bare, "refs/tags/v2026.8.8"))
+        [void](Invoke-TestGit $release.Work @("tag", "-d", "v0.1.2"))
+        [void](Invoke-TestGit $release.Work @("tag", "-a", "v0.1.2", "-m", "v0.1.2"))
+        [void](Invoke-TestGit $release.Work @("push", "--quiet", "--force", $release.Bare, "refs/tags/v0.1.2"))
         $beforeInvalidRelease = Invoke-TestGit $hostRoot @("status", "--short", "--untracked-files=all")
-        $invalidRelease = Invoke-Adapter "windows-powershell" $hostRoot @("--check", "--to", "2026.8.8")
+        $invalidRelease = Invoke-Adapter "windows-powershell" $hostRoot @("--check", "--to", "0.1.2")
         if ($invalidRelease.Code -ne 1 -or -not $invalidRelease.Output.Contains("package.json version does not match")) { Fail "candidate version mismatch was not rejected" }
         if ((Invoke-TestGit $hostRoot @("status", "--short", "--untracked-files=all")) -cne $beforeInvalidRelease) { Fail "invalid candidate changed the host" }
 
-        Write-ReleaseSite $release.Work "2026.8.9" "malformed tag name"
+        Write-ReleaseSite $release.Work "0.10.0" "numerically latest release"
+        [void](Invoke-TestGit $release.Work @("add", "website"))
+        [void](Invoke-TestGit $release.Work @("commit", "--quiet", "-m", "add 0.10.0 release"))
+        [void](Invoke-TestGit $release.Work @("tag", "-a", "v0.10.0", "-m", "v0.10.0"))
+        [void](Invoke-TestGit $release.Work @("push", "--quiet", $release.Bare, "refs/tags/v0.10.0"))
+
+        Write-ReleaseSite $release.Work "0.2.0" "lexically later release"
+        [void](Invoke-TestGit $release.Work @("add", "website"))
+        [void](Invoke-TestGit $release.Work @("commit", "--quiet", "-m", "add 0.2.0 release"))
+        [void](Invoke-TestGit $release.Work @("tag", "-a", "v0.2.0", "-m", "v0.2.0"))
+        [void](Invoke-TestGit $release.Work @("push", "--quiet", $release.Bare, "refs/tags/v0.2.0"))
+
+        $numericOrdering = Invoke-Adapter "windows-powershell" $hostRoot @("--check")
+        if ($numericOrdering.Code -ne 2 -or -not $numericOrdering.Output.Contains("Update available: 0.1.1 -> 0.10.0.")) {
+            Fail "stable releases were not ordered by numeric SemVer precedence: $($numericOrdering.Output)"
+        }
+
+        Write-ReleaseSite $release.Work "0.1.3" "malformed tag name"
         [void](Invoke-TestGit $release.Work @("add", "website"))
         [void](Invoke-TestGit $release.Work @("commit", "--quiet", "-m", "valid v9 release content"))
-        [void](Invoke-TestGit $release.Work @("tag", "-a", "v2026.8.9", "-m", "v2026.8.9"))
-        $tagPayload = Invoke-TestGit $release.Work @("cat-file", "-p", "v2026.8.9")
-        $wrongNamePayload = $tagPayload.Replace("tag v2026.8.9", "tag v2099.1.1") + "`n"
+        [void](Invoke-TestGit $release.Work @("tag", "-a", "v0.1.3", "-m", "v0.1.3"))
+        $tagPayload = Invoke-TestGit $release.Work @("cat-file", "-p", "v0.1.3")
+        $wrongNamePayload = $tagPayload.Replace("tag v0.1.3", "tag v2099.1.1") + "`n"
         Push-Location $release.Work
         $previousErrorAction = $ErrorActionPreference
         $ErrorActionPreference = "Continue"
@@ -824,34 +859,55 @@ try {
         }
         if ($wrongTagCode -ne 0) { Fail "could not construct malformed annotated tag fixture: $($wrongTagOutput -join "`n")" }
         $wrongTagObject = ($wrongTagOutput -join "`n").Trim()
-        [void](Invoke-TestGit $release.Work @("update-ref", "refs/tags/v2026.8.9", $wrongTagObject))
-        [void](Invoke-TestGit $release.Work @("push", "--quiet", $release.Bare, "refs/tags/v2026.8.9"))
-        $wrongNameTag = Invoke-Adapter "windows-powershell" $hostRoot @("--check", "--to", "2026.8.9")
-        if ($wrongNameTag.Code -ne 1 -or -not $wrongNameTag.Output.Contains("tag object does not name v2026.8.9")) {
+        [void](Invoke-TestGit $release.Work @("update-ref", "refs/tags/v0.1.3", $wrongTagObject))
+        [void](Invoke-TestGit $release.Work @("push", "--quiet", $release.Bare, "refs/tags/v0.1.3"))
+        $wrongNameTag = Invoke-Adapter "windows-powershell" $hostRoot @("--check", "--to", "0.1.3")
+        if ($wrongNameTag.Code -ne 1 -or -not $wrongNameTag.Output.Contains("tag object does not name v0.1.3")) {
             Fail "an annotated tag whose internal name differs from its ref was accepted"
         }
 
-        $v7Commit = Invoke-TestGit $release.Work @("rev-list", "-n", "1", "v2026.8.7")
-        [void](Invoke-TestGit $release.Work @("tag", "-d", "v2026.8.7"))
-        [void](Invoke-TestGit $release.Work @("tag", "-a", "v2026.8.7", $v7Commit, "-m", "moved v2026.8.7"))
-        [void](Invoke-TestGit $release.Work @("push", "--quiet", "--force", $release.Bare, "refs/tags/v2026.8.7"))
-        $movedTag = Invoke-Adapter "windows-powershell" $hostRoot @("--check", "--to", "2026.8.7")
+        $v7Commit = Invoke-TestGit $release.Work @("rev-list", "-n", "1", "v0.1.1")
+        [void](Invoke-TestGit $release.Work @("tag", "-d", "v0.1.1"))
+        [void](Invoke-TestGit $release.Work @("tag", "-a", "v0.1.1", $v7Commit, "-m", "moved v0.1.1"))
+        [void](Invoke-TestGit $release.Work @("push", "--quiet", "--force", $release.Bare, "refs/tags/v0.1.1"))
+        $movedTag = Invoke-Adapter "windows-powershell" $hostRoot @("--check", "--to", "0.1.1")
         if ($movedTag.Code -ne 1 -or -not $movedTag.Output.Contains("installed provenance does not match")) { Fail "a moved release tag was not rejected" }
 
-        [void](Invoke-TestGit $release.Work @("tag", "v2026.8.10"))
-        [void](Invoke-TestGit $release.Work @("push", "--quiet", $release.Bare, "refs/tags/v2026.8.10"))
+        [void](Invoke-TestGit $release.Work @("tag", "v0.1.4"))
+        [void](Invoke-TestGit $release.Work @("push", "--quiet", $release.Bare, "refs/tags/v0.1.4"))
         $lightweightRelease = Invoke-Adapter "windows-powershell" $hostRoot @("--check")
-        if ($lightweightRelease.Code -ne 1 -or -not $lightweightRelease.Output.Contains("v2026.8.10 is not an annotated tag")) {
+        if ($lightweightRelease.Code -ne 1 -or -not $lightweightRelease.Output.Contains("v0.1.4 is not an annotated tag")) {
             Fail "a lightweight release-shaped tag did not invalidate the release source"
         }
-        [void](Invoke-TestGit $release.Work @("push", "--quiet", $release.Bare, ":refs/tags/v2026.8.10"))
-        [void](Invoke-TestGit $release.Work @("tag", "-d", "v2026.8.10"))
+        [void](Invoke-TestGit $release.Work @("push", "--quiet", $release.Bare, ":refs/tags/v0.1.4"))
+        [void](Invoke-TestGit $release.Work @("tag", "-d", "v0.1.4"))
 
-        [void](Invoke-TestGit $release.Work @("tag", "-a", "v2026.02.10", "-m", "invalid padded CalVer"))
-        [void](Invoke-TestGit $release.Work @("push", "--quiet", $release.Bare, "refs/tags/v2026.02.10"))
-        $invalidCalendarTag = Invoke-Adapter "windows-powershell" $hostRoot @("--check")
-        if ($invalidCalendarTag.Code -ne 1 -or -not $invalidCalendarTag.Output.Contains("remote tag v2026.02.10 must be a calendar version")) {
-            Fail "an invalid calendar-shaped tag was silently ignored"
+        [void](Invoke-TestGit $release.Work @("tag", "-a", "v0.1", "-m", "invalid two-component SemVer"))
+        [void](Invoke-TestGit $release.Work @("push", "--quiet", $release.Bare, "refs/tags/v0.1"))
+        $incompleteSemVerTag = Invoke-Adapter "windows-powershell" $hostRoot @("--check")
+        if ($incompleteSemVerTag.Code -ne 1 -or
+            -not $incompleteSemVerTag.Output.Contains("remote tag v0.1 must be a stable semantic version in X.Y.Z form")) {
+            Fail "a two-component stable release tag was silently ignored"
+        }
+        [void](Invoke-TestGit $release.Work @("push", "--quiet", $release.Bare, ":refs/tags/v0.1"))
+        [void](Invoke-TestGit $release.Work @("tag", "-d", "v0.1"))
+
+        [void](Invoke-TestGit $release.Work @("tag", "-a", "v.0.1", "-m", "invalid empty SemVer component"))
+        [void](Invoke-TestGit $release.Work @("push", "--quiet", $release.Bare, "refs/tags/v.0.1"))
+        $emptySemVerComponentTag = Invoke-Adapter "windows-powershell" $hostRoot @("--check")
+        if ($emptySemVerComponentTag.Code -ne 1 -or
+            -not $emptySemVerComponentTag.Output.Contains("remote tag v.0.1 must be a stable semantic version in X.Y.Z form")) {
+            Fail "a release tag with an empty numeric component was silently ignored"
+        }
+        [void](Invoke-TestGit $release.Work @("push", "--quiet", $release.Bare, ":refs/tags/v.0.1"))
+        [void](Invoke-TestGit $release.Work @("tag", "-d", "v.0.1"))
+
+        [void](Invoke-TestGit $release.Work @("tag", "-a", "v0.01.2", "-m", "invalid padded SemVer"))
+        [void](Invoke-TestGit $release.Work @("push", "--quiet", $release.Bare, "refs/tags/v0.01.2"))
+        $invalidSemVerTag = Invoke-Adapter "windows-powershell" $hostRoot @("--check")
+        if ($invalidSemVerTag.Code -ne 1 -or
+            -not $invalidSemVerTag.Output.Contains("remote tag v0.01.2 must be a stable semantic version in X.Y.Z form")) {
+            Fail "a non-canonical stable release tag was silently ignored"
         }
     }
     finally {

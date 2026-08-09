@@ -10,13 +10,13 @@ $TestFailAt = ""
 
 function Show-Usage {
     @"
-Usage: website\bin\update.cmd [--check] [--to YYYY.M.D]
+Usage: website\bin\update.cmd [--check] [--to X.Y.Z]
 
 Update the managed jekyll-obsidian website snapshot from an official release.
 
 Options:
   --check             Check whether a newer snapshot is available without writing
-  --to YYYY.M.D       Select a specific release (default: latest stable release)
+  --to X.Y.Z          Select a specific release (default: latest stable release)
   --help, -h          Show this help
 "@ | Write-Output
 }
@@ -54,24 +54,32 @@ function Read-Utf8Normalized([string]$Path, [string]$Label) {
     return $text.Replace("`r`n", "`n").Replace("`r", "`n")
 }
 
-function Get-CalVer([string]$Version, [string]$Label) {
-    $match = [Regex]::Match($Version, '^(?<year>\d{4})\.(?<month>[1-9]|1[0-2])\.(?<day>[1-9]|[12]\d|3[01])$')
-    if (-not $match.Success) { Fail "$Label must be a calendar version in YYYY.M.D form." }
-    try {
-        $date = New-Object DateTime(
-            [int]$match.Groups["year"].Value,
-            [int]$match.Groups["month"].Value,
-            [int]$match.Groups["day"].Value,
-            0,
-            0,
-            0,
-            [DateTimeKind]::Utc
-        )
+function Get-StableSemVer([string]$Version, [string]$Label) {
+    $match = [Regex]::Match($Version, '\A(?<major>0|[1-9][0-9]*)\.(?<minor>0|[1-9][0-9]*)\.(?<patch>0|[1-9][0-9]*)\z')
+    if (-not $match.Success) { Fail "$Label must be a stable semantic version in X.Y.Z form." }
+    return [PSCustomObject]@{
+        Version = $Version
+        Major = $match.Groups["major"].Value
+        Minor = $match.Groups["minor"].Value
+        Patch = $match.Groups["patch"].Value
     }
-    catch {
-        Fail "$Label is not a valid calendar date."
+}
+
+function Compare-SemVerNumericIdentifier([string]$Left, [string]$Right) {
+    if ($Left.Length -lt $Right.Length) { return -1 }
+    if ($Left.Length -gt $Right.Length) { return 1 }
+    $comparison = [StringComparer]::Ordinal.Compare($Left, $Right)
+    if ($comparison -lt 0) { return -1 }
+    if ($comparison -gt 0) { return 1 }
+    return 0
+}
+
+function Compare-StableSemVer([object]$Left, [object]$Right) {
+    foreach ($component in @("Major", "Minor", "Patch")) {
+        $comparison = Compare-SemVerNumericIdentifier ([string]$Left.$component) ([string]$Right.$component)
+        if ($comparison -ne 0) { return $comparison }
     }
-    return [PSCustomObject]@{ Version = $Version; Date = $date }
+    return 0
 }
 
 function Read-ReleaseMetadata([string]$SitePath, [string]$ExpectedVersion) {
@@ -99,7 +107,7 @@ function Read-ReleaseMetadata([string]$SitePath, [string]$ExpectedVersion) {
     $match = [Regex]::Match($release, '\Aformat=1\nversion=(?<version>[^\n]+)\nupdater_protocol=1\n\z')
     if (-not $match.Success) { Fail "website/$ReleaseMetadataName is malformed or uses an unsupported updater protocol." }
     $version = $match.Groups["version"].Value
-    [void](Get-CalVer $version "release version")
+    [void](Get-StableSemVer $version "release version")
     if (-not [string]::IsNullOrEmpty($ExpectedVersion) -and $version -cne $ExpectedVersion) {
         Fail "release metadata version $version does not match $ExpectedVersion."
     }
@@ -238,9 +246,10 @@ function Get-RemoteReleases([string]$HostDir, [string]$Transport) {
         $match = [Regex]::Match($line, '^(?<oid>[0-9a-f]{40,64})\s+refs/tags/(?<tag>v[^\^\s]+)(?<peeled>\^\{\})?$')
         if (-not $match.Success) { continue }
         $tag = $match.Groups["tag"].Value
-        if ($tag -notmatch '^v\d{4}\.\d+\.\d+$') { continue }
+        if ($tag -match '^v[0-9]+\.[0-9]+\.[0-9]+[-+]') { continue }
+        if ($tag -notmatch '^v[0-9.]+$') { continue }
         $version = $tag.Substring(1)
-        [void](Get-CalVer $version "remote tag $tag")
+        [void](Get-StableSemVer $version "remote tag $tag")
         $target = if ($match.Groups["peeled"].Success) { $peeled } else { $direct }
         if ($target.ContainsKey($tag)) { Fail "remote release $tag is ambiguous." }
         $target[$tag] = $match.Groups["oid"].Value
@@ -248,21 +257,27 @@ function Get-RemoteReleases([string]$HostDir, [string]$Transport) {
     $releases = New-Object System.Collections.Generic.List[object]
     foreach ($tag in $direct.Keys) {
         if (-not $peeled.ContainsKey($tag)) { Fail "remote release $tag is not an annotated tag." }
-        $calver = Get-CalVer $tag.Substring(1) "remote tag $tag"
+        $semver = Get-StableSemVer $tag.Substring(1) "remote tag $tag"
         [void]$releases.Add([PSCustomObject]@{
             Tag = $tag
-            Version = $calver.Version
-            Date = $calver.Date
+            Version = $semver.Version
+            SemVer = $semver
             TagObject = $direct[$tag]
             Commit = $peeled[$tag]
         })
     }
-    if ($releases.Count -eq 0) { Fail "the official origin has no stable annotated CalVer releases." }
-    return @($releases.ToArray() | Sort-Object -Property Date)
+    if ($releases.Count -eq 0) { Fail "the official origin has no stable annotated SemVer releases." }
+    return @($releases.ToArray())
 }
 
 function Select-RemoteRelease([object[]]$Releases, [string]$RequestedVersion) {
-    if ([string]::IsNullOrEmpty($RequestedVersion)) { return $Releases[-1] }
+    if ([string]::IsNullOrEmpty($RequestedVersion)) {
+        $latest = $Releases[0]
+        foreach ($release in $Releases) {
+            if ((Compare-StableSemVer $release.SemVer $latest.SemVer) -gt 0) { $latest = $release }
+        }
+        return $latest
+    }
     foreach ($release in $Releases) {
         if ($release.Version -ceq $RequestedVersion) { return $release }
     }
@@ -372,7 +387,7 @@ function Read-ProvenanceLock([string]$Path) {
     $match = [Regex]::Match($text, $pattern)
     if (-not $match.Success) { Fail ".github/jekyll-obsidian.lock is malformed." }
     $version = $match.Groups["version"].Value
-    [void](Get-CalVer $version "locked version")
+    [void](Get-StableSemVer $version "locked version")
     if ($match.Groups["origin"].Value -cne $CanonicalOrigin -or $match.Groups["tag"].Value -cne "v$version") {
         Fail ".github/jekyll-obsidian.lock does not describe an official release."
     }
@@ -717,8 +732,8 @@ function Read-TransactionOperations([string]$HostDir, [string]$TransactionRoot) 
         @("prepared", "applying", "verified") -cnotcontains $journal.State) {
         Fail "recovery_required: update transaction journal has an unsupported format."
     }
-    [void](Get-CalVer ([string]$journal.OldVersion) "transaction old version")
-    [void](Get-CalVer ([string]$journal.NewVersion) "transaction new version")
+    [void](Get-StableSemVer ([string]$journal.OldVersion) "transaction old version")
+    [void](Get-StableSemVer ([string]$journal.NewVersion) "transaction new version")
     $operations = New-Object System.Collections.Generic.List[object]
     $seenTargets = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::OrdinalIgnoreCase)
     $seenBackups = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::OrdinalIgnoreCase)
@@ -977,7 +992,7 @@ try {
                 if ($index + 1 -ge $args.Count) { Fail "--to requires a value." }
                 $index++
                 $RequestedVersion = $args[$index]
-                [void](Get-CalVer $RequestedVersion "--to")
+                [void](Get-StableSemVer $RequestedVersion "--to")
                 $ToWasSet = $true
             }
             "--help" { Show-Usage; exit 0 }
@@ -1043,15 +1058,15 @@ try {
     $LockPath = Join-Path $HostDir ".github\jekyll-obsidian.lock"
     Assert-CleanManagedState $HostDir $SiteDir $LockPath
     $installed = Read-ReleaseMetadata $SiteDir $null
-    $installedCalVer = Get-CalVer $installed.Version "installed version"
+    $installedSemVer = Get-StableSemVer $installed.Version "installed version"
     $transport = Get-TransportOrigin
     $temporaryParent = Join-Path ([System.IO.Path]::GetTempPath()) "jekyll-obsidian-update-$([Guid]::NewGuid().ToString('N'))"
     [System.IO.Directory]::CreateDirectory($temporaryParent) | Out-Null
     $WorkingDirectory = $temporaryParent
     $releases = @(Get-RemoteReleases $temporaryParent $transport)
     $targetRelease = Select-RemoteRelease $releases $RequestedVersion
-    $targetCalVer = Get-CalVer $targetRelease.Version "target version"
-    if ($targetCalVer.Date -lt $installedCalVer.Date) { Fail "downgrade from $($installed.Version) to $($targetRelease.Version) is not allowed." }
+    $targetSemVer = Get-StableSemVer $targetRelease.Version "target version"
+    if ((Compare-StableSemVer $targetSemVer $installedSemVer) -lt 0) { Fail "downgrade from $($installed.Version) to $($targetRelease.Version) is not allowed." }
 
     $currentRelease = Get-ReleaseByVersion $releases $installed.Version
     $currentCandidate = Fetch-Release $temporaryParent $transport $currentRelease (Join-Path $temporaryParent "current")

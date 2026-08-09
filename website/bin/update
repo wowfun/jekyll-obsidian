@@ -15,13 +15,13 @@ run_lock_owned=0
 
 usage() {
   cat <<'USAGE'
-Usage: website/bin/update [--check] [--to YYYY.M.D]
+Usage: website/bin/update [--check] [--to X.Y.Z]
 
 Update the managed website snapshot from an official stable release.
 
 Options:
   --check             Report whether an update is available without writing
-  --to YYYY.M.D       Update to a specific stable release
+  --to X.Y.Z          Update to a specific stable SemVer release
   --help, -h          Show this help
 USAGE
 }
@@ -48,24 +48,15 @@ cleanup() {
 trap cleanup EXIT
 trap 'exit 1' HUP INT TERM
 
-is_calver() {
+is_stable_semver() {
   LC_ALL=C awk -v value="$1" '
     BEGIN {
       count = split(value, part, ".")
-      if (count != 3 || part[1] !~ /^[0-9][0-9][0-9][0-9]$/ ||
-          part[2] !~ /^[0-9]+$/ || part[3] !~ /^[0-9]+$/) exit 1
-      year = part[1] + 0
-      month = part[2] + 0
-      day = part[3] + 0
-      if (value != sprintf("%04d.%d.%d", year, month, day)) exit 1
-      if (year < 1 || month < 1 || month > 12 || day < 1) exit 1
-      days = 31
-      if (month == 4 || month == 6 || month == 9 || month == 11) days = 30
-      if (month == 2) {
-        leap = (year % 4 == 0 && (year % 100 != 0 || year % 400 == 0))
-        days = leap ? 29 : 28
+      if (count != 3) exit 1
+      for (part_index = 1; part_index <= 3; part_index++) {
+        if (part[part_index] !~ /^(0|[1-9][0-9]*)$/) exit 1
       }
-      exit day <= days ? 0 : 1
+      exit 0
     }
   ' </dev/null
 }
@@ -87,7 +78,7 @@ read_release_metadata() {
     version=*) metadata_version=${metadata_version_line#version=} ;;
     *) return 1 ;;
   esac
-  is_calver "$metadata_version" || return 1
+  is_stable_semver "$metadata_version" || return 1
   [ "$(sed -n '3p' "$metadata_path")" = 'updater_protocol=1' ] || return 1
   printf '%s\n' "$metadata_version"
 }
@@ -127,11 +118,20 @@ verify_version_contract() {
 
 version_relation() {
   LC_ALL=C awk -v left="$1" -v right="$2" '
+    function compare_numeric(left_part, right_part, left_text, right_text) {
+      if (length(left_part) < length(right_part)) return -1
+      if (length(left_part) > length(right_part)) return 1
+      left_text = "x" left_part
+      right_text = "x" right_part
+      if (left_text < right_text) return -1
+      if (left_text > right_text) return 1
+      return 0
+    }
     BEGIN {
       split(left, a, "."); split(right, b, ".")
       for (i = 1; i <= 3; i++) {
-        if (a[i] + 0 < b[i] + 0) { print -1; exit }
-        if (a[i] + 0 > b[i] + 0) { print 1; exit }
+        relation = compare_numeric(a[i], b[i])
+        if (relation != 0) { print relation; exit }
       }
       print 0
     }
@@ -167,7 +167,7 @@ read_lock() {
   case "$lock_commit_line" in commit=*) lock_commit=${lock_commit_line#commit=} ;; *) return 1 ;; esac
   case "$lock_tree_line" in website_tree=*) lock_tree=${lock_tree_line#website_tree=} ;; *) return 1 ;; esac
   [ "$lock_origin" = "$OFFICIAL_ORIGIN" ] || return 1
-  is_calver "$lock_version" || return 1
+  is_stable_semver "$lock_version" || return 1
   [ "$lock_tag" = "v$lock_version" ] || return 1
   is_oid "$lock_tag_object" && is_oid "$lock_commit" && is_oid "$lock_tree" || return 1
 }
@@ -411,7 +411,7 @@ recover_transaction() {
   case "$recovery_state_line" in state=prepared|state=applying|state=verified) recovery_state=${recovery_state_line#state=} ;; *) fail "recovery_required: the unfinished transaction journal is malformed." ;; esac
   case "$recovery_old_line" in old_version=*) recovery_old=${recovery_old_line#old_version=} ;; *) fail "recovery_required: the unfinished transaction journal is malformed." ;; esac
   case "$recovery_new_line" in new_version=*) recovery_new=${recovery_new_line#new_version=} ;; *) fail "recovery_required: the unfinished transaction journal is malformed." ;; esac
-  is_calver "$recovery_old" && is_calver "$recovery_new" ||
+  is_stable_semver "$recovery_old" && is_stable_semver "$recovery_new" ||
     fail "recovery_required: the unfinished transaction versions are malformed."
   validate_transaction_paths "$transaction_dir/old-paths" &&
     validate_transaction_paths "$transaction_dir/new-paths" ||
@@ -614,7 +614,7 @@ if [ "${JEKYLL_OBSIDIAN_UPDATE_INTERNAL_WORKER:-0}" = 1 ]; then
   target_version_line=$(sed -n '4p' "$journal")
   case "$installed_version_line" in old_version=*) installed_version=${installed_version_line#old_version=} ;; *) fail "the private update worker journal is invalid." ;; esac
   case "$target_version_line" in new_version=*) target_version=${target_version_line#new_version=} ;; *) fail "the private update worker journal is invalid." ;; esac
-  is_calver "$installed_version" && is_calver "$target_version" || fail "the private update worker versions are invalid."
+  is_stable_semver "$installed_version" && is_stable_semver "$target_version" || fail "the private update worker versions are invalid."
   validate_transaction_paths "$transaction_dir/old-paths" &&
     validate_transaction_paths "$transaction_dir/new-paths" &&
     validate_target_manifest "$target_paths" "$transaction_dir/new-paths" ||
@@ -657,7 +657,7 @@ while [ "$#" -gt 0 ]; do
   esac
 done
 
-if [ "$to_was_set" -eq 1 ] && ! is_calver "$requested_version"; then
+if [ "$to_was_set" -eq 1 ] && ! is_stable_semver "$requested_version"; then
   fail "invalid release version: $requested_version"
 fi
 
@@ -737,9 +737,9 @@ awk '$2 ~ /^refs\/tags\/v/ && $2 !~ /\^\{\}$/ { reference = $2; sub(/^refs\/tags
   "$remote_refs" >"$discovery_dir/named-releases"
 while IFS= read -r named_version; do
   [ -n "$named_version" ] || continue
-  if printf '%s\n' "$named_version" | LC_ALL=C grep -Eq '^[0-9]{4}\.[0-9]+\.[0-9]+$' &&
-     ! is_calver "$named_version"; then
-    fail "invalid calendar release tag: v$named_version"
+  if printf '%s\n' "$named_version" | LC_ALL=C grep -Eq '^[0-9.]+$' &&
+     ! is_stable_semver "$named_version"; then
+    fail "invalid stable SemVer release tag: v$named_version"
   fi
 done <"$discovery_dir/named-releases"
 
@@ -784,7 +784,7 @@ awk '
 ' "$remote_refs" >"$discovery_dir/lightweight-releases"
 while IFS= read -r lightweight_version; do
   [ -n "$lightweight_version" ] || continue
-  if is_calver "$lightweight_version"; then
+  if is_stable_semver "$lightweight_version"; then
     fail "release-shaped tag v$lightweight_version must be an annotated tag."
   fi
 done <"$discovery_dir/lightweight-releases"
@@ -792,18 +792,26 @@ done <"$discovery_dir/lightweight-releases"
 : >"$release_candidates"
 while IFS="	" read -r version tag_object commit; do
   [ -n "$version" ] || continue
-  if is_calver "$version" && is_oid "$tag_object" && is_oid "$commit"; then
+  if is_stable_semver "$version" && is_oid "$tag_object" && is_oid "$commit"; then
     printf '%s\t%s\t%s\n' "$version" "$tag_object" "$commit" >>"$release_candidates"
   fi
 done <"$discovery_dir/unvalidated-releases"
 
-[ -s "$release_candidates" ] || fail "no annotated stable release tags were found."
+[ -s "$release_candidates" ] || fail "no annotated stable SemVer release tags were found."
 
 if [ "$to_was_set" -eq 1 ]; then
   target_record=$(awk -F '\t' -v wanted="$requested_version" '$1 == wanted { print; found = 1 } END { if (!found) exit 1 }' "$release_candidates") ||
     fail "official annotated release not found: v$requested_version"
 else
-  target_record=$(sort -t . -k1,1n -k2,2n -k3,3n "$release_candidates" | tail -n 1)
+  target_record=""
+  latest_version=""
+  while IFS="	" read -r candidate_version candidate_tag_object candidate_commit; do
+    [ -n "$candidate_version" ] || continue
+    if [ -z "$target_record" ] || [ "$(version_relation "$candidate_version" "$latest_version")" -gt 0 ]; then
+      latest_version=$candidate_version
+      target_record=$(printf '%s\t%s\t%s\n' "$candidate_version" "$candidate_tag_object" "$candidate_commit")
+    fi
+  done <"$release_candidates"
 fi
 
 target_version=$(printf '%s\n' "$target_record" | awk -F '\t' '{ print $1 }')

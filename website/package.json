@@ -1,6 +1,6 @@
 {
   "name": "jekyll-obsidian",
-  "version": "2026.8.9",
+  "version": "0.1.0",
   "private": true,
   "type": "module",
   "description": "Frontend assets and browser checks for the configurable Jekyll Obsidian template.",
