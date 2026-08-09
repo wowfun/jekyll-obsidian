@@ -20,7 +20,10 @@ for (const pageUnderTest of pages) {
     await page.evaluate(() => document.fonts.ready);
 
     if (pageUnderTest.name === "syntax") {
-      await expect(page.locator("[data-math-rendered]").first()).toBeVisible();
+      const math = page.locator(
+        "[data-math], [data-math-style], .math-inline, .math-display"
+      );
+      await expect(page.locator("[data-math-rendered]")).toHaveCount(await math.count());
       await expect(page.locator("[data-mermaid-rendered]")).toBeVisible();
     }
     if (pageUnderTest.name === "home") {

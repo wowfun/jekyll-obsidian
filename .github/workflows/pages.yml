@@ -167,6 +167,9 @@ jobs:
         run: npm ci
 
       - name: Restore verified GitHub Markdown inputs
+        # Remove after actions/download-artifact#484 is fixed in a release.
+        env:
+          NODE_OPTIONS: --disable-warning=DEP0005
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
           name: github-markdown-${{ github.run_id }}
