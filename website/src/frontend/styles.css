@@ -1070,7 +1070,6 @@
     padding: 0.28rem 0.2rem;
     border: 1px solid var(--line-strong);
     border-radius: 100vmax;
-    gap: 0.18rem;
     font-size: 0.65rem;
   }
 
@@ -1081,7 +1080,7 @@
 
   .archive-timeline__year li .archive-timeline__count {
     min-inline-size: 0;
-    padding-inline-start: 0.2rem;
+    padding-inline-start: 0.1rem;
     border-inline-start: 1px solid var(--line);
   }
 

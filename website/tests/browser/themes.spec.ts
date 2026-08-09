@@ -516,8 +516,9 @@ test("Minimal post metadata places distinct Blog topics beside the publication d
   }
 });
 
-test("Minimal chronology lays out a full year as twelve monthly capsules in two rows", async ({ page }, testInfo) => {
+test("Minimal chronology fits twelve monthly capsules under Linux fallback font metrics", async ({ page }, testInfo) => {
   await page.goto(site("minimal", "/blog/"));
+  await page.addStyleTag({ content: ":root { --font-system: Arial, sans-serif; }" });
 
   let chronology = page.getByRole("navigation", { name: "Chronology" });
   if (testInfo.project.name === "mobile-chromium") {
