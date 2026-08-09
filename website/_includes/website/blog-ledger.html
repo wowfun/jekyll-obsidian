@@ -5,7 +5,13 @@
     {% unless include.compact %}<header class="section-heading"><h2 id="dispatches-title">{{ ui.field_dispatches | default: 'Field dispatches' | escape }}</h2></header>{% endunless %}
     <ol>
       {% for post in include.posts %}
-        <li{% if include.filterable %} data-filter-item data-topic-anchors="{{ post.topic_anchors | join: ' ' | escape }}"{% if post.filter_month %} data-filter-month="{{ post.filter_month | escape }}"{% endif %}{% endif %}><div class="blog-ledger__meta"><time datetime="{{ post.published_at | escape }}">{{ post.published_at | date: "%Y-%m-%d" }}</time>{% if post.topics and post.topics.size > 0 %}<span class="blog-ledger__topics">{% for topic in post.topics %}{{ topic.name | escape }}{% unless forloop.last %} · {% endunless %}{% endfor %}</span>{% endif %}</div><a href="{{ post.url | escape }}"><strong>{{ post.title | escape }}</strong>{% if post.summary and post.summary != '' %}<span class="blog-ledger__description">{{ post.summary | escape }}</span>{% endif %}</a></li>
+        <li{% if include.filterable %} data-filter-item data-topic-anchors="{{ post.topic_anchors | join: ' ' | escape }}"{% if post.filter_month %} data-filter-month="{{ post.filter_month | escape }}"{% endif %}{% endif %}>
+          <div class="blog-ledger__meta"><time datetime="{{ post.published_at | escape }}">{{ post.published_at | date: "%Y-%m-%d" }}</time></div>
+          <div class="blog-ledger__content">
+            <a class="blog-ledger__main" href="{{ post.url | escape }}"><strong>{{ post.title | escape }}</strong>{% if post.summary and post.summary != '' %}<span class="blog-ledger__description">{{ post.summary | escape }}</span>{% endif %}</a>
+            {% if post.topics and post.topics.size > 0 %}<ul class="blog-ledger__topics" aria-label="{{ ui.topics | default: 'Topics' | escape }}">{% for topic in post.topics %}<li><a href="{{ blog_url | escape }}?topic={{ topic.anchor | url_encode }}" data-topic-filter-option data-topic-anchor="{{ topic.anchor | escape }}">{{ topic.name | escape }}</a></li>{% endfor %}</ul>{% endif %}
+          </div>
+        </li>
       {% endfor %}
     </ol>
     {% unless include.compact %}<a class="ledger-archive-link" href="{{ blog_url | escape }}">{{ ui.view_all | default: 'View all' | escape }} <span aria-hidden="true">→</span></a>{% endunless %}

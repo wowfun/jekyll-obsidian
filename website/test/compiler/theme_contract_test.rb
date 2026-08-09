@@ -572,8 +572,36 @@ class ThemeContractTest < Minitest::Test
     assert_equal [%w[rust typescript], %w[typescript ai-agent]],
       portfolio_data.fetch("portfolio_projects").map { |project| project.fetch("topic_anchors") }
 
+    assert_equal [
+      { "name" => "Rust", "anchor" => "rust" },
+      { "name" => "TypeScript", "anchor" => "typescript" }
+    ], page(result, "/portfolio/alpha/").data.dig("website", "theme_data", "portfolio_topics")
+    refute page(result, "/blog/post/").data.dig("website", "theme_data").key?("portfolio_topics")
+
     blog_topics = page(result, "/blog/").data.dig("website", "theme_data", "topic_summaries")
     assert_equal [{ "name" => "Writing", "anchor" => "writing", "count" => 1 }], blog_topics
+  end
+
+  def test_minimal_portfolio_omits_project_topics_when_tags_are_disabled
+    result = compile(
+      note(
+        "portfolio/alpha.md",
+        "---\npublish: true\ntags: [release]\ncategories: [Rust]\n---\n# Alpha"
+      ),
+      theme: "minimal",
+      features: { "tags" => false }
+    )
+
+    assert result.success?, result.diagnostics.map(&:message).join("\n")
+    assert_empty page(result, "/portfolio/").data.dig(
+      "website", "theme_data", "portfolio_topic_summaries"
+    )
+    assert_empty page(result, "/portfolio/").data.dig(
+      "website", "theme_data", "portfolio_projects", 0, "topics"
+    )
+    assert_empty page(result, "/portfolio/alpha/").data.dig(
+      "website", "theme_data", "portfolio_topics"
+    )
   end
 
   def test_minimal_root_fallback_reaches_a_hidden_portfolio_without_replacing_an_authored_root_route

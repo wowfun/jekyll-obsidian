@@ -513,40 +513,44 @@ module JekyllObsidian
           "portfolio_topic_summaries" => portfolio_taxonomy.fetch("summaries"),
           "portfolio_topic_filter_count" => portfolio_projects.length
         }
+        portfolio_projects_by_id = portfolio_projects.to_h { |project| [project.fetch("id"), project] }
         linked_docs = documentation.docs_note_ids.filter_map { |id| model.notes_by_id[id] }
         linked_doc_positions = linked_docs.each_with_index.to_h { |note, index| [note.id, index] }
         post_positions = posts.each_with_index.to_h { |post, index| [post.id, index] }
         theme_data = model.notes.to_h do |note|
           post_index = post_positions[note.id]
           doc_index = linked_doc_positions[note.id]
+          project = portfolio_projects_by_id[note.id]
+          data = {
+            "archive_groups" => [],
+            "docs_tree" => note.content_type == "doc" ? documentation.docs_tree : [],
+            "docs_home_url" => documentation.docs_home_url,
+            "related_articles" => related_article_cards(note, model, config),
+            "previous" => sequence_card(
+              note,
+              post_index,
+              doc_index,
+              posts,
+              linked_docs,
+              -1,
+              config,
+              taxonomy
+            ),
+            "next" => sequence_card(
+              note,
+              post_index,
+              doc_index,
+              posts,
+              linked_docs,
+              1,
+              config,
+              taxonomy
+            )
+          }
+          data["portfolio_topics"] = project.fetch("topics") if project
           [
             note.id,
-            {
-              "archive_groups" => [],
-              "docs_tree" => note.content_type == "doc" ? documentation.docs_tree : [],
-              "docs_home_url" => documentation.docs_home_url,
-              "related_articles" => related_article_cards(note, model, config),
-              "previous" => sequence_card(
-                note,
-                post_index,
-                doc_index,
-                posts,
-                linked_docs,
-                -1,
-                config,
-                taxonomy
-              ),
-              "next" => sequence_card(
-                note,
-                post_index,
-                doc_index,
-                posts,
-                linked_docs,
-                1,
-                config,
-                taxonomy
-              )
-            }
+            data
           ]
         end
         system_theme_data = {

@@ -174,6 +174,37 @@ class LocalizedCompilerTest < Minitest::Test
     ).map { |project| project.fetch("id") }
   end
 
+  def test_minimal_portfolio_detail_topics_follow_physical_translations_and_fallbacks
+    result = compile(
+      note(
+        "portfolio/translated.md",
+        "---\npublish: true\ncategories: [Rust, TypeScript]\n---\n# Translated project"
+      ),
+      note(
+        "portfolio/fallback.md",
+        "---\npublish: true\ncategories: [Ruby]\n---\n# Fallback project"
+      ),
+      *manifests,
+      note(
+        "_translations/zh-CN/portfolio/translated.md",
+        "---\npublish: true\ntitle: 已翻译项目\n---\n# 已翻译项目"
+      ),
+      theme: "minimal",
+      i18n: I18N.merge("enabled" => true)
+    )
+
+    assert result.success?, result.diagnostics.map(&:message).join("\n")
+    assert_equal %w[Rust TypeScript], page(result, "/zh-CN/portfolio/translated/").data.dig(
+      "website", "theme_data", "portfolio_topics"
+    ).map { |topic| topic.fetch("name") }
+
+    fallback = page(result, "/zh-CN/portfolio/fallback/")
+    assert_equal true, fallback.data.dig("website", "i18n", "fallback")
+    assert_equal ["Ruby"], fallback.data.dig(
+      "website", "theme_data", "portfolio_topics"
+    ).map { |topic| topic.fetch("name") }
+  end
+
   def test_hidden_indexless_portfolio_redirect_uses_its_localized_route_and_title
     result = compile(
       note("work/alpha.md", "---\npublish: true\n---\n# Alpha"),
@@ -301,6 +332,28 @@ class LocalizedCompilerTest < Minitest::Test
     assert_equal ["release", "架构"], page(result, "/zh-CN/blog/").data.dig(
       "website", "theme_data", "archive_groups", 0, "posts", 0, "topics"
     ).map { |topic| topic.fetch("name") }
+  end
+
+  def test_minimal_blog_topic_metadata_keeps_ui_and_fallback_content_languages_distinct
+    result = compile(
+      note(
+        "blog/post.md",
+        "---\npublish: true\ncontent_type: post\ndate: 2026-08-01\ncategories: [Architecture]\n---\n# Post"
+      ),
+      *manifests("  topics: 主题\n"),
+      theme: "minimal",
+      i18n: I18N.merge("enabled" => true)
+    )
+
+    assert result.success?, result.diagnostics.map(&:message).join("\n")
+    fallback = page(result, "/zh-CN/blog/post/").data.fetch("website")
+    assert_equal true, fallback.dig("i18n", "fallback")
+    assert_equal "zh-CN", fallback.dig("i18n", "locale")
+    assert_equal "ltr", fallback.dig("i18n", "dir")
+    assert_equal "en", fallback.dig("i18n", "content_lang")
+    assert_equal "ltr", fallback.dig("i18n", "content_dir")
+    assert_equal "主题", fallback.dig("i18n", "messages", "topics")
+    assert_equal ["Architecture"], fallback.fetch("topic_links").map { |topic| topic.fetch("name") }
   end
 
   def test_locale_manifests_are_closed_and_i18n_defaults_are_theme_specific

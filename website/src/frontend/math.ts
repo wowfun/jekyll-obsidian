@@ -34,6 +34,7 @@ import "@mathjax/src/js/input/tex/textmacros/TextMacrosConfiguration.js";
 import "@mathjax/src/js/input/tex/unicode/UnicodeConfiguration.js";
 import "@mathjax/src/js/input/tex/upgreek/UpgreekConfiguration.js";
 import "@mathjax/src/js/input/tex/verb/VerbConfiguration.js";
+import { decorateSourceCopy } from "./code-block-copy";
 
 const texPackages = [
   "base",
@@ -105,6 +106,7 @@ export async function renderMath(): Promise<void> {
       element.replaceChildren(document.importNode(rendered, true));
       element.dataset.mathRendered = "true";
       element.setAttribute("aria-label", source);
+      decorateSourceCopy(element, source, "formula");
     } catch {
       element.dataset.mathError = "true";
     }

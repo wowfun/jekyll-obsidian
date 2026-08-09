@@ -10,12 +10,13 @@
     {% unless page.website.has_h1 %}<h1 class="note-title">{{ page.title | escape }}</h1>{% endunless %}
     {% if page.website.kind == 'note' and page.website.content_type == 'post' and page.website.authors.size > 0 %}<p class="note-byline">{{ ui.posted_by | default: 'Posted by' | escape }} {% for author in page.website.authors %}{% if author.url %}<a href="{{ author.url | escape }}">{{ author.name | escape }}</a>{% else %}{{ author.name | escape }}{% endif %}{% unless forloop.last %}, {% endunless %}{% endfor %}</p>{% endif %}
     {% if page.website.subtitle %}<p class="note-subtitle">{{ page.website.subtitle | escape }}</p>{% elsif page.website.kind == 'note' and page.description %}<p class="note-description">{{ page.description | escape }}</p>{% endif %}
+    {% if page.website.theme == 'minimal' %}{% include website/portfolio-topics.html topics=page.website.theme_data.portfolio_topics url=page.website.routes.portfolio %}{% endif %}
     {% if page.website.kind == 'note' %}
       <div class="note-meta">
         {% if page.website.content_type == 'post' and page.website.published_at %}<time datetime="{{ page.website.published_at | escape }}">{{ ui.published | default: 'Published' | escape }} {{ page.website.published_at | date: "%Y-%m-%d" }}</time>{% endif %}
         {% if page.website.theme == 'minimal' and page.website.content_type == 'post' and page.website.features.tags and page.website.topic_links.size > 0 %}
           {% assign blog_url = page.website.routes.blog %}{% unless blog_url %}{% assign blog_url = '/blog/' | relative_url %}{% endunless %}
-          <span class="note-meta__topics" aria-label="{{ ui.topics | default: 'Topics' | escape }}">{% for topic in page.website.topic_links %}<a class="tag-chip" href="{{ blog_url | escape }}?topic={{ topic.anchor | url_encode }}">{{ topic.name | escape }}</a>{% endfor %}</span>
+          <span class="note-meta__topics" aria-label="{{ ui.topics | default: 'Topics' | escape }}" lang="{{ page.website.i18n.locale | default: site.lang | default: 'en' | escape }}" dir="{{ page.website.i18n.dir | default: 'ltr' | escape }}">{% for topic in page.website.topic_links %}<a class="tag-chip" href="{{ blog_url | escape }}?topic={{ topic.anchor | url_encode }}" lang="{{ page.website.i18n.content_lang | default: page.website.i18n.locale | default: site.lang | default: 'en' | escape }}" dir="{{ page.website.i18n.content_dir | default: page.website.i18n.dir | default: 'ltr' | escape }}">{{ topic.name | escape }}</a>{% endfor %}</span>
         {% endif %}
         {% if page.website.updated %}<time datetime="{{ page.website.updated | escape }}">{{ ui.updated | default: 'Updated' | escape }} {{ page.website.updated | date: "%Y-%m-%d" }}</time>{% endif %}
         {% if page.website.features.tags %}

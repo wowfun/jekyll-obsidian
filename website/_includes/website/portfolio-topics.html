@@ -1,0 +1,4 @@
+{% if include.topics.size > 0 %}
+  {% assign ui = page.website.i18n.messages %}
+  <ul class="minimal-portfolio-card__topics" aria-label="{{ ui.topics | default: 'Topics' | escape }}" lang="{{ page.website.i18n.locale | default: site.lang | default: 'en' | escape }}" dir="{{ page.website.i18n.dir | default: 'ltr' | escape }}">{% for topic in include.topics %}<li lang="{{ page.website.i18n.content_lang | default: page.website.i18n.locale | default: site.lang | default: 'en' | escape }}" dir="{{ page.website.i18n.content_dir | default: page.website.i18n.dir | default: 'ltr' | escape }}">{% if include.url and topic.anchor %}<a class="tag-chip" href="{{ include.url | escape }}?topic={{ topic.anchor | url_encode }}">{{ topic.name | escape }}</a>{% else %}<span class="tag-chip">{{ topic.name | escape }}</span>{% endif %}</li>{% endfor %}</ul>
+{% endif %}

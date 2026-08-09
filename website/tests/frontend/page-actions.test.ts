@@ -50,6 +50,42 @@ describe("page Markdown actions", () => {
     cleanup();
   });
 
+  it("restores keyboard focus and the document selection after the copy fallback", async () => {
+    vi.spyOn(window, "fetch").mockResolvedValue(new Response("# Guide\n", { status: 200 }));
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText: vi.fn(async () => { throw new Error("denied"); }) }
+    });
+    Object.defineProperty(document, "execCommand", {
+      configurable: true,
+      value: vi.fn(() => { throw new Error("copy rejected"); })
+    });
+    document.body.insertAdjacentHTML("beforeend", '<p id="selection-source">Keep this selection</p>');
+    const selectedText = document.querySelector<HTMLElement>("#selection-source")!;
+    const originalRange = document.createRange();
+    originalRange.selectNodeContents(selectedText);
+    const selection = document.getSelection()!;
+    selection.removeAllRanges();
+    selection.addRange(originalRange);
+    vi.spyOn(HTMLTextAreaElement.prototype, "select").mockImplementation(function selectFallbackField(
+      this: HTMLTextAreaElement
+    ) {
+      this.focus();
+      document.getSelection()?.removeAllRanges();
+    });
+    const button = document.querySelector<HTMLButtonElement>("[data-copy-page]")!;
+    button.focus();
+    const cleanup = initialisePageActions();
+
+    button.click();
+
+    await vi.waitFor(() => expect(document.querySelector("[data-copy-page-status]")?.textContent)
+      .toBe("Copy failed"));
+    expect(document.activeElement).toBe(button);
+    expect(document.getSelection()?.toString()).toBe("Keep this selection");
+    cleanup();
+  });
+
   it("closes the native menu with Escape and returns focus to its summary", () => {
     const menu = document.querySelector<HTMLDetailsElement>("details")!;
     const summary = menu.querySelector<HTMLElement>("summary")!;

@@ -6,6 +6,7 @@ type Theme = "minimal" | "docs";
 const themes = ["minimal", "docs"] as const satisfies readonly Theme[];
 const site = (theme: Theme, route = "/") => `/__site__/${theme}${route}`;
 const localizedDocs = (route = "/") => `/__site__/docs-i18n${route}`;
+const localizedMinimal = (route = "/") => `/__site__/minimal-i18n${route}`;
 
 for (const theme of themes) {
   test(`${theme} exposes an accessible presentation`, async ({ page }) => {
@@ -52,6 +53,7 @@ for (const theme of themes) {
 
     await actions.locator(".page-actions__primary").click();
     await expect(actions.locator("[role='status']")).toHaveText("Copied");
+    await expect(actions.locator(".page-actions__primary")).toBeFocused();
     expect(await page.evaluate(() =>
       (window as typeof window & { __copiedMarkdown?: string }).__copiedMarkdown
     )).toBe(markdown);
@@ -63,6 +65,235 @@ for (const theme of themes) {
     await expect(view).toHaveAttribute("rel", "noopener");
   });
 }
+
+for (const theme of themes) {
+  test(`${theme} adds one shared source-copy action to code, Mermaid, and MathJax`, async ({ page }, testInfo) => {
+    await page.addInitScript(() => {
+      Object.defineProperty(navigator, "clipboard", {
+        configurable: true,
+        value: {
+          async writeText(value: string) {
+            (window as typeof window & { __copiedCode?: string }).__copiedCode = value;
+          }
+        }
+      });
+    });
+    await page.goto(site(theme, "/docs/Syntax/"));
+    await expect(page.locator("[data-mermaid-rendered]")).toBeVisible();
+
+    const blocks = page.locator(".note-content [data-code-block-copy]");
+    const renderedCode = page.locator(".note-content pre");
+    await expect(blocks).toHaveCount(await renderedCode.count());
+    expect(await blocks.count()).toBeGreaterThan(0);
+    await expect(blocks.locator(":scope > pre")).toHaveCount(await blocks.count());
+    await expect(page.locator(".note-content pre button")).toHaveCount(0);
+    const diagram = page.locator("[data-mermaid-rendered]").first();
+    const diagramButton = diagram.locator("button[data-copy-source]");
+    await expect(diagramButton).toHaveCount(1);
+    await expect(diagramButton).toHaveAccessibleName("Copy diagram source");
+    const formulas = page.locator("[data-math-rendered]");
+    expect(await formulas.count()).toBeGreaterThan(1);
+    await expect(formulas.locator("button[data-copy-source]")).toHaveCount(await formulas.count());
+    await expect(formulas.first().locator("button[data-copy-source]")).toHaveAccessibleName("Copy formula source");
+
+    const first = blocks.first();
+    const source = await first.locator(":scope > pre").textContent();
+    const button = first.locator("button[data-copy-code]");
+    await expect(button).toHaveAccessibleName("Copy code");
+    const primaryInk = await page.locator("body").evaluate((element) => getComputedStyle(element).color);
+    await expect(button).toHaveCSS("color", primaryInk);
+    await expect(button).toHaveCSS("border-top-width", "0px");
+    await expect(button.locator("svg")).toBeVisible();
+    await expect(button.locator(".code-block-copy__label")).toHaveCount(0);
+    await expect(button).toHaveText("");
+    const actionBox = (await button.boundingBox())!;
+    expect(actionBox.width).toBeGreaterThanOrEqual(32);
+    expect(actionBox.height).toBeGreaterThanOrEqual(32);
+    expect(Math.abs(actionBox.width - actionBox.height)).toBeLessThanOrEqual(1);
+    const placement = await first.evaluate((element) => {
+      const wrapper = element.getBoundingClientRect();
+      const action = element.querySelector("button")!.getBoundingClientRect();
+      return {
+        top: action.top - wrapper.top,
+        end: wrapper.right - action.right
+      };
+    });
+    expect(placement.top).toBeGreaterThanOrEqual(0);
+    expect(placement.top).toBeLessThanOrEqual(16);
+    expect(placement.end).toBeGreaterThanOrEqual(0);
+    expect(placement.end).toBeLessThanOrEqual(16);
+    const idleShadow = await button.evaluate((element) => getComputedStyle(element).boxShadow);
+    await button.focus();
+    await expect.poll(() => button.evaluate((element) => getComputedStyle(element).boxShadow))
+      .not.toBe(idleShadow);
+    await page.keyboard.press("Enter");
+    await expect(button).toHaveAccessibleName("Copied");
+    await expect(button.locator("[data-copy-icon='success']")).toBeVisible();
+    await expect(first.getByRole("status")).toHaveText("Copied");
+    await expect(button).toBeFocused();
+    expect(await page.evaluate(() =>
+      (window as typeof window & { __copiedCode?: string }).__copiedCode
+    )).toBe(source);
+
+    const diagramSource = await diagram.locator("template[data-website-copy-source]").evaluate((template) =>
+      (template as HTMLTemplateElement).content.textContent
+    );
+    await diagramButton.click();
+    await expect(diagramButton).toHaveAccessibleName("Copied");
+    await expect(diagramButton.locator("[data-copy-icon='success']")).toBeVisible();
+    expect(await page.evaluate(() =>
+      (window as typeof window & { __copiedCode?: string }).__copiedCode
+    )).toBe(diagramSource);
+
+    const formula = formulas.first();
+    const formulaButton = formula.locator("button[data-copy-source]");
+    const formulaActionBox = (await formulaButton.boundingBox())!;
+    expect(formulaActionBox.width).toBeGreaterThanOrEqual(24);
+    expect(formulaActionBox.height).toBeGreaterThanOrEqual(24);
+    const formulaSource = await formula.locator("template[data-website-copy-source]").evaluate((template) =>
+      (template as HTMLTemplateElement).content.textContent
+    );
+    await formulaButton.click();
+    await expect(formulaButton).toHaveAccessibleName("Copied");
+    await expect(formulaButton.locator("[data-copy-icon='success']")).toBeVisible();
+    expect(await page.evaluate(() =>
+      (window as typeof window & { __copiedCode?: string }).__copiedCode
+    )).toBe(formulaSource);
+
+    const sourceHosts = page.locator(".note-content [data-source-copy]");
+    const fitsViewport = await sourceHosts.evaluateAll((elements) => elements.every((element) => {
+      const box = element.getBoundingClientRect();
+      return box.left >= 0 && box.right <= document.documentElement.clientWidth;
+    }));
+    expect(fitsViewport).toBe(true);
+    const accessibility = await new AxeBuilder({ page }).include("button[data-copy-source]").analyze();
+    expect(accessibility.violations).toEqual([]);
+
+    await page.emulateMedia({ forcedColors: "active" });
+    await button.focus();
+    await page.keyboard.press("Tab");
+    await page.keyboard.press("Shift+Tab");
+    await expect(button).toBeFocused();
+    const forcedColorFocus = await button.evaluate((element) => {
+      const style = getComputedStyle(element);
+      return {
+        visible: element.matches(":focus-visible"),
+        outlineStyle: style.outlineStyle,
+        outlineWidth: Number.parseFloat(style.outlineWidth)
+      };
+    });
+    expect(forcedColorFocus.visible).toBe(true);
+    expect(forcedColorFocus.outlineStyle).not.toBe("none");
+    expect(forcedColorFocus.outlineWidth).toBeGreaterThanOrEqual(2);
+    await page.emulateMedia({ forcedColors: "none" });
+
+    await page.emulateMedia({ media: "print" });
+    await expect(diagramButton).toBeHidden();
+    const printSourceLayout = await page.evaluate(() => {
+      const paddings = (element: Element) => {
+        const style = getComputedStyle(element);
+        return {
+          start: Number.parseFloat(style.paddingInlineStart),
+          end: Number.parseFloat(style.paddingInlineEnd)
+        };
+      };
+      const diagram = document.querySelector<HTMLElement>("[data-mermaid-rendered]")!;
+      const displayFormula = document.querySelector<HTMLElement>(
+        ":is([data-math-style='display'], [data-math='display'], .math-display)[data-source-copy]"
+      )!;
+      const inlineFormula = document.querySelector<HTMLElement>(
+        ":is([data-math-style='inline'], [data-math='inline'], .math-inline)[data-source-copy]"
+      )!;
+      return {
+        diagram: paddings(diagram),
+        displayFormula: paddings(displayFormula),
+        inlineDisplay: getComputedStyle(inlineFormula).display
+      };
+    });
+    expect(printSourceLayout.diagram.end).toBeCloseTo(printSourceLayout.diagram.start, 5);
+    expect(printSourceLayout.displayFormula.end)
+      .toBeCloseTo(printSourceLayout.displayFormula.start, 5);
+    expect(printSourceLayout.inlineDisplay).toBe("inline");
+    await page.emulateMedia({ media: "screen" });
+
+    if (theme === "docs" && testInfo.project.name === "desktop-chromium") {
+      await page.getByRole("navigation", { name: "Documentation", exact: true })
+        .getByRole("link", { name: "Integration" }).click();
+      await expect(page).toHaveURL(site("docs", "/docs/Integration/"));
+      const navigatedBlock = page.locator(".note-content [data-code-block-copy]").first();
+      const navigatedButton = navigatedBlock.locator("button[data-copy-code]");
+      await expect(navigatedButton).toBeVisible();
+      await expect(navigatedButton).toHaveAccessibleName("Copy code");
+      const navigatedSource = await navigatedBlock.locator(":scope > pre").textContent();
+      await navigatedButton.click();
+      await expect(navigatedButton).toHaveAccessibleName("Copied");
+      expect(await page.evaluate(() =>
+        (window as typeof window & { __copiedCode?: string }).__copiedCode
+      )).toBe(navigatedSource);
+
+      await page.getByRole("navigation", { name: "Documentation", exact: true })
+        .getByRole("link", { name: "Syntax", exact: true }).click();
+      await expect(page).toHaveURL(site("docs", "/docs/Syntax/"));
+      const returnedDiagram = page.locator("[data-mermaid-rendered]");
+      await expect(returnedDiagram).toHaveCount(1);
+      await expect(returnedDiagram.locator("button[data-copy-source]")).toHaveCount(1);
+      const returnedMath = page.locator("[data-math-rendered]");
+      await expect.poll(() => returnedMath.count()).toBeGreaterThan(0);
+      await expect(returnedMath.locator("button[data-copy-source]"))
+        .toHaveCount(await returnedMath.count());
+    }
+  });
+}
+
+test("localized code block actions announce their state in the page language", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "desktop-chromium", "one localized interaction is sufficient");
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText: async () => { throw new Error("denied"); } }
+    });
+  });
+  await page.goto(localizedDocs("/zh-CN/docs/Syntax/"));
+
+  const first = page.locator("[data-code-block-copy]").first();
+  const button = first.locator("button[data-copy-code]");
+  await expect(button).toHaveAccessibleName("复制代码");
+  await button.click();
+  await expect(button).toHaveAccessibleName("已复制");
+  await expect(first.getByRole("status")).toHaveText("已复制");
+  const localizedDiagramAction = page.locator("[data-mermaid-rendered] button[data-copy-source]");
+  await expect(localizedDiagramAction).toHaveAccessibleName("复制图表源码");
+  await expect(localizedDiagramAction).toHaveAttribute("lang", "zh-CN");
+  const localizedFormulaAction = page.locator("[data-math-rendered] button[data-copy-source]").first();
+  await expect(localizedFormulaAction).toHaveAccessibleName("复制公式源码");
+  await expect(localizedFormulaAction).toHaveAttribute("lang", "zh-CN");
+
+  await page.goto(localizedDocs("/zh-CN/docs/development/"));
+  const fallbackContent = page.locator(".note-content");
+  await expect(fallbackContent).toHaveAttribute("lang", "en");
+  const fallbackBlock = fallbackContent.locator("[data-code-block-copy]").first();
+  const fallbackButton = fallbackBlock.locator("button[data-copy-code]");
+  const fallbackStatus = fallbackBlock.getByRole("status");
+  await expect(fallbackButton).toHaveAttribute("lang", "zh-CN");
+  await expect(fallbackButton).toHaveAttribute("dir", "ltr");
+  await expect(fallbackStatus).toHaveAttribute("lang", "zh-CN");
+  await expect(fallbackStatus).toHaveAttribute("dir", "ltr");
+  const selectedText = await fallbackContent.locator("p").first().evaluate((paragraph) => {
+    const range = document.createRange();
+    range.selectNodeContents(paragraph);
+    const selection = document.getSelection()!;
+    selection.removeAllRanges();
+    selection.addRange(range);
+    return selection.toString();
+  });
+  expect(selectedText).not.toBe("");
+  await fallbackButton.focus();
+  await page.keyboard.press("Enter");
+  await expect(fallbackButton).toHaveAccessibleName("已复制");
+  await expect(fallbackStatus).toHaveText("已复制");
+  await expect(fallbackButton).toBeFocused();
+  expect(await page.evaluate(() => document.getSelection()?.toString())).toBe(selectedText);
+});
 
 test("View as Markdown remains reachable without JavaScript", async ({ browser }, testInfo) => {
   test.skip(testInfo.project.name !== "desktop-chromium", "one no-JS browser contract is sufficient");
@@ -110,7 +341,10 @@ test("Mobile Copy page keeps a dynamic accessible name while showing only its ic
   await expect(primary).toHaveAccessibleName("Copy page");
   await expect(primary.locator("svg")).toBeVisible();
   const mobileBox = await primary.boundingBox();
-  expect(mobileBox?.width).toBeCloseTo(40.8, 0);
+  const rootFontSize = await page.locator("html").evaluate((element) =>
+    Number.parseFloat(getComputedStyle(element).fontSize)
+  );
+  expect(mobileBox?.width).toBeCloseTo(2.55 * rootFontSize, 0);
   expect(mobileBox?.height).toBeGreaterThanOrEqual(40);
   expect(await primaryLabel.evaluate((element) => {
     const box = element.getBoundingClientRect();
@@ -253,6 +487,17 @@ test("Minimal Portfolio filters one-column projects and keeps repository links i
   await expect(cardTopics).toContainText("Ruby");
   await expect(cardTopics).toContainText("TypeScript");
   await expect(cardTopics).toContainText("Static Site Generator");
+  const cardTopicChips = cardTopics.locator(".tag-chip");
+  await expect(cardTopicChips).toHaveCount(6);
+  const cardTopicHeights = await cardTopicChips.evaluateAll((chips) =>
+    chips.map((chip) => chip.getBoundingClientRect().height)
+  );
+  expect(Math.max(...cardTopicHeights) - Math.min(...cardTopicHeights)).toBeLessThanOrEqual(1);
+  expect(await cardTopics.locator("li").evaluateAll((items) => items.every((item) => {
+    const capsule = item.querySelector(".tag-chip")!.getBoundingClientRect();
+    const box = item.getBoundingClientRect();
+    return Math.abs(box.width - capsule.width) <= 1 && Math.abs(box.height - capsule.height) <= 1;
+  }))).toBe(true);
 
   const filter = page.getByRole("navigation", { name: "Filter by topic" });
   await expect(filter.getByRole("link", { name: /^All\b/ })).toHaveAttribute("aria-current", "page");
@@ -308,6 +553,32 @@ test("Minimal Portfolio filters one-column projects and keeps repository links i
   await page.keyboard.press("Enter");
   await expect(page).toHaveURL(site("minimal", "/portfolio/jekyll-obsidian/"));
   await expect(page.getByRole("heading", { level: 1, name: "Imported Jekyll Obsidian" })).toBeVisible();
+  const detailDescription = page.locator(".note-header .note-description");
+  const detailTopics = page.locator(".note-header .minimal-portfolio-card__topics");
+  await expect(detailTopics.locator("li")).toHaveText([
+    "Jekyll",
+    "Obsidian",
+    "jekyll-obsidian",
+    "Ruby",
+    "TypeScript",
+    "Static Site Generator"
+  ]);
+  const detailTopicLinks = detailTopics.getByRole("link");
+  await expect(detailTopicLinks).toHaveCount(6);
+  await expect(detailTopicLinks.getByText("Ruby", { exact: true }))
+    .toHaveAttribute("href", site("minimal", "/portfolio/?topic=ruby"));
+  const detailTopicHeights = await detailTopicLinks.evaluateAll((links) =>
+    links.map((link) => link.getBoundingClientRect().height)
+  );
+  expect(Math.max(...detailTopicHeights) - Math.min(...detailTopicHeights)).toBeLessThanOrEqual(1);
+  expect(await detailTopics.locator("li").evaluateAll((items) => items.every((item) => {
+    const capsule = item.querySelector(".tag-chip")!.getBoundingClientRect();
+    const box = item.getBoundingClientRect();
+    return Math.abs(box.width - capsule.width) <= 1 && Math.abs(box.height - capsule.height) <= 1;
+  }))).toBe(true);
+  expect(await detailDescription.evaluate((description) =>
+    description.nextElementSibling?.classList.contains("minimal-portfolio-card__topics")
+  )).toBe(true);
   const sourceActions = page.getByRole("navigation", { name: "Contribute to this page" });
   const editLink = sourceActions.getByRole("link", { name: "Edit", exact: true });
   const detailRepositoryLink = sourceActions.getByRole("link", { name: "Open Jekyll Obsidian on GitHub" });
@@ -324,6 +595,88 @@ test("Minimal Portfolio filters one-column projects and keeps repository links i
     "href",
     "https://github.com/wowfun/jekyll-obsidian/blob/0123456789abcdef0123456789abcdef01234567/README.md"
   );
+  await detailTopicLinks.getByText("Ruby", { exact: true }).focus();
+  await page.keyboard.press("Enter");
+  await expect(page).toHaveURL(site("minimal", "/portfolio/?topic=ruby"));
+  await expect(page.getByRole("navigation", { name: "Filter by topic" })
+    .getByRole("link", { name: /Ruby/ })).toHaveAttribute("aria-current", "page");
+});
+
+test("Mermaid HTML labels render and stay inside each theme reading column", async ({ page }, testInfo) => {
+  if (testInfo.project.name === "mobile-chromium") {
+    await page.setViewportSize({ width: 390, height: 900 });
+  }
+
+  for (const theme of themes) {
+    await page.goto(site(theme, "/portfolio/jekyll-obsidian/"));
+    const content = page.locator(".note-content");
+    const figure = content.locator(":scope > .mermaid-diagram");
+    await expect(figure).toBeVisible();
+    await expect(content.locator("pre[data-mermaid-error]")).toHaveCount(0);
+    await expect(figure.locator("foreignObject br")).toHaveCount(1);
+    expect(await figure.locator("template[data-mermaid-source]").evaluate((template) =>
+      (template as HTMLTemplateElement).content.textContent
+    )).toContain("<br/>");
+    await expect(figure.locator("button[data-copy-source]")).toHaveCount(1);
+    await expect(figure.locator("button[data-copy-source]")).toHaveAccessibleName("Copy diagram source");
+
+    const geometry = await figure.locator(":scope > svg").evaluate((svg) => {
+      const viewBox = (svg as SVGSVGElement).viewBox.baseVal;
+      const content = (svg as SVGSVGElement).getBBox();
+      return {
+        content: { width: content.width, height: content.height },
+        viewBox: { width: viewBox.width, height: viewBox.height }
+      };
+    });
+    expect(geometry.viewBox.width / geometry.content.width, `${theme} Mermaid horizontal fill`)
+      .toBeLessThan(2);
+    expect(geometry.viewBox.height / geometry.content.height, `${theme} Mermaid vertical fill`)
+      .toBeLessThan(2);
+
+    const prose = (await content.locator(":scope > p").first().boundingBox())!;
+    const diagram = (await figure.boundingBox())!;
+    expect(diagram.x, `${theme} Mermaid left`).toBeCloseTo(prose.x, 0);
+    expect(diagram.x + diagram.width, `${theme} Mermaid right`).toBeCloseTo(prose.x + prose.width, 0);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth), `${theme} page width`)
+      .toBeLessThanOrEqual(await page.evaluate(() => document.documentElement.clientWidth));
+
+    await figure.locator(":scope > svg").evaluate((svg) => { svg.dataset.renderCycle = "initial"; });
+    await page.locator("[data-color-scheme-toggle]").click();
+    await expect(content.locator(".mermaid-diagram > svg[data-render-cycle='initial']")).toHaveCount(0);
+    const redrawn = content.locator(":scope > .mermaid-diagram");
+    await expect(redrawn).toBeVisible();
+    await expect(redrawn.locator("foreignObject br")).toHaveCount(1);
+    await expect(redrawn.locator("button[data-copy-source]")).toHaveCount(1);
+    await expect(redrawn.locator("button[data-copy-source]")).toHaveAccessibleName("Copy diagram source");
+    await expect(content.locator("pre[data-mermaid-error]")).toHaveCount(0);
+  }
+});
+
+test("simple Mermaid flowcharts do not reserve a mostly blank canvas", async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+
+  for (const theme of themes) {
+    await page.goto(site(theme, "/docs/Syntax/"));
+    const svg = page.locator(".note-content > .mermaid-diagram > svg");
+    await expect(svg).toBeVisible();
+    await page.evaluate(() => new Promise<void>((resolve) =>
+      requestAnimationFrame(() => requestAnimationFrame(() => resolve()))
+    ));
+
+    const geometry = await svg.evaluate((element) => {
+      const diagram = element as SVGSVGElement;
+      const viewBox = diagram.viewBox.baseVal;
+      const content = diagram.getBBox();
+      return {
+        content: { width: content.width, height: content.height },
+        viewBox: { width: viewBox.width, height: viewBox.height }
+      };
+    });
+    expect(geometry.viewBox.width / geometry.content.width, `${theme} Mermaid horizontal fill`)
+      .toBeLessThan(2);
+    expect(geometry.viewBox.height / geometry.content.height, `${theme} Mermaid vertical fill`)
+      .toBeLessThan(2);
+  }
 });
 
 test("Minimal recent posts use editorial rows without reserving an empty media column", async ({ page }, testInfo) => {
@@ -405,6 +758,11 @@ test("Blog filters by topic and exposes only populated chronology periods", asyn
   await expect(page).toHaveURL(/\/blog\/\?topic=release-notes$/);
   await expect(filter.getByRole("link", { name: /release-notes/ })).toHaveAttribute("aria-current", "page");
   await expect(filter.getByRole("link", { name: /release-notes/ })).not.toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
+  const visibleReleaseCapsule = page.locator("[data-filter-item]:visible .blog-ledger__topics a", {
+    hasText: "release-notes"
+  });
+  await expect(visibleReleaseCapsule).not.toHaveAttribute("aria-current", "page");
+  await expect(visibleReleaseCapsule).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
   await expect(page.locator("[data-filter-item]:visible").getByRole("link", { name: "One vault, two site models" })).toBeVisible();
   await expect(page.locator("[data-filter-item]", { hasText: "从笔记到发布" })).toBeHidden();
   await filter.getByRole("link", { name: /^All\b/ }).click();
@@ -418,24 +776,62 @@ test("Blog filters by topic and exposes only populated chronology periods", asyn
   await expect(entries.nth(1).locator(".blog-ledger__description"))
     .toHaveText("同一个 Obsidian vault 如何保持写作格式，同时生成不同的信息结构。");
   await expect(entries.locator(".blog-ledger__topics")).toHaveCount(2);
-  await expect(entries.locator("a .blog-ledger__topics")).toHaveCount(0);
-  await expect(entries.nth(0).locator(".blog-ledger__topics"))
-    .toHaveText("release-notes · themes · Architecture");
+  await expect(entries.locator("a a")).toHaveCount(0);
+  await expect(entries.nth(0).locator(".blog-ledger__meta").locator(".blog-ledger__topics"))
+    .toHaveCount(0);
+  const firstMainLink = entries.nth(0).locator("a.blog-ledger__main");
+  await expect(firstMainLink).toHaveAttribute(
+    "href",
+    site("minimal", "/blog/One%20vault%2C%20three%20readings/")
+  );
+  await expect(firstMainLink.locator(".blog-ledger__description"))
+    .toHaveText("Why Minimal and Docs share one compiler but not one layout.");
+  const firstTopics = entries.nth(0).locator(".blog-ledger__topics a");
+  await expect(firstTopics).toHaveText(["release-notes", "themes", "Architecture"]);
+  expect(await firstTopics.evaluateAll((links) =>
+    links.every((link) => link.hasAttribute("data-topic-filter-option"))
+  )).toBe(true);
+  await expect(firstTopics.nth(1)).toHaveAttribute(
+    "href",
+    site("minimal", "/blog/?topic=themes")
+  );
+
+  await firstTopics.nth(1).focus();
+  await expect(firstTopics.nth(1)).toBeFocused();
+  await page.keyboard.press("Enter");
+  await expect(page).toHaveURL(/\/blog\/\?topic=themes$/);
+  await expect(filter.getByRole("link", { name: /themes/ })).toHaveAttribute("aria-current", "page");
+  await expect(firstTopics.nth(1)).not.toHaveAttribute("aria-current", "page");
+  await expect(firstTopics.nth(1)).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
+  await expect(page.locator("[data-filter-item]:visible")).toHaveCount(1);
+  await filter.getByRole("link", { name: /^All\b/ }).click();
+  await expect(page).toHaveURL(site("minimal", "/blog/"));
 
   if (testInfo.project.name === "desktop-chromium") {
     const firstMeta = (await entries.nth(0).locator(".blog-ledger__meta").boundingBox())!;
-    const firstTitle = (await entries.nth(0).locator("strong").boundingBox())!;
+    const firstContent = (await entries.nth(0).locator(".blog-ledger__content").boundingBox())!;
+    const firstTitle = (await firstMainLink.locator("strong").boundingBox())!;
     const firstDate = entries.nth(0).locator("time");
-    const firstTopics = (await entries.nth(0).locator(".blog-ledger__topics").boundingBox())!;
+    const firstDateBox = (await firstDate.boundingBox())!;
+    const firstTopicListBox = (await entries.nth(0).locator(".blog-ledger__topics").boundingBox())!;
     expect(firstTitle.x - (firstMeta.x + firstMeta.width)).toBeLessThanOrEqual(13);
-    expect(firstTopics.y).toBeGreaterThan((await firstDate.boundingBox())!.y);
+    expect(firstTopicListBox.x).toBeCloseTo(firstContent.x, 0);
+    expect(firstTopicListBox.y).toBeGreaterThan(
+      (await firstMainLink.locator(".blog-ledger__description").boundingBox())!.y
+    );
+    expect(Math.abs(
+      firstDateBox.y + (firstDateBox.height / 2) - (firstContent.y + (firstContent.height / 2))
+    )).toBeLessThanOrEqual(1);
     expect(Number.parseFloat(await firstDate.evaluate((element) => getComputedStyle(element).fontSize)))
-      .toBeGreaterThanOrEqual(11.8);
+      .toBeGreaterThanOrEqual(13);
 
     const chronology = page.getByRole("navigation", { name: "Chronology" });
     const chronologyHeading = (await chronology.getByRole("heading", { name: "Chronology" }).boundingBox())!;
     const archiveHeading = (await page.locator(".archive-ledger > section > h2").first().boundingBox())!;
     expect(chronologyHeading.y).toBeCloseTo(archiveHeading.y, 0);
+    const filterBox = (await filter.boundingBox())!;
+    const initialLedgerTop = archiveHeading.y;
+    expect(initialLedgerTop - (filterBox.y + filterBox.height)).toBeLessThanOrEqual(42);
     await expect(chronology.locator('[data-filter-year="2026"] .archive-timeline__count')).toHaveText("2");
     await expect(chronology.locator('[data-filter-month="2026-08"] .archive-timeline__count')).toHaveText("1");
     await expect(chronology.locator('[data-filter-month="2026-07"] .archive-timeline__count')).toHaveText("1");
@@ -446,6 +842,10 @@ test("Blog filters by topic and exposes only populated chronology periods", asyn
     await expect(page).toHaveURL(/\/blog\/\?month=2026-07$/);
     await expect(page.locator("[data-filter-item]:visible")).toHaveCount(1);
     await expect(chronology.locator('[data-filter-month="2026-07"]')).toHaveAttribute("aria-current", "page");
+    expect((await page.locator(".archive-ledger > section > h2").first().boundingBox())!.y)
+      .toBeCloseTo(initialLedgerTop, 0);
+    expect((await chronology.getByRole("heading", { name: "Chronology" }).boundingBox())!.y)
+      .toBeCloseTo(initialLedgerTop, 0);
     await chronology.locator('[data-filter-month="2026-07"]').click();
     await expect(page).toHaveURL(site("minimal", "/blog/"));
     await expect(chronology.locator('[data-filter-month="2026-07"]')).not.toHaveAttribute("aria-current", "page");
@@ -463,6 +863,19 @@ test("Blog filters by topic and exposes only populated chronology periods", asyn
     expect(Number.parseFloat(await year.evaluate((element) => getComputedStyle(element).fontSize)))
       .toBeGreaterThanOrEqual(24);
   } else {
+    const firstRow = entries.nth(0);
+    const rowBox = (await firstRow.boundingBox())!;
+    const dateBox = (await firstRow.locator("time").boundingBox())!;
+    const contentBox = (await firstRow.locator(".blog-ledger__content").boundingBox())!;
+    expect(dateBox.y).toBeLessThan(contentBox.y);
+    expect(contentBox.y + contentBox.height).toBeLessThanOrEqual(rowBox.y + rowBox.height + 1);
+    expect(await firstRow.evaluate((row) => row.scrollWidth <= row.clientWidth)).toBe(true);
+    for (const topic of await firstRow.locator(".blog-ledger__topics a").all()) {
+      const box = (await topic.boundingBox())!;
+      expect(box.x).toBeGreaterThanOrEqual(rowBox.x - 1);
+      expect(box.x + box.width).toBeLessThanOrEqual(rowBox.x + rowBox.width + 1);
+    }
+
     await page.getByRole("button", { name: "Chronology" }).tap();
     const dialog = page.locator('dialog[data-dialog="context"]');
     await expect(dialog).toBeVisible();
@@ -514,6 +927,30 @@ test("Minimal post metadata places distinct Blog topics beside the publication d
       expect(box.x + box.width).toBeLessThanOrEqual(headerBox.x + headerBox.width + 1);
     }
   }
+});
+
+test("localized fallback post topics separate UI and content languages", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "desktop-chromium", "one rendered language contract is sufficient");
+  await page.goto(localizedMinimal("/zh-CN/blog/One%20vault%2C%20three%20readings/"));
+
+  await expect(page.locator("html")).toHaveAttribute("lang", "zh-CN");
+  const header = page.locator(".note-header");
+  await expect(header).toHaveAttribute("lang", "en");
+  await expect(header).toHaveAttribute("dir", "ltr");
+  const topics = header.locator(".note-meta__topics");
+  await expect(topics).toHaveAttribute("aria-label", "主题");
+  await expect(topics).toHaveAttribute("lang", "zh-CN");
+  await expect(topics).toHaveAttribute("dir", "ltr");
+  const links = topics.locator("a");
+  await expect(links).toHaveCount(3);
+  expect(await links.evaluateAll((elements) => elements.map((element) => ({
+    lang: element.getAttribute("lang"),
+    dir: element.getAttribute("dir")
+  })))).toEqual([
+    { lang: "en", dir: "ltr" },
+    { lang: "en", dir: "ltr" },
+    { lang: "en", dir: "ltr" }
+  ]);
 });
 
 test("Minimal chronology fits twelve monthly capsules under Linux fallback font metrics", async ({ page }, testInfo) => {
@@ -590,7 +1027,141 @@ test("Minimal chronology fits twelve monthly capsules under Linux fallback font 
     };
   });
   expect(capsuleStyle.borderWidth).toBe("1px");
-  expect(capsuleStyle.radius).toBeGreaterThanOrEqual(capsuleStyle.height / 2);
+  expect(capsuleStyle.radius).toBeGreaterThanOrEqual(4);
+  expect(capsuleStyle.radius).toBeLessThan(capsuleStyle.height / 2);
+});
+
+test("Minimal navigation and Blog filters keep primary labels legible in every color mode", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "desktop-chromium", "desktop computed-style contract");
+
+  for (const colorScheme of ["light", "dark"] as const) {
+    await page.emulateMedia({ colorScheme, forcedColors: "none" });
+    await page.goto(site("minimal", "/blog/"));
+
+    const result = await page.evaluate(() => {
+      const parseRgb = (value: string): [number, number, number] => {
+        const channels = value.match(/[\d.]+/g)?.slice(0, 3).map(Number);
+        if (!channels || channels.length !== 3) throw new Error(`Expected an RGB color, got ${value}`);
+        return channels as [number, number, number];
+      };
+      const luminance = (value: string): number => {
+        const linear = (channel: number) => {
+          const normalized = channel / 255;
+          return normalized <= 0.04045
+            ? normalized / 12.92
+            : ((normalized + 0.055) / 1.055) ** 2.4;
+        };
+        const [red, green, blue] = parseRgb(value);
+        return (0.2126 * linear(red)) + (0.7152 * linear(green)) + (0.0722 * linear(blue));
+      };
+      const contrast = (foreground: string, background: string): number => {
+        const foregroundLuminance = luminance(foreground);
+        const backgroundLuminance = luminance(background);
+        const lighter = Math.max(foregroundLuminance, backgroundLuminance);
+        const darker = Math.min(foregroundLuminance, backgroundLuminance);
+        return (lighter + 0.05) / (darker + 0.05);
+      };
+      const color = (selector: string) => getComputedStyle(document.querySelector(selector)!).color;
+      const surface = getComputedStyle(document.body).backgroundColor;
+      const graphite = getComputedStyle(document.documentElement).getPropertyValue("--graphite").trim();
+      const primary = {
+        navigation: color(".site-navigation a:not([aria-current])"),
+        topic: color(".tag-filter__list a:not([aria-current]) .context-tag__name"),
+        month: color("[data-month-filter-option] > span:first-child"),
+        ledgerTopic: color(".blog-ledger__topics a")
+      };
+      const fontSize = (selector: string) =>
+        Number.parseFloat(getComputedStyle(document.querySelector(selector)!).fontSize);
+      return {
+        primary,
+        sizes: {
+          navigation: fontSize(".site-navigation a:not([aria-current])"),
+          topic: fontSize(".tag-filter__list a:not([aria-current]) .context-tag__name"),
+          month: fontSize("[data-month-filter-option] > span:first-child"),
+          ledgerTopic: fontSize(".blog-ledger__topics a")
+        },
+        counts: {
+          topic: color(".tag-filter__list .context-tag__count"),
+          month: color("[data-month-filter-option] .archive-timeline__count")
+        },
+        ink: color("body"),
+        graphite: (() => {
+          const probe = document.createElement("span");
+          probe.style.color = graphite;
+          document.body.append(probe);
+          const computed = getComputedStyle(probe).color;
+          probe.remove();
+          return computed;
+        })(),
+        contrasts: Object.fromEntries(Object.entries(primary).map(([key, value]) => [key, contrast(value, surface)]))
+      };
+    });
+
+    expect(Object.values(result.primary)).toEqual(Array(4).fill(result.ink));
+    expect(Object.values(result.counts)).toEqual(Array(2).fill(result.graphite));
+    expect(result.sizes.navigation).toBeGreaterThanOrEqual(12.5);
+    for (const size of [result.sizes.topic, result.sizes.month, result.sizes.ledgerTopic]) {
+      expect(size).toBeGreaterThanOrEqual(12);
+    }
+    for (const ratio of Object.values(result.contrasts)) expect(ratio).toBeGreaterThanOrEqual(7);
+
+    await page.goto(site("minimal"));
+    const contextLabel = page.locator(".context-tag-list .context-tag__name").first();
+    const contextCount = page.locator(".context-tag-list .context-tag__count").first();
+    await expect(contextLabel).toHaveCSS("color", result.ink);
+    await expect(contextCount).toHaveCSS("color", result.graphite);
+    expect(Number.parseFloat(await contextLabel.evaluate((element) => getComputedStyle(element).fontSize)))
+      .toBeGreaterThanOrEqual(12);
+    expect(Number.parseFloat(await contextCount.evaluate((element) => getComputedStyle(element).fontSize)))
+      .toBeLessThan(Number.parseFloat(await contextLabel.evaluate((element) => getComputedStyle(element).fontSize)));
+
+    await page.goto(site("minimal", "/portfolio/"));
+    const portfolioTopic = page.locator(".minimal-portfolio-card__topics li").first();
+    const portfolioSummary = page.locator(".minimal-portfolio-card__summary").first();
+    await expect(portfolioTopic).toHaveCSS("color", result.ink);
+    await expect(portfolioSummary).toHaveCSS("color", result.ink);
+    expect(Number.parseFloat(await portfolioTopic.evaluate((element) => getComputedStyle(element).fontSize)))
+      .toBeGreaterThanOrEqual(12);
+
+    await page.goto(site("docs", "/docs/Getting%20Started/"));
+    const docsPrimarySelectors = [
+      ".site-navigation a:not([aria-current])",
+      ".docs-tree__item > a:not([aria-current])",
+      ".docs-context .outline-list a",
+      ".note-description",
+      ".source-actions a",
+      ".docs-context .relation-list a:visible"
+    ];
+    for (const selector of docsPrimarySelectors) {
+      const element = page.locator(selector).first();
+      await expect(element, selector).toBeVisible();
+      await expect(element, selector).toHaveCSS("color", result.ink);
+    }
+  }
+
+  await page.emulateMedia({ colorScheme: "light", forcedColors: "active" });
+  await page.goto(site("minimal", "/blog/"));
+  const forcedContrast = await page.evaluate(() => {
+    const swatch = document.querySelector<HTMLElement>(".tag-filter__list .context-tag__name")!;
+    const background = document.body;
+    const toChannels = (value: string): [number, number, number] => {
+      const channels = value.match(/[\d.]+/g)?.slice(0, 3).map(Number);
+      if (!channels || channels.length !== 3) throw new Error(`Expected an RGB color, got ${value}`);
+      return channels as [number, number, number];
+    };
+    const luminance = (value: string) => {
+      const linear = (channel: number) => {
+        const normalized = channel / 255;
+        return normalized <= 0.04045 ? normalized / 12.92 : ((normalized + 0.055) / 1.055) ** 2.4;
+      };
+      const [red, green, blue] = toChannels(value);
+      return (0.2126 * linear(red)) + (0.7152 * linear(green)) + (0.0722 * linear(blue));
+    };
+    const foreground = luminance(getComputedStyle(swatch).color);
+    const surface = luminance(getComputedStyle(background).backgroundColor);
+    return (Math.max(foreground, surface) + 0.05) / (Math.min(foreground, surface) + 0.05);
+  });
+  expect(forcedContrast).toBeGreaterThanOrEqual(7);
 });
 
 test("Minimal reveals page and chronology scrollbars only during interaction", async ({ page }, testInfo) => {
@@ -875,6 +1446,79 @@ test("every theme places the local graph first in documentation context", async 
     await expect(context.getByRole("button", { name: "Open full graph" })).toBeVisible();
     await expect(context.getByRole("button", { name: "Expand local graph" })).toBeVisible();
     await expect(context.locator("[data-graph-view]")).toHaveAttribute("data-graph-ready", "true");
+  }
+});
+
+test("compact Portfolio graphs keep node labels clear of their live status", async ({ page }, testInfo) => {
+  if (testInfo.project.name === "mobile-chromium") {
+    await page.setViewportSize({ width: 320, height: 900 });
+  }
+  await page.goto(site("minimal", "/portfolio/jekyll-obsidian/"));
+
+  let view = page.locator("[data-context-panel] [data-graph-view]");
+  if (testInfo.project.name === "mobile-chromium") {
+    await page.getByRole("button", { name: "Context" }).tap();
+    view = page.locator('dialog[data-dialog="context"] [data-graph-view]');
+  }
+  await expect(view).toBeVisible();
+  await expect(view).toHaveAttribute("data-graph-ready", "true");
+
+  const assertLabelsClearStatus = async () => {
+    await page.waitForTimeout(400);
+    const geometry = await view.evaluate((container) => {
+      const status = container.querySelector<HTMLElement>("[data-graph-status]");
+      const labels = [...container.querySelectorAll<SVGTextElement>(".graph-node text")];
+      const canvas = container.querySelector<HTMLElement>("[data-graph-canvas]");
+      const svg = canvas?.querySelector<SVGSVGElement>("svg");
+      if (!status || !canvas || !svg) {
+        return { labelCount: labels.length, overlaps: ["missing graph surface"], surface: null };
+      }
+      const statusRect = status.getBoundingClientRect();
+      const canvasRect = canvas.getBoundingClientRect();
+      const overlaps = labels.filter((label) => {
+        const labelRect = label.getBoundingClientRect();
+        return labelRect.left < statusRect.right && labelRect.right > statusRect.left &&
+          labelRect.top < statusRect.bottom && labelRect.bottom > statusRect.top;
+      }).map((label) => label.textContent || "untitled node");
+      const clipped = labels.filter((label) => {
+        const labelRect = label.getBoundingClientRect();
+        return labelRect.left < canvasRect.left || labelRect.right > canvasRect.right ||
+          labelRect.top < canvasRect.top || labelRect.bottom > canvasRect.bottom;
+      }).map((label) => label.textContent || "untitled node");
+      return {
+        labelCount: labels.length,
+        overlaps,
+        clipped,
+        neighbourAnchors: labels.filter((label) =>
+          !label.closest(".graph-node")?.classList.contains("graph-node--current")
+        ).map((label) => label.getAttribute("text-anchor")),
+        surface: {
+          canvasWidth: canvas.clientWidth,
+          canvasHeight: canvas.clientHeight,
+          viewBoxWidth: svg.viewBox.baseVal.width,
+          viewBoxHeight: svg.viewBox.baseVal.height
+        }
+      };
+    });
+    expect(geometry.labelCount).toBe(3);
+    expect(geometry.overlaps).toEqual([]);
+    expect(geometry.clipped).toEqual([]);
+    expect(geometry.neighbourAnchors).toEqual(["middle", "middle"]);
+    expect(geometry.surface).not.toBeNull();
+    expect(geometry.surface!.viewBoxWidth).toBeCloseTo(geometry.surface!.canvasWidth, 0);
+    expect(geometry.surface!.viewBoxHeight).toBeCloseTo(geometry.surface!.canvasHeight, 0);
+  };
+
+  await assertLabelsClearStatus();
+  await page.locator("html").evaluate((root) => { root.setAttribute("dir", "rtl"); });
+  await assertLabelsClearStatus();
+
+  if (testInfo.project.name === "desktop-chromium") {
+    await page.getByRole("button", { name: "Expand local graph" }).click();
+    const expanded = page.locator('dialog[data-dialog="graph-local"] [data-graph-dialog-view="local"]');
+    await expect(expanded).toHaveAttribute("data-graph-ready", "true");
+    await expect(expanded.locator(".graph-node")).toHaveCount(3);
+    expect((await expanded.boundingBox())!.height).toBeGreaterThanOrEqual(480);
   }
 });
 
@@ -1210,13 +1854,35 @@ test("authored related pages reuse accessible Recent-post cards at the page bott
   }
 });
 
-test("Mobile site titles wrap without clipping at narrow viewport widths", async ({ page }, testInfo) => {
+test("Blog details link their explicitly related project", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "desktop-chromium", "one keyboard rendering contract is sufficient");
+
+  for (const route of [
+    "/blog/One%20vault%2C%20three%20readings/",
+    "/blog/%E4%BB%8E%E7%AC%94%E8%AE%B0%E5%88%B0%E5%8F%91%E5%B8%83/"
+  ]) {
+    await page.goto(site("minimal", route));
+    const project = page
+      .getByRole("navigation", { name: "Related articles" })
+      .getByRole("link", { name: "Jekyll Obsidian", exact: true });
+    await expect(project).toHaveAttribute("href", site("minimal", "/portfolio/jekyll-obsidian/"));
+
+    await project.focus();
+    await expect(project).toBeFocused();
+    await page.keyboard.press("Enter");
+    await expect(page).toHaveURL(site("minimal", "/portfolio/jekyll-obsidian/"));
+  }
+});
+
+test("Mobile typography and wide content stay inside narrow viewports", async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== "mobile-chromium", "one mobile rendering contract is sufficient");
 
-  for (const width of [320, 360, 412]) {
+  for (const width of [320, 390]) {
     await page.setViewportSize({ width, height: 900 });
     for (const route of [site("minimal"), site("docs"), localizedDocs("/docs/Getting%20Started/")]) {
       await page.goto(route);
+      expect(await page.locator("html").evaluate((element) => Number.parseFloat(getComputedStyle(element).fontSize)),
+        `${route} root font at ${width}px`).toBeCloseTo(17, 1);
       const title = page.locator(".site-mark__name");
       await expect(title).not.toHaveText("");
       const dimensions = await title.evaluate((element) => {
@@ -1234,19 +1900,72 @@ test("Mobile site titles wrap without clipping at narrow viewport widths", async
       expect(await page.locator(".site-header").evaluate((element) => element.scrollWidth <= element.clientWidth),
         `${route} header at ${width}px`).toBe(true);
     }
+
+    await page.goto(site("minimal", "/blog/"));
+    const topicList = page.locator(".tag-filter__list");
+    await expect(topicList).toBeVisible();
+    expect(await topicList.evaluate((element) => element.scrollWidth <= element.clientWidth),
+      `Blog topic filters at ${width}px`).toBe(true);
+    expect(await page.locator(".archive-ledger").evaluate((element) => element.scrollWidth <= element.clientWidth),
+      `Blog ledger at ${width}px`).toBe(true);
+
+    await page.goto(site("minimal", "/docs/Customization/"));
+    for (const selector of [".note-content pre", ".note-content table"] as const) {
+      const element = page.locator(selector).first();
+      await expect(element).toBeVisible();
+      if (selector.endsWith("table")) {
+        await element.locator("td").first().evaluate((cell) => {
+          cell.textContent = "A-deterministically-wide-table-value-".repeat(24);
+          cell.setAttribute("style", "white-space: nowrap");
+        });
+        expect(await element.evaluate((node) => node.scrollWidth > node.clientWidth),
+          `wide table scrolls internally at ${width}px`).toBe(true);
+      }
+      const geometry = await element.evaluate((node) => {
+        const box = node.getBoundingClientRect();
+        return {
+          left: box.left,
+          right: box.right,
+          viewport: document.documentElement.clientWidth,
+          ownOverflow: node.scrollWidth > node.clientWidth
+        };
+      });
+      expect(geometry.left, `${selector} left at ${width}px`).toBeGreaterThanOrEqual(0);
+      expect(geometry.right, `${selector} right at ${width}px`).toBeLessThanOrEqual(geometry.viewport + 1);
+    }
+    expect(await page.evaluate(() => document.documentElement.scrollWidth), `page width at ${width}px`)
+      .toBeLessThanOrEqual(await page.evaluate(() => document.documentElement.clientWidth));
   }
 });
 
-test("desktop themes use the wider canvas without lengthening prose lines", async ({ page }, testInfo) => {
+test("desktop themes use the wider canvas without horizontal overflow", async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== "desktop-chromium", "desktop layout contract");
   await page.setViewportSize({ width: 1920, height: 1080 });
 
   await page.goto(site("minimal"));
+  expect(await page.locator("html").evaluate((element) => Number.parseFloat(getComputedStyle(element).fontSize)))
+    .toBeCloseTo(17, 1);
   expect((await page.locator(".minimal-recent__grid").boundingBox())!.width).toBeGreaterThanOrEqual(900);
-  expect((await page.locator(".note-content > p").first().boundingBox())!.width).toBeLessThanOrEqual(780);
+  const minimalHomeProse = (await page.locator(".note-content > p").first().boundingBox())!;
+  const minimalHomeMain = (await page.locator(".minimal-reading-column").boundingBox())!;
+  expect(minimalHomeProse.width).toBeCloseTo(minimalHomeMain.width, 0);
 
   await page.goto(site("minimal", "/docs/Customization/"));
-  expect((await page.locator(".note-content > pre").first().boundingBox())!.width).toBeLessThanOrEqual(780);
+  expect((await page.locator(".note-content > [data-code-block-copy]").first().boundingBox())!.width)
+    .toBeLessThanOrEqual(780);
+  const minimalDocsShell = (await page.locator(".minimal-shell--docs").boundingBox())!;
+  const minimalHeaderInner = (await page.locator(".site-header__inner").boundingBox())!;
+  const minimalLogo = (await page.locator(".site-mark").boundingBox())!;
+  const minimalSidebar = (await page.locator(".minimal-docs-sidebar").boundingBox())!;
+  const minimalMain = (await page.locator(".minimal-reading-column").boundingBox())!;
+  const minimalContext = (await page.locator(".minimal-context").boundingBox())!;
+  expect(minimalDocsShell.x).toBeCloseTo(minimalHeaderInner.x, 0);
+  expect(minimalDocsShell.width).toBeCloseTo(minimalHeaderInner.width, 0);
+  expect(minimalSidebar.x).toBeCloseTo(minimalLogo.x, 0);
+  expect(minimalSidebar.x + minimalSidebar.width).toBeLessThanOrEqual(minimalMain.x);
+  expect(minimalMain.x + minimalMain.width).toBeLessThanOrEqual(minimalContext.x);
+  expect(minimalContext.x + minimalContext.width)
+    .toBeLessThanOrEqual(minimalDocsShell.x + minimalDocsShell.width + 1);
 
   await page.goto(site("docs", "/docs/Getting%20Started/"));
   const sidebar = (await page.locator(".docs-sidebar").boundingBox())!;
@@ -1254,20 +1973,29 @@ test("desktop themes use the wider canvas without lengthening prose lines", asyn
   const context = (await page.locator(".docs-context").boundingBox())!;
   const docsTitle = (await page.locator(".note-content > h1").first().boundingBox())!;
   const docsProse = (await page.locator(".note-content > p").first().boundingBox())!;
-  const docsCode = (await page.locator(".note-content > pre").first().boundingBox())!;
+  const docsCode = (await page.locator(".note-content > [data-code-block-copy]").first().boundingBox())!;
   const docsActions = (await page.locator("[data-page-actions]").boundingBox())!;
-  expect(main.width).toBeGreaterThanOrEqual(880);
+  const docsShell = (await page.locator(".docs-shell").boundingBox())!;
+  const headerInner = (await page.locator(".site-header__inner").boundingBox())!;
+  const logo = (await page.locator(".site-mark").boundingBox())!;
+  expect(main.width).toBeGreaterThanOrEqual(720);
   expect(docsProse.width).toBeLessThanOrEqual(640);
   expect(docsTitle.x).toBeCloseTo(docsProse.x, 0);
   expect(docsTitle.width).toBeCloseTo(docsProse.width, 0);
   expect(docsCode.x).toBeCloseTo(docsProse.x, 0);
   expect(docsCode.width).toBeCloseTo(docsProse.width, 0);
   expect(docsActions.x + docsActions.width).toBeCloseTo(docsProse.x + docsProse.width, 0);
+  expect(docsShell.x).toBeCloseTo(headerInner.x, 0);
+  expect(docsShell.width).toBeCloseTo(headerInner.width, 0);
+  expect(sidebar.x).toBeCloseTo(logo.x, 0);
   expect(sidebar.x + sidebar.width).toBeLessThanOrEqual(main.x);
   expect(main.x + main.width).toBeLessThanOrEqual(context.x);
+  expect(context.x + context.width).toBeLessThanOrEqual(docsShell.x + docsShell.width + 1);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth))
+    .toBeLessThanOrEqual(await page.evaluate(() => document.documentElement.clientWidth));
 });
 
-test("Minimal aligns prose to one column and system-page actions to the canvas edge", async ({ page }, testInfo) => {
+test("Minimal aligns prose and authored Home actions to the reading edge", async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== "desktop-chromium", "desktop reading-column contract");
   await page.setViewportSize({ width: 1190, height: 900 });
   await page.goto(site("minimal"));
@@ -1282,12 +2010,19 @@ test("Minimal aligns prose to one column and system-page actions to the canvas e
   expect(callout.x).toBeCloseTo(paragraph.x, 0);
   expect(callout.width).toBeCloseTo(paragraph.width, 0);
   expect(title.x).toBeCloseTo(recent.x, 0);
-  expect(actions.x + actions.width).toBeCloseTo(recent.x + recent.width, 0);
+  expect(actions.x + actions.width).toBeCloseTo(paragraph.x + paragraph.width, 0);
+  expect(actions.y).toBeCloseTo(title.y, 0);
+  expect(recent.y).toBeGreaterThan(actions.y + actions.height);
+
+  await page.goto(site("minimal", "/blog/One%20vault%2C%20three%20readings/"));
+  const articleParagraph = (await page.locator(".note-content > p").first().boundingBox())!;
+  expect(articleParagraph.x).toBeCloseTo(paragraph.x, 0);
+  expect(articleParagraph.width).toBeCloseTo(paragraph.width, 0);
 
   await page.goto(site("minimal", "/docs/Customization/"));
   const documentTitle = (await page.locator(".note-content > h1").first().boundingBox())!;
   const prose = (await page.locator(".note-content > p").first().boundingBox())!;
-  const code = (await page.locator(".note-content > pre").first().boundingBox())!;
+  const code = (await page.locator(".note-content > [data-code-block-copy]").first().boundingBox())!;
   const table = (await page.locator(".note-content > table").first().boundingBox())!;
   const entry = (await page.locator(".minimal-entry").boundingBox())!;
   const noteActions = (await page.locator("[data-page-actions]").boundingBox())!;
@@ -1296,10 +2031,219 @@ test("Minimal aligns prose to one column and system-page actions to the canvas e
   expect(code.x).toBeCloseTo(prose.x, 0);
   expect(code.width).toBeCloseTo(prose.width, 0);
   expect(table.x).toBeCloseTo(prose.x, 0);
+  expect(table.x + table.width).toBeCloseTo(prose.x + prose.width, 0);
   expect(table.x + table.width).toBeLessThanOrEqual(entry.x + entry.width + 1);
   expect(await page.evaluate(() => document.documentElement.scrollWidth))
     .toBeLessThanOrEqual(await page.evaluate(() => document.documentElement.clientWidth));
   expect(noteActions.x + noteActions.width).toBeCloseTo(prose.x + prose.width, 0);
+});
+
+test("Minimal aligns desktop rails, content tops, and page actions across page types", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "desktop-chromium", "desktop layout geometry");
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  const contentOffsets: number[] = [];
+  const contextPositions: number[] = [];
+
+  for (const route of [
+    "/",
+    "/blog/One%20vault%2C%20three%20readings/",
+    "/docs/Customization/"
+  ]) {
+    await page.goto(site("minimal", route));
+    const shell = page.locator(".minimal-shell");
+    const header = (await page.locator(".site-header").boundingBox())!;
+    const entry = (await page.locator(".minimal-entry").boundingBox())!;
+    const prose = (await page.locator(".note-content > p").first().boundingBox())!;
+    const context = (await page.locator(".minimal-context").boundingBox())!;
+    const readingColumn = (await page.locator(".minimal-reading-column").boundingBox())!;
+    const actions = (await page.locator("[data-page-actions]").boundingBox())!;
+    const columnGap = await shell.evaluate((element) => Number.parseFloat(getComputedStyle(element).columnGap));
+    contentOffsets.push(entry.y - (header.y + header.height));
+    contextPositions.push(context.x);
+    expect.soft(context.x - (prose.x + prose.width), `${route} reading-to-context gap`)
+      .toBeCloseTo(columnGap, 0);
+    expect.soft(actions.x + actions.width, `${route} action at middle-column end`)
+      .toBeCloseTo(readingColumn.x + readingColumn.width, 0);
+    expect.soft(actions.y, `${route} action at middle-column top`).toBeCloseTo(readingColumn.y, 0);
+  }
+  expect.soft(contentOffsets[1]!, "article top rhythm").toBeCloseTo(contentOffsets[0]!, 0);
+  expect.soft(contentOffsets[2]!, "documentation top rhythm").toBeCloseTo(contentOffsets[0]!, 0);
+
+  await page.goto(site("minimal", "/blog/"));
+  contextPositions.push((await page.locator(".archive-context").boundingBox())!.x);
+  expect((await page.locator(".archive-ledger").boundingBox())!.width)
+    .toBeGreaterThan(780);
+  for (const position of contextPositions.slice(1)) {
+    expect.soft(position, "stable right-rail position").toBeCloseTo(contextPositions[0]!, 0);
+  }
+});
+
+test("Minimal page actions reserve the leading header line in LTR, RTL, and narrow layouts", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "desktop-chromium", "one geometry contract is sufficient");
+  const routes = [
+    { route: "/", leading: ".note-content > h1" },
+    { route: "/blog/One%20vault%2C%20three%20readings/", leading: ".note-header > :first-child" },
+    { route: "/docs/Customization/", leading: ".note-header > :first-child" }
+  ] as const;
+  const geometry = async (leading: string) => page.locator(leading).evaluate((element) => {
+    const content = element.getBoundingClientRect();
+    const range = document.createRange();
+    range.selectNodeContents(element);
+    const actionElement = document.querySelector<HTMLElement>("[data-page-actions]")!;
+    const action = actionElement.getBoundingClientRect();
+    const actionStyle = getComputedStyle(actionElement);
+    return {
+      actionPosition: actionStyle.position,
+      actionFloat: actionStyle.cssFloat,
+      contentWidth: content.width,
+      textWrap: getComputedStyle(element).textWrap,
+      overlaps: Array.from(range.getClientRects()).some((line) =>
+        line.width > 0 && line.left < action.right && line.right > action.left
+        && line.top < action.bottom && line.bottom > action.top
+      )
+    };
+  });
+
+  for (const width of [1440, 1200]) {
+    await page.setViewportSize({ width, height: 1000 });
+    for (const direction of ["ltr", "rtl"] as const) {
+      for (const { route, leading } of routes) {
+        await page.goto(site("minimal", route));
+        await page.locator("html").evaluate((element, dir) => { element.setAttribute("dir", dir); }, direction);
+        if (route !== "/") {
+          await page.locator(leading).evaluate((element) => {
+            element.textContent = "A deliberately long leading line proves that localized headings wrap before page actions";
+          });
+        }
+        const result = await geometry(leading);
+        expect(result.overlaps, `${route} ${width}px ${direction} leading text avoids page actions`).toBe(false);
+        if (route === "/") {
+          expect(result.actionPosition, `${width}px Home action stays in flow`).toBe("relative");
+          expect(result.actionFloat, `${width}px Home action reserves its measured width`).toBe("inline-end");
+          expect(result.textWrap, `${width}px Home title uses available line width`).toBe("wrap");
+          expect(result.contentWidth, `${width}px Home title keeps the full reading width`)
+            .toBeCloseTo((await page.locator(".minimal-reading-column").boundingBox())!.width, 0);
+        }
+      }
+    }
+  }
+
+  await page.setViewportSize({ width: 520, height: 900 });
+  for (const { route, leading } of routes) {
+    await page.goto(site("minimal", route));
+    await expect(page.locator("[data-page-actions]")).toHaveCSS("position", "static");
+    expect((await geometry(leading)).overlaps, `${route} mobile actions remain in flow`).toBe(false);
+  }
+});
+
+test("author CSS classes cannot override theme reading alignment", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "desktop-chromium", "desktop reading-column contract");
+  await page.setViewportSize({ width: 1440, height: 1000 });
+
+  for (const { theme, route, articleSelector, collisionClasses } of [
+    {
+      theme: "minimal" as const,
+      route: "/blog/One%20vault%2C%20three%20readings/",
+      articleSelector: ".minimal-entry",
+      collisionClasses: ["docs-article", "docs-main", "theme-docs"]
+    },
+    {
+      theme: "docs" as const,
+      route: "/docs/Customization/",
+      articleSelector: ".docs-article",
+      collisionClasses: ["minimal-entry", "minimal-reading-column", "theme-minimal"]
+    }
+  ]) {
+    await page.goto(site(theme, route));
+    const prose = (await page.locator(".note-content > p").first().boundingBox())!;
+    await page.locator(articleSelector).evaluate(
+      (element, classes) => element.classList.add(...classes),
+      collisionClasses
+    );
+    const collidedProse = (await page.locator(".note-content > p").first().boundingBox())!;
+    expect(collidedProse.x, `${theme} author classes cannot change theme alignment`).toBeCloseTo(prose.x, 0);
+    expect(collidedProse.width, `${theme} author classes cannot change reading width`).toBeCloseTo(prose.width, 0);
+  }
+});
+
+test("documentation code wrappers and sequence controls follow each theme reading column", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "desktop-chromium", "desktop reading-column geometry");
+  await page.setViewportSize({ width: 1440, height: 1000 });
+
+  for (const theme of themes) {
+    await page.goto(site(theme, "/docs/Customization/"));
+    const prose = (await page.locator(".note-content > p").first().boundingBox())!;
+    const codeOuter = page.locator(".note-content > :is(.code-block-copy, pre)").first();
+    await codeOuter.evaluate((code) => {
+      const highlighter = document.createElement("div");
+      highlighter.className = "highlighter-rouge";
+      const highlight = document.createElement("div");
+      highlight.className = "highlight";
+      code.replaceWith(highlighter);
+      highlighter.append(highlight);
+      highlight.append(code);
+    });
+    const highlighter = (await page.locator(".note-content > .highlighter-rouge").first().boundingBox())!;
+    const nestedCode = (await page.locator(".highlighter-rouge > .highlight > :is(.code-block-copy, pre)")
+      .first().boundingBox())!;
+    expect(highlighter.x, `${theme} fenced wrapper left`).toBeCloseTo(prose.x, 0);
+    expect(highlighter.width, `${theme} fenced wrapper width`).toBeCloseTo(prose.width, 0);
+    expect(nestedCode.x, `${theme} nested code left`).toBeCloseTo(highlighter.x, 0);
+    expect(nestedCode.width, `${theme} nested code width`).toBeCloseTo(highlighter.width, 0);
+
+    const table = page.locator(".note-content > table").first();
+    const tableBox = (await table.boundingBox())!;
+    expect(tableBox.x, `${theme} table left`).toBeCloseTo(prose.x, 0);
+    expect(tableBox.x + tableBox.width, `${theme} table right`).toBeCloseTo(prose.x + prose.width, 0);
+    await table.locator("td").first().evaluate((cell) => {
+      cell.textContent = "A-deterministically-wide-table-value-".repeat(24);
+      cell.setAttribute("style", "white-space: nowrap");
+    });
+    expect(await table.evaluate((element) => element.scrollWidth > element.clientWidth),
+      `${theme} wide table scrolls internally`).toBe(true);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth), `${theme} table page width`)
+      .toBeLessThanOrEqual(await page.evaluate(() => document.documentElement.clientWidth));
+
+    const pairedNavigation = page.getByRole("navigation", { name: "Documentation sequence" });
+    const pairedBox = (await pairedNavigation.boundingBox())!;
+    const pairedLinks = pairedNavigation.locator(":scope > a");
+    await expect(pairedLinks).toHaveCount(2);
+    const pairedLinkBoxes = await pairedLinks.evaluateAll((links) => links.map((link) => {
+      const box = link.getBoundingClientRect();
+      return { x: box.x, width: box.width, right: box.right };
+    }));
+    const [previousBox, pairedNextBox] = pairedLinkBoxes;
+    if (!previousBox || !pairedNextBox) throw new Error(`Expected two ${theme} sequence links`);
+    expect(pairedBox.x, `${theme} paired navigation left`).toBeCloseTo(prose.x, 0);
+    expect(pairedBox.x + pairedBox.width, `${theme} paired navigation right`)
+      .toBeCloseTo(prose.x + prose.width, 0);
+    expect(previousBox.width, `${theme} equal sequence columns`).toBeCloseTo(pairedNextBox.width, 0);
+
+    await page.goto(site(theme, "/docs/"));
+    const body = (await page.locator(".note-content > p").first().boundingBox())!;
+    const singleNavigation = page.getByRole("navigation", { name: "Documentation sequence" });
+    const singleBox = (await singleNavigation.boundingBox())!;
+    const next = singleNavigation.locator(":scope > a[rel='next']");
+    await expect(singleNavigation.locator(":scope > a")).toHaveCount(1);
+    const nextBox = (await next.boundingBox())!;
+    expect(singleBox.x, `${theme} single navigation left`).toBeCloseTo(body.x, 0);
+    expect(singleBox.x + singleBox.width, `${theme} single navigation right`)
+      .toBeCloseTo(body.x + body.width, 0);
+    const columnGap = await singleNavigation.evaluate((navigation) =>
+      Number.parseFloat(getComputedStyle(navigation).columnGap) || 0
+    );
+    expect(nextBox.x, `${theme} single next uses second slot`)
+      .toBeCloseTo(singleBox.x + ((singleBox.width + columnGap) / 2), 0);
+    expect(Math.abs((nextBox.x + nextBox.width) - (body.x + body.width)), `${theme} single next right`)
+      .toBeLessThanOrEqual(1);
+
+    await page.goto(site(theme, "/docs/Syntax/"));
+    const footnotes = (await page.locator(".note-content > .footnotes").boundingBox())!;
+    const sourceActions = (await page.locator(".source-actions").boundingBox())!;
+    expect(footnotes.x, `${theme} footnotes left`).toBeCloseTo(sourceActions.x, 0);
+    expect(footnotes.x + footnotes.width, `${theme} footnotes right`)
+      .toBeCloseTo(sourceActions.x + sourceActions.width, 0);
+  }
 });
 
 test("localized docs search loads the locale index and finds CJK content", async ({ page }) => {

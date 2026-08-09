@@ -46,6 +46,10 @@ messages:
   contribute: 参与编辑本页
   copy_page: 复制页面
   copy_page_description: 以 Markdown 复制页面，供 LLM 使用
+  copy_code: 复制代码
+  copy_diagram_source: 复制图表源码
+  copy_formula_source: 复制公式源码
+  copy_code_failed: 复制失败
   view_as_markdown: 以 Markdown 查看
   view_as_markdown_description: 以纯文本查看本页
   more_page_actions: 更多页面操作

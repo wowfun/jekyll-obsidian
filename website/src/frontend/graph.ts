@@ -136,11 +136,17 @@ function renderGraph(container: HTMLElement, payload: GraphPayload | LocalGraphP
     degree: node.degree ?? neighbours.get(node.id)?.size ?? 0
   }));
   const edges: VisualEdge[] = payload.edges.map((edge) => ({ ...edge }));
-  const width = Math.max(container.clientWidth, mode === "compact" ? 220 : 640);
-  const height = Math.max(container.clientHeight, mode === "compact" ? 210 : 480);
+  container.querySelector("[data-graph-canvas]")?.remove();
+  const canvas = document.createElement("div");
+  canvas.className = "graph-canvas";
+  canvas.dataset.graphCanvas = "";
+  container.prepend(canvas);
+
+  let width = canvas.clientWidth || (mode === "compact" ? 220 : 640);
+  let height = canvas.clientHeight || (mode === "compact" ? 210 : 480);
   const current = nodes.find((node) => node.id === currentId);
-  const centreX = width / 2;
-  const centreY = height / 2;
+  let centreX = width / 2;
+  let centreY = height / 2;
 
   nodes.forEach((node, index) => {
     if (node === current) {
@@ -157,12 +163,6 @@ function renderGraph(container: HTMLElement, payload: GraphPayload | LocalGraphP
     node.x = centreX + Math.cos(angle) * radius;
     node.y = centreY + Math.sin(angle) * radius;
   });
-
-  container.querySelector("[data-graph-canvas]")?.remove();
-  const canvas = document.createElement("div");
-  canvas.className = "graph-canvas";
-  canvas.dataset.graphCanvas = "";
-  container.prepend(canvas);
 
   const identity = ++graphIdentity;
   const titleId = `website-graph-title-${identity}`;
@@ -243,6 +243,20 @@ function renderGraph(container: HTMLElement, payload: GraphPayload | LocalGraphP
     .force("center", forceCenter(centreX, centreY));
 
   const position = () => {
+    if (mode === "compact") {
+      for (const node of nodes) {
+        const radius = nodeRadius(node.degree, mode);
+        const x = node.x ?? width / 2;
+        const y = node.y ?? height / 2;
+        const boundedX = Math.max(radius + 4, Math.min(width - radius - 4, x));
+        const labelClearance = radius + 16;
+        const boundedY = Math.max(labelClearance, Math.min(height - labelClearance, y));
+        if (boundedX !== x) node.vx = 0;
+        if (boundedY !== y) node.vy = 0;
+        node.x = boundedX;
+        node.y = boundedY;
+      }
+    }
     links
       .attr("x1", (edge) => (edge.source as VisualNode).x ?? 0)
       .attr("y1", (edge) => (edge.source as VisualNode).y ?? 0)
@@ -329,6 +343,37 @@ function renderGraph(container: HTMLElement, payload: GraphPayload | LocalGraphP
   svg.call(zoomBehaviour);
   container.dataset.graphScale = "1";
 
+  let resizeFrame = 0;
+  const resizeObserver = new ResizeObserver(() => {
+    cancelAnimationFrame(resizeFrame);
+    resizeFrame = requestAnimationFrame(() => {
+      const nextWidth = canvas.clientWidth;
+      const nextHeight = canvas.clientHeight;
+      if (nextWidth <= 0 || nextHeight <= 0 ||
+        (Math.abs(nextWidth - width) < 1 && Math.abs(nextHeight - height) < 1)) return;
+
+      const offsetX = (nextWidth - width) / 2;
+      const offsetY = (nextHeight - height) / 2;
+      for (const node of nodes) {
+        node.x = (node.x ?? width / 2) + offsetX;
+        node.y = (node.y ?? height / 2) + offsetY;
+        if (node.fx != null) node.fx += offsetX;
+        if (node.fy != null) node.fy += offsetY;
+      }
+      width = nextWidth;
+      height = nextHeight;
+      centreX = width / 2;
+      centreY = height / 2;
+      svg.attr("viewBox", `0 0 ${width} ${height}`);
+      zoomBehaviour.extent([[0, 0], [width, height]]);
+      simulation.force("center", forceCenter(centreX, centreY));
+      if (reducedMotion()) simulation.stop();
+      else simulation.alpha(0.35).restart();
+      position();
+    });
+  });
+  resizeObserver.observe(canvas);
+
   const svgElement = svg.node();
   const preventOuterScroll = (event: WheelEvent) => event.preventDefault();
   svgElement?.addEventListener("wheel", preventOuterScroll, { passive: false });
@@ -347,6 +392,8 @@ function renderGraph(container: HTMLElement, payload: GraphPayload | LocalGraphP
 
   const dispose = () => {
     simulation.stop();
+    resizeObserver.disconnect();
+    cancelAnimationFrame(resizeFrame);
     svgElement?.removeEventListener("wheel", preventOuterScroll);
     container.dataset.graphDisposed = "true";
     instances.delete(container);

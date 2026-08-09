@@ -114,15 +114,6 @@
     line-height: 1.7;
   }
 
-  .docs-article > .note-header,
-  .docs-article > .source-actions,
-  .docs-article > .related-articles,
-  .docs-article > .website-comments,
-  .docs-article > .note-content > :where(h1, h2, h3, h4, p, ul, ol, dl, blockquote, pre, .callout) {
-    inline-size: min(100%, var(--reading-width));
-    margin-inline: auto;
-  }
-
   .docs-article > .page-actions {
     margin-inline-end: max(0px, calc((100% - var(--reading-width)) / 2));
   }
@@ -183,7 +174,7 @@
     display: block;
     padding: 0.38rem 0.55rem;
     border-radius: 0.22rem;
-    color: var(--graphite);
+    color: var(--ink);
     font-size: 0.76rem;
     line-height: 1.35;
     text-decoration: none;

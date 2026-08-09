@@ -9,6 +9,7 @@
 
   html {
     -webkit-text-size-adjust: 100%;
+    font-size: 106.25%;
     text-size-adjust: 100%;
     scroll-behavior: smooth;
   }
@@ -272,7 +273,7 @@
     border: 1px solid transparent;
     border-radius: 0.35rem;
     background: transparent;
-    color: var(--graphite);
+    color: var(--ink);
     cursor: pointer;
     font-size: 0.76rem;
     font-weight: 620;
@@ -367,7 +368,7 @@
     display: block;
     padding: 0.58rem 0.65rem;
     border-radius: 0.3rem;
-    color: var(--graphite);
+    color: var(--ink);
     font-size: 0.76rem;
     text-decoration: none;
   }
@@ -384,7 +385,7 @@
     border-inline-start: 3px solid var(--violet);
     border-radius: 0.25rem;
     background: color-mix(in srgb, var(--violet) 8%, var(--surface));
-    color: var(--graphite);
+    color: var(--ink);
     font-family: var(--font-ui);
     font-size: 0.78rem;
   }
@@ -432,6 +433,42 @@
 }
 
 @layer content {
+  body.theme-minimal {
+    --website-reading-margin-inline: 0 auto;
+  }
+
+  body.theme-docs {
+    --website-reading-margin-inline: auto;
+  }
+
+  :is(.minimal-entry, .docs-article) > :where(
+    .note-header,
+    .source-actions,
+    .related-articles,
+    .website-comments
+  ),
+  :is(.minimal-entry, .docs-article) > .note-content > :where(
+    h1,
+    h2,
+    h3,
+    h4,
+    p,
+    ul,
+    ol,
+    dl,
+    blockquote,
+    pre,
+    table,
+    .highlighter-rouge,
+    .code-block-copy,
+    .callout,
+    .mermaid-diagram,
+    .footnotes
+  ) {
+    inline-size: min(100%, var(--reading-width));
+    margin-inline: var(--website-reading-margin-inline);
+  }
+
   .note-header {
     margin-block-end: 2.5rem;
     padding-block-end: 0;
@@ -470,7 +507,7 @@
     inline-size: 100%;
     max-inline-size: none;
     margin-block-start: 0;
-    color: var(--graphite);
+    color: var(--ink);
     font-family: var(--font-article);
     font-size: 1.08rem;
     font-style: normal;
@@ -605,7 +642,7 @@
   .note-content blockquote {
     padding: 0.1rem 0 0.1rem 1.25rem;
     border-inline-start: 2px solid var(--teal);
-    color: var(--graphite);
+    color: var(--ink);
     font-style: italic;
   }
 
@@ -672,7 +709,7 @@
   }
 
   .note-content th {
-    color: var(--graphite);
+    color: var(--ink);
     font-size: 0.7rem;
     letter-spacing: 0.06em;
     text-transform: uppercase;
@@ -715,7 +752,7 @@
 
   .note-content .website-external-frame__fallback,
   .note-content .website-tweet__fallback {
-    color: var(--graphite);
+    color: var(--ink);
     font-family: var(--font-ui);
     font-size: 0.74rem;
   }
@@ -756,12 +793,79 @@
     margin-block-start: 4rem;
     padding-block-start: 1.4rem;
     border-block-start: 1px solid var(--line);
-    color: var(--graphite);
+    color: var(--ink);
     font-size: 0.86em;
   }
 }
 
 @layer components {
+  :is(.minimal-reading-column, .docs-main) > .sequence-navigation {
+    inline-size: min(100%, var(--reading-width));
+    margin-inline: var(--website-reading-margin-inline);
+  }
+
+  .sequence-navigation > a[rel="next"]:first-child {
+    grid-column: 2;
+  }
+
+  .code-block-copy {
+    position: relative;
+    max-inline-size: 100%;
+  }
+
+  .code-block-copy > pre {
+    inline-size: 100%;
+    margin: 0;
+    padding-inline-end: 4rem;
+  }
+
+  .source-copy__button {
+    position: absolute;
+    z-index: 1;
+    inset-block-start: 0.55rem;
+    inset-inline-end: 0.55rem;
+    display: grid;
+    inline-size: 2rem;
+    block-size: 2rem;
+    padding: 0;
+    border: 0;
+    border-radius: 0.3rem;
+    background: color-mix(in srgb, var(--code-surface) 94%, transparent);
+    color: var(--ink);
+    box-shadow: 0 1px 4px rgb(24 27 39 / 7%);
+    cursor: pointer;
+    place-items: center;
+  }
+
+  .source-copy__button:hover,
+  .source-copy__button:focus-visible {
+    background: var(--surface);
+    color: var(--ink);
+  }
+
+  .source-copy__button:focus-visible {
+    box-shadow: var(--focus-ring);
+  }
+
+  .source-copy__button[data-copy-state="success"] {
+    background: var(--teal-soft);
+    color: var(--teal);
+  }
+
+  .source-copy__button[data-copy-state="error"] {
+    color: var(--danger);
+  }
+
+  .source-copy__icon {
+    inline-size: 0.9rem;
+    block-size: 0.9rem;
+    fill: none;
+    stroke: currentColor;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    stroke-width: 1.45;
+  }
+
   .theme-docs .related-articles {
     margin-block-start: clamp(3rem, 7vw, 5rem);
   }
@@ -841,7 +945,7 @@
   .theme-docs .related-articles .minimal-post-card__subtitle,
   .theme-docs .related-articles .minimal-post-card__excerpt {
     margin: 0.6rem 0 0;
-    color: var(--graphite);
+    color: var(--ink);
     font-size: 0.9rem;
     line-height: 1.62;
   }
@@ -909,7 +1013,7 @@
 
   .relation-section__title {
     margin-block-end: 0.7rem;
-    color: var(--graphite);
+    color: var(--ink);
     font-size: 0.65rem;
     font-weight: 720;
     letter-spacing: 0.1em;
@@ -958,8 +1062,8 @@
     border-radius: 100vmax;
     gap: 0.38rem;
     background: transparent;
-    color: var(--graphite);
-    font-size: 0.68rem;
+    color: var(--ink);
+    font-size: 0.72rem;
     font-weight: 640;
     line-height: 1;
     text-decoration: none;
@@ -1046,7 +1150,7 @@
     min-block-size: 2rem;
     padding: 0.35rem 0.5rem;
     border-radius: 0.3rem;
-    color: var(--graphite);
+    color: var(--ink);
     font-size: 0.75rem;
     font-variant-numeric: tabular-nums;
     text-decoration: none;
@@ -1069,8 +1173,13 @@
     min-inline-size: 0;
     padding: 0.28rem 0.2rem;
     border: 1px solid var(--line-strong);
-    border-radius: 100vmax;
-    font-size: 0.65rem;
+    border-radius: 0.35rem;
+    font-size: 0.72rem;
+  }
+
+  .archive-timeline__year li a > span:first-child {
+    color: var(--ink);
+    font-weight: 640;
   }
 
   .archive-timeline__year li a:hover,
@@ -1082,10 +1191,12 @@
     min-inline-size: 0;
     padding-inline-start: 0.1rem;
     border-inline-start: 1px solid var(--line);
+    font-size: 0.62rem;
   }
 
   .archive-timeline__count {
     min-inline-size: 1.5rem;
+    color: var(--graphite);
     text-align: end;
   }
 
@@ -1141,7 +1252,7 @@
     display: block;
     padding: 0.24rem 0.35rem;
     border-radius: 0.25rem;
-    color: var(--graphite);
+    color: var(--ink);
     font-size: 0.77rem;
     line-height: 1.38;
     text-decoration: none;
@@ -1182,15 +1293,16 @@
     border: 1px solid var(--line-strong);
     border-radius: 100vmax;
     background: transparent;
-    color: var(--graphite);
+    color: var(--ink);
     font-family: var(--font-ui);
-    font-size: 0.67rem;
+    font-size: 0.72rem;
     font-weight: 640;
+    line-height: 1;
     text-decoration: none;
     white-space: nowrap;
   }
 
-  .tag-chip:hover {
+  .tag-chip[href]:hover {
     border-color: color-mix(in srgb, var(--graphite) 72%, var(--line));
     color: var(--ink);
   }
@@ -1354,7 +1466,7 @@
 
   .note-preview__description {
     margin-block-start: 0.45rem;
-    color: var(--graphite);
+    color: var(--ink);
     font-family: var(--font-article);
     font-size: 0.76rem;
     line-height: 1.55;
@@ -1364,7 +1476,7 @@
     min-block-size: 4rem;
     max-block-size: min(240px, calc(100vh - 170px));
     padding: 0.85rem 1rem 1rem;
-    color: var(--graphite);
+    color: var(--ink);
     font-family: var(--font-article);
     font-size: 0.78rem;
     line-height: 1.58;
@@ -1478,7 +1590,7 @@
     block-size: 2rem;
     border-radius: 50%;
     background: var(--frost);
-    color: var(--graphite);
+    color: var(--ink);
     cursor: pointer;
     place-items: center;
   }
@@ -1559,7 +1671,7 @@
   }
 
   .search-navigation a {
-    color: var(--graphite);
+    color: var(--ink);
     font-size: 0.72rem;
     text-decoration: none;
   }
@@ -1613,7 +1725,9 @@
   }
 
   .mermaid-diagram {
+    position: relative;
     padding: 1rem;
+    padding-inline-end: 3.1rem;
     border: 1px solid var(--line);
     border-radius: 0.4rem;
     background: var(--frost);
@@ -1623,6 +1737,36 @@
   [data-math-rendered] {
     max-inline-size: 100%;
     overflow-x: auto;
+  }
+
+  [data-math-rendered][data-source-copy] {
+    position: relative;
+  }
+
+  :is([data-math-style="display"], [data-math="display"], .math-display)[data-source-copy] {
+    display: block;
+    padding-inline-end: 2.6rem;
+  }
+
+  :is([data-math-style="inline"], [data-math="inline"], .math-inline)[data-source-copy] {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.1rem;
+    overflow: visible;
+    vertical-align: middle;
+  }
+
+  :is([data-math-style="inline"], [data-math="inline"], .math-inline) > .source-copy__button {
+    position: static;
+    flex: none;
+    inline-size: 1.5rem;
+    block-size: 1.5rem;
+    background: transparent;
+    box-shadow: none;
+  }
+
+  :is([data-math-style="inline"], [data-math="inline"], .math-inline) > .source-copy__button:focus-visible {
+    box-shadow: var(--focus-ring);
   }
 
   [data-math-rendered] mjx-container {
@@ -1655,7 +1799,7 @@
     border: 1px solid transparent;
     border-radius: 0.3rem;
     background: transparent;
-    color: var(--graphite);
+    color: var(--ink);
     cursor: pointer;
     place-items: center;
   }
@@ -1698,7 +1842,18 @@
   }
 
   .graph-view--compact {
+    display: grid;
     block-size: 220px;
+    border: 1px solid var(--line);
+    border-radius: 0.5rem;
+    background: var(--surface);
+    grid-template-rows: minmax(0, 1fr) auto;
+    overflow: hidden;
+  }
+
+  .graph-view--compact .graph-canvas {
+    border: 0;
+    border-radius: 0;
   }
 
   .graph-view--expanded,
@@ -1776,6 +1931,13 @@
     pointer-events: none;
   }
 
+  .graph-view--compact .graph-status {
+    position: static;
+    min-inline-size: 0;
+    padding: 0.1rem 0.55rem 0.35rem;
+    justify-self: end;
+  }
+
   .graph-view[data-graph-bounded-fallback="true"] {
     display: grid;
     place-items: center;
@@ -1811,7 +1973,7 @@
     min-block-size: 1.75rem;
     padding: 0.2rem 0;
     border: 0;
-    color: var(--graphite);
+    color: var(--ink);
     font-family: var(--font-ui);
     font-size: 0.68rem;
     font-weight: 620;
@@ -1981,7 +2143,7 @@
     block-size: 2rem;
     border: 1px solid var(--line);
     border-radius: 0.42rem;
-    color: var(--graphite);
+    color: var(--ink);
     place-items: center;
   }
 
@@ -1998,7 +2160,7 @@
 
   .page-actions__item small {
     margin-block-start: 0.08rem;
-    color: var(--graphite);
+    color: var(--ink);
     font-size: 0.72rem;
     line-height: 1.35;
   }
@@ -2007,7 +2169,7 @@
     margin: 0.25rem 0.58rem 0.4rem;
     padding-block-start: 0.55rem;
     border-block-start: 1px solid var(--line);
-    color: var(--graphite);
+    color: var(--danger);
     font-size: 0.72rem;
     line-height: 1.4;
   }
@@ -2100,7 +2262,7 @@
     min-block-size: 2.8rem;
     border-radius: 0.35rem;
     background: transparent;
-    color: var(--graphite);
+    color: var(--ink);
     cursor: pointer;
     font-size: 0.66rem;
     font-weight: 650;
@@ -2229,13 +2391,26 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
+  html {
     scroll-behavior: auto !important;
+  }
+
+  .graph-node,
+  .page-actions__menu > summary svg,
+  .mermaid-diagram *,
+  .mermaid-diagram *::before,
+  .mermaid-diagram *::after {
     transition-duration: 0.01ms !important;
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
+  }
+}
+
+@media (forced-colors: active) {
+  .source-copy__button:focus-visible {
+    outline: 2px solid ButtonText;
+    outline-offset: 2px;
+    box-shadow: none;
   }
 }
 
@@ -2256,6 +2431,7 @@
   .site-footer,
   .source-actions,
   .page-actions,
+  .source-copy__button,
   .website-comments,
   .website-dialog,
   .website-external-frame__viewport,
@@ -2273,5 +2449,22 @@
 
   .note-content a {
     color: inherit;
+  }
+
+  .code-block-copy > pre {
+    padding-inline-end: 1.35rem;
+  }
+
+  .mermaid-diagram {
+    padding-inline-end: 1rem;
+  }
+
+  :is([data-math-style="display"], [data-math="display"], .math-display)[data-source-copy] {
+    padding-inline-end: 0;
+  }
+
+  :is([data-math-style="inline"], [data-math="inline"], .math-inline)[data-source-copy] {
+    display: inline;
+    vertical-align: baseline;
   }
 }

@@ -7,6 +7,10 @@
     {% if page.website.kind == 'note' and page.website.content_type == 'doc' and page.website.theme_data.docs_tree.size > 0 %}{% assign is_docs_page = true %}{% endif %}
     {% assign is_authored_home = false %}
     {% if page.website.kind == 'home' and page.website.id %}{% assign is_authored_home = true %}{% endif %}
+    {% assign has_home_modules = false %}
+    {% if is_authored_home %}
+      {% if page.website.theme_data.recent_posts.size > 0 or page.website.theme_data.contacts.size > 0 %}{% assign has_home_modules = true %}{% endif %}
+    {% endif %}
     {% assign has_mobile_context = false %}
     {% if page.website.kind == 'home' %}
       {% if page.website.theme_data.topic_summaries.size > 0 or page.website.has_context %}{% assign has_mobile_context = true %}{% endif %}
@@ -19,7 +23,7 @@
     <a class="skip-link" href="#main-content">{{ ui.skip_to_content | default: 'Skip to content' | escape }}</a>
     {% include website/header.html theme='minimal' %}
 
-    <main class="minimal-shell{% unless page.website.kind == 'note' %} minimal-shell--system{% endunless %}{% if is_docs_page %} minimal-shell--docs{% endif %}{% if page.website.kind == 'blog-index' %} minimal-shell--blog{% endif %}" id="main-content"{% if page.website.kind == 'blog-index' %} data-filter-page{% endif %}>
+    <main class="minimal-shell{% unless page.website.kind == 'note' %} minimal-shell--system{% endunless %}{% if is_authored_home %} minimal-shell--authored-home{% endif %}{% if is_docs_page %} minimal-shell--docs{% endif %}{% if page.website.kind == 'blog-index' %} minimal-shell--blog{% endif %}" id="main-content"{% if page.website.kind == 'blog-index' %} data-filter-page{% endif %}>
       {% if is_docs_page %}
         <aside class="minimal-docs-sidebar">
           <nav class="docs-tree" aria-label="{{ ui.documentation | default: 'Documentation' | escape }}" data-docs-navigation>
@@ -34,9 +38,11 @@
           {% unless page.website.has_h1 %}{% include website/page-actions.html %}{% endunless %}
           {% include website/note-header.html %}
           {% if page.website.has_h1 %}{% include website/page-actions.html %}{% endif %}
-          <div class="note-content" lang="{{ page.website.i18n.content_lang | default: page.website.i18n.locale | default: site.lang | default: 'en' | escape }}" dir="{{ page.website.i18n.content_dir | default: page.website.i18n.dir | default: 'ltr' | escape }}">
+          <div class="note-content" lang="{{ page.website.i18n.content_lang | default: page.website.i18n.locale | default: site.lang | default: 'en' | escape }}" dir="{{ page.website.i18n.content_dir | default: page.website.i18n.dir | default: 'ltr' | escape }}" data-copy-code-label="{{ ui.copy_code | default: 'Copy code' | escape }}" data-copy-diagram-label="{{ ui.copy_diagram_source | default: 'Copy diagram source' | escape }}" data-copy-formula-label="{{ ui.copy_formula_source | default: 'Copy formula source' | escape }}" data-copy-code-success="{{ ui.copied | default: 'Copied' | escape }}" data-copy-code-error="{{ ui.copy_code_failed | default: 'Copy failed' | escape }}">
             {% if page.website.kind == 'note' or page.website.kind == 'home' %}{{ content }}{% endif %}
-            {% unless page.website.kind == 'note' %}{% include website/system-page.html %}{% endunless %}
+            {% unless page.website.kind == 'note' %}
+              {% unless is_authored_home %}{% include website/system-page.html %}{% endunless %}
+            {% endunless %}
           </div>
           {% if page.website.kind == 'note' and page.website.theme_data.portfolio_projects.size > 0 %}{% include website/portfolio-grid.html %}{% endif %}
           {% if page.website.kind == 'note' or is_authored_home %}{% include website/source-actions.html %}{% endif %}
@@ -67,6 +73,10 @@
         <aside class="minimal-context archive-context" data-page-context data-dialog-movable="context" data-auto-hide-scrollbar aria-label="{{ ui.chronology | default: 'Chronology' | escape }}">{% include website/archive-timeline.html timeline=page.website.theme_data.timeline %}</aside>
       {% elsif page.website.kind == 'note' and page.website.has_context %}
         <aside class="minimal-context" data-page-context data-context-panel data-dialog-movable="context" aria-label="{{ ui.page_context | default: 'Page context' | escape }}">{% include website/context.html location='rail' %}</aside>
+      {% endif %}
+
+      {% if has_home_modules %}
+        <div class="minimal-home-modules">{% include website/system-page.html %}</div>
       {% endif %}
     </main>
 

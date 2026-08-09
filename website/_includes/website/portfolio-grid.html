@@ -21,7 +21,7 @@
                 <h3 class="minimal-portfolio-card__title"><a class="minimal-portfolio-card__main" href="{{ project.url | escape }}">{{ project.title | escape }}</a></h3>
               {% endif %}
               {% if project.summary %}<p class="minimal-portfolio-card__summary">{{ project.summary | escape }}</p>{% endif %}
-              {% if project.topics.size > 0 %}<ul class="minimal-portfolio-card__topics" aria-label="{{ ui.topics | default: 'Topics' | escape }}">{% for topic in project.topics %}<li>{{ topic.name | escape }}</li>{% endfor %}</ul>{% endif %}
+              {% include website/portfolio-topics.html topics=project.topics %}
             </div>
             {% if project.repository_url %}
               {% assign repository_label_template = ui.open_project_on_github | default: 'Open {title} on GitHub' %}

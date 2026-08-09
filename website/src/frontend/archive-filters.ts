@@ -10,7 +10,9 @@ function selectedValue(
 
 function applyFilters(root: HTMLElement): void {
   const parameters = new URLSearchParams(window.location.search);
-  const topicOptions = Array.from(document.querySelectorAll<HTMLElement>("[data-topic-filter-option]"));
+  const topicOptions = Array.from(document.querySelectorAll<HTMLElement>(
+    "[data-topic-filter-nav] [data-topic-filter-option]"
+  ));
   const yearOptions = Array.from(document.querySelectorAll<HTMLElement>("[data-year-filter-option]"));
   const monthOptions = Array.from(document.querySelectorAll<HTMLElement>("[data-month-filter-option]"));
   const topic = selectedValue(parameters, "topic", topicOptions, "topicAnchor");

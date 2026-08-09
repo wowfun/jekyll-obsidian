@@ -45,6 +45,7 @@ class GitHubMarkdownCompilationTest < Minitest::Test
           publish: true
           title: Local card title
           description: Local card description
+          categories: [Rust, TypeScript]
           github_markdown:
             repository: acme/widget
             ref: main
@@ -72,6 +73,9 @@ class GitHubMarkdownCompilationTest < Minitest::Test
     assert_equal "https://github.com/acme/widget",
       detail.data.dig("website", "source_links", "repository")
     assert_includes detail.data.dig("website", "source_links", "edit"), "portfolio/widget.md"
+    assert_equal %w[Rust TypeScript], detail.data.dig(
+      "website", "theme_data", "portfolio_topics"
+    ).map { |topic| topic.fetch("name") }
 
     card = page(result, "/portfolio/").data.dig("website", "theme_data", "portfolio_projects").fetch(0)
     assert_equal "Local card title", card.fetch("title")

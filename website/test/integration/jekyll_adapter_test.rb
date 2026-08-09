@@ -189,6 +189,30 @@ class JekyllAdapterTest < Minitest::Test
     assert status.success?, "#{stdout}\n#{stderr}"
   end
 
+  def test_indexless_minimal_home_keeps_system_modules_in_the_first_content_row
+    FileUtils.rm(File.join(@temporary_root, "vault", "index.md"))
+    FileUtils.mkdir_p(File.join(@temporary_root, "vault", "blog"))
+    File.write(File.join(@temporary_root, "vault", "blog", "dispatch.md"), <<~MARKDOWN)
+      ---
+      publish: true
+      title: One dispatch
+      date: 2026-07-01
+      tags: [Engineering]
+      ---
+      # One dispatch
+    MARKDOWN
+    install_project_layout
+
+    build_site("website" => website_config.merge("theme" => "minimal")).process
+
+    document = Nokogiri::HTML5.parse(File.read(File.join(destination, "index.html")))
+    recent = document.at_css(".minimal-reading-column .note-content > .minimal-recent")
+    refute_nil recent
+    refute_nil document.at_css(".minimal-home-context")
+    assert_nil document.at_css(".minimal-home-modules")
+    refute_includes document.at_css("main")["class"], "minimal-shell--authored-home"
+  end
+
   def test_real_footer_always_links_to_the_jekyll_obsidian_repository
     install_project_layout
     site = build_site
@@ -437,9 +461,16 @@ class JekyllAdapterTest < Minitest::Test
     assert_includes blog, 'class="blog-ledger__description"'
     assert_includes blog, "A concise dispatch summary from the authored body."
     blog_document = Nokogiri::HTML5.parse(blog)
-    topics = blog_document.at_css(".blog-ledger__meta .blog-ledger__topics")
-    assert_equal "Engineering · release-notes · AI Agent", topics.text.strip
-    assert_operator topics.previous_element, :==, topics.parent.at_css("time")
+    topics = blog_document.at_css(".blog-ledger__content .blog-ledger__topics")
+    topic_links = topics.css("a[data-topic-filter-option]")
+    assert_equal ["Engineering", "release-notes", "AI Agent"], topic_links.map { |link| link.text.strip }
+    assert_equal [
+      "/blog/?topic=engineering",
+      "/blog/?topic=release-notes",
+      "/blog/?topic=ai-agent"
+    ], topic_links.map { |link| link["href"] }
+    assert_equal "blog-ledger__main", topics.previous_element["class"]
+    assert_nil blog_document.at_css(".blog-ledger__meta .blog-ledger__topics")
 
     post = Nokogiri::HTML5.parse(File.read(File.join(destination, "blog", "dispatch", "index.html")))
     topic_links = post.css(".note-meta .tag-chip")
@@ -832,9 +863,86 @@ class JekyllAdapterTest < Minitest::Test
     ).process
 
     fallback = File.read(File.join(destination, "ar", "index.html"))
-    assert_includes fallback, '<html class="no-js" lang="ar" dir="rtl">'
-    assert_includes fallback, '<header class="note-header" lang="en" dir="ltr">'
-    assert_includes fallback, '<div class="note-content" lang="en" dir="ltr">'
+    document = Nokogiri::HTML5.parse(fallback)
+    assert_equal "ar", document.at_css("html")["lang"]
+    assert_equal "rtl", document.at_css("html")["dir"]
+    assert_equal "en", document.at_css(".note-header")["lang"]
+    assert_equal "ltr", document.at_css(".note-header")["dir"]
+    assert_equal "en", document.at_css(".note-content")["lang"]
+    assert_equal "ltr", document.at_css(".note-content")["dir"]
+  end
+
+  def test_fallback_portfolio_topics_separate_ui_and_content_languages
+    install_project_layout
+    File.write(File.join(@temporary_root, "vault", "_locale.yml"), "name: English\ndir: ltr\n")
+    FileUtils.mkdir_p(File.join(@temporary_root, "vault", "_translations", "ar"))
+    File.write(
+      File.join(@temporary_root, "vault", "_translations", "ar", "_locale.yml"),
+      "name: العربية\ndir: rtl\nmessages:\n  topics: المواضيع\n"
+    )
+    FileUtils.mkdir_p(File.join(@temporary_root, "vault", "portfolio"))
+    File.write(
+      File.join(@temporary_root, "vault", "portfolio", "project.md"),
+      "---\npublish: true\ndescription: Default summary\ncategories: [Rust]\n---\n# Project\n"
+    )
+
+    build_site(
+      "website" => website_config.merge(
+        "theme" => "minimal",
+        "i18n" => { "enabled" => true, "locales" => %w[en ar] }
+      )
+    ).process
+
+    document = Nokogiri::HTML5.parse(
+      File.read(File.join(destination, "ar", "portfolio", "project", "index.html"))
+    )
+    topics = document.at_css(".note-header .minimal-portfolio-card__topics")
+    refute_nil topics
+    assert_equal "المواضيع", topics["aria-label"]
+    assert_equal "ar", topics["lang"]
+    assert_equal "rtl", topics["dir"]
+    topic = topics.at_css("li")
+    assert_equal "Rust", topic.text
+    assert_equal "en", topic["lang"]
+    assert_equal "ltr", topic["dir"]
+    topic_link = topic.at_css("a.tag-chip")
+    refute_nil topic_link
+    assert_equal "/ar/portfolio/?topic=rust", topic_link["href"]
+  end
+
+  def test_fallback_blog_topics_separate_ui_and_content_languages
+    install_project_layout
+    File.write(File.join(@temporary_root, "vault", "_locale.yml"), "name: English\ndir: ltr\n")
+    FileUtils.mkdir_p(File.join(@temporary_root, "vault", "_translations", "ar"))
+    File.write(
+      File.join(@temporary_root, "vault", "_translations", "ar", "_locale.yml"),
+      "name: العربية\ndir: rtl\nmessages:\n  topics: المواضيع\n"
+    )
+    FileUtils.mkdir_p(File.join(@temporary_root, "vault", "blog"))
+    File.write(
+      File.join(@temporary_root, "vault", "blog", "post.md"),
+      "---\npublish: true\ncontent_type: post\ndate: 2026-08-01\ncategories: [Architecture]\n---\n# Post\n"
+    )
+
+    build_site(
+      "website" => website_config.merge(
+        "theme" => "minimal",
+        "i18n" => { "enabled" => true, "locales" => %w[en ar] }
+      )
+    ).process
+
+    document = Nokogiri::HTML5.parse(
+      File.read(File.join(destination, "ar", "blog", "post", "index.html"))
+    )
+    topics = document.at_css(".note-header .note-meta__topics")
+    refute_nil topics
+    assert_equal "المواضيع", topics["aria-label"]
+    assert_equal "ar", topics["lang"]
+    assert_equal "rtl", topics["dir"]
+    topic = topics.at_css("a")
+    assert_equal "Architecture", topic.text
+    assert_equal "en", topic["lang"]
+    assert_equal "ltr", topic["dir"]
   end
 
   def test_reader_rejects_public_symlink_that_resolves_into_private_vault_content

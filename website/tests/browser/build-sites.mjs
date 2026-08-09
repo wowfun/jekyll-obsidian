@@ -84,17 +84,27 @@ try {
     "--destination", "_site-browser-docs-i18n",
     "--skip-assets",
   ]);
-  const destination = path.join(projectRoot, "_site-browser-docs-i18n");
-  stagedDestination = path.join(
-    projectRoot,
-    ".jekyll-obsidian-cache",
-    `${path.basename(fixtureHost)}.site`,
-  );
-  await cp(path.join(fixtureWebsite, "_site-browser-docs-i18n"), stagedDestination, {
-    recursive: true,
-  });
-  await rm(destination, { force: true, recursive: true });
-  await rename(stagedDestination, destination);
+  build(path.join(fixtureWebsite, "bin/build"), [
+    "--theme", "minimal",
+    "--url", "http://127.0.0.1:4173",
+    "--baseurl", "/__site__/minimal-i18n",
+    "--destination", "_site-browser-minimal-i18n",
+    "--skip-assets",
+  ]);
+  for (const siteName of ["docs-i18n", "minimal-i18n"]) {
+    const destination = path.join(projectRoot, `_site-browser-${siteName}`);
+    stagedDestination = path.join(
+      projectRoot,
+      ".jekyll-obsidian-cache",
+      `${path.basename(fixtureHost)}.${siteName}.site`,
+    );
+    await cp(path.join(fixtureWebsite, `_site-browser-${siteName}`), stagedDestination, {
+      recursive: true,
+    });
+    await rm(destination, { force: true, recursive: true });
+    await rename(stagedDestination, destination);
+    stagedDestination = undefined;
+  }
 } finally {
   if (stagedDestination) {
     await rm(stagedDestination, { force: true, recursive: true });
