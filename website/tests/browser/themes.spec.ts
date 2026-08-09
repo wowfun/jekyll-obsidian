@@ -1522,6 +1522,122 @@ test("compact Portfolio graphs keep node labels clear of their live status", asy
   }
 });
 
+test("desktop compact graphs keep every visible label separate and inside the canvas", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "desktop-chromium", "desktop compact graph assertion");
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.goto(site("minimal", "/docs/Getting%20Started/"));
+  await page.evaluate(() => document.fonts.ready);
+
+  const view = page.locator("[data-context-panel] [data-graph-view]");
+  await expect(view).toBeVisible();
+  await expect(view).toHaveAttribute("data-graph-ready", "true");
+
+  for (const direction of ["ltr", "rtl"] as const) {
+    await page.locator("html").evaluate((root, value) => { root.setAttribute("dir", value); }, direction);
+    const geometry = await view.evaluate((container) => {
+      const canvas = container.querySelector<HTMLElement>("[data-graph-canvas]");
+      const status = container.querySelector<HTMLElement>("[data-graph-status]");
+      const labels = [...container.querySelectorAll<SVGTextElement>(".graph-node text")];
+      if (!canvas || !status) {
+        return { labelCount: labels.length, clipped: ["missing graph surface"], intersections: [], statusIntersections: [] };
+      }
+
+      const canvasRect = canvas.getBoundingClientRect();
+      const statusRect = status.getBoundingClientRect();
+      const rectangles = labels.map((label) => ({
+        title: label.textContent || "untitled node",
+        rect: label.getBoundingClientRect()
+      }));
+      const intersects = (left: DOMRect, right: DOMRect) =>
+        left.left < right.right && left.right > right.left &&
+        left.top < right.bottom && left.bottom > right.top;
+      const intersections: string[] = [];
+      for (let left = 0; left < rectangles.length; left += 1) {
+        for (let right = left + 1; right < rectangles.length; right += 1) {
+          const leftLabel = rectangles[left]!;
+          const rightLabel = rectangles[right]!;
+          if (intersects(leftLabel.rect, rightLabel.rect)) {
+            intersections.push(`${leftLabel.title} / ${rightLabel.title}`);
+          }
+        }
+      }
+
+      return {
+        labelCount: labels.length,
+        clipped: rectangles.filter(({ rect }) =>
+          rect.left < canvasRect.left || rect.right > canvasRect.right ||
+          rect.top < canvasRect.top || rect.bottom > canvasRect.bottom
+        ).map(({ title }) => title),
+        intersections,
+        statusIntersections: rectangles.filter(({ rect }) => intersects(rect, statusRect)).map(({ title }) => title)
+      };
+    });
+
+    expect(geometry.labelCount).toBe(10);
+    expect(geometry.clipped, direction).toEqual([]);
+    expect(geometry.intersections, direction).toEqual([]);
+    expect(geometry.statusIntersections, direction).toEqual([]);
+  }
+});
+
+test("expanded and complete graphs keep dragged node labels inside the canvas", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "desktop-chromium", "desktop graph edge assertion");
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.goto(site("minimal", "/docs/Getting%20Started/"));
+
+  const context = page.locator("[data-context-panel]");
+  const cases = [
+    {
+      open: "Expand local graph",
+      dialog: 'dialog[data-dialog="graph-local"]',
+      view: '[data-graph-dialog-view="local"]',
+      close: "Close local graph"
+    },
+    {
+      open: "Open full graph",
+      dialog: 'dialog[data-dialog="graph-global"]',
+      view: '[data-graph-dialog-view="global"]',
+      close: "Close full graph"
+    }
+  ] as const;
+
+  for (const graphCase of cases) {
+    await context.getByRole("button", { name: graphCase.open }).click();
+    const dialog = page.locator(graphCase.dialog);
+    const view = dialog.locator(graphCase.view);
+    await expect(dialog).toBeVisible();
+    await expect(view).toHaveAttribute("data-graph-ready", "true");
+
+    const node = view.locator(".graph-node[role='link']").first();
+    const circle = node.locator("circle");
+    const canvas = view.locator("[data-graph-canvas]");
+    const circleBox = (await circle.boundingBox())!;
+    const canvasBox = (await canvas.boundingBox())!;
+    await page.mouse.move(circleBox.x + circleBox.width / 2, circleBox.y + circleBox.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(canvasBox.x + canvasBox.width - 20, circleBox.y + circleBox.height / 2, { steps: 5 });
+    await page.mouse.up();
+
+    const geometry = await node.evaluate((element) => {
+      const label = element.querySelector<SVGTextElement>("text")!;
+      const circle = element.querySelector<SVGCircleElement>("circle")!;
+      const canvas = element.closest("[data-graph-canvas]")!;
+      const labelRect = label.getBoundingClientRect();
+      const circleRect = circle.getBoundingClientRect();
+      const canvasRect = canvas.getBoundingClientRect();
+      return {
+        circleEndGap: canvasRect.right - circleRect.right,
+        labelClipped: labelRect.left < canvasRect.left || labelRect.right > canvasRect.right ||
+          labelRect.top < canvasRect.top || labelRect.bottom > canvasRect.bottom
+      };
+    });
+    expect(geometry.circleEndGap, graphCase.open).toBeLessThan(32);
+    expect(geometry.labelClipped, graphCase.open).toBe(false);
+
+    await dialog.getByRole("button", { name: graphCase.close }).click();
+  }
+});
+
 test("graph dialogs cache the complete graph and dispose expanded local graphs", async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== "desktop-chromium", "desktop graph dialog assertion");
   let graphRequests = 0;
