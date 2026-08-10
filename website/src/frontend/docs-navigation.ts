@@ -121,7 +121,7 @@ function commitPage(source: Document, url: URL, push: boolean): void {
     throw new TypeError("Destination is not a documentation page in the current theme");
   }
 
-  for (const name of ["browse", "context", "graph-global", "graph-local", "mermaid"] as const) {
+  for (const name of ["browse", "context", "graph-global", "graph-local", "media"] as const) {
     closeWebsiteDialog(name);
   }
   syncPageHead(source);

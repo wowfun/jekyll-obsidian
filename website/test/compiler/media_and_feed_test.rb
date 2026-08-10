@@ -111,6 +111,7 @@ class MediaAndFeedTest < Minitest::Test
     assert result.success?, result.diagnostics.map(&:message).join("\n")
     document = Nokogiri::HTML5.fragment(page(result, "/").content)
     image = document.at_css('img[alt="Field sketch"]')
+    assert_equal "true", image["data-website-image"]
     assert_equal "320", image["width"]
     assert_equal "180", image["height"]
     assert_equal 2, document.css("audio").length

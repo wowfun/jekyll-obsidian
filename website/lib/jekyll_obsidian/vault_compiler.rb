@@ -1560,6 +1560,7 @@ module JekyllObsidian
       annotate_task_states(note, fragment)
       annotate_code_blocks(note, fragment)
       transform_callouts(fragment)
+      fragment.css("img").each { |image| image["data-website-image"] = "true" }
       fragment.css("pre code.language-mermaid").each { |node| node.parent["data-website-mermaid"] = "true" }
       fragment.css("a[href]").each do |link|
         next unless link["href"].match?(%r{\Ahttps?://}i)

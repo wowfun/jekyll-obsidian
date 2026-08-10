@@ -13,20 +13,23 @@ vi.mock("mermaid", () => ({ default: mermaid }));
 
 import { renderMermaid } from "../../src/frontend/mermaid";
 import { initialiseDialogs } from "../../src/frontend/dialogs";
+import { initialiseMediaViewerControls } from "../../src/frontend/media-viewer";
 
 describe("localized Mermaid diagrams", () => {
   beforeEach(() => {
     document.body.innerHTML = `
-      <div class="note-content" data-copy-diagram-label="复制图表源码" data-expand-diagram-label="放大图表">
+      <div id="website-media-1-clip"></div>
+      <div class="note-content" data-copy-diagram-label="复制图表源码" data-expand-diagram-label="放大图表" data-close-diagram-label="关闭图表">
         <pre data-website-mermaid data-diagram-label="图表"><code class="language-mermaid">graph TD; A--&gt;B</code></pre>
       </div>
-      <dialog data-dialog="mermaid" data-mermaid-zoom-level="缩放：{percent}%">
+      <dialog data-dialog="media" data-media-zoom-level="缩放：{percent}%">
+        <h2 data-media-dialog-title></h2>
         <button data-dialog-close>关闭</button>
-        <button data-mermaid-zoom-out>缩小</button>
-        <button data-mermaid-zoom-reset>复位</button>
-        <button data-mermaid-zoom-in>放大</button>
-        <output data-mermaid-zoom-status aria-live="polite"></output>
-        <div data-mermaid-dialog-viewport><div data-mermaid-dialog-canvas></div></div>
+        <button data-media-zoom-out>缩小</button>
+        <button data-media-zoom-reset>复位</button>
+        <button data-media-zoom-in>放大</button>
+        <output data-media-zoom-status aria-live="polite"></output>
+        <div data-media-dialog-viewport role="group"><div data-media-dialog-canvas></div></div>
       </dialog>`;
     HTMLDialogElement.prototype.showModal = function showModal() { this.open = true; };
     HTMLDialogElement.prototype.close = function close() {
@@ -37,6 +40,7 @@ describe("localized Mermaid diagrams", () => {
     mermaid.initialize.mockClear();
     mermaid.render.mockClear();
     mermaid.render.mockImplementation(async () => ({ svg: mermaidOutput.svg }));
+    initialiseMediaViewerControls();
   });
 
   it("accepts Mermaid SVG HTML containing a foreignObject line break", async () => {
@@ -54,6 +58,7 @@ describe("localized Mermaid diagrams", () => {
   });
 
   it("opens an accessible clone of the current diagram without rendering Mermaid again", async () => {
+    mermaidOutput.svg = '<svg xmlns="http://www.w3.org/2000/svg" id="diagram"><g id="clip"></g><g class="node" clip-path="url(#clip)"></g></svg>';
     initialiseDialogs();
     await renderMermaid();
 
@@ -64,11 +69,18 @@ describe("localized Mermaid diagrams", () => {
 
     expand.click();
 
-    const dialog = document.querySelector<HTMLDialogElement>('dialog[data-dialog="mermaid"]')!;
-    const enlarged = dialog.querySelector<SVGSVGElement>("[data-mermaid-dialog-canvas] > svg")!;
+    const dialog = document.querySelector<HTMLDialogElement>('dialog[data-dialog="media"]')!;
+    const enlarged = dialog.querySelector<SVGSVGElement>("[data-media-dialog-canvas] > svg")!;
+    const sourceClip = sourceSvg.querySelector<SVGElement>("[id]")!;
+    const enlargedClip = enlarged.querySelector<SVGElement>("[id]")!;
     expect(dialog.open).toBe(true);
     expect(enlarged).not.toBe(sourceSvg);
-    expect(enlarged.outerHTML).toBe(sourceSvg.outerHTML);
+    expect(enlarged.id).not.toBe(sourceSvg.id);
+    expect(enlargedClip.id).not.toBe(sourceClip.id);
+    expect(enlarged.querySelector("g.node")?.getAttribute("clip-path"))
+      .toBe(`url(#${enlargedClip.id})`);
+    const ids = Array.from(document.querySelectorAll<SVGElement>("svg[id], svg [id]"), (element) => element.id);
+    expect(new Set(ids).size).toBe(ids.length);
     expect(mermaid.render).toHaveBeenCalledOnce();
   });
 
@@ -77,25 +89,25 @@ describe("localized Mermaid diagrams", () => {
     await renderMermaid();
     document.querySelector<HTMLButtonElement>("button[data-mermaid-expand]")!.click();
 
-    const dialog = document.querySelector<HTMLDialogElement>('dialog[data-dialog="mermaid"]')!;
-    const canvas = dialog.querySelector<HTMLElement>("[data-mermaid-dialog-canvas]")!;
-    const status = dialog.querySelector<HTMLOutputElement>("[data-mermaid-zoom-status]")!;
-    const zoomIn = dialog.querySelector<HTMLButtonElement>("[data-mermaid-zoom-in]")!;
-    const zoomOut = dialog.querySelector<HTMLButtonElement>("[data-mermaid-zoom-out]")!;
-    const reset = dialog.querySelector<HTMLButtonElement>("[data-mermaid-zoom-reset]")!;
+    const dialog = document.querySelector<HTMLDialogElement>('dialog[data-dialog="media"]')!;
+    const canvas = dialog.querySelector<HTMLElement>("[data-media-dialog-canvas]")!;
+    const status = dialog.querySelector<HTMLOutputElement>("[data-media-zoom-status]")!;
+    const zoomIn = dialog.querySelector<HTMLButtonElement>("[data-media-zoom-in]")!;
+    const zoomOut = dialog.querySelector<HTMLButtonElement>("[data-media-zoom-out]")!;
+    const reset = dialog.querySelector<HTMLButtonElement>("[data-media-zoom-reset]")!;
 
     for (let index = 0; index < 20; index += 1) zoomIn.click();
-    expect(canvas.dataset.mermaidZoom).toBe("3");
+    expect(canvas.dataset.mediaZoom).toBe("3");
     expect(status.textContent).toBe("缩放：300%");
     expect(zoomIn.disabled).toBe(true);
 
     for (let index = 0; index < 20; index += 1) zoomOut.click();
-    expect(canvas.dataset.mermaidZoom).toBe("0.5");
+    expect(canvas.dataset.mediaZoom).toBe("0.5");
     expect(status.textContent).toBe("缩放：50%");
     expect(zoomOut.disabled).toBe(true);
 
     reset.click();
-    expect(canvas.dataset.mermaidZoom).toBe("1");
+    expect(canvas.dataset.mediaZoom).toBe("1");
     expect(status.textContent).toBe("缩放：100%");
     expect(zoomIn.disabled).toBe(false);
     expect(zoomOut.disabled).toBe(false);
@@ -106,7 +118,7 @@ describe("localized Mermaid diagrams", () => {
     await renderMermaid();
 
     const figure = document.querySelector<HTMLElement>(".mermaid-diagram")!;
-    const dialog = document.querySelector<HTMLDialogElement>('dialog[data-dialog="mermaid"]')!;
+    const dialog = document.querySelector<HTMLDialogElement>('dialog[data-dialog="media"]')!;
     const expand = figure.querySelector<HTMLButtonElement>("button[data-mermaid-expand]")!;
     figure.querySelector<HTMLButtonElement>("button[data-copy-source]")!.click();
     expect(dialog.open).toBe(false);
@@ -207,20 +219,20 @@ describe("localized Mermaid diagrams", () => {
 
     const originalExpand = document.querySelectorAll<HTMLButtonElement>("[data-mermaid-expand]")[1]!;
     originalExpand.click();
-    const dialog = document.querySelector<HTMLDialogElement>('dialog[data-dialog="mermaid"]')!;
+    const dialog = document.querySelector<HTMLDialogElement>('dialog[data-dialog="media"]')!;
     expect(dialog.open).toBe(true);
-    expect(dialog.querySelectorAll("[data-mermaid-dialog-canvas] > svg")).toHaveLength(1);
+    expect(dialog.querySelectorAll("[data-media-dialog-canvas] > svg")).toHaveLength(1);
 
     document.dispatchEvent(new CustomEvent(COLOR_SCHEME_EVENT, { detail: { scheme: "dark" } }));
 
     expect(dialog.open).toBe(false);
-    expect(dialog.querySelectorAll("[data-mermaid-dialog-canvas] > svg")).toHaveLength(0);
+    expect(dialog.querySelectorAll("[data-media-dialog-canvas] > svg")).toHaveLength(0);
     await vi.waitFor(() => expect(mermaid.render).toHaveBeenCalledTimes(4));
     const replacementExpand = document.querySelectorAll<HTMLButtonElement>("[data-mermaid-expand]")[1]!;
     expect(replacementExpand).not.toBe(originalExpand);
     expect(document.activeElement).toBe(replacementExpand);
     expect(dialog.open).toBe(false);
-    expect(dialog.querySelectorAll("[data-mermaid-dialog-canvas] > svg")).toHaveLength(0);
+    expect(dialog.querySelectorAll("[data-media-dialog-canvas] > svg")).toHaveLength(0);
 
     const ids = Array.from(
       document.querySelectorAll<SVGElement>("svg[id], svg [id]"),

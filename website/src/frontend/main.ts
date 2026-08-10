@@ -11,6 +11,7 @@ import { initialiseCodeBlockCopy } from "./code-block-copy";
 import { initialiseTweets } from "./tweets";
 import { initialiseAnalytics } from "./analytics";
 import { initialiseAutoHideScrollbars } from "./scrollbars";
+import { initialiseImageViewer, initialiseMediaViewerControls } from "./media-viewer";
 
 const DOCS_PAGE_CHANGE_EVENT = "website:docs-page-change";
 let pageFeatureGeneration = 0;
@@ -26,6 +27,8 @@ function initialisePageFeatures(): void {
   const cleanupArchiveFilters = initialiseArchiveFilters();
   const cleanupPageActions = initialisePageActions();
   const cleanupCodeBlockCopy = initialiseCodeBlockCopy();
+  const cleanupImageViewer = initialiseImageViewer();
+  initialiseMediaViewerControls();
   const cleanupTweets = initialiseTweets();
   cleanupPageFeatures = () => {
     cleanupOutline();
@@ -33,6 +36,7 @@ function initialisePageFeatures(): void {
     cleanupArchiveFilters();
     cleanupPageActions();
     cleanupCodeBlockCopy();
+    cleanupImageViewer();
     cleanupTweets();
   };
 

@@ -649,7 +649,7 @@
   }
 
   .blog-ledger time {
-    color: var(--teal);
+    color: var(--ink);
     font-size: 0.8rem;
     font-variant-numeric: tabular-nums;
   }

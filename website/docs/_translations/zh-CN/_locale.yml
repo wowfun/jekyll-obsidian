@@ -47,6 +47,9 @@ messages:
   copy_page: 复制页面
   copy_page_description: 以 Markdown 复制页面，供 LLM 使用
   copy_code: 复制代码
+  image: 图片
+  expand_image: 放大图片
+  close_image: 关闭图片
   copy_diagram_source: 复制图表源码
   expand_diagram: 放大图表
   close_diagram: 关闭图表

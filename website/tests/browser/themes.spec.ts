@@ -236,13 +236,16 @@ for (const theme of themes) {
       await expect(page).toHaveURL(site("docs", "/docs/Syntax/"));
       const returnedDiagram = page.locator("[data-mermaid-rendered]");
       await expect(returnedDiagram).toHaveCount(1);
+      const returnedImage = page.locator('.note-content img[src*="research-folio.svg"]');
+      await expect(returnedImage).toHaveAttribute("role", "button");
+      await expect(returnedImage).toHaveAccessibleName("Expand image");
       await expect(returnedDiagram.locator("button[data-copy-source]")).toHaveCount(1);
       const returnedExpand = returnedDiagram.locator("button[data-mermaid-expand]");
       await expect(returnedExpand).toHaveCount(1);
       await returnedExpand.click();
-      const returnedDialog = page.locator('dialog[data-dialog="mermaid"]');
+      const returnedDialog = page.locator('dialog[data-dialog="media"]');
       await returnedDialog.getByRole("button", { name: "Zoom in" }).click();
-      await expect(returnedDialog.locator("[data-mermaid-zoom-status]")).toHaveText("Zoom: 125%");
+      await expect(returnedDialog.locator("[data-media-zoom-status]")).toHaveText("Zoom: 125%");
       await page.keyboard.press("Escape");
       await expect(returnedExpand).toBeFocused();
       const returnedMath = page.locator("[data-math-rendered]");
@@ -267,20 +270,41 @@ for (const theme of themes) {
     await sourceSvg.evaluate((svg) => { svg.dataset.enlargeSource = "current"; });
 
     await figure.locator("button[data-copy-source]").click();
-    await expect(page.locator('dialog[data-dialog="mermaid"]')).not.toBeVisible();
+    await expect(page.locator('dialog[data-dialog="media"]')).not.toBeVisible();
     await sourceSvg.click();
 
-    const dialog = page.locator('dialog[data-dialog="mermaid"]');
+    const dialog = page.locator('dialog[data-dialog="media"]');
     await expect(dialog).toBeVisible();
-    await expect(dialog.locator("[data-mermaid-dialog-canvas] > svg"))
+    await expect(dialog.locator("[data-media-dialog-canvas] > svg"))
       .toHaveAttribute("data-enlarge-source", "current");
+    expect(await page.evaluate(() => {
+      const ids = Array.from(document.querySelectorAll<SVGElement>(
+        "[data-mermaid-rendered] svg[id], [data-mermaid-rendered] svg [id], [data-media-dialog-canvas] svg[id], [data-media-dialog-canvas] svg [id]"
+      ), (element) => element.id);
+      return new Set(ids).size === ids.length;
+    })).toBe(true);
+    const isolatedStyles = await page.evaluate(() => {
+      const source = document.querySelector<SVGSVGElement>("[data-mermaid-rendered] > svg")!;
+      const clone = document.querySelector<SVGSVGElement>("[data-media-dialog-canvas] > svg")!;
+      return {
+        sourceId: source.id,
+        cloneId: clone.id,
+        sourceStyle: source.querySelector("style")?.textContent || "",
+        cloneStyle: clone.querySelector("style")?.textContent || ""
+      };
+    });
+    expect(isolatedStyles.cloneId).not.toBe(isolatedStyles.sourceId);
+    expect(isolatedStyles.sourceStyle).toContain(`#${isolatedStyles.sourceId}`);
+    expect(isolatedStyles.cloneStyle).not.toContain(`#${isolatedStyles.sourceId}`);
+    expect(isolatedStyles.cloneStyle).toContain(`#${isolatedStyles.cloneId}`);
     const zoomIn = dialog.getByRole("button", { name: "Zoom in" });
     const reset = dialog.getByRole("button", { name: "Reset zoom" });
-    const status = dialog.locator("[data-mermaid-zoom-status]");
+    const status = dialog.locator("[data-media-zoom-status]");
+    const viewport = dialog.locator("[data-media-dialog-viewport]");
     await expect(dialog.getByRole("button", { name: "Zoom out" })).toBeVisible();
     await expect(dialog.getByRole("button", { name: "Close diagram" })).toBeVisible();
     await expect(status).toHaveText("Zoom: 100%");
-    const controlGeometry = await dialog.locator(".mermaid-dialog__controls").evaluate((controls) => ({
+    const controlGeometry = await dialog.locator(".media-dialog__controls").evaluate((controls) => ({
       clientWidth: controls.clientWidth,
       scrollWidth: controls.scrollWidth,
       buttons: [...controls.querySelectorAll("button")].map((button) => {
@@ -291,11 +315,26 @@ for (const theme of themes) {
     expect(controlGeometry.scrollWidth).toBeLessThanOrEqual(controlGeometry.clientWidth);
     expect(controlGeometry.buttons.every(({ width, height }) => width >= 40 && height >= 40)).toBe(true);
 
+    const pageScrollBeforeWheel = await page.evaluate(() => window.scrollY);
+    const enlargedSvg = dialog.locator("[data-media-dialog-canvas] > svg");
+    const wheelTarget = (await enlargedSvg.boundingBox())!;
+    await zoomIn.focus();
+    await page.mouse.move(
+      wheelTarget.x + (wheelTarget.width * 0.7),
+      wheelTarget.y + (wheelTarget.height * 0.5)
+    );
+    await page.mouse.wheel(0, -120);
+    await expect.poll(async () => Number(await dialog.locator("[data-media-dialog-canvas]")
+      .getAttribute("data-media-zoom"))).toBeGreaterThan(1);
+    expect(await page.evaluate(() => window.scrollY)).toBe(pageScrollBeforeWheel);
+    await expect(zoomIn).toBeFocused();
+    await reset.click();
+    await expect(status).toHaveText("Zoom: 100%");
+
     await zoomIn.focus();
     await page.keyboard.press("Enter");
     await expect(status).toHaveText("Zoom: 125%");
     await zoomIn.click({ clickCount: 3 });
-    const viewport = dialog.locator("[data-mermaid-dialog-viewport]");
     expect(await viewport.evaluate((element) => element.scrollWidth > element.clientWidth)).toBe(true);
     const dragStart = await viewport.evaluate((element) => {
       element.scrollLeft = (element.scrollWidth - element.clientWidth) / 2;
@@ -305,16 +344,16 @@ for (const theme of themes) {
     const dragY = viewportBox.y + viewportBox.height / 2;
     await page.mouse.move(viewportBox.x + viewportBox.width / 2, dragY);
     await page.mouse.down({ button: "left" });
-    await expect(viewport).toHaveAttribute("data-mermaid-panning", "");
+    await expect(viewport).toHaveAttribute("data-media-panning", "");
     await expect(viewport).toHaveCSS("cursor", "grabbing");
     await page.mouse.move(viewportBox.x + viewportBox.width / 2 - 60, dragY, { steps: 4 });
     await page.mouse.up({ button: "left" });
-    await expect(viewport).not.toHaveAttribute("data-mermaid-panning");
+    await expect(viewport).not.toHaveAttribute("data-media-panning");
     await expect(viewport).toHaveCSS("cursor", "grab");
     const dragEnd = await viewport.evaluate((element) => element.scrollLeft);
     expect(dragEnd).toBeGreaterThan(dragStart);
     await page.mouse.down({ button: "right" });
-    await expect(viewport).not.toHaveAttribute("data-mermaid-panning");
+    await expect(viewport).not.toHaveAttribute("data-media-panning");
     await page.mouse.move(viewportBox.x + viewportBox.width / 2 - 90, dragY);
     await page.mouse.up({ button: "right" });
     expect(await viewport.evaluate((element) => element.scrollLeft)).toBe(dragEnd);
@@ -335,21 +374,104 @@ for (const theme of themes) {
       }));
     });
     await expect(dialog).toBeHidden();
-    await expect(dialog.locator("[data-mermaid-dialog-canvas] > svg")).toHaveCount(0);
+    await expect(dialog.locator("[data-media-dialog-canvas] > svg")).toHaveCount(0);
     await expect(figure).toBeVisible();
     await expect(expand).toBeFocused();
     expect(await page.evaluate(() => {
       const selector = [
         "[data-mermaid-rendered] svg[id]",
         "[data-mermaid-rendered] svg [id]",
-        "[data-mermaid-dialog-canvas] svg[id]",
-        "[data-mermaid-dialog-canvas] svg [id]"
+        "[data-media-dialog-canvas] svg[id]",
+        "[data-media-dialog-canvas] svg [id]"
       ].join(",");
       const ids = Array.from(document.querySelectorAll<SVGElement>(selector), (element) => element.id);
       return new Set(ids).size === ids.length;
     })).toBe(true);
     expect(await page.evaluate(() => document.documentElement.scrollWidth))
       .toBeLessThanOrEqual(await page.evaluate(() => document.documentElement.clientWidth));
+  });
+}
+
+for (const theme of themes) {
+  test(`${theme} opens content images in a zoomable viewer`, async ({ page }, testInfo) => {
+    if (testInfo.project.name === "mobile-chromium") {
+      await page.setViewportSize({ width: 320, height: 800 });
+    }
+    await page.goto(site(theme, "/docs/Syntax/"));
+
+    const image = page.locator('.note-content img[src*="research-folio.svg"]');
+    await expect(image).toBeVisible();
+    await expect(image).toHaveAttribute("role", "button");
+    await expect(image).toHaveAccessibleName("Expand image");
+    await image.evaluate((element) => {
+      element.style.inlineSize = "100px";
+      element.style.blockSize = "50px";
+      element.style.position = "absolute";
+      const source = element.getAttribute("src")!;
+      element.setAttribute("srcset", `${source}?small 1x, ${source}?large 3x`);
+    });
+    await image.evaluate((element) => (element as HTMLImageElement).click());
+
+    const dialog = page.locator('dialog[data-dialog="media"]');
+    await expect(dialog).toBeVisible();
+    await expect(dialog.locator("[data-media-dialog-canvas] > img"))
+      .toHaveAttribute("src", /research-folio\.svg$/);
+    const dialogImage = dialog.locator("[data-media-dialog-canvas] > img");
+    await expect(dialogImage).toHaveAttribute("srcset", /\?large$/);
+    await expect.poll(() => dialogImage.evaluate((element) => (element as HTMLImageElement).currentSrc))
+      .toContain("?large");
+    await expect(dialog.getByRole("button", { name: "Close image" })).toBeVisible();
+    expect((await new AxeBuilder({ page }).include('dialog[data-dialog="media"]').analyze()).violations)
+      .toEqual([]);
+    const status = dialog.locator("[data-media-zoom-status]");
+    const viewport = dialog.locator("[data-media-dialog-viewport]");
+    const canvas = dialog.locator("[data-media-dialog-canvas]");
+    await expect(status).toHaveText("Zoom: 100%");
+
+    const enlargedImage = canvas.locator(":scope > img");
+    const imageBox = (await enlargedImage.boundingBox())!;
+    const wheelX = imageBox.x + (imageBox.width * 0.65);
+    const wheelY = imageBox.y + (imageBox.height * 0.5);
+    await page.mouse.move(
+      wheelX,
+      wheelY
+    );
+    await page.mouse.wheel(0, -600);
+    await page.mouse.wheel(0, -600);
+    await expect.poll(async () => Number(await canvas.getAttribute("data-media-zoom")))
+      .toBeGreaterThan(1.5);
+    const enlargedBox = (await enlargedImage.boundingBox())!;
+    expect(enlargedBox.width).toBeGreaterThan(imageBox.width * 1.5);
+    expect(Math.abs((enlargedBox.x + (enlargedBox.width * 0.65)) - wheelX)).toBeLessThanOrEqual(2);
+    expect(Math.abs((enlargedBox.y + (enlargedBox.height * 0.5)) - wheelY)).toBeLessThanOrEqual(2);
+    expect(await viewport.evaluate((element) => element.scrollWidth > element.clientWidth)).toBe(true);
+
+    const dragStart = await viewport.evaluate((element) => {
+      element.scrollLeft = (element.scrollWidth - element.clientWidth) / 2;
+      return element.scrollLeft;
+    });
+    const viewportBox = (await viewport.boundingBox())!;
+    const dragY = viewportBox.y + (viewportBox.height / 2);
+    await page.mouse.move(viewportBox.x + (viewportBox.width / 2), dragY);
+    await page.mouse.down({ button: "left" });
+    await expect(viewport).toHaveAttribute("data-media-panning", "");
+    await page.mouse.move(viewportBox.x + (viewportBox.width / 2) - 50, dragY, { steps: 3 });
+    await page.mouse.up({ button: "left" });
+    expect(await viewport.evaluate((element) => element.scrollLeft)).toBeGreaterThan(dragStart);
+
+    await page.keyboard.press("Escape");
+    await expect(dialog).toBeHidden();
+    await expect(image).toBeFocused();
+    await page.emulateMedia({ forcedColors: "active" });
+    const focusIndicator = await image.evaluate((element) => {
+      const style = getComputedStyle(element);
+      return {
+        outlineStyle: style.outlineStyle,
+        outlineWidth: Number.parseFloat(style.outlineWidth)
+      };
+    });
+    expect(focusIndicator.outlineStyle).toBe("solid");
+    expect(focusIndicator.outlineWidth).toBeGreaterThanOrEqual(2);
   });
 }
 
@@ -375,13 +497,25 @@ test("localized code block actions announce their state in the page language", a
   const localizedDiagramExpand = page.locator("[data-mermaid-rendered] button[data-mermaid-expand]");
   await expect(localizedDiagramExpand).toHaveAccessibleName("放大图表");
   await localizedDiagramExpand.click();
-  const localizedDiagramDialog = page.locator('dialog[data-dialog="mermaid"]');
+  const localizedDiagramDialog = page.locator('dialog[data-dialog="media"]');
   await expect(localizedDiagramDialog.getByRole("button", { name: "放大" })).toBeVisible();
   await expect(localizedDiagramDialog.getByRole("button", { name: "缩小" })).toBeVisible();
   await expect(localizedDiagramDialog.getByRole("button", { name: "复位缩放" })).toBeVisible();
   await expect(localizedDiagramDialog.getByRole("button", { name: "关闭图表" })).toBeVisible();
-  await expect(localizedDiagramDialog.locator("[data-mermaid-zoom-status]")).toHaveText("缩放：100%");
+  await expect(localizedDiagramDialog.locator("[data-media-zoom-status]")).toHaveText("缩放：100%");
   await page.keyboard.press("Escape");
+  const localizedImage = page.locator('.note-content img[src*="research-folio.svg"]');
+  await expect(localizedImage).toHaveAccessibleName("放大图片");
+  expect(await localizedImage.evaluate((image) => {
+    const id = image.getAttribute("aria-labelledby");
+    const label = id ? document.getElementById(id) : null;
+    return label?.querySelector("span")?.lang;
+  })).toBe("zh-CN");
+  await localizedImage.click();
+  await expect(localizedDiagramDialog.getByRole("button", { name: "关闭图片" })).toBeVisible();
+  await expect(localizedDiagramDialog.locator("[data-media-dialog-title]")).toHaveText("图片");
+  await page.keyboard.press("Escape");
+  await expect(localizedImage).toBeFocused();
   const localizedFormulaAction = page.locator("[data-math-rendered] button[data-copy-source]").first();
   await expect(localizedFormulaAction).toHaveAccessibleName("复制公式源码");
   await expect(localizedFormulaAction).toHaveAttribute("lang", "zh-CN");
@@ -577,6 +711,8 @@ test("Minimal recent post cards expose one article link across the whole card", 
   await expect(generatedCard.locator(`a[href="${generatedHref}"]`)).toHaveCount(1);
   await expect(generatedCard.locator(".minimal-post-card__media")).not.toHaveAttribute("href", /.+/);
   await expect(generatedCard.locator(".minimal-post-card__media img")).toHaveAttribute("alt", "");
+  await expect(generatedCard.locator(".minimal-post-card__media img")).not.toHaveAttribute("role", "button");
+  await expect(generatedCard.locator(".minimal-post-card__media img")).not.toHaveAttribute("tabindex", /.+/);
 
   await page.goto("/__fixture__/post-card/");
   const card = page.locator(".minimal-post-card");
@@ -1278,7 +1414,8 @@ test("Minimal navigation and Blog filters keep primary labels legible in every c
         navigation: color(".site-navigation a:not([aria-current])"),
         topic: color(".tag-filter__list a:not([aria-current]) .context-tag__name"),
         month: color("[data-month-filter-option] > span:first-child"),
-        ledgerTopic: color(".blog-ledger__topics a")
+        ledgerTopic: color(".blog-ledger__topics a"),
+        date: color(".blog-ledger time")
       };
       const fontSize = (selector: string) =>
         Number.parseFloat(getComputedStyle(document.querySelector(selector)!).fontSize);
@@ -1307,7 +1444,7 @@ test("Minimal navigation and Blog filters keep primary labels legible in every c
       };
     });
 
-    expect(Object.values(result.primary)).toEqual(Array(4).fill(result.ink));
+    expect(Object.values(result.primary)).toEqual(Array(5).fill(result.ink));
     expect(Object.values(result.counts)).toEqual(Array(2).fill(result.graphite));
     expect(result.sizes.navigation).toBeGreaterThanOrEqual(12.5);
     for (const size of [result.sizes.topic, result.sizes.month, result.sizes.ledgerTopic]) {
@@ -1351,6 +1488,10 @@ test("Minimal navigation and Blog filters keep primary labels legible in every c
 
   await page.emulateMedia({ colorScheme: "light", forcedColors: "active" });
   await page.goto(site("minimal", "/blog/"));
+  await expect(page.locator(".blog-ledger time").first()).toHaveCSS(
+    "color",
+    await page.locator("body").evaluate((element) => getComputedStyle(element).color)
+  );
   const forcedContrast = await page.evaluate(() => {
     const swatch = document.querySelector<HTMLElement>(".tag-filter__list .context-tag__name")!;
     const background = document.body;
