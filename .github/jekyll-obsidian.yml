@@ -23,3 +23,6 @@ website:
     repository_id: R_kgDOTpvnAQ
     category: Blog comments
     category_id: DIC_kwDOTpvnAc4DCly_
+  analytics:
+    provider: cloudflare
+    token: 39256861462445f681576be582afd9e4
