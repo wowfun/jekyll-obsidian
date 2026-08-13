@@ -58,7 +58,7 @@ content/
 
 Relative paths pair translations. In this example, `_translations/zh-CN/guide/Advanced.md` translates `guide/Advanced.md`. A translated note without a default note at the same path is an orphan and fails the build. Locale roots do not require `index.md`; each one redirects to its localized form of the default tree's first ordered page.
 
-The default tree owns site structure. It decides which notes exist, how they are classified, their structural `nav_order`, and which public routes they use. Translations supply localized content without creating a separate information architecture. Presentation lists may use each locale's rendered title as a stable tie-breaker; for example, Portfolio projects with the same `nav_order` follow their localized titles.
+The default tree owns site structure. It decides which notes exist, how they are classified, their structural `nav_order`, custom-tab IDs and selectors, and which public routes they use. Translations supply localized content without creating a separate information architecture. A custom tab keeps the default language's member set even when translated tags or categories differ; cards use the current locale's content and may use its rendered titles as an ordering tie-breaker.
 
 ## Define a locale manifest
 
@@ -89,11 +89,11 @@ tags:
 ---
 ```
 
-A translation can replace the body and the translatable properties `title`, `subtitle`, `description`, `tags`, `author`, `categories`, `image`, `cssclasses`, and `related`. Custom properties are also inherited when omitted and replaced by property name when present. When the default page opts into top-level navigation, its translation may also replace `navigation.label`. Set the YAML boolean `publish: false` on a translation to disable only that translation and serve the default-language fallback at its localized URL. Property wiki links resolve inside the active locale, including a locale-prefixed fallback URL when the target has no physical translation.
+A translation can replace the body and the translatable properties `title`, `subtitle`, `description`, `tags`, `author`, `categories`, `image`, `cssclasses`, and `related`. Custom properties are also inherited when omitted and replaced by property name when present. When the default folder index declares a custom tab, its translation may replace only `tab.label`; omitting that label uses the translated page title. Set the YAML boolean `publish: false` on a translation to disable only that translation and serve the default-language fallback at its localized URL. Property wiki links resolve inside the active locale, including a locale-prefixed fallback URL when the target has no physical translation.
 
 A translated Portfolio wrapper may select its own `github_markdown` file or provide a local body. The remote property does not carry into a physical translation that supplies its own content. When the translated wrapper is absent, the ordinary fallback page uses the default-language project and its imported body. See [[Portfolio#Import a GitHub Markdown file|Portfolio]] for the source contract.
 
-Structural properties belong to the default note. This includes `permalink`, `content_type`, `date`, `created`, `updated`, `pinned`, `nav_order`, `nav_exclude`, `aliases`, and `comments`. Omit these properties from the translation; if present, they must exactly match the default value. Always omit `navigation.order` and `navigation.visible` from a translation because any attempt to set them is rejected. A post without `date` or `created` inherits the default note's Git-derived publication date. `updated` is never derived from Git; omit it unless the default note declares an explicit update date. Committing only a translation therefore changes neither post chronology nor the Blog order.
+Structural properties belong to the default note. This includes `permalink`, `content_type`, `date`, `created`, `updated`, `pinned`, `nav_order`, `nav_exclude`, `aliases`, `comments`, and `tabs`. Omit these properties from the translation; if present, they must exactly match the default value. Always omit `tab.id`, `tab.order`, and `tab.topics` from a translation because any attempt to set them is rejected. A post without `date` or `created` inherits the default note's Git-derived publication date. `updated` is never derived from Git; omit it unless the default note declares an explicit update date. Committing only a translation therefore changes neither post chronology nor the Blog order.
 
 ## Understand localized URLs and resources
 
@@ -119,7 +119,7 @@ Binary attachments remain shared in the default content tree. Do not put locale-
 
 ## Handle missing translations
 
-When a note has no translation, the build still succeeds and the compiler creates its locale-prefixed URL. A missing translation is not a warning or an error. The page shows a localized missing-translation notice and displays the default-language content. The authored content retains the default language and text direction, including when the surrounding locale is right-to-left.
+When a note has no translation, the build still succeeds and the compiler creates its locale-prefixed URL. A missing translation is not a warning or an error. The page briefly shows a localized missing-translation notice and displays the default-language content. The authored content retains the default language and text direction, including when the surrounding locale is right-to-left.
 
 A fallback page has a canonical link to the default page and a `noindex` directive. It is omitted from the sitemap and from reciprocal `hreflang` groups. The language switcher can still link to it, which keeps the localized navigation complete while making the SEO boundary explicit.
 

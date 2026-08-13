@@ -124,10 +124,6 @@ website:
       label: Work
       order: 30
       visible: true
-    folders:
-      - path: team
-        label: Team
-        order: 40
 ```
 
 The Portfolio path is relative to `website.source`; an explicit path replaces the default `portfolio` path. Published Markdown descendants become Portfolio pages, so an explicit `content_type` within that path must be `page`. A public `<path>/index.md` keeps its authored introduction above the project grid. When it is absent, the compiler generates the Portfolio index at that route. The index itself is not a project. Projects with `pinned: true` appear first; each group is then ordered by `nav_order`, title, and path. Set `nav_exclude: true` on a project to omit its card, or set `website.navigation.portfolio.visible: false` to hide only the tab while keeping the Portfolio index and project pages public.
@@ -136,22 +132,39 @@ Each project card uses its `image`, title, and `description`, falling back to a 
 
 A project can replace its local body with a public GitHub Markdown file by setting `github_markdown`. The local wrapper continues to own card metadata and its route, while the resolved remote body supplies the detail page, outline, Search text, preview, and Markdown endpoint. See [[Portfolio|Portfolio]] for the accepted URL and mapping forms, empty-body rule, branch refresh behavior, content limits, relative URLs, localization, and security boundary.
 
-A custom folder path is also relative to `website.source`, but selects published pages whose effective `content_type` is `page`. Its public `index.md` is the tab destination when present; otherwise the tab opens the first visible page after `nav_order`, title, and path sorting. A folder label defaults to its index title when present, then to a readable form of its last path segment. Custom folder order defaults to `100`, and `visible` defaults to `true`. Ordinary folders never become tabs unless listed here. A custom folder cannot reuse the active Portfolio path.
+## Custom tabs
 
-A public standalone page can opt into the same navigation directly from frontmatter:
+Minimal and Docs use the same custom-tab contract. Declare a tab on a published folder `index.md`; that note remains the canonical tab homepage, and its authored body appears above the generated member cards:
 
 ```yaml
 ---
 publish: true
 content_type: page
-navigation:
-  label: About
-  order: 15
-  visible: true
+tab:
+  id: favorites
+  label: Favorites
+  order: 40
+  topics:
+    - favorite
+    - reference
 ---
 ```
 
-The label defaults to the page title, the order defaults to `100`, and visibility defaults to `true`. Only a published note whose effective content type is `page` may declare `navigation`. Duplicate sources or targets, reserved built-in conflicts, invalid paths, and folders without a visible destination fail the build. A translation may replace `navigation.label`; the default-language page owns `order` and `visible`.
+`id` is required and must be a lowercase ASCII identifier such as `favorites` or `team-work`; `home`, `blog`, `docs`, and `portfolio` are reserved. The label defaults to the localized index title, and order defaults to `100`. A custom tab is always visible. Its root must be a visible `content_type: page` folder index and cannot sit inside the active Portfolio path.
+
+Members are the union of three sources: every published descendant of the tab folder, any published note that names the tab in `tabs`, and any published note whose `tags` or `categories` match one of the tab's `topics`. Multiple topics use OR matching after Unicode normalization and case folding. Add a page outside the folder without changing its route:
+
+```yaml
+---
+publish: true
+tabs:
+  - favorites
+---
+```
+
+Membership is additional: a Blog post remains active under Blog, a documentation page remains active under Docs, and a Portfolio page remains active under Portfolio. Only ordinary page descendants use the custom tab as their active navigation item; the deepest nested custom root wins. Cards are de-duplicated and sorted by `pinned`, then `nav_order`, localized title, and source path. `nav_exclude: true` removes a folder or topic match and cannot be combined with `tabs`. An empty topic result is valid and leaves only the authored index body.
+
+Duplicate IDs, labels, or destinations, unknown `tabs` references, invalid roots, and reserved conflicts fail the build. Notes keep one canonical URL even when several tabs include them; custom tabs never create redirects or duplicate Search, feed, or sitemap entries.
 
 Tabs that do not fit the desktop header move into an accessible More menu. The mobile Browse sheet and the Search dialog's quick navigation use the same ordered destinations and active state. Search narrows those quick links by their configured labels while it queries note content. Without JavaScript, the header links remain visible and wrap naturally. Opening Docs from Minimal keeps the Minimal site shell while adding the handbook tree, page outline, and previous or next links.
 
@@ -241,7 +254,7 @@ website:
       - zh-CN
 ```
 
-Add `enabled: true` inside `i18n` for Minimal; add `enabled: false` to keep a configured Docs locale plan dormant. Keep the default language in the normal content tree. Put translated notes at the same relative path below `_translations/<locale>/`. A translation inherits the publication state of its public default-language note; set `publish: false` on the translation to show the existing default-language fallback instead. Every configured locale requires `_locale.yml` at its locale root; `name` is required, while `hreflang`, `dir`, and the closed `messages` catalog are optional. A missing or disabled translation does not fail the build. It keeps its localized URL, shows the default-language content with a notice, and is excluded from search-engine indexing and the sitemap.
+Add `enabled: true` inside `i18n` for Minimal; add `enabled: false` to keep a configured Docs locale plan dormant. Keep the default language in the normal content tree. Put translated notes at the same relative path below `_translations/<locale>/`. A translation inherits the publication state of its public default-language note; set `publish: false` on the translation to show the existing default-language fallback instead. Every configured locale requires `_locale.yml` at its locale root; `name` is required, while `hreflang`, `dir`, and the closed `messages` catalog are optional. A missing or disabled translation does not fail the build. It keeps its localized URL, briefly shows a notice over the default-language content, and is excluded from search-engine indexing and the sitemap.
 
 ```yaml
 name: 简体中文
@@ -272,7 +285,7 @@ The compiler reserves these note properties for publication behavior and validat
 - `publish`, `title`, `subtitle`, `aliases`, `tags`, `author`, `categories`, and `description`
 - `permalink`, `image`, and `cssclasses`
 - `created` and `updated`
-- `content_type`, `date`, `pinned`, `nav_order`, `nav_exclude`, and `navigation`
+- `content_type`, `date`, `pinned`, `nav_order`, `nav_exclude`, `tab`, and `tabs`
 - `comments`, `github_markdown`, and `related`
 
 Other top-level properties may contain scalar values or flat scalar lists. Custom property names must be normalized, single-line text without leading or trailing whitespace. A complete wiki link in one of those values becomes an ordinary note relation when it is a YAML double-quoted string. Custom properties remain compiler metadata: their keys and raw values never flow into Liquid, HTML, feeds, or generated JSON.
@@ -289,7 +302,7 @@ related:
 
 `related` is the curated list variant. It accepts only a list of double-quoted wiki links, preserves the authored order, removes repeated targets, and shows the resolved pages as Recent-post-style cards at the bottom of the page. Broken related links fail a production build. Other custom-property links still join Direct links, Backlinks, and Graph data but do not create a second visible field table.
 
-`aliases`, `tags`, `author`, `categories`, and `cssclasses` are string arrays; `subtitle` is a string. `publish`, `pinned`, `nav_exclude`, and `comments` use YAML booleans. `navigation` is the closed mapping documented above. `github_markdown` accepts only the URL or mapping documented in [[Portfolio|Portfolio]], and only on a Portfolio project wrapper. Dates use ISO 8601. A note title comes from `title`, its first level-one heading, or its filename, in that order.
+`aliases`, `tags`, `author`, `categories`, `cssclasses`, and `tabs` are string arrays; `subtitle` is a string. `publish`, `pinned`, `nav_exclude`, and `comments` use YAML booleans. `tab` is the closed mapping documented above. `github_markdown` accepts only the URL or mapping documented in [[Portfolio|Portfolio]], and only on a Portfolio project wrapper. Dates use ISO 8601. A note title comes from `title`, its first level-one heading, or its filename, in that order.
 
 `updated` is optional and appears in page metadata only when the author supplies it; the compiler never infers an update date from Git. A post's publication time uses `date`, then `created`, then its first Git commit. Atom entries use explicit `updated` when present and otherwise use that publication time for posts. A non-post note without `updated` is omitted from the feed.
 

@@ -32,7 +32,7 @@ website:
       visible: true
 ```
 
-`path` is relative to `website.source` and may contain nested POSIX segments. An explicit path replaces `portfolio`; a missing or empty path leaves the collection off. Set `visible: false` to hide the built-in tab without removing the Portfolio index, project routes, or active scope. A custom folder navigation entry cannot reuse the active Portfolio path.
+`path` is relative to `website.source` and may contain nested POSIX segments. An explicit path replaces `portfolio`; a missing or empty path leaves the collection off. Set `visible: false` to hide the built-in tab without removing the Portfolio index, project routes, or active scope. A custom tab root cannot sit inside the active Portfolio path; Portfolio pages can still join an outside custom tab through `tabs` or a topic match without changing their active Portfolio ownership.
 
 Docs validates the Portfolio configuration but does not create a tab, collection index, or project grid. Notes under that path keep their ordinary Docs classification.
 

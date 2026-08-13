@@ -116,10 +116,6 @@ website:
       label: Work
       order: 30
       visible: true
-    folders:
-      - path: team
-        label: Team
-        order: 40
 ```
 
 作品集路径相对于 `website.source`；显式路径会取代默认的 `portfolio`。该路径下的已发布 Markdown 后代统一变成作品集页面，因此其中显式设置的 `content_type` 必须为 `page`。公开的 `<path>/index.md` 会在项目网格上方保留自定义介绍；没有索引时，编译器会在该路由生成作品集索引。索引本身不算项目。设置了 `pinned: true` 的项目排在最前；置顶组和普通组内部再依次按 `nav_order`、标题和路径排序。项目设置 `nav_exclude: true` 后不会显示卡片；设置 `website.navigation.portfolio.visible: false` 只会隐藏标签页，作品集索引和项目页面仍然公开。
@@ -128,22 +124,39 @@ website:
 
 项目可以通过 `github_markdown` 将本地正文替换为公开的 GitHub Markdown 文件。本地项目页继续管理卡片元数据和路由，解析后的远程正文则用于详情页、大纲、Search 文本、预览和 Markdown 端点。接受的 URL 与映射格式、空正文规则、分支刷新、内容上限、相对 URL、本地化和安全边界详见 [[Portfolio|作品集]]。
 
-自定义文件夹路径同样相对于 `website.source`，但它只选择有效 `content_type` 为 `page` 的已发布页面。存在公开 `index.md` 时，该索引是标签页目标；没有索引时，标签页会打开依次按 `nav_order`、标题和路径排序的第一个可见页面。文件夹标签优先使用索引标题，否则使用最后一个路径片段的可读形式。自定义文件夹默认顺序为 `100`，`visible` 默认为 `true`。普通文件夹只有在此处列出后才会成为标签页。自定义文件夹不能重复使用当前作品集路径。
+## 自定义标签页
 
-公开独立页面也可以通过 frontmatter 加入同一导航：
+Minimal 与 Docs 使用同一套自定义标签页契约。在已发布文件夹的 `index.md` 上声明标签页；该笔记仍是标签页的 canonical 主页，其正文显示在自动生成的成员卡片之前：
 
 ```yaml
 ---
 publish: true
 content_type: page
-navigation:
-  label: About
-  order: 15
-  visible: true
+tab:
+  id: favorites
+  label: 收藏
+  order: 40
+  topics:
+    - favorite
+    - reference
 ---
 ```
 
-标签默认使用页面标题，顺序默认为 `100`，可见性默认为 `true`。只有有效内容类型为 `page` 的已发布笔记才能声明 `navigation`。来源或目标重复、与保留的内置项目冲突、路径无效，以及文件夹中没有可见目标都会让构建失败。译文可以替换 `navigation.label`；`order` 与 `visible` 由默认语言页面管理。
+`id` 必填，并且必须是 `favorites`、`team-work` 这类小写 ASCII 标识符；`home`、`blog`、`docs` 和 `portfolio` 已保留。标签默认使用本地化后的索引标题，顺序默认为 `100`。自定义标签页始终可见。其根必须是可见的 `content_type: page` 文件夹索引，且不能位于当前 Portfolio 路径内。
+
+成员取三类来源的并集：标签页文件夹下所有已发布后代、通过 `tabs` 指定该标签页的已发布笔记，以及 `tags` 或 `categories` 与标签页任一 `topics` 匹配的已发布笔记。多个 topic 使用 OR 关系，并在 Unicode 规范化和大小写折叠后精确匹配。文件夹外的页面可在不改变路由的情况下加入：
+
+```yaml
+---
+publish: true
+tabs:
+  - favorites
+---
+```
+
+成员关系只用于额外展示：文章仍在 Blog 下激活，文档仍在 Docs 下激活，作品集页面仍在 Portfolio 下激活。只有普通页面后代会激活自定义标签页；存在嵌套根时，以最深层根为准。卡片会去重，并依次按 `pinned`、`nav_order`、本地化标题和源路径排序。`nav_exclude: true` 会移除文件夹或 topic 匹配结果，且不能与 `tabs` 同时使用。topic 没有匹配项是有效状态，此时只显示索引正文。
+
+ID、标签或目标重复，`tabs` 引用未知标签页，根无效或与保留项冲突，都会让构建失败。即使一个页面加入多个标签页，它也只保留一个 canonical URL；自定义标签页不会创建重定向，也不会在 Search、订阅源或 sitemap 中复制页面。
 
 桌面标题栏放不下的标签页会进入无障碍 More 菜单。移动端 Browse 面板和 Search 对话框的快速导航会复用同一组有序目标和激活状态。Search 会按配置标签筛选快速链接，同时查询笔记正文。没有 JavaScript 时，标题栏链接仍然可见，并会自然换行。从 Minimal 打开 Docs 时会保留 Minimal 站点外壳，同时加入手册目录、页面大纲及上一篇或下一篇链接。
 
@@ -233,7 +246,7 @@ website:
       - zh-CN
 ```
 
-Minimal 需要在 `i18n` 下添加 `enabled: true`；Docs 可以通过 `enabled: false` 暂停已经配置的语言方案。默认语言保留在普通内容树中。其他语言的笔记放在 `_translations/<locale>/` 下相同的相对路径中。译文继承公开默认语言笔记的发布状态；设置 `publish: false` 后，该语言 URL 会显示现有的默认语言回退内容。每个配置的语言都需要在其根目录提供 `_locale.yml`。`name` 为必填项；`hreflang`、`dir` 和封闭的 `messages` 目录可选。译文缺失或停用不会让构建失败。对应本地化 URL 会显示默认语言正文和提示，并从搜索引擎索引与站点地图中排除。
+Minimal 需要在 `i18n` 下添加 `enabled: true`；Docs 可以通过 `enabled: false` 暂停已经配置的语言方案。默认语言保留在普通内容树中。其他语言的笔记放在 `_translations/<locale>/` 下相同的相对路径中。译文继承公开默认语言笔记的发布状态；设置 `publish: false` 后，该语言 URL 会显示现有的默认语言回退内容。每个配置的语言都需要在其根目录提供 `_locale.yml`。`name` 为必填项；`hreflang`、`dir` 和封闭的 `messages` 目录可选。译文缺失或停用不会让构建失败。对应本地化 URL 会在默认语言正文上短暂显示提示，并从搜索引擎索引与站点地图中排除。
 
 ```yaml
 name: 简体中文
@@ -264,7 +277,7 @@ messages:
 - `publish`、`title`、`subtitle`、`aliases`、`tags`、`author`、`categories` 和 `description`
 - `permalink`、`image` 和 `cssclasses`
 - `created` 和 `updated`
-- `content_type`、`date`、`pinned`、`nav_order`、`nav_exclude` 和 `navigation`
+- `content_type`、`date`、`pinned`、`nav_order`、`nav_exclude`、`tab` 和 `tabs`
 - `comments`、`github_markdown` 和 `related`
 
 其他顶层属性可以使用标量或一层标量列表。自定义属性名必须是经过规范化的单行文本，且不能带首尾空白。其中完整的 Wiki 链接只有写成 YAML 双引号字符串时，才会成为普通笔记关系。自定义属性只属于编译器元数据；属性名和原始值不会进入 Liquid、HTML、Feed 或生成的 JSON。
@@ -281,7 +294,7 @@ related:
 
 `related` 是用于精选列表的专用字段。它只接受双引号 Wiki 链接列表，保留书写顺序并去除重复目标，在页面底部以「最新文章」相同的卡片样式显示。生产构建会拒绝断开的相关文章链接。其他自定义属性链接仍会进入直接链接、反向链接和关系图，但不会额外生成一张可见属性表。
 
-`aliases`、`tags`、`author`、`categories` 和 `cssclasses` 是字符串数组，`subtitle` 是字符串。`publish`、`pinned`、`nav_exclude` 和 `comments` 使用 YAML 布尔值。`navigation` 是前文说明的封闭映射。`github_markdown` 只接受 [[Portfolio|作品集]]中说明的 URL 或映射形式，并且只能用于作品集项目页。日期使用 ISO 8601。笔记标题依次取自 `title`、第一个一级标题和文件名。
+`aliases`、`tags`、`author`、`categories`、`cssclasses` 和 `tabs` 是字符串数组，`subtitle` 是字符串。`publish`、`pinned`、`nav_exclude` 和 `comments` 使用 YAML 布尔值。`tab` 是前文说明的封闭映射。`github_markdown` 只接受 [[Portfolio|作品集]]中说明的 URL 或映射形式，并且只能用于作品集项目页。日期使用 ISO 8601。笔记标题依次取自 `title`、第一个一级标题和文件名。
 
 `updated` 可选，只有作者明确提供时才会出现在页面元数据中；编译器不会从 Git 推导更新时间。文章发布时间依次使用 `date`、`created` 和第一次 Git 提交时间。Atom 条目优先使用显式 `updated`；未提供时，文章沿用其发布时间。没有 `updated` 的非文章笔记不会进入订阅源。
 
