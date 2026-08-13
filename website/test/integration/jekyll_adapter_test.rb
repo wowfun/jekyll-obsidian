@@ -535,10 +535,12 @@ class JekyllAdapterTest < Minitest::Test
   end
 
   def test_search_navigation_uses_the_same_compiler_owned_items_as_the_header
-    File.write(File.join(@temporary_root, "vault", "about.md"), <<~MARKDOWN)
+    FileUtils.mkdir_p(File.join(@temporary_root, "vault", "about"))
+    File.write(File.join(@temporary_root, "vault", "about", "index.md"), <<~MARKDOWN)
       ---
       publish: true
-      navigation:
+      tab:
+        id: company
         label: Company
         order: 15
       ---
@@ -559,7 +561,48 @@ class JekyllAdapterTest < Minitest::Test
     end
 
     assert_equal header, search
-    assert_includes search, ["page:about.md", "/about/", "Company", nil]
+    assert_includes search, ["company", "/about/", "Company", nil]
+  end
+
+  def test_custom_tab_renders_the_same_canonical_member_cards_in_both_themes
+    favorites = File.join(@temporary_root, "vault", "favorites")
+    FileUtils.mkdir_p(favorites)
+    File.write(File.join(favorites, "index.md"), <<~MARKDOWN)
+      ---
+      publish: true
+      tab:
+        id: favorites
+        topics:
+          - favorite
+      ---
+      # Favorites
+
+      Authored introduction.
+    MARKDOWN
+    File.write(
+      File.join(favorites, "inside.md"),
+      "---\npublish: true\ndescription: From the folder\n---\n# Inside"
+    )
+    File.write(
+      File.join(@temporary_root, "vault", "outside.md"),
+      "---\npublish: true\ntags:\n  - favorite\n---\n# Outside"
+    )
+    install_project_layout
+
+    %w[minimal docs].each do |theme|
+      build_site("website" => website_config.merge("theme" => theme)).process
+      document = Nokogiri::HTML5.parse(File.read(File.join(destination, "favorites", "index.html")))
+      links = document.css(".tab-collection .minimal-post-card h2 a")
+      assert_equal ["Inside", "Outside"], links.map(&:text), theme
+      assert_equal ["/favorites/inside/", "/outside/"], links.map { |link| link["href"] }, theme
+      assert_equal "From the folder", document.at_css(".tab-collection .minimal-post-card__excerpt").text
+
+      article = document.at_css(theme == "minimal" ? ".minimal-entry" : ".docs-article")
+      children = article.element_children
+      note_content = children.find { |child| child["class"].to_s.split.include?("note-content") }
+      collection = children.find { |child| child["class"].to_s.split.include?("tab-collection") }
+      assert_operator children.index(note_content), :<, children.index(collection), theme
+    end
   end
 
   def test_host_docs_source_is_compiled_without_entering_the_reader

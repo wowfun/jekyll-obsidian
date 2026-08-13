@@ -297,7 +297,7 @@
     border-block-end: 1px solid var(--line);
   }
 
-  .minimal-post-card:has(h3 a:focus-visible) {
+  .minimal-post-card:has(:is(h2, h3) a:focus-visible) {
     border-radius: 0.2rem;
     box-shadow: var(--focus-ring);
   }
@@ -322,29 +322,29 @@
     object-fit: cover;
   }
 
-  .minimal-post-card h3 {
+  .minimal-post-card :is(h2, h3) {
     position: static;
     margin: 0;
     font-size: clamp(1.15rem, 2.2vw, 1.42rem);
     line-height: 1.28;
   }
 
-  .minimal-post-card h3 a {
+  .minimal-post-card :is(h2, h3) a {
     color: var(--ink);
     text-decoration: none;
   }
 
-  .minimal-post-card h3 a:hover {
+  .minimal-post-card :is(h2, h3) a:hover {
     color: var(--violet);
   }
 
-  .minimal-post-card h3 a::after {
+  .minimal-post-card :is(h2, h3) a::after {
     position: absolute;
     inset: 0;
     content: "";
   }
 
-  .minimal-post-card h3 a:focus-visible {
+  .minimal-post-card :is(h2, h3) a:focus-visible {
     box-shadow: none;
   }
 

@@ -34,7 +34,7 @@
 
       <div class="minimal-reading-column" data-docs-main>
         <article class="minimal-entry{% if page.website.cssclasses %} {{ page.website.cssclasses | join: ' ' }}{% endif %}">
-          {% if page.website.i18n.fallback %}<aside class="translation-fallback" role="note">{{ ui.translation_missing | default: 'This page is not translated yet. The default-language version is shown.' | escape }}</aside>{% endif %}
+          {% if page.website.i18n.fallback %}<aside class="translation-fallback" role="status">{{ ui.translation_missing | default: 'This page is not translated yet. The default-language version is shown.' | escape }}</aside>{% endif %}
           {% unless page.website.has_h1 %}{% include website/page-actions.html %}{% endunless %}
           {% include website/note-header.html %}
           {% if page.website.has_h1 %}{% include website/page-actions.html %}{% endif %}
@@ -44,6 +44,7 @@
               {% unless is_authored_home %}{% include website/system-page.html %}{% endunless %}
             {% endunless %}
           </div>
+          {% if page.website.kind == 'note' and page.website.theme_data.tab_id %}{% include website/tab-collection.html %}{% endif %}
           {% if page.website.kind == 'note' and page.website.theme_data.portfolio_projects.size > 0 %}{% include website/portfolio-grid.html %}{% endif %}
           {% if page.website.kind == 'note' or is_authored_home %}{% include website/source-actions.html %}{% endif %}
           {% if page.website.kind == 'note' or is_authored_home %}{% include website/related-articles.html %}{% endif %}

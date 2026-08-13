@@ -380,14 +380,38 @@
   }
 
   .translation-fallback {
-    margin-block-end: 1.5rem;
+    position: fixed;
+    z-index: 40;
+    inset-inline: 1rem;
+    inset-block-end: calc(1rem + env(safe-area-inset-bottom, 0px));
+    inline-size: fit-content;
+    max-inline-size: min(32rem, calc(100% - 2rem));
     padding: 0.8rem 1rem;
     border-inline-start: 3px solid var(--violet);
     border-radius: 0.25rem;
+    margin-inline: auto;
     background: color-mix(in srgb, var(--violet) 8%, var(--surface));
+    box-shadow: var(--shadow);
     color: var(--ink);
     font-family: var(--font-ui);
     font-size: 0.78rem;
+    pointer-events: none;
+    animation: translation-fallback-notice 5s ease-in forwards;
+  }
+
+  @keyframes translation-fallback-notice {
+    0%,
+    90% {
+      visibility: visible;
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    100% {
+      visibility: hidden;
+      opacity: 0;
+      transform: translateY(0.4rem);
+    }
   }
 
   .site-footer {
@@ -444,6 +468,7 @@
   :is(.minimal-entry, .docs-article) > :where(
     .note-header,
     .source-actions,
+    .tab-collection,
     .related-articles,
     .website-comments
   ),
@@ -882,59 +907,59 @@
     vertical-align: middle;
   }
 
-  .theme-docs .related-articles {
+  .theme-docs :is(.related-articles, .tab-collection) {
     margin-block-start: clamp(3rem, 7vw, 5rem);
   }
 
-  .theme-docs .related-articles .minimal-section-heading {
+  .theme-docs :is(.related-articles, .tab-collection) .minimal-section-heading {
     padding-block-end: 0.8rem;
     border-block-end: 1px solid var(--line-strong);
   }
 
-  .theme-docs .related-articles .minimal-section-heading h2 {
+  .theme-docs :is(.related-articles, .tab-collection) .minimal-section-heading h2 {
     margin: 0;
     font-family: var(--font-article);
     font-size: clamp(1.35rem, 2.7vw, 1.75rem);
   }
 
-  .theme-docs .related-articles .minimal-recent__grid {
+  .theme-docs :is(.related-articles, .tab-collection) .minimal-recent__grid {
     display: grid;
     grid-template-columns: minmax(0, 1fr);
   }
 
-  .theme-docs .related-articles .minimal-post-card {
+  .theme-docs :is(.related-articles, .tab-collection) .minimal-post-card {
     position: relative;
     min-inline-size: 0;
     padding-block: clamp(1.5rem, 3vw, 2rem);
     border-block-end: 1px solid var(--line);
   }
 
-  .theme-docs .related-articles .minimal-post-card:has(h3 a:focus-visible) {
+  .theme-docs :is(.related-articles, .tab-collection) .minimal-post-card:has(:is(h2, h3) a:focus-visible) {
     border-radius: 0.2rem;
     box-shadow: var(--focus-ring);
   }
 
-  .theme-docs .related-articles .minimal-post-card--with-image {
+  .theme-docs :is(.related-articles, .tab-collection) .minimal-post-card--with-image {
     display: grid;
     grid-template-columns: minmax(10rem, 14rem) minmax(0, 1fr);
     align-items: center;
     gap: clamp(1.25rem, 3vw, 2rem);
   }
 
-  .theme-docs .related-articles .minimal-post-card__media {
+  .theme-docs :is(.related-articles, .tab-collection) .minimal-post-card__media {
     display: block;
     aspect-ratio: 16 / 9;
     overflow: hidden;
     background: var(--surface);
   }
 
-  .theme-docs .related-articles .minimal-post-card__media img {
+  .theme-docs :is(.related-articles, .tab-collection) .minimal-post-card__media img {
     inline-size: 100%;
     block-size: 100%;
     object-fit: cover;
   }
 
-  .theme-docs .related-articles .minimal-post-card h3 {
+  .theme-docs :is(.related-articles, .tab-collection) .minimal-post-card :is(h2, h3) {
     position: static;
     margin: 0;
     font-family: var(--font-article);
@@ -943,37 +968,37 @@
     overflow-wrap: anywhere;
   }
 
-  .theme-docs .related-articles .minimal-post-card h3 a {
+  .theme-docs :is(.related-articles, .tab-collection) .minimal-post-card :is(h2, h3) a {
     color: var(--ink);
     text-decoration: none;
   }
 
-  .theme-docs .related-articles .minimal-post-card h3 a::after {
+  .theme-docs :is(.related-articles, .tab-collection) .minimal-post-card :is(h2, h3) a::after {
     position: absolute;
     inset: 0;
     content: "";
   }
 
-  .theme-docs .related-articles .minimal-post-card h3 a:focus-visible {
+  .theme-docs :is(.related-articles, .tab-collection) .minimal-post-card :is(h2, h3) a:focus-visible {
     box-shadow: none;
   }
 
-  .theme-docs .related-articles .minimal-post-card__subtitle,
-  .theme-docs .related-articles .minimal-post-card__excerpt {
+  .theme-docs :is(.related-articles, .tab-collection) .minimal-post-card__subtitle,
+  .theme-docs :is(.related-articles, .tab-collection) .minimal-post-card__excerpt {
     margin: 0.6rem 0 0;
     color: var(--ink);
     font-size: 0.9rem;
     line-height: 1.62;
   }
 
-  .theme-docs .related-articles .minimal-post-card footer {
+  .theme-docs :is(.related-articles, .tab-collection) .minimal-post-card footer {
     margin-block-start: 0.75rem;
     color: var(--graphite);
     font-size: 0.7rem;
     font-variant-numeric: tabular-nums;
   }
 
-  .theme-docs .related-articles .minimal-post-card footer a {
+  .theme-docs :is(.related-articles, .tab-collection) .minimal-post-card footer a {
     position: relative;
     z-index: 1;
     color: inherit;
@@ -1321,6 +1346,21 @@
     line-height: 1;
     text-decoration: none;
     white-space: nowrap;
+  }
+
+  .tab-collection__topics {
+    display: flex;
+    flex-wrap: wrap;
+    margin: 0.8rem 0 0;
+    padding: 0;
+    list-style: none;
+    gap: 0.4rem;
+  }
+
+  .tab-collection__topics li,
+  .tab-collection__topics .tag-chip {
+    position: relative;
+    z-index: 1;
   }
 
   .tag-chip[href]:hover {
@@ -2348,6 +2388,10 @@
 }
 
 @media (max-width: 880px) {
+  .translation-fallback {
+    inset-block-end: calc(max(0.7rem, env(safe-area-inset-bottom)) + 4rem);
+  }
+
   .site-header__inner {
     min-block-size: 3.6rem;
   }
@@ -2492,7 +2536,7 @@
 }
 
 @media (max-width: 520px) {
-  .theme-docs .related-articles .minimal-post-card--with-image {
+  .theme-docs :is(.related-articles, .tab-collection) .minimal-post-card--with-image {
     grid-template-columns: minmax(0, 1fr);
   }
 
@@ -2561,6 +2605,10 @@
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
   }
+
+  .translation-fallback {
+    animation-timing-function: steps(1, end);
+  }
 }
 
 @media (forced-colors: active) {
@@ -2603,6 +2651,14 @@
   .website-external-frame__viewport,
   .website-tweet__mount {
     display: none !important;
+  }
+
+  .translation-fallback {
+    position: static;
+    max-inline-size: none;
+    margin-block-end: 1.5rem;
+    box-shadow: none;
+    animation: none;
   }
 
   .minimal-shell,

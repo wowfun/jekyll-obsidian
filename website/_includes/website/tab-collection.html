@@ -1,0 +1,28 @@
+{% assign members = page.website.theme_data.tab_members %}
+{% if members.size > 0 %}
+  <section class="tab-collection minimal-recent" aria-label="{{ page.title | escape }}">
+    <div class="minimal-recent__grid">
+      {% for member in members %}
+        <article class="minimal-post-card{% if member.image %} minimal-post-card--with-image{% endif %}">
+          {% if member.image %}<div class="minimal-post-card__media"><img src="{{ member.image | escape }}" alt="" loading="lazy" decoding="async"></div>{% endif %}
+          <div class="minimal-post-card__body">
+            <h2><a href="{{ member.url | escape }}">{{ member.title | escape }}</a></h2>
+            {% if member.subtitle %}<p class="minimal-post-card__subtitle">{{ member.subtitle | escape }}</p>{% endif %}
+            {% if member.summary and member.summary != '' %}<p class="minimal-post-card__excerpt">{{ member.summary | escape }}</p>{% endif %}
+            {% if member.topics.size > 0 %}
+              <ul class="tab-collection__topics" aria-label="{{ ui.topics | default: 'Topics' | escape }}">
+                {% for topic in member.topics %}<li>{% if topic.url %}<a class="tag-chip" href="{{ topic.url | escape }}">{{ topic.name | escape }}</a>{% else %}<span class="tag-chip">{{ topic.name | escape }}</span>{% endif %}</li>{% endfor %}
+              </ul>
+            {% endif %}
+            {% if member.authors.size > 0 or member.published_at %}
+              <footer>
+                {% if member.authors.size > 0 %}<span>{{ ui.posted_by | default: 'Posted by' | escape }} {% for author in member.authors %}{% if author.url %}<a href="{{ author.url | escape }}">{{ author.name | escape }}</a>{% else %}{{ author.name | escape }}{% endif %}{% unless forloop.last %}, {% endunless %}{% endfor %}{% if member.published_at %} {{ ui.on | default: 'on' | escape }} {% endif %}</span>{% endif %}
+                {% if member.published_at %}<time datetime="{{ member.published_at | escape }}">{% unless member.authors.size > 0 %}{{ ui.published | default: 'Published' | escape }} {% endunless %}{{ member.published_at | date: "%Y-%m-%d" }}</time>{% endif %}
+              </footer>
+            {% endif %}
+          </div>
+        </article>
+      {% endfor %}
+    </div>
+  </section>
+{% endif %}

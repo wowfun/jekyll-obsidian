@@ -2258,7 +2258,20 @@ test("localized docs language navigation and fallback metadata remain correct", 
     .toHaveAttribute("href", "https://github.com/wowfun/jekyll-obsidian");
 
   await page.goto(localizedDocs("/zh-CN/docs/Architecture/"));
-  await expect(page.locator(".translation-fallback")).toContainText("本页尚无译文");
+  const fallbackNotice = page.locator(".translation-fallback");
+  await expect(fallbackNotice).toBeVisible();
+  await expect(fallbackNotice).toContainText("本页尚无译文");
+  const mobileToolbar = page.locator(".mobile-toolbar");
+  if (await mobileToolbar.isVisible()) {
+    const [noticeBox, toolbarBox] = await Promise.all([
+      fallbackNotice.boundingBox(),
+      mobileToolbar.boundingBox(),
+    ]);
+    expect(noticeBox).not.toBeNull();
+    expect(toolbarBox).not.toBeNull();
+    expect(noticeBox!.y + noticeBox!.height).toBeLessThanOrEqual(toolbarBox!.y);
+  }
+  await expect(fallbackNotice).toBeHidden({ timeout: 7_000 });
   await expect(page.locator(".note-content")).toHaveAttribute("lang", "en");
   await expect(page.locator('meta[name="robots"]')).toHaveAttribute("content", "noindex");
   await expect(page.locator('link[rel="alternate"][hreflang]')).toHaveCount(0);
