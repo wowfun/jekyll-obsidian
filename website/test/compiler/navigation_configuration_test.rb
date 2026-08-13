@@ -5,56 +5,60 @@ require "test_helper"
 class NavigationConfigurationTest < Minitest::Test
   I18N = { "locales" => %w[en zh-CN] }.freeze
 
-  def test_frontmatter_navigation_is_an_explicit_strict_mapping
-    parsed = JekyllObsidian::FrontMatter.parse("about.md", <<~MARKDOWN)
+  def test_frontmatter_tab_is_an_explicit_strict_mapping
+    parsed = JekyllObsidian::FrontMatter.parse("about/index.md", <<~MARKDOWN)
       ---
       publish: true
-      navigation:
+      tab:
+        id: about
         label: About us
         order: 15
-        visible: false
+        topics:
+          - profile
       ---
       # About
     MARKDOWN
 
     assert_empty parsed.diagnostics
     assert_equal(
-      { "label" => "About us", "order" => 15, "visible" => false },
-      parsed.properties.fetch("navigation")
+      { "id" => "about", "label" => "About us", "order" => 15, "topics" => ["profile"] },
+      parsed.properties.fetch("tab")
     )
 
     opted_in = JekyllObsidian::FrontMatter.parse(
-      "projects.md",
-      "---\npublish: true\nnavigation: {}\n---\n# Projects"
+      "projects/index.md",
+      "---\npublish: true\ntab: {}\n---\n# Projects"
     )
-    assert opted_in.properties.key?("navigation")
-    assert_equal({}, opted_in.properties.fetch("navigation"))
+    assert opted_in.properties.key?("tab")
+    assert_equal({}, opted_in.properties.fetch("tab"))
   end
 
-  def test_frontmatter_navigation_rejects_unknown_keys_and_invalid_types
-    parsed = JekyllObsidian::FrontMatter.parse("about.md", <<~MARKDOWN)
+  def test_frontmatter_tab_rejects_unknown_keys_and_invalid_types
+    parsed = JekyllObsidian::FrontMatter.parse("about/index.md", <<~MARKDOWN)
       ---
       publish: true
-      navigation:
+      tab:
+        id: About!
         label: 7
         order: first
-        visible: "yes"
+        topics: profile
         href: /elsewhere/
       ---
       # About
     MARKDOWN
 
     messages = parsed.diagnostics.select { |item| item.code == "invalid_property" }.map(&:message)
-    assert_includes messages, 'unknown navigation setting "href"'
-    assert_includes messages, "navigation.label must be a non-empty string containing only output-safe Unicode characters"
-    assert_includes messages, "navigation.order must be an integer"
-    assert_includes messages, "navigation.visible must be a YAML boolean"
+    assert_includes messages, 'unknown tab setting "href"'
+    assert_includes messages, "tab.id must be a lowercase ASCII identifier"
+    assert_includes messages, "tab.label must be a non-empty string containing only output-safe Unicode characters"
+    assert_includes messages, "tab.order must be an integer"
+    assert_includes messages, "tab.topics must be an array of non-empty strings"
 
     scalar = JekyllObsidian::FrontMatter.parse(
-      "about.md",
-      "---\npublish: true\nnavigation: About\n---\n# About"
+      "about/index.md",
+      "---\npublish: true\ntab: About\n---\n# About"
     )
-    assert scalar.diagnostics.any? { |item| item.message == "navigation must be a YAML mapping with string keys" }
+    assert scalar.diagnostics.any? { |item| item.message == "tab must be a YAML mapping with string keys" }
   end
 
   def test_site_navigation_defaults_are_fully_normalized_and_immutable
@@ -66,25 +70,19 @@ class NavigationConfigurationTest < Minitest::Test
         "home" => { "order" => 0, "visible" => true },
         "blog" => { "order" => 10, "visible" => true },
         "docs" => { "order" => 20, "visible" => true },
-        "portfolio" => { "path" => "portfolio", "order" => 30, "visible" => true },
-        "folders" => []
+        "portfolio" => { "path" => "portfolio", "order" => 30, "visible" => true }
       },
       navigation
     )
     assert navigation.frozen?
     assert navigation.fetch("home").frozen?
-    assert navigation.fetch("folders").frozen?
   end
 
-  def test_site_navigation_normalizes_builtin_overrides_and_folders
+  def test_site_navigation_normalizes_builtin_and_portfolio_overrides
     navigation, diagnostics = normalized_navigation(
       "home" => { "label" => "Start", "visible" => false },
       "blog" => { "order" => 30 },
-      "portfolio" => { "path" => "selected-work", "label" => "Work", "visible" => false },
-      "folders" => [
-        { "path" => "portfolio", "label" => "Work" },
-        { "path" => "projects/client", "order" => 45, "visible" => false }
-      ]
+      "portfolio" => { "path" => "selected-work", "label" => "Work", "visible" => false }
     )
 
     assert_empty diagnostics
@@ -95,13 +93,6 @@ class NavigationConfigurationTest < Minitest::Test
       { "path" => "selected-work", "order" => 30, "visible" => false, "label" => "Work" },
       navigation.fetch("portfolio")
     )
-    assert_equal(
-      [
-        { "path" => "portfolio", "order" => 100, "visible" => true, "label" => "Work" },
-        { "path" => "projects/client", "order" => 45, "visible" => false }
-      ],
-      navigation.fetch("folders")
-    )
   end
 
   def test_site_navigation_rejects_unknown_fields_invalid_types_and_unsafe_paths
@@ -110,14 +101,7 @@ class NavigationConfigurationTest < Minitest::Test
       "home" => { "label" => false, "order" => "first", "visible" => 1, "href" => "/" },
       "blog" => nil,
       "portfolio" => { "path" => "../work", "archive" => true },
-      "folders" => [
-        "portfolio",
-        { "label" => "Missing path" },
-        { "path" => "/absolute" },
-        { "path" => "projects/../private" },
-        { "path" => "projects\\client" },
-        { "path" => "valid", "extra" => true }
-      ]
+      "folders" => []
     )
 
     messages = diagnostics.select { |item| item.code == "invalid_navigation_config" }.map(&:message)
@@ -129,31 +113,29 @@ class NavigationConfigurationTest < Minitest::Test
     assert_includes messages, "website.navigation.blog must be a mapping with string keys"
     assert_includes messages, 'unknown website.navigation.portfolio setting "archive"'
     assert_includes messages, "website.navigation.portfolio.path must not contain empty or traversal segments"
-    assert_includes messages, "website.navigation.folders[0] must be a mapping with string keys"
-    assert_includes messages, "website.navigation.folders[1].path must be a string"
+    assert_includes messages, 'unknown website.navigation setting "folders"'
     assert_equal "portfolio", navigation.dig("portfolio", "path")
-    assert_equal ["valid"], navigation.fetch("folders").map { |item| item.fetch("path") }
   end
 
-  def test_translation_may_only_replace_a_default_page_navigation_label
+  def test_translation_may_only_replace_a_default_tab_label
     result = compile(
       note("index.md", "---\npublish: true\n---\n# Home"),
-      note("about.md", <<~MARKDOWN),
+      note("about/index.md", <<~MARKDOWN),
         ---
         publish: true
-        navigation:
+        tab:
+          id: about
           label: About
           order: 30
-          visible: false
         ---
         # About
       MARKDOWN
       locale_manifest("_locale.yml", "name: English\n"),
       locale_manifest("_translations/zh-CN/_locale.yml", "name: 简体中文\n"),
-      note("_translations/zh-CN/about.md", <<~MARKDOWN),
+      note("_translations/zh-CN/about/index.md", <<~MARKDOWN),
         ---
         publish: true
-        navigation:
+        tab:
           label: 关于
         ---
         # 关于
@@ -163,41 +145,41 @@ class NavigationConfigurationTest < Minitest::Test
     )
 
     assert result.success?, result.diagnostics.map(&:message).join("\n")
-    translated = result.notes.find { |item| item.id == "zh-CN:about.md" }
+    translated = result.notes.find { |item| item.id == "zh-CN:about/index.md" }
     assert_equal(
-      { "label" => "关于", "order" => 30, "visible" => false },
-      translated.properties.fetch("navigation")
+      { "id" => "about", "label" => "关于", "order" => 30 },
+      translated.properties.fetch("tab")
     )
   end
 
   def test_translation_cannot_opt_in_or_override_navigation_structure
     additions = compile(
       note("index.md", "---\npublish: true\n---\n# Home"),
-      note("about.md", "---\npublish: true\n---\n# About"),
+      note("about/index.md", "---\npublish: true\n---\n# About"),
       locale_manifest("_locale.yml", "name: English\n"),
       locale_manifest("_translations/zh-CN/_locale.yml", "name: 简体中文\n"),
-      note("_translations/zh-CN/about.md", "---\npublish: true\nnavigation:\n  label: 关于\n---\n# 关于"),
+      note("_translations/zh-CN/about/index.md", "---\npublish: true\ntab:\n  label: 关于\n---\n# 关于"),
       theme: "docs",
       i18n: I18N
     )
     refute additions.success?
     assert(additions.diagnostics.any? do |item|
-      item.code == "localized_structure_override" && item.message.include?("default-language note declares navigation")
+      item.code == "localized_structure_override" && item.message.include?("default-language note declares tab")
     end)
 
     overrides = compile(
       note("index.md", "---\npublish: true\n---\n# Home"),
-      note("about.md", "---\npublish: true\nnavigation:\n  label: About\n  order: 30\n  visible: false\n---\n# About"),
+      note("about/index.md", "---\npublish: true\ntab:\n  id: about\n  label: About\n  order: 30\n  topics:\n    - profile\n---\n# About"),
       locale_manifest("_locale.yml", "name: English\n"),
       locale_manifest("_translations/zh-CN/_locale.yml", "name: 简体中文\n"),
-      note("_translations/zh-CN/about.md", "---\npublish: true\nnavigation:\n  label: 关于\n  order: 1\n  visible: true\n---\n# 关于"),
+      note("_translations/zh-CN/about/index.md", "---\npublish: true\ntab:\n  label: 关于\n  order: 1\n  topics:\n    - other\n---\n# 关于"),
       theme: "docs",
       i18n: I18N
     )
     refute overrides.success?
     messages = overrides.diagnostics.select { |item| item.code == "localized_structure_override" }.map(&:message)
-    assert_includes messages, "translation must inherit navigation.order from the default language"
-    assert_includes messages, "translation must inherit navigation.visible from the default language"
+    assert_includes messages, "translation must inherit tab.order from the default language"
+    assert_includes messages, "translation must inherit tab.topics from the default language"
   end
 
   def test_minimal_builtin_navigation_is_content_aware_ordered_and_overridable
@@ -313,61 +295,55 @@ class NavigationConfigurationTest < Minitest::Test
     assert_equal "page", page(hidden, "/work/project/").data.dig("website", "content_type")
   end
 
-  def test_folder_navigation_uses_index_or_first_visible_ordered_page_and_marks_its_scope
+  def test_custom_tab_uses_its_folder_index_and_marks_page_descendants_active
     result = compile(
       note("index.md", "---\npublish: true\n---\n# Home"),
-      note("showcase/index.md", "---\npublish: true\ntitle: Selected work\n---\n# Showcase"),
+      note("showcase/index.md", "---\npublish: true\ntitle: Selected work\ntab:\n  id: showcase\n  order: 30\n---\n# Showcase"),
       note("showcase/earlier.md", "---\npublish: true\nnav_order: 1\n---\n# Earlier"),
+      note("projects/index.md", "---\npublish: true\ntab:\n  id: projects\n  order: 40\n---\n# Projects"),
       note("projects/hidden.md", "---\npublish: true\nnav_order: 0\nnav_exclude: true\n---\n# Hidden"),
       note("projects/zulu.md", "---\npublish: true\nnav_order: 10\n---\n# Alpha"),
       note("projects/alpha.md", "---\npublish: true\nnav_order: 10\n---\n# Alpha"),
       note("projects/unordered.md", "---\npublish: true\n---\n# Aardvark"),
       note("private-section/page.md", "---\npublish: true\n---\n# Private section"),
       theme: "minimal",
-      baseurl: "/site",
-      navigation: {
-        "folders" => [
-          { "path" => "showcase", "order" => 30 },
-          { "path" => "projects", "order" => 40 },
-          { "path" => "private-section", "visible" => false }
-        ]
-      }
+      baseurl: "/site"
     )
 
     assert result.success?, result.diagnostics.map(&:message).join("\n")
     items = navigation_for(result, "/")
-    portfolio = items.find { |item| item.fetch("id") == "folder:showcase" }
-    projects = items.find { |item| item.fetch("id") == "folder:projects" }
+    portfolio = items.find { |item| item.fetch("id") == "showcase" }
+    projects = items.find { |item| item.fetch("id") == "projects" }
     assert_equal "Selected work", portfolio.fetch("label")
     assert_equal "/site/showcase/", portfolio.fetch("url")
     assert_equal "Projects", projects.fetch("label")
-    assert_equal "/site/projects/alpha/", projects.fetch("url")
+    assert_equal "/site/projects/", projects.fetch("url")
     assert_equal "/site/", items.find { |item| item.fetch("id") == "home" }.fetch("url")
-    refute items.any? { |item| item.fetch("id") == "folder:private-section" }
-    assert_equal "folder:showcase", current_navigation_id(result, "/showcase/earlier/")
-    assert_equal "folder:projects", current_navigation_id(result, "/projects/zulu/")
+    refute items.any? { |item| item.fetch("id") == "private-section" }
+    assert_equal "showcase", current_navigation_id(result, "/showcase/earlier/")
+    assert_equal "projects", current_navigation_id(result, "/projects/zulu/")
     assert page(result, "/private-section/page/")
     refute_includes projects.fetch("url"), "/site/site/"
   end
 
-  def test_page_navigation_opt_in_scopes_index_children_but_not_nested_posts
+  def test_custom_tab_scope_does_not_override_nested_posts
     result = compile(
       note("index.md", "---\npublish: true\n---\n# Home"),
-      note("about.md", "---\npublish: true\nnavigation:\n  label: About us\n  order: 5\n---\n# About"),
-      note("section/index.md", "---\npublish: true\nnavigation:\n  order: 15\n---\n# Section"),
-      note("section/alpha.md", "---\npublish: true\nnavigation:\n  label: Featured\n  order: 16\n---\n# Alpha"),
+      note("about.md", "---\npublish: true\n---\n# About"),
+      note("section/index.md", "---\npublish: true\ntab:\n  id: section\n  order: 15\n---\n# Section"),
+      note("section/alpha.md", "---\npublish: true\ntabs:\n  - section\n---\n# Alpha"),
       note("section/case-study.md", "---\npublish: true\n---\n# Case study"),
       note("section/dispatch.md", "---\npublish: true\ncontent_type: post\ndate: 2026-08-02\n---\n# Dispatch"),
-      note("hidden.md", "---\npublish: true\nnavigation:\n  visible: false\n---\n# Hidden"),
+      note("hidden.md", "---\npublish: true\n---\n# Hidden"),
       theme: "minimal"
     )
 
     assert result.success?, result.diagnostics.map(&:message).join("\n")
     ids = navigation_for(result, "/").map { |item| item.fetch("id") }
-    assert_equal ["home", "page:about.md", "blog", "page:section/index.md", "page:section/alpha.md"], ids
-    assert_equal "page:about.md", current_navigation_id(result, "/about/")
-    assert_equal "page:section/index.md", current_navigation_id(result, "/section/case-study/")
-    assert_equal "page:section/alpha.md", current_navigation_id(result, "/section/alpha/")
+    assert_equal %w[home blog section], ids
+    assert_nil current_navigation_id(result, "/about/")
+    assert_equal "section", current_navigation_id(result, "/section/case-study/")
+    assert_equal "section", current_navigation_id(result, "/section/alpha/")
     assert_equal "blog", current_navigation_id(result, "/section/dispatch/")
     assert page(result, "/hidden/")
     assert_nil current_navigation_id(result, "/hidden/")
@@ -378,11 +354,11 @@ class NavigationConfigurationTest < Minitest::Test
     post = published_note("blog/post.md", "Post", "/blog/post/", "post")
     doc = published_note("docs/guide.md", "Guide", "/docs/guide/", "doc")
     page_note = published_note(
-      "about.md",
+      "about/index.md",
       "About",
       "/about/",
       "page",
-      properties: { "navigation" => { "label" => "About" } }
+      properties: { "tab" => { "id" => "about", "label" => "About" } }
     )
     model = JekyllObsidian::PublishedSiteModel.new(
       notes: [root, post, doc, page_note],
@@ -405,18 +381,18 @@ class NavigationConfigurationTest < Minitest::Test
     home = projection.items.find { |item| item.fetch("id") == "home" }
     blog = projection.items.find { |item| item.fetch("id") == "blog" }
     docs = projection.items.find { |item| item.fetch("id") == "docs" }
-    about = projection.items.find { |item| item.fetch("id") == "page:about.md" }
+    about = projection.items.find { |item| item.fetch("id") == "about" }
     assert_equal %w[active_scope id label order url], home.keys.sort
     assert_equal({ "note_ids" => ["index.md"], "routes" => ["/"] }, home.fetch("active_scope"))
     assert_equal({ "note_ids" => ["blog/post.md"], "routes" => ["/blog/"] }, blog.fetch("active_scope"))
     assert_equal({ "note_ids" => ["docs/guide.md"], "routes" => [] }, docs.fetch("active_scope"))
-    assert_equal({ "note_ids" => ["about.md"], "routes" => [] }, about.fetch("active_scope"))
+    assert_equal({ "note_ids" => ["about/index.md"], "routes" => [] }, about.fetch("active_scope"))
     assert_equal(
       {
         "index.md" => "home",
         "blog/post.md" => "blog",
         "docs/guide.md" => "docs",
-        "about.md" => "page:about.md"
+        "about/index.md" => "about"
       },
       projection.active_by_note_id
     )
@@ -524,105 +500,50 @@ class NavigationConfigurationTest < Minitest::Test
     assert_empty diagnostics
   end
 
-  def test_navigation_reports_duplicate_empty_reserved_and_invalid_sources
-    duplicate_folder = compile(
+  def test_navigation_reports_duplicate_unpublished_excluded_and_portfolio_tab_sources
+    duplicate = compile(
       note("index.md", "---\npublish: true\n---\n# Home"),
-      note("work/item.md", "---\npublish: true\n---\n# Item"),
-      theme: "minimal",
-      navigation: { "folders" => [{ "path" => "work" }, { "path" => "WORK" }] }
-    )
-    assert_diagnostic duplicate_folder, "duplicate_navigation_folder", "WORK"
-
-    duplicate_target = compile(
-      note("index.md", "---\npublish: true\n---\n# Home"),
-      note("showcase/index.md", "---\npublish: true\nnavigation:\n  label: Showcase page\n---\n# Showcase"),
-      theme: "minimal",
-      navigation: { "folders" => [{ "path" => "showcase", "label" => "Showcase folder" }] }
-    )
-    assert_diagnostic duplicate_target, "duplicate_navigation_target", "showcase/index.md"
-
-    portfolio_folder = compile(
-      note("index.md", "---\npublish: true\n---\n# Home"),
-      note("portfolio/project.md", "---\npublish: true\n---\n# Project"),
-      theme: "minimal",
-      navigation: { "folders" => [{ "path" => "portfolio" }] }
-    )
-    assert_diagnostic portfolio_folder, "duplicate_navigation_folder", "portfolio"
-
-    hidden_portfolio = compile(
-      note("index.md", "---\npublish: true\n---\n# Home"),
-      note("portfolio/project.md", "---\npublish: true\n---\n# Project"),
-      theme: "minimal",
-      navigation: {
-        "portfolio" => { "visible" => false },
-        "folders" => [{ "path" => "portfolio" }]
-      }
-    )
-    assert hidden_portfolio.success?, hidden_portfolio.diagnostics.map(&:message).join("\n")
-    assert_equal ["folder:portfolio"], navigation_for(hidden_portfolio, "/").map { |item| item.fetch("id") } - ["home"]
-
-    index_only = compile(
-      note("index.md", "---\npublish: true\n---\n# Home"),
-      note("portfolio/index.md", "---\npublish: true\n---\n# Portfolio"),
-      theme: "minimal",
-      navigation: { "folders" => [{ "path" => "portfolio" }] }
-    )
-    assert index_only.success?, index_only.diagnostics.map(&:message).join("\n")
-    assert_equal ["folder:portfolio"], navigation_for(index_only, "/").map { |item| item.fetch("id") } - ["home"]
-
-    reserved = compile(
-      note("index.md", "---\npublish: true\nnavigation:\n  visible: false\n---\n# Home"),
+      note("one/index.md", "---\npublish: true\ntab:\n  id: work\n---\n# One"),
+      note("two/index.md", "---\npublish: true\ntab:\n  id: work\n---\n# Two"),
       theme: "minimal"
     )
-    assert_diagnostic reserved, "reserved_navigation_page", "index.md"
-
-    visible_empty = compile(
-      note("index.md", "---\npublish: true\n---\n# Home"),
-      theme: "minimal",
-      navigation: { "folders" => [{ "path" => "missing" }] }
-    )
-    assert_diagnostic visible_empty, "empty_navigation_folder", "missing"
-
-    hidden_empty = compile(
-      note("index.md", "---\npublish: true\n---\n# Home"),
-      theme: "minimal",
-      navigation: { "folders" => [{ "path" => "missing", "visible" => false }] }
-    )
-    assert_diagnostic hidden_empty, "empty_navigation_folder", "missing"
+    assert_diagnostic duplicate, "duplicate_tab_id", "two/index.md"
 
     unpublished = compile(
       note("index.md", "---\npublish: true\n---\n# Home"),
-      note("private.md", "---\npublish: false\nnavigation: {}\n---\n# Private"),
+      note("private/index.md", "---\npublish: false\ntab:\n  id: private\n---\n# Private"),
       theme: "minimal"
     )
-    assert_diagnostic unpublished, "unpublished_page_navigation", "private.md"
+    assert_diagnostic unpublished, "unpublished_tab_declaration", "private/index.md"
 
-    non_page = compile(
+    excluded = compile(
       note("index.md", "---\npublish: true\n---\n# Home"),
-      note("blog/post.md", "---\npublish: true\ndate: 2026-08-01\nnavigation:\n  visible: false\n---\n# Post"),
+      note("work/index.md", "---\npublish: true\ntab:\n  id: work\n---\n# Work"),
+      note("hidden.md", "---\npublish: true\nnav_exclude: true\ntabs:\n  - work\n---\n# Hidden"),
       theme: "minimal"
     )
-    assert_diagnostic non_page, "invalid_page_navigation", "blog/post.md"
+    assert_diagnostic excluded, "invalid_tab_membership", "hidden.md"
 
-    empty_label = compile(
+    portfolio = compile(
       note("index.md", "---\npublish: true\n---\n# Home"),
-      note("empty.md", "---\npublish: true\ntitle: \"\"\nnavigation: {}\n---\nNo heading"),
+      note("portfolio/index.md", "---\npublish: true\ntab:\n  id: selected\n---\n# Selected"),
+      note("portfolio/project.md", "---\npublish: true\n---\n# Project"),
       theme: "minimal"
     )
-    assert_diagnostic empty_label, "invalid_navigation_label", "empty.md"
+    assert_diagnostic portfolio, "tab_conflicts_with_portfolio", "portfolio/index.md"
   end
 
-  def test_localized_navigation_changes_only_labels_and_keeps_order_visibility_and_scope
+  def test_localized_custom_tab_changes_only_its_label_and_keeps_order_and_scope
     entries = [
       note("index.md", "---\npublish: true\n---\n# Home"),
-      note("about.md", "---\npublish: true\nnavigation:\n  label: About\n  order: 15\n---\n# About"),
+      note("about/index.md", "---\npublish: true\ntab:\n  id: about\n  label: About\n  order: 15\n---\n# About"),
       locale_manifest("_locale.yml", "name: English\n"),
       locale_manifest(
         "_translations/zh-CN/_locale.yml",
         "name: 简体中文\nmessages:\n  home: 首页\n  blog: 博客\n  docs: 文档\n"
       ),
       note("_translations/zh-CN/index.md", "---\npublish: true\n---\n# 首页"),
-      note("_translations/zh-CN/about.md", "---\npublish: true\nnavigation:\n  label: 关于\n---\n# 关于")
+      note("_translations/zh-CN/about/index.md", "---\npublish: true\ntab:\n  label: 关于\n---\n# 关于")
     ]
     result = compile(
       *entries,
@@ -632,13 +553,13 @@ class NavigationConfigurationTest < Minitest::Test
     )
 
     assert result.success?, result.diagnostics.map(&:message).join("\n")
-    default_item = navigation_for(result, "/about/").find { |item| item.fetch("id") == "page:about.md" }
-    translated_item = navigation_for(result, "/zh-CN/about/").find { |item| item.fetch("id") == "page:about.md" }
+    default_item = navigation_for(result, "/about/").find { |item| item.fetch("id") == "about" }
+    translated_item = navigation_for(result, "/zh-CN/about/").find { |item| item.fetch("id") == "about" }
     assert_equal "About", default_item.fetch("label")
     assert_equal "关于", translated_item.fetch("label")
     assert_equal default_item.fetch("order"), translated_item.fetch("order")
-    assert_equal "page:about.md", page(result, "/about/").data.dig("website", "active_navigation_id")
-    assert_equal "page:about.md", page(result, "/zh-CN/about/").data.dig("website", "active_navigation_id")
+    assert_equal "about", page(result, "/about/").data.dig("website", "active_navigation_id")
+    assert_equal "about", page(result, "/zh-CN/about/").data.dig("website", "active_navigation_id")
     refute default_item.key?("active_scope")
     refute translated_item.key?("active_scope")
     assert_equal "/site/about/", default_item.fetch("url")
@@ -648,33 +569,33 @@ class NavigationConfigurationTest < Minitest::Test
   def test_localized_labels_do_not_reorder_items_with_the_same_default_order
     result = compile(
       note("index.md", "---\npublish: true\n---\n# Home"),
-      note("alpha.md", "---\npublish: true\nnavigation:\n  label: Alpha\n  order: 30\n---\n# Alpha"),
-      note("beta.md", "---\npublish: true\nnavigation:\n  label: Beta\n  order: 30\n---\n# Beta"),
+      note("alpha/index.md", "---\npublish: true\ntab:\n  id: alpha\n  label: Alpha\n  order: 30\n---\n# Alpha"),
+      note("beta/index.md", "---\npublish: true\ntab:\n  id: beta\n  label: Beta\n  order: 30\n---\n# Beta"),
       locale_manifest("_locale.yml", "name: English\n"),
       locale_manifest("_translations/zh-CN/_locale.yml", "name: 简体中文\n"),
       note("_translations/zh-CN/index.md", "---\npublish: true\n---\n# 首页"),
-      note("_translations/zh-CN/alpha.md", "---\npublish: true\nnavigation:\n  label: Zulu\n---\n# 甲"),
-      note("_translations/zh-CN/beta.md", "---\npublish: true\nnavigation:\n  label: Able\n---\n# 乙"),
+      note("_translations/zh-CN/alpha/index.md", "---\npublish: true\ntab:\n  label: Zulu\n---\n# 甲"),
+      note("_translations/zh-CN/beta/index.md", "---\npublish: true\ntab:\n  label: Able\n---\n# 乙"),
       theme: "minimal",
       i18n: I18N.merge("enabled" => true)
     )
 
     assert result.success?, result.diagnostics.map(&:message).join("\n")
-    default_items = navigation_for(result, "/").select { |item| item.fetch("id").start_with?("page:") }
-    translated_items = navigation_for(result, "/zh-CN/").select { |item| item.fetch("id").start_with?("page:") }
-    assert_equal %w[page:alpha.md page:beta.md], default_items.map { |item| item.fetch("id") }
+    default_items = navigation_for(result, "/").select { |item| %w[alpha beta].include?(item.fetch("id")) }
+    translated_items = navigation_for(result, "/zh-CN/").select { |item| %w[alpha beta].include?(item.fetch("id")) }
+    assert_equal %w[alpha beta], default_items.map { |item| item.fetch("id") }
     assert_equal default_items.map { |item| item.fetch("id") }, translated_items.map { |item| item.fetch("id") }
     assert_equal %w[Zulu Able], translated_items.map { |item| item.fetch("label") }
   end
 
-  def test_indexless_localized_root_uses_the_default_language_navigation_order
+  def test_localized_root_redirect_uses_the_default_language_navigation_order
     result = compile(
-      note("alpha.md", "---\npublish: true\nnavigation:\n  label: Alpha\n  order: 30\n---\n# Alpha"),
-      note("beta.md", "---\npublish: true\nnavigation:\n  label: Beta\n  order: 30\n---\n# Beta"),
+      note("alpha/index.md", "---\npublish: true\ntab:\n  id: alpha\n  label: Alpha\n  order: 30\n---\n# Alpha"),
+      note("beta/index.md", "---\npublish: true\ntab:\n  id: beta\n  label: Beta\n  order: 30\n---\n# Beta"),
       locale_manifest("_locale.yml", "name: English\n"),
       locale_manifest("_translations/zh-CN/_locale.yml", "name: 简体中文\n"),
-      note("_translations/zh-CN/alpha.md", "---\npublish: true\nnavigation:\n  label: Zulu\n---\n# 甲"),
-      note("_translations/zh-CN/beta.md", "---\npublish: true\nnavigation:\n  label: Able\n---\n# 乙"),
+      note("_translations/zh-CN/alpha/index.md", "---\npublish: true\ntab:\n  label: Zulu\n---\n# 甲"),
+      note("_translations/zh-CN/beta/index.md", "---\npublish: true\ntab:\n  label: Able\n---\n# 乙"),
       theme: "minimal",
       i18n: I18N.merge("enabled" => true)
     )

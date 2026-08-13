@@ -8,13 +8,14 @@ module JekyllObsidian
     XML_INVALID_CHARACTER = OutputText::INVALID_CHARACTER
     SUPPORTED = %w[
       publish title subtitle aliases tags author categories description permalink image cssclasses created updated
-      content_type date pinned nav_order nav_exclude navigation comments github_markdown related
+      content_type date pinned nav_order nav_exclude tab tabs comments github_markdown related
     ].freeze
     ARRAY_PROPERTIES = %w[aliases tags author categories cssclasses].freeze
     LINK_ARRAY_PROPERTIES = %w[author categories].freeze
     STRING_PROPERTIES = %w[title subtitle description permalink image].freeze
     CONTENT_TYPES = %w[post doc page].freeze
-    NAVIGATION_KEYS = %w[label order visible].freeze
+    TAB_KEYS = %w[id label order topics].freeze
+    TAB_ID_PATTERN = /\A[a-z][a-z0-9-]*\z/.freeze
 
     Result = Struct.new(:properties, :property_links, :body, :diagnostics, keyword_init: true)
 
@@ -166,8 +167,11 @@ module JekyllObsidian
           else
             error("invalid_property", "nav_exclude must be a YAML boolean")
           end
-        when "navigation"
-          normalized = validate_navigation(value)
+        when "tab"
+          normalized = validate_tab(value)
+          properties[key] = normalized if normalized
+        when "tabs"
+          normalized = validate_tabs(value)
           properties[key] = normalized if normalized
         when "github_markdown"
           begin
@@ -339,21 +343,29 @@ module JekyllObsidian
       )
     end
 
-    def validate_navigation(value)
+    def validate_tab(value)
       unless value.is_a?(Hash) && value.keys.all? { |key| key.is_a?(String) }
-        error("invalid_property", "navigation must be a YAML mapping with string keys")
+        error("invalid_property", "tab must be a YAML mapping with string keys")
         return nil
       end
 
-      unknown = value.keys - NAVIGATION_KEYS
-      unknown.sort.each { |key| error("invalid_property", "unknown navigation setting #{key.inspect}") }
+      unknown = value.keys - TAB_KEYS
+      unknown.sort.each { |key| error("invalid_property", "unknown tab setting #{key.inspect}") }
       normalized = {}
+      if value.key?("id")
+        id = value["id"]
+        if valid_tab_id?(id)
+          normalized["id"] = id
+        else
+          error("invalid_property", "tab.id must be a lowercase ASCII identifier")
+        end
+      end
       if value.key?("label")
         label = value["label"]
         if self.class.valid_output_text?(label) && !label.strip.empty?
           normalized["label"] = label
         else
-          error("invalid_property", "navigation.label must be a non-empty string containing only output-safe Unicode characters")
+          error("invalid_property", "tab.label must be a non-empty string containing only output-safe Unicode characters")
         end
       end
       if value.key?("order")
@@ -361,18 +373,37 @@ module JekyllObsidian
         if order.is_a?(Integer)
           normalized["order"] = order
         else
-          error("invalid_property", "navigation.order must be an integer")
+          error("invalid_property", "tab.order must be an integer")
         end
       end
-      if value.key?("visible")
-        visible = value["visible"]
-        if visible == true || visible == false
-          normalized["visible"] = visible
+      if value.key?("topics")
+        topics = value["topics"]
+        if topics.is_a?(Array) && topics.all? { |topic| valid_tab_topic?(topic) }
+          normalized["topics"] = topics.map(&:strip)
         else
-          error("invalid_property", "navigation.visible must be a YAML boolean")
+          error("invalid_property", "tab.topics must be an array of non-empty strings")
         end
       end
       normalized
+    end
+
+    def validate_tabs(value)
+      unless value.is_a?(Array) && value.all? { |id| valid_tab_id?(id) } && value.uniq.length == value.length
+        error("invalid_property", "tabs entries must be unique lowercase ASCII identifiers")
+        return nil
+      end
+
+      value.dup
+    end
+
+    def valid_tab_id?(value)
+      value.is_a?(String) && value.match?(TAB_ID_PATTERN)
+    end
+
+    def valid_tab_topic?(value)
+      self.class.valid_output_text?(value) && !value.strip.empty? && value == value.unicode_normalize(:nfc)
+    rescue EncodingError
+      false
     end
 
     def wiki_link_candidate?(value)

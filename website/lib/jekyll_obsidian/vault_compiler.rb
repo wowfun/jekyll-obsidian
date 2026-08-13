@@ -83,10 +83,8 @@ module JekyllObsidian
       "path" => "portfolio", "order" => 30, "visible" => true
     }.freeze
     NAVIGATION_OVERRIDE_KEYS = %w[label order visible].freeze
-    NAVIGATION_KEYS = (NAVIGATION_BUILTINS.keys + %w[portfolio folders]).freeze
+    NAVIGATION_KEYS = (NAVIGATION_BUILTINS.keys + %w[portfolio]).freeze
     PORTFOLIO_NAVIGATION_KEYS = (NAVIGATION_OVERRIDE_KEYS + %w[path]).freeze
-    NAVIGATION_FOLDER_KEYS = (NAVIGATION_OVERRIDE_KEYS + %w[path]).freeze
-    CUSTOM_NAVIGATION_DEFAULTS = { "order" => 100, "visible" => true }.freeze
     MAX_CONTACTS = 12
     GISCUS_LANGUAGES = Set.new(%w[
       ar be bg ca cs da de en eo es eu fa fr gr hbs he hu id it ja kh ko nl pl
@@ -213,7 +211,8 @@ module JekyllObsidian
         settings: @navigation_config,
         content: @content,
         url_builder: @url_builder,
-        theme: @theme
+        theme: @theme,
+        member_ids_by_tab_id: @request.tab_memberships
       )
       @diagnostics.concat(navigation.diagnostics)
       theme_config = EffectiveThemeConfig.new(
@@ -486,22 +485,13 @@ module JekyllObsidian
       else
         PORTFOLIO_NAVIGATION_DEFAULTS.dup
       end
-      folders = raw.fetch("folders", [])
-      unless folders.is_a?(Array)
-        error("invalid_navigation_config", "website.navigation.folders must be an array")
-        folders = []
-      end
-      normalized["folders"] = folders.each_with_index.filter_map do |entry, index|
-        normalize_navigation_folder(entry, index)
-      end
       @navigation_config = DeepFreeze.call(normalized)
     end
 
     def default_navigation_config
       DeepFreeze.call(
         NAVIGATION_BUILTINS.transform_values(&:dup).merge(
-          "portfolio" => PORTFOLIO_NAVIGATION_DEFAULTS.dup,
-          "folders" => []
+          "portfolio" => PORTFOLIO_NAVIGATION_DEFAULTS.dup
         )
       )
     end
@@ -533,22 +523,6 @@ module JekyllObsidian
         error("invalid_navigation_config", "unknown #{path} setting #{key.inspect}")
       end
       normalize_navigation_fields(value, path, defaults)
-    end
-
-    def normalize_navigation_folder(value, index)
-      path = "website.navigation.folders[#{index}]"
-      unless value.is_a?(Hash) && value.keys.all? { |key| key.is_a?(String) }
-        error("invalid_navigation_config", "#{path} must be a mapping with string keys")
-        return nil
-      end
-
-      (value.keys - NAVIGATION_FOLDER_KEYS).sort.each do |key|
-        error("invalid_navigation_config", "unknown #{path} setting #{key.inspect}")
-      end
-      folder_path = normalize_navigation_folder_path(value["path"], "#{path}.path")
-      return nil unless folder_path
-
-      normalize_navigation_fields(value, path, CUSTOM_NAVIGATION_DEFAULTS).merge("path" => folder_path)
     end
 
     def normalize_navigation_fields(value, path, defaults)
@@ -680,10 +654,10 @@ module JekyllObsidian
           parsed = FrontMatter.parse(path, entry.bytes.to_s)
           @diagnostics.concat(parsed.diagnostics)
           published = @content_policy.publish?(path, parsed.properties)
-          if parsed.properties.key?("navigation") && !published
+          if (parsed.properties.key?("tab") || parsed.properties.key?("tabs")) && !published
             error(
-              "unpublished_page_navigation",
-              "navigation frontmatter is only supported on published pages",
+              "unpublished_tab_declaration",
+              "tab and tabs frontmatter are only supported on published pages",
               path
             )
           end

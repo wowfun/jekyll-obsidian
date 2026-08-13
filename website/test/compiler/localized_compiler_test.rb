@@ -226,23 +226,31 @@ class LocalizedCompilerTest < Minitest::Test
     assert_equal "/manual/zh-CN/work/", localized_redirect.data.dig("website", "routes", "portfolio")
   end
 
-  def test_portfolio_translation_navigation_uses_effective_page_ownership_from_the_compiler
+  def test_portfolio_translation_keeps_builtin_active_while_joining_a_custom_tab
     result = compile(
       note("index.md", "---\npublish: true\n---\n# Home"),
       note(
+        "featured/index.md",
+        "---\npublish: true\ntab:\n  id: featured\n  label: Featured\n---\n# Featured"
+      ),
+      note(
         "work/alpha.md",
-        "---\npublish: true\nnavigation:\n  label: Featured project\n---\n# Alpha"
+        "---\npublish: true\ntabs:\n  - featured\n---\n# Alpha"
       ),
       *manifests,
       note(
+        "_translations/zh-CN/featured/index.md",
+        "---\npublish: true\ntab:\n  label: 特选\n---\n# 特选"
+      ),
+      note(
         "_translations/zh-CN/work/alpha.md",
-        "---\npublish: true\ntitle: 甲\nnavigation:\n  label: 特选项目\n---\n# 甲"
+        "---\npublish: true\ntitle: 甲\n---\n# 甲"
       ),
       theme: "minimal",
       i18n: I18N.merge("enabled" => true),
       navigation: { "portfolio" => { "path" => "work" } },
       content: {
-        "default_type" => "doc",
+        "default_type" => "page",
         "directories" => { "doc" => ["work"], "post" => [] }
       }
     )
@@ -250,8 +258,11 @@ class LocalizedCompilerTest < Minitest::Test
     assert result.success?, result.diagnostics.map(&:message).join("\n")
     translated = page(result, "/zh-CN/work/alpha/")
     assert_equal "page", translated.data.dig("website", "content_type")
-    item = translated.data.dig("website", "navigation").find { |entry| entry.fetch("id") == "page:work/alpha.md" }
-    assert_equal "特选项目", item.fetch("label")
+    assert_equal "portfolio", translated.data.dig("website", "active_navigation_id")
+    item = translated.data.dig("website", "navigation").find { |entry| entry.fetch("id") == "featured" }
+    assert_equal "特选", item.fetch("label")
+    cards = page(result, "/zh-CN/featured/").data.dig("website", "theme_data", "tab_members")
+    assert_equal ["甲"], cards.map { |card| card.fetch("title") }
   end
 
   def test_real_translations_have_reciprocal_hreflang_and_fallbacks_are_omitted_from_sitemap

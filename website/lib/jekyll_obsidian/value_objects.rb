@@ -81,7 +81,7 @@ module JekyllObsidian
     :navigation
   )
 
-  BuildRequest = ImmutableRecord.define(:snapshot, :config)
+  BuildRequest = ImmutableRecord.define(:snapshot, :config, :tab_memberships)
   SourceSpan = ImmutableRecord.define(:start_line, :start_column, :end_line, :end_column)
   FrontMatterLink = ImmutableRecord.define(:property, :index, :target, :display, :source_span)
   Diagnostic = ImmutableRecord.define(:severity, :code, :message, :path, :span, :property)

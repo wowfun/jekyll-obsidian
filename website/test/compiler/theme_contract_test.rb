@@ -48,8 +48,8 @@ class ThemeContractTest < Minitest::Test
     assert_equal "/", page(minimal, "/posts/newer/").data.dig("website", "routes", "home")
 
     custom = compile(
-      note("zulu.md", "---\npublish: true\nnavigation:\n  order: 20\n---\n# Zulu"),
-      note("alpha.md", "---\npublish: true\nnavigation:\n  order: 10\n---\n# Alpha"),
+      note("zulu/index.md", "---\npublish: true\ntab:\n  id: zulu\n  order: 20\n---\n# Zulu"),
+      note("alpha/index.md", "---\npublish: true\ntab:\n  id: alpha\n  order: 10\n---\n# Alpha"),
       theme: "minimal"
     )
     assert custom.success?, custom.diagnostics.map(&:message).join("\n")

@@ -16,7 +16,7 @@ module JekyllObsidian
     TRANSLATABLE_PROPERTIES = %w[
       title subtitle description tags author categories image cssclasses github_markdown related
     ].freeze
-    STRUCTURAL_PROPERTIES = (FrontMatter::SUPPORTED - TRANSLATABLE_PROPERTIES - %w[publish navigation]).freeze
+    STRUCTURAL_PROPERTIES = (FrontMatter::SUPPORTED - TRANSLATABLE_PROPERTIES - %w[publish tab]).freeze
     URL_PROPERTIES = %w[
       absolute_url canonical_url discussion_url docs_home_url
       home_url href image markdown_url redirect_url route url
@@ -198,11 +198,18 @@ module JekyllObsidian
       snapshots = build_locale_snapshots if @diagnostics.none? { |item| item.severity == :error }
       return failure if @diagnostics.any? { |item| item.severity == :error }
 
-      results = @locales.to_h do |locale|
+      results = {}
+      tab_memberships = nil
+      ([@default_locale] + @locales.reject { |locale| locale == @default_locale }).each do |locale|
         config = BuildConfig.new(**@config.to_h.merge(i18n: nil))
-        result = VaultCompiler.compile_single(BuildRequest.new(snapshot: snapshots.fetch(locale), config: config))
+        result = VaultCompiler.compile_single(BuildRequest.new(
+          snapshot: snapshots.fetch(locale),
+          config: config,
+          tab_memberships: tab_memberships
+        ))
         @diagnostics.concat(localized_diagnostics(result.diagnostics, locale))
-        [locale, result]
+        results[locale] = result
+        tab_memberships = tab_membership(result) if locale == @default_locale && result.success?
       end
       return failure if results.values.any? { |result| !result.success? }
 
@@ -460,30 +467,30 @@ module JekyllObsidian
     def merge_translation_properties(default_properties, translated_properties, physical_path)
       merged = default_properties.merge(translated_properties)
       merged = merged.reject { |key, _| key == "github_markdown" } unless translated_properties.key?("github_markdown")
-      return merged unless translated_properties.key?("navigation")
+      return merged unless translated_properties.key?("tab")
 
-      default_navigation = default_properties["navigation"]
-      translated_navigation = translated_properties.fetch("navigation")
-      unless default_navigation
+      default_tab = default_properties["tab"]
+      translated_tab = translated_properties.fetch("tab")
+      unless default_tab
         error(
           "localized_structure_override",
-          "translation may only override navigation.label when the default-language note declares navigation",
+          "translation may only override tab.label when the default-language note declares tab",
           physical_path
         )
-        return default_navigation ? merged.merge("navigation" => default_navigation) : merged.reject { |key, _| key == "navigation" }
+        return merged.reject { |key, _| key == "tab" }
       end
 
-      %w[order visible].each do |property|
-        next unless translated_navigation.key?(property)
+      %w[id order topics].each do |property|
+        next unless translated_tab.key?(property)
 
         error(
           "localized_structure_override",
-          "translation must inherit navigation.#{property} from the default language",
+          "translation must inherit tab.#{property} from the default language",
           physical_path
         )
       end
-      label_override = translated_navigation.key?("label") ? { "label" => translated_navigation.fetch("label") } : {}
-      merged.merge("navigation" => default_navigation.merge(label_override))
+      label_override = translated_tab.key?("label") ? { "label" => translated_tab.fetch("label") } : {}
+      merged.merge("tab" => default_tab.merge(label_override))
     end
 
     def combine(results)
@@ -793,6 +800,14 @@ module JekyllObsidian
     def navigation_order(result)
       page = result.pages.find { |candidate| candidate.data.dig("website", "navigation") }
       Array(page&.data&.dig("website", "navigation")).map { |item| item.fetch("id") }
+    end
+
+    def tab_membership(result)
+      result.pages.filter_map do |page|
+        website = page.data["website"]
+        ids = website&.dig("theme_data", "tab_member_ids")
+        [website.dig("theme_data", "tab_id"), ids] if website && ids
+      end.to_h
     end
 
     def preserve_default_navigation_order!(website, default_order)

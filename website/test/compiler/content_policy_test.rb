@@ -86,16 +86,16 @@ class ContentPolicyTest < Minitest::Test
     refute result.generated_files.find { |output| output.route == "/sitemap.xml" }.content.include?("/draft/")
   end
 
-  def test_default_published_pages_can_use_navigation_frontmatter
+  def test_default_published_pages_can_use_tab_frontmatter
     result = compile(
       note("index.md", "# Home"),
-      note("about.md", "---\nnavigation:\n  label: About\n---\n# About"),
+      note("about/index.md", "---\ntab:\n  id: about\n  label: About\n---\n# About"),
       content: { "publish_by_default" => ["."] }
     )
 
     assert result.success?, result.diagnostics.map(&:message).join("\n")
     assert page(result, "/about/")
-    refute result.diagnostics.any? { |item| item.code == "unpublished_page_navigation" }
+    refute result.diagnostics.any? { |item| item.code == "unpublished_tab_declaration" }
   end
 
   def test_invalid_publish_values_still_fail_a_default_published_build

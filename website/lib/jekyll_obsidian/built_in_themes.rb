@@ -453,6 +453,31 @@ module JekyllObsidian
         }
       end
 
+      def tab_member_card(note, config)
+        topics = note.topics
+          .select { |topic| %w[tag category].include?(topic.fetch("kind")) }
+          .uniq { |topic| topic_name_identity(topic) }
+          .map { |topic| topic.slice("name", "url") }
+        content_card(note, config).merge(
+          "content_type" => note.content_type,
+          "topics" => topics
+        )
+      end
+
+      def attach_custom_tab_theme_data(theme_data, model, config)
+        config.navigation.custom_tabs.each do |tab|
+          cards = tab.member_note_ids.filter_map do |id|
+            note = model.notes_by_id[id]
+            tab_member_card(note, config) if note
+          end
+          theme_data[tab.index_note_id] = theme_data.fetch(tab.index_note_id).merge(
+            "tab_id" => tab.id,
+            "tab_member_ids" => tab.member_note_ids,
+            "tab_members" => cards
+          )
+        end
+      end
+
       def related_article_cards(note, model, config)
         Array(note.related).map do |related|
           target = model.notes_by_id.fetch(related.fetch("id"))
@@ -568,6 +593,7 @@ module JekyllObsidian
             portfolio_theme_data
           )
         end
+        attach_custom_tab_theme_data(theme_data, model, config)
         authored_root_route = model.notes.any? { |note| note.route == "/" }
         home = home_page(displayed, config, system_theme_data, taxonomy) if !root && !authored_root_route && displayed.any?
         groups = archive_groups(displayed, config, taxonomy)
@@ -792,6 +818,7 @@ module JekyllObsidian
             }
           ]
         end
+        attach_custom_tab_theme_data(theme_data, model, config)
         system_theme_data = {
           "docs_tree" => navigation.docs_tree,
           "docs_home_url" => docs_home_url,
