@@ -31,7 +31,7 @@
     "@playwright/test": "1.62.1",
     "@types/d3": "7.4.3",
     "esbuild": "0.28.1",
-    "happy-dom": "20.11.1",
+    "happy-dom": "20.11.2",
     "typescript": "7.0.2",
     "vitest": "4.1.10"
   },
