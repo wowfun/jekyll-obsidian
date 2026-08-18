@@ -70,8 +70,19 @@ try {
         $defaultConfig = [System.IO.File]::ReadAllText((Join-Path $root ".github\jekyll-obsidian.yml"))
         if (-not $defaultConfig.Contains("  theme: 'minimal'")) { Fail "$adapter did not generate the Minimal default theme" }
         if (-not $defaultConfig.Contains("    publish_by_default: []")) { Fail "$adapter did not preserve explicit publication defaults" }
+        $workflowPath = Join-Path $root ".github\workflows\pages.yml"
+        $workflow = [System.IO.File]::ReadAllText($workflowPath)
+        if (-not $workflow.Contains("id: scope")) { Fail "$adapter workflow does not expose the CI scope" }
+        if (-not $workflow.Contains('scripts/ci-scope.sh "$BASE_SHA" "$HEAD_SHA" >> "$GITHUB_OUTPUT"')) { Fail "$adapter workflow does not classify the complete change range" }
+        if ([regex]::Matches($workflow, "(?m)^        if: steps\.scope\.outputs\.full == 'true'$" ).Count -ne 3) { Fail "$adapter full regression steps are not conditioned on the CI scope" }
+        if (-not $workflow.Contains("if: failure() && steps.scope.outputs.full == 'true'")) { Fail "$adapter browser failure artifacts are not limited to full regressions" }
+        $hostValidationStart = $workflow.IndexOf("      - name: Validate the host content")
+        $freezeInputsStart = $workflow.IndexOf("      - name: Freeze GitHub Markdown inputs")
+        if ($hostValidationStart -lt 0 -or $freezeInputsStart -le $hostValidationStart) { Fail "$adapter workflow has no bounded host validation step" }
+        $hostValidation = $workflow.Substring($hostValidationStart, $freezeInputsStart - $hostValidationStart)
+        if ($hostValidation.Contains("--skip-assets")) { Fail "$adapter host validation depends on assets from the full regression" }
         Assert-LfWithoutBom (Join-Path $root ".github\jekyll-obsidian.yml")
-        Assert-LfWithoutBom (Join-Path $root ".github\workflows\pages.yml")
+        Assert-LfWithoutBom $workflowPath
 
         $configBefore = [System.IO.File]::ReadAllBytes((Join-Path $root ".github\jekyll-obsidian.yml"))
         $workflowBefore = [System.IO.File]::ReadAllBytes((Join-Path $root ".github\workflows\pages.yml"))

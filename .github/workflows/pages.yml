@@ -55,6 +55,13 @@ jobs:
       - name: Check host integration
         run: bin/integrate --check
 
+      - name: Classify the complete change range
+        id: scope
+        env:
+          BASE_SHA: ${{ (github.event_name == 'pull_request' && github.event.pull_request.base.sha) || (github.event_name == 'push' && github.event.before) || '' }}
+          HEAD_SHA: ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.sha) || github.sha }}
+        run: scripts/ci-scope.sh "$BASE_SHA" "$HEAD_SHA" >> "$GITHUB_OUTPUT"
+
       - name: Set up Ruby
         uses: ruby/setup-ruby@95ef2b042f9d7a56d8268cba8559e2842e2ad01b
         with:
@@ -73,15 +80,17 @@ jobs:
         run: npm ci
 
       - name: Install the Chromium test browser
+        if: steps.scope.outputs.full == 'true'
         run: npx playwright install --with-deps chromium
 
       - name: Run template regression tests
+        if: steps.scope.outputs.full == 'true'
         env:
           RUN_BROWSER_TESTS: "1"
         run: bin/test
 
       - name: Upload browser failure artifacts
-        if: failure()
+        if: failure() && steps.scope.outputs.full == 'true'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: browser-failure-${{ github.run_attempt }}
@@ -90,6 +99,7 @@ jobs:
           retention-days: 3
 
       - name: Build the bundled example in every deployment shape
+        if: steps.scope.outputs.full == 'true'
         env:
           JEKYLL_ENV: production
         run: |
@@ -119,7 +129,6 @@ jobs:
           --url https://example.invalid
           --baseurl /host-preview
           --destination _site-host-content
-          --skip-assets
 
       - name: Freeze GitHub Markdown inputs for deployment
         if: github.event_name != 'pull_request'

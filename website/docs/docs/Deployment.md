@@ -7,7 +7,7 @@ tags:
   - github-pages
 description: Test and deploy any built-in theme with the included GitHub Pages workflow.
 created: 2026-07-31
-updated: 2026-08-07
+updated: 2026-08-19
 ---
 
 # Deployment
@@ -16,14 +16,21 @@ The generated workflow targets GitHub.com. It separates untrusted verification f
 
 ## Pull requests and pushes
 
-Every pull request and every push to the repository's default branch checks out the full Git history, runs the dependency-free integration drift check, installs the locked Ruby and Node dependencies, runs the template test suite, and validates the configured host content. The bundled example builds both themes at a domain root and builds Minimal again under a project path, covering both deployment shapes:
+Every pull request and every push to the repository's default branch checks out the full Git history, runs the dependency-free integration drift check, installs the locked Ruby and Node dependencies, and performs a real production build of the configured host content. That build compiles the frontend assets, audits the generated site, and validates its URLs.
+
+The workflow classifies the complete pull request difference, rather than only the latest push, into one of two validation tiers:
+
+- **Host validation** covers content, translations, and host configuration. It keeps the production host build and its audit, but skips Chromium, template and browser regression tests, visual baselines, and the bundled-example matrix.
+- **Full regression** covers Jekyll Obsidian implementation changes. It installs Chromium, runs `website/bin/test` with browser coverage, and builds every bundled deployment shape. The example builds both themes at a domain root and builds Minimal again under a project path:
 
 1. At a domain root, such as `https://owner.github.io/`.
 2. Under a project path, such as `https://owner.github.io/jekyll-obsidian/`.
 
+Any change under `website/` selects full regression, except `website/docs/**`, which is the source repository's own content. A change to the generated `.github/workflows/pages.yml` also selects full regression. A pull request containing both content and implementation changes always uses full regression. Manual runs, initial pushes, invalid commit IDs, missing history, and Git comparison failures all fail safely to full regression; the workflow never reuses a previous run's classification.
+
 Pull request jobs have `contents: read` permission. They do not call `configure-pages`, upload a Pages artifact, or deploy.
 
-The workflow watches the configured content directory, `website/**`, `.github/jekyll-obsidian.yml`, and its own file. Do not edit these trigger paths manually; re-run the integration command when the source changes. Template browser and visual baselines always use `website/docs`, while a separate production build validates the host source, so custom documentation cannot be mistaken for a visual regression.
+The workflow watches the configured content directory, `website/**`, `.github/jekyll-obsidian.yml`, and its own file. Do not edit these trigger paths manually; re-run the integration command when the source changes. Full-regression browser and visual baselines always use `website/docs`, while the production build in both tiers validates the host source, so custom documentation cannot be mistaken for a visual regression. A successful content-only push to the default branch continues through the trusted Pages build and deployment.
 
 ## Trusted Pages build
 
