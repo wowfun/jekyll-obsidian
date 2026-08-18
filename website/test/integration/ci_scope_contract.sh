@@ -47,6 +47,20 @@ assert_scope() {
     fail "$label returned '$actual' instead of 'full=$expected'."
 }
 
+assert_scope_from_website() {
+  expected=$1
+  base=$2
+  head=$3
+  label=$4
+  mkdir -p "$repository/website"
+
+  if ! actual=$(cd "$repository/website" && "$CLASSIFIER" "$base" "$head"); then
+    fail "$label could not be classified from the workflow directory."
+  fi
+  [ "$actual" = "full=$expected" ] ||
+    fail "$label returned '$actual' instead of 'full=$expected' from the workflow directory."
+}
+
 assert_added_path_requires_full() {
   path=$1
   label=$2
@@ -75,6 +89,7 @@ printf '%s\n' '# Deployment' > "$repository/website/docs/Deployment.md"
 git -C "$repository" add website/docs/Deployment.md
 git -C "$repository" commit -qm "update source documentation"
 assert_scope false "$base_sha" "$(git -C "$repository" rev-parse HEAD)" "website documentation change"
+assert_scope_from_website false "$base_sha" "$(git -C "$repository" rev-parse HEAD)" "website documentation change"
 
 assert_added_path_requires_full "website/lib/jekyll_obsidian/compiler.rb" "Ruby implementation change"
 assert_added_path_requires_full "website/assets/js/application.js" "frontend implementation change"
@@ -82,6 +97,7 @@ assert_added_path_requires_full "website/package-lock.json" "dependency change"
 assert_added_path_requires_full "website/test/unit/compiler_test.rb" "test change"
 assert_added_path_requires_full "website/scripts/templates/pages.yml" "workflow template change"
 assert_added_path_requires_full ".github/workflows/pages.yml" "generated workflow change"
+assert_scope_from_website true "$base_sha" "$(git -C "$repository" rev-parse HEAD)" "generated workflow change"
 
 new_repository
 printf '%s\n' '# Mixed content' > "$repository/content/index.md"

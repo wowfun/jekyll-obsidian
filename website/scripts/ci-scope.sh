@@ -29,7 +29,7 @@ git cat-file -e "$base_sha^{commit}" 2>/dev/null || full_regression
 git cat-file -e "$head_sha^{commit}" 2>/dev/null || full_regression
 
 if git diff --quiet --no-renames "$base_sha" "$head_sha" -- \
-  website ':(exclude)website/docs/**' .github/workflows/pages.yml
+  ':(top)website' ':(top,exclude)website/docs/**' ':(top).github/workflows/pages.yml'
 then
   printf '%s\n' 'full=false'
 else
