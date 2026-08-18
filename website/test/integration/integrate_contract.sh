@@ -55,6 +55,17 @@ grep -Fqx '      doc: []' "$default_host/.github/jekyll-obsidian.yml" || fail "t
 [ "$(grep -Fxc "      - 'docs/**'" "$default_host/.github/workflows/pages.yml")" -eq 2 ] || fail "content trigger was not generated twice."
 grep -Fq "bin/integrate --check" "$default_host/.github/workflows/pages.yml" || fail "workflow does not check integration drift."
 grep -Fq -- "--example" "$default_host/.github/workflows/pages.yml" || fail "template regression builds are not isolated."
+grep -Fq 'id: scope' "$default_host/.github/workflows/pages.yml" || fail "workflow does not expose the CI scope."
+grep -Fq 'scripts/ci-scope.sh "$BASE_SHA" "$HEAD_SHA" >> "$GITHUB_OUTPUT"' \
+  "$default_host/.github/workflows/pages.yml" || fail "workflow does not classify the complete change range."
+[ "$(grep -Fxc "        if: steps.scope.outputs.full == 'true'" "$default_host/.github/workflows/pages.yml")" -eq 3 ] ||
+  fail "full regression steps are not conditioned on the CI scope."
+grep -Fqx "        if: failure() && steps.scope.outputs.full == 'true'" \
+  "$default_host/.github/workflows/pages.yml" || fail "browser failure artifacts are not limited to full regressions."
+if sed -n '/      - name: Validate the host content/,/      - name: Freeze GitHub Markdown inputs/p' \
+  "$default_host/.github/workflows/pages.yml" | grep -Fq -- '--skip-assets'; then
+  fail "host validation still depends on assets from the full regression."
+fi
 assert_lf_without_bom "$default_host/.github/jekyll-obsidian.yml"
 assert_lf_without_bom "$default_host/.github/workflows/pages.yml"
 if [ -n "${INTEGRATION_REFERENCE_DIR:-}" ]; then

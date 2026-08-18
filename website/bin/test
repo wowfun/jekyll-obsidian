@@ -6,6 +6,7 @@ PROJECT_DIR=$(CDPATH= cd -- "$SCRIPT_DIR/.." && pwd)
 export BUNDLE_GEMFILE="$PROJECT_DIR/Gemfile"
 
 cd "$PROJECT_DIR"
+test/integration/ci_scope_contract.sh
 test/integration/integrate_contract.sh
 test/integration/update_contract.sh
 test/integration/build_contract.sh
