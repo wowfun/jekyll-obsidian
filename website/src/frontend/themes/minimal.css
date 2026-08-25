@@ -271,7 +271,7 @@
     font-size: clamp(1.35rem, 2.7vw, 1.75rem);
   }
 
-  .minimal-section-heading > a {
+  .minimal-recent__view-all {
     flex: none;
     color: var(--ink);
     font-size: 0.7rem;
@@ -281,13 +281,27 @@
     text-transform: uppercase;
   }
 
-  .minimal-section-heading > a:hover {
+  .minimal-recent__view-all:hover {
     color: var(--violet);
   }
 
   .minimal-recent__grid {
     display: grid;
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  .minimal-recent__footer {
+    display: flex;
+    justify-content: flex-end;
+    padding-block-start: 0.7rem;
+  }
+
+  .minimal-recent__view-all {
+    display: inline-flex;
+    align-items: center;
+    min-block-size: 2.75rem;
+    padding-inline: 0.15rem;
+    gap: 0.35rem;
   }
 
   .minimal-post-card {

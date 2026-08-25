@@ -644,8 +644,17 @@ test("Minimal Home combines authored content with at most six recent posts", asy
   await expect(cards.first().locator(".minimal-post-card__media img"))
     .toHaveAttribute("src", /\/__site__\/minimal\/assets\/vault\/assets\/research-folio\.svg$/);
   await expect(cards.nth(1).locator(".minimal-post-card__media")).toHaveCount(0);
-  await expect(recent.getByRole("link", { name: /View all/ }))
-    .toHaveAttribute("href", site("minimal", "/blog/"));
+  const viewAllLinks = recent.getByRole("link", { name: /View all/ });
+  await expect(viewAllLinks).toHaveCount(1);
+  const recentFooter = recent.locator(".minimal-recent__footer");
+  const bottomViewAll = recentFooter.getByRole("link", { name: /View all/ });
+  await expect(bottomViewAll).toBeVisible();
+  await expect(bottomViewAll).toHaveAttribute("href", site("minimal", "/blog/"));
+  const recentBox = (await recent.boundingBox())!;
+  const bottomViewAllBox = (await bottomViewAll.boundingBox())!;
+  expect(bottomViewAllBox.height).toBeGreaterThanOrEqual(44);
+  expect(bottomViewAllBox.x + bottomViewAllBox.width)
+    .toBeCloseTo(recentBox.x + recentBox.width, 0);
   await expect(cards.locator(":not(.minimal-post-card--with-image) .minimal-post-card__media"))
     .toHaveCount(0);
   await expect(page.locator(".blog-post-feed, .blog-pager, link[rel='next']")).toHaveCount(0);

@@ -8,10 +8,12 @@
     <section class="minimal-recent" aria-labelledby="minimal-recent-title">
       <header class="minimal-section-heading">
         <h2 id="minimal-recent-title">{{ ui.recent_posts | default: 'Recent posts' | escape }}</h2>
-        <a href="{{ blog_url | escape }}">{{ ui.view_all | default: 'View all' | escape }} <span aria-hidden="true">→</span></a>
       </header>
       <div class="minimal-recent__grid">
         {% include website/post-cards.html posts=recent_posts %}
+      </div>
+      <div class="minimal-recent__footer">
+        <a class="minimal-recent__view-all" href="{{ blog_url | escape }}">{{ ui.view_all | default: 'View all' | escape }} <span aria-hidden="true">→</span></a>
       </div>
     </section>
   {% endif %}
