@@ -177,6 +177,7 @@ module JekyllObsidian
       @diagnostics = []
       @notes = {}
       @all_note_paths = Set.new
+      @directory_index_paths = DeepFreeze.call({})
       @attachments = {}
       @attachment_basename_index = Hash.new { |hash, key| hash[key] = [] }
       @image_paths = {}
@@ -698,6 +699,7 @@ module JekyllObsidian
           error("invalid_entry_kind", "snapshot entry kind must be note, attachment, or locale_manifest", path)
         end
       end
+      @directory_index_paths = DirectoryIndexes.resolve(@all_note_paths)
     end
 
     def parse_public_notes
@@ -712,15 +714,15 @@ module JekyllObsidian
           route = @url_builder.validate_permalink(route)
           error("invalid_permalink", "permalink must be a concrete site path beginning and ending with /", note.id) unless route
         else
-          route = @url_builder.route_for_note(note.id)
+          route = @url_builder.route_for_note(note.id, directory_index: directory_index_note?(note.id))
         end
-        note.route = route || @url_builder.route_for_note(note.id)
-        if note.id == "index.md" && note.route != "/"
+        note.route = route || @url_builder.route_for_note(note.id, directory_index: directory_index_note?(note.id))
+        if root_index_note?(note.id) && note.route != "/"
           error("invalid_home_permalink", "the public root index must publish at /", note.id)
         end
         note.updated = note.properties["updated"]
         note.created = deterministic_created(note)
-        if note.id == "index.md" && note.properties["content_type"] && note.properties["content_type"] != "page"
+        if root_index_note?(note.id) && note.properties["content_type"] && note.properties["content_type"] != "page"
           error("invalid_root_content_type", "the public root index must have content_type: page", note.id)
         end
         note.content_type = effective_content_type(note)
@@ -758,6 +760,8 @@ module JekyllObsidian
     end
 
     def effective_content_type(note)
+      return "page" if root_index_note?(note.id)
+
       classified = @content_policy.classify(note.id, note.properties)
       return classified unless portfolio_note?(note.id)
 
@@ -777,6 +781,14 @@ module JekyllObsidian
 
       path = @navigation_config.fetch("portfolio").fetch("path")
       note_id.start_with?("#{path}/")
+    end
+
+    def directory_index_note?(note_id)
+      @directory_index_paths[File.dirname(note_id)] == note_id
+    end
+
+    def root_index_note?(note_id)
+      @directory_index_paths["."] == note_id
     end
 
     def parse_markdown_once
@@ -1731,6 +1743,7 @@ module JekyllObsidian
           published_at: note.published_at,
           nav_order: note.nav_order,
           nav_exclude: note.nav_exclude,
+          directory_index: directory_index_note?(note.id),
           has_h1: note.has_h1,
           feature_flags: note.feature_flags,
           content_security: content_security_needs(content),
@@ -1747,6 +1760,7 @@ module JekyllObsidian
       PublishedSiteModel.new(
         notes: notes,
         notes_by_id: notes.to_h { |note| [note.id, note] },
+        directory_index_paths: @directory_index_paths,
         relations: relations,
         graph_edges: graph_edges,
         graph_degrees: graph_degrees_for(notes, graph_edges)
@@ -2206,9 +2220,20 @@ module JekyllObsidian
       registry = DestinationRegistry.new
       (pages + generated_files + copied_assets).each do |output|
         destination = destination_key(output)
-        conflict = registry.add(destination, output.route)
+        conflict = registry.add(destination, output)
         if conflict
-          error("route_collision", "output route collides with #{conflict}", output.route)
+          readme_index = [output, conflict].find { |candidate| readme_directory_index_output?(candidate) }
+          if readme_index
+            note_id = readme_index.data.dig("website", "id")
+            conflicting_output = readme_index.equal?(output) ? conflict : output
+            error(
+              "route_collision",
+              "README.md becomes its folder index route and collides with #{conflicting_output.route}; set publish: false or rename it",
+              note_id
+            )
+          else
+            error("route_collision", "output route collides with #{conflict.route}", output.route)
+          end
         end
       end
 
@@ -2225,6 +2250,15 @@ module JekyllObsidian
       return unless production? && @notes.any?
       index_count = pages.count { |page| page.route == "/" }
       error("invalid_index_count", "production must generate exactly one /index.html", nil) unless index_count == 1
+    end
+
+    def readme_directory_index_output?(output)
+      return false unless output.is_a?(PageOutput)
+
+      website = output.data["website"]
+      note_id = website.is_a?(Hash) && website["id"]
+      website.is_a?(Hash) && website["directory_index"] == true &&
+        File.basename(note_id.to_s) == DirectoryIndexes::FALLBACK_BASENAME
     end
 
     def destination_key(output)

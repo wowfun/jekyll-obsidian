@@ -63,6 +63,11 @@ module JekyllObsidian
     def build_plan(result)
       published = result.notes.map(&:id).to_set
       portfolio_path = configured_portfolio_path
+      physical_note_paths = @request.snapshot.entries.filter_map do |entry|
+        path = entry.path.to_s
+        path if entry.kind.to_sym == :note && !path.start_with?(TRANSLATION_PREFIX)
+      end
+      portfolio_index_path = DirectoryIndexes.resolve(physical_note_paths)[portfolio_path]
       locales = Array(result.site_data.dig("website_i18n", "locales")).map { |item| item.fetch("code") }
       default_locale = @request.config.lang.to_s
       plan = []
@@ -81,7 +86,7 @@ module JekyllObsidian
         next if parsed.properties["publish"] == false
         next unless published_note?(published, logical_path, locale)
 
-        unless logical_path.start_with?("#{portfolio_path}/") && logical_path != "#{portfolio_path}/index.md"
+        unless logical_path.start_with?("#{portfolio_path}/") && logical_path != portfolio_index_path
           diagnostics << diagnostic(
             "github_markdown_scope",
             "github_markdown is only supported by project wrappers below the configured portfolio path",

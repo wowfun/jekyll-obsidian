@@ -112,6 +112,7 @@ module JekyllObsidian
     :published_at,
     :nav_order,
     :nav_exclude,
+    :directory_index,
     :has_h1,
     :feature_flags,
     :content_security,
@@ -127,6 +128,7 @@ module JekyllObsidian
   PublishedSiteModel = ImmutableRecord.define(
     :notes,
     :notes_by_id,
+    :directory_index_paths,
     :relations,
     :graph_edges,
     :graph_degrees

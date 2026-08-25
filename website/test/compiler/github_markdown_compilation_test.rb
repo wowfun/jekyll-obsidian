@@ -145,6 +145,15 @@ class GitHubMarkdownCompilationTest < Minitest::Test
         MARKDOWN
         "github_markdown_scope"
       ],
+      "portfolio/README.md" => [
+        <<~MARKDOWN,
+          ---
+          publish: true
+          github_markdown: https://github.com/acme/widget/blob/main/README.md
+          ---
+        MARKDOWN
+        "github_markdown_scope"
+      ],
       "portfolio/body.md" => [
         <<~MARKDOWN,
           ---

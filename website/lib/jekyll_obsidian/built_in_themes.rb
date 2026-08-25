@@ -95,6 +95,7 @@ module JekyllObsidian
           "cssclasses" => Array(properties["cssclasses"]),
           "created" => note.created,
           "updated" => note.updated,
+          "directory_index" => note.directory_index,
           "has_h1" => note.has_h1,
           "source_links" => note.source_links,
           "home_route" => home_route,
@@ -585,7 +586,8 @@ module JekyllObsidian
           "previous" => nil,
           "next" => nil
         }
-        root = model.notes_by_id["index.md"]
+        root_path = model.directory_index_paths&.fetch(".", nil)
+        root = root_path && model.notes_by_id[root_path]
         home_modules = home_theme_data(displayed, config, taxonomy)
         theme_data[root.id] = theme_data.fetch(root.id).merge(home_modules) if root
         if portfolio&.index_note_id
@@ -803,7 +805,8 @@ module JekyllObsidian
         navigation = config.navigation
         docs_home_url = navigation.docs_home_url
         linked = navigation.docs_note_ids.filter_map { |id| model.notes_by_id[id] }
-        landing = model.notes_by_id["index.md"] || linked.first || model.notes.first
+        root_path = model.directory_index_paths&.fetch(".", nil)
+        landing = (root_path && model.notes_by_id[root_path]) || linked.first || model.notes.first
         linked_positions = linked.each_with_index.to_h { |linked_note, index| [linked_note.id, index] }
         theme_data = model.notes.to_h do |note|
           index = linked_positions[note.id]

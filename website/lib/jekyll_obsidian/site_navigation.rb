@@ -87,7 +87,7 @@ module JekyllObsidian
         items = []
         posts = @model.notes.select { |note| note.content_type == "post" }
         docs = @model.notes.select { |note| note.content_type == "doc" }
-        root = @model.notes_by_id["index.md"]
+        root = directory_index(".")
         portfolio_owns_root_navigation = portfolio&.route == "/" && @settings.fetch("portfolio").fetch("visible")
 
         add_builtin(
@@ -134,7 +134,7 @@ module JekyllObsidian
 
       def docs_items(documentation, custom_tabs)
         items = []
-        root = @model.notes_by_id["index.md"]
+        root = directory_index(".")
         docs = @model.notes.select { |note| note.content_type == "doc" }
         add_builtin(
           items,
@@ -259,10 +259,15 @@ module JekyllObsidian
         }
       end
 
+      def directory_index(directory)
+        path = @model.directory_index_paths&.fetch(directory, nil)
+        path && @model.notes_by_id[path]
+      end
+
       def portfolio_projection
         path = @settings.fetch("portfolio").fetch("path")
         notes = @model.notes.select { |note| note.id.start_with?("#{path}/") }
-        index = notes.find { |note| note.id == "#{path}/index.md" }
+        index = directory_index(path)
         projects = notes.reject { |note| note.id == index&.id || note.nav_exclude }.sort_by do |note|
           portfolio_sort_key(note)
         end
@@ -297,7 +302,7 @@ module JekyllObsidian
             next
           end
           seen[id] = note.id
-          unless note.content_type == "page" && File.basename(note.id) == "index.md" && note.id != "index.md" && !note.nav_exclude
+          unless note.content_type == "page" && directory_index_note?(note) && File.dirname(note.id) != "." && !note.nav_exclude
             navigation_error(
               "invalid_tab_root",
               "tab must be declared by a visible content_type: page folder index",
@@ -415,7 +420,7 @@ module JekyllObsidian
               folder = folder[:children].fetch(segment)
             end
           end
-          if File.basename(navigation_id) == "index.md"
+          if directory_index_note?(note)
             folder[:index] = note
           else
             folder[:notes] << note
@@ -435,7 +440,7 @@ module JekyllObsidian
         walk.call(tree)
 
         configured_root = docs_directories.filter_map do |directory|
-          candidate = @model.notes_by_id["#{directory}/index.md"]
+          candidate = directory_index(directory)
           candidate if candidate&.content_type == "doc" && !candidate.nav_exclude
         end.first
         landing = configured_root || linked.first
@@ -468,6 +473,10 @@ module JekyllObsidian
           nodes << node
         end
         nodes.sort_by { |node| docs_sort_key(node) }
+      end
+
+      def directory_index_note?(note)
+        @model.directory_index_paths&.fetch(File.dirname(note.id), nil) == note.id
       end
 
       def first_link_url(nodes)

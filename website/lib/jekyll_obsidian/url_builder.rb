@@ -16,12 +16,12 @@ module JekyllObsidian
       freeze
     end
 
-    def route_for_note(path)
+    def route_for_note(path, directory_index: false)
       normalized = path.unicode_normalize(:nfc)
       segments = normalized.split("/")
       filename = segments.pop
       stem = filename.delete_suffix(".md")
-      segments << stem unless stem.casecmp("index").zero?
+      segments << stem unless directory_index || stem.casecmp("index").zero?
       encoded = segments.reject(&:empty?).map { |segment| encode_segment(segment) }
       encoded.empty? ? "/" : "/#{encoded.join("/")}/"
     end

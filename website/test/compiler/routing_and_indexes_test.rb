@@ -80,6 +80,85 @@ class RoutingAndIndexesTest < Minitest::Test
     assert result.diagnostics.any? { |item| item.code == "invalid_home_permalink" }
   end
 
+  def test_root_readme_becomes_the_authored_home_when_index_is_absent
+    result = compile(
+      note("README.md", "---\npublish: true\n---\n# Read me\n\nRoot introduction."),
+      theme: "minimal"
+    )
+
+    assert result.success?, result.diagnostics.map(&:message).join("\n")
+    home = page(result, "/")
+    refute_nil home
+    assert_equal "README.md", home.data.dig("website", "id")
+    assert_equal "home", home.data.dig("website", "kind")
+    assert_equal "/index.md", home.data.dig("website", "markdown_url")
+    assert_includes home.data.dig("website", "source_links", "source"), "vault/README.md"
+    assert_includes home.content, "Root introduction."
+    refute page(result, "/README/")
+  end
+
+  def test_physical_index_reserves_the_root_slot_even_when_it_is_private
+    published = compile(
+      note("index.md", "---\npublish: true\n---\n# Primary"),
+      note("README.md", "---\npublish: true\n---\n# Secondary"),
+      theme: "minimal"
+    )
+
+    assert published.success?, published.diagnostics.map(&:message).join("\n")
+    assert_equal "index.md", page(published, "/").data.dig("website", "id")
+    assert_equal "README.md", page(published, "/README/").data.dig("website", "id")
+
+    private = compile(
+      note("index.md", "---\npublish: false\n---\n# Private"),
+      note("README.md", "---\npublish: true\n---\n# Ordinary README"),
+      note("blog/post.md", "---\npublish: true\ncontent_type: post\ndate: 2026-08-22\n---\n# Post"),
+      theme: "minimal"
+    )
+
+    assert private.success?, private.diagnostics.map(&:message).join("\n")
+    assert_nil page(private, "/").data.dig("website", "id")
+    assert_equal "README.md", page(private, "/README/").data.dig("website", "id")
+
+    unpublished_fallback = compile(
+      note("README.md", "---\npublish: false\n---\n# Private README"),
+      note("blog/post.md", "---\npublish: true\ncontent_type: post\ndate: 2026-08-22\n---\n# Post"),
+      theme: "minimal"
+    )
+    assert unpublished_fallback.success?, unpublished_fallback.diagnostics.map(&:message).join("\n")
+    assert_nil page(unpublished_fallback, "/").data.dig("website", "id")
+    refute page(unpublished_fallback, "/README/")
+  end
+
+  def test_readme_fallback_is_exact_and_applies_to_nested_directories
+    result = compile(
+      note("index.md", "---\npublish: true\n---\n# Home"),
+      note("guides/README.md", "---\npublish: true\n---\n# Guides"),
+      note("notes/readme.md", "---\npublish: true\n---\n# Lowercase"),
+      theme: "minimal"
+    )
+
+    assert result.success?, result.diagnostics.map(&:message).join("\n")
+    assert_equal "guides/README.md", page(result, "/guides/").data.dig("website", "id")
+    assert_equal "/guides.md", page(result, "/guides/").data.dig("website", "markdown_url")
+    assert_equal "notes/readme.md", page(result, "/notes/readme/").data.dig("website", "id")
+  end
+
+  def test_root_readme_obeys_root_index_permalink_and_content_type_constraints
+    moved = compile(
+      note("README.md", "---\npublish: true\npermalink: /elsewhere/\n---\n# Home"),
+      theme: "minimal"
+    )
+    wrong_type = compile(
+      note("README.md", "---\npublish: true\ncontent_type: post\ndate: 2026-08-22\n---\n# Home"),
+      theme: "minimal"
+    )
+
+    refute moved.success?
+    assert moved.diagnostics.any? { |item| item.code == "invalid_home_permalink" && item.path == "README.md" }
+    refute wrong_type.success?
+    assert wrong_type.diagnostics.any? { |item| item.code == "invalid_root_content_type" && item.path == "README.md" }
+  end
+
   def test_equivalent_routes_collide_fail_closed
     result = compile(
       note("index.md", "---\npublish: true\nupdated: 2026-07-30\n---\n# Home"),
@@ -89,6 +168,22 @@ class RoutingAndIndexesTest < Minitest::Test
 
     refute result.success?
     assert result.diagnostics.any? { |item| item.code == "route_collision" }
+  end
+
+  def test_readme_index_collision_names_the_source_and_remediation
+    result = compile(
+      note("index.md", "---\npublish: true\n---\n# Home"),
+      note("blog/README.md", "---\npublish: true\n---\n# Blog introduction"),
+      note("posts/entry.md", "---\npublish: true\ncontent_type: post\ndate: 2026-08-26\n---\n# Entry"),
+      theme: "minimal"
+    )
+
+    refute result.success?
+    diagnostic = result.diagnostics.find { |item| item.code == "route_collision" }
+    refute_nil diagnostic
+    assert_equal "blog/README.md", diagnostic.path
+    assert_includes diagnostic.message, "README.md becomes its folder index route"
+    assert_includes diagnostic.message, "publish: false"
   end
 
   def test_versioned_indexes_are_stable_and_note_level

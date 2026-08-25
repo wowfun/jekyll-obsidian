@@ -99,6 +99,32 @@ class JekyllAdapterTest < Minitest::Test
     assert_equal "/index.md", homepage.data.dig("website", "markdown_url")
   end
 
+  def test_real_site_uses_root_readme_as_the_authored_home
+    FileUtils.rm(File.join(@temporary_root, "vault", "index.md"))
+    File.write(File.join(@temporary_root, "vault", "README.md"), <<~MARKDOWN)
+      ---
+      publish: true
+      title: README Home
+      ---
+      # README Home
+      Authored from the repository README.
+    MARKDOWN
+
+    site = build_site
+    site.process
+
+    html = File.read(File.join(destination, "index.html"))
+    assert_includes html, "Authored from the repository README."
+    assert File.file?(File.join(destination, "index.md"))
+    refute File.exist?(File.join(destination, "README", "index.html"))
+    homepage = site.pages.find { |page| page.respond_to?(:website_route) && page.website_route == "/" }
+    assert_equal "README.md", homepage.data.dig("website", "id")
+    assert_equal(
+      "https://github.com/example/obsidian/edit/main/vault/README.md",
+      homepage.data.dig("website", "source_links", "edit")
+    )
+  end
+
   def test_portfolio_apng_is_copied_to_the_built_site_byte_for_byte
     project_root = File.join(@temporary_root, "vault", "portfolio")
     FileUtils.mkdir_p(project_root)
@@ -480,6 +506,88 @@ class JekyllAdapterTest < Minitest::Test
       "/blog/?topic=release-notes",
       "/blog/?topic=ai-agent"
     ], topic_links.map { |link| link["href"] }
+  end
+
+  def test_index_pages_without_authored_h1_do_not_render_a_substitute_title
+    File.write(File.join(@temporary_root, "vault", "index.md"), <<~MARKDOWN)
+      ---
+      publish: true
+      title: Home
+      ---
+      ## Home introduction
+    MARKDOWN
+    FileUtils.mkdir_p(File.join(@temporary_root, "vault", "portfolio"))
+    File.write(File.join(@temporary_root, "vault", "portfolio", "index.md"), <<~MARKDOWN)
+      ---
+      publish: true
+      title: Portfolio
+      ---
+      ## Selected work
+    MARKDOWN
+    File.write(
+      File.join(@temporary_root, "vault", "portfolio", "project.md"),
+      "---\npublish: true\n---\n# Project\n"
+    )
+    FileUtils.mkdir_p(File.join(@temporary_root, "vault", "favorites"))
+    File.write(File.join(@temporary_root, "vault", "favorites", "index.md"), <<~MARKDOWN)
+      ---
+      publish: true
+      title: Favorites
+      tab:
+        id: favorites
+      ---
+      ## Saved notes
+    MARKDOWN
+    File.write(
+      File.join(@temporary_root, "vault", "ordinary.md"),
+      "---\npublish: true\ntitle: Ordinary page\n---\nBody without a level-one heading.\n"
+    )
+    install_project_layout
+
+    build_site("website" => website_config.merge("theme" => "minimal")).process
+
+    {
+      "index.html" => "Home introduction",
+      File.join("portfolio", "index.html") => "Selected work",
+      File.join("favorites", "index.html") => "Saved notes"
+    }.each do |path, heading|
+      document = Nokogiri::HTML5.parse(File.read(File.join(destination, path)))
+      assert_nil document.at_css(".note-title"), "expected #{path} to omit its substitute title"
+      assert_equal heading, document.at_css(".note-content h2").text
+    end
+
+    ordinary = Nokogiri::HTML5.parse(File.read(File.join(destination, "ordinary", "index.html")))
+    assert_equal "Ordinary page", ordinary.at_css(".note-title").text
+  end
+
+  def test_readme_directory_indexes_without_authored_h1_do_not_render_a_substitute_title
+    FileUtils.rm(File.join(@temporary_root, "vault", "index.md"))
+    File.write(File.join(@temporary_root, "vault", "README.md"), <<~MARKDOWN)
+      ---
+      publish: true
+      ---
+      ## Home introduction
+    MARKDOWN
+    FileUtils.mkdir_p(File.join(@temporary_root, "vault", "guide"))
+    File.write(File.join(@temporary_root, "vault", "guide", "README.md"), <<~MARKDOWN)
+      ---
+      publish: true
+      title: Guide manual
+      ---
+      ## Guide introduction
+    MARKDOWN
+    install_project_layout
+
+    build_site("website" => website_config.merge("theme" => "minimal")).process
+
+    {
+      "index.html" => "Home introduction",
+      File.join("guide", "index.html") => "Guide introduction"
+    }.each do |path, heading|
+      document = Nokogiri::HTML5.parse(File.read(File.join(destination, path)))
+      assert_nil document.at_css(".note-title"), "expected #{path} to omit its substitute title"
+      assert_equal heading, document.at_css(".note-content h2").text
+    end
   end
 
   def test_post_byline_uses_resolved_authors_and_preserves_each_title_owner

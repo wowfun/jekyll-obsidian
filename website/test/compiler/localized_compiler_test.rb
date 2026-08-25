@@ -105,6 +105,27 @@ class LocalizedCompilerTest < Minitest::Test
       "https://example.test/zh-CN/"
   end
 
+  def test_readme_home_keeps_same_path_translation_and_physical_source_identity
+    result = compile(
+      note("README.md", "---\npublish: true\ntitle: Home\n---\n# Home"),
+      *manifests,
+      note("_translations/zh-CN/README.md", "---\npublish: true\ntitle: 首页\n---\n# 首页"),
+      theme: "minimal",
+      i18n: I18N.merge("enabled" => true)
+    )
+
+    assert result.success?, result.diagnostics.map(&:message).join("\n")
+    default = page(result, "/")
+    translated = page(result, "/zh-CN/")
+    assert_equal "README.md", default.data.dig("website", "id")
+    assert_equal "README.md", translated.data.dig("website", "id")
+    assert result.notes.any? { |note_output| note_output.id == "zh-CN:README.md" }
+    assert_equal "/index.md", default.data.dig("website", "markdown_url")
+    assert_equal "/zh-CN/index.md", translated.data.dig("website", "markdown_url")
+    assert_includes translated.data.dig("website", "source_links", "source"),
+      "vault/_translations/zh-CN/README.md"
+  end
+
   def test_minimal_blog_heading_localizes_unless_configuration_supplies_a_label
     entries = [
       note("index.md", "---\npublish: true\n---\n# Home"),

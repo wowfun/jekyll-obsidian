@@ -326,6 +326,21 @@ class NavigationConfigurationTest < Minitest::Test
     refute_includes projects.fetch("url"), "/site/site/"
   end
 
+  def test_custom_tab_accepts_readme_when_the_folder_has_no_index
+    result = compile(
+      note("index.md", "---\npublish: true\n---\n# Home"),
+      note("about/README.md", "---\npublish: true\ntab:\n  id: about\n---\n# About"),
+      note("about/team.md", "---\npublish: true\n---\n# Team"),
+      theme: "minimal"
+    )
+
+    assert result.success?, result.diagnostics.map(&:message).join("\n")
+    about = navigation_for(result, "/").find { |item| item.fetch("id") == "about" }
+    assert_equal({ "id" => "about", "label" => "About", "url" => "/about/", "order" => 100 }, about)
+    assert_equal "about", current_navigation_id(result, "/about/")
+    assert_equal "about", current_navigation_id(result, "/about/team/")
+  end
+
   def test_custom_tab_scope_does_not_override_nested_posts
     result = compile(
       note("index.md", "---\npublish: true\n---\n# Home"),
@@ -363,6 +378,7 @@ class NavigationConfigurationTest < Minitest::Test
     model = JekyllObsidian::PublishedSiteModel.new(
       notes: [root, post, doc, page_note],
       notes_by_id: [root, post, doc, page_note].to_h { |item| [item.id, item] },
+      directory_index_paths: { "." => "index.md", "about" => "about/index.md" },
       relations: [],
       graph_edges: [],
       graph_degrees: {}
@@ -412,6 +428,7 @@ class NavigationConfigurationTest < Minitest::Test
     model = JekyllObsidian::PublishedSiteModel.new(
       notes: notes,
       notes_by_id: notes.to_h { |note| [note.id, note] },
+      directory_index_paths: { "work" => "work/index.md" },
       relations: [],
       graph_edges: [],
       graph_degrees: {}
@@ -446,6 +463,7 @@ class NavigationConfigurationTest < Minitest::Test
     model = JekyllObsidian::PublishedSiteModel.new(
       notes: notes,
       notes_by_id: notes.to_h { |note| [note.id, note] },
+      directory_index_paths: {},
       relations: [],
       graph_edges: [],
       graph_degrees: {}
@@ -482,6 +500,7 @@ class NavigationConfigurationTest < Minitest::Test
       model = JekyllObsidian::PublishedSiteModel.new(
         notes: notes,
         notes_by_id: notes.to_h { |note| [note.id, note] },
+        directory_index_paths: { "portfolio" => "portfolio/index.md" },
         relations: [],
         graph_edges: [],
         graph_degrees: {}

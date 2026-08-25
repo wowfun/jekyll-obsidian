@@ -1,13 +1,17 @@
 {% assign show_note_header = false %}
+{% assign show_note_title = false %}
+{% unless page.website.has_h1 %}
+  {% unless page.website.directory_index %}{% assign show_note_title = true %}{% endunless %}
+{% endunless %}
 {% if page.website.kind == 'note' %}{% assign show_note_header = true %}{% endif %}
 {% if page.website.kind == 'home' and page.website.id %}
-  {% unless page.website.has_h1 %}{% assign show_note_header = true %}{% endunless %}
+  {% if show_note_title %}{% assign show_note_header = true %}{% endif %}
   {% if page.website.subtitle %}{% assign show_note_header = true %}{% endif %}
 {% endif %}
 {% if show_note_header %}
   {% assign ui = page.website.i18n.messages %}
   <header class="note-header" lang="{{ page.website.i18n.content_lang | default: page.website.i18n.locale | default: site.lang | default: 'en' | escape }}" dir="{{ page.website.i18n.content_dir | default: page.website.i18n.dir | default: 'ltr' | escape }}">
-    {% unless page.website.has_h1 %}<h1 class="note-title">{{ page.title | escape }}</h1>{% endunless %}
+    {% if show_note_title %}<h1 class="note-title">{{ page.title | escape }}</h1>{% endif %}
     {% if page.website.kind == 'note' and page.website.content_type == 'post' and page.website.authors.size > 0 %}<p class="note-byline">{{ ui.posted_by | default: 'Posted by' | escape }} {% for author in page.website.authors %}{% if author.url %}<a href="{{ author.url | escape }}">{{ author.name | escape }}</a>{% else %}{{ author.name | escape }}{% endif %}{% unless forloop.last %}, {% endunless %}{% endfor %}</p>{% endif %}
     {% if page.website.subtitle %}<p class="note-subtitle">{{ page.website.subtitle | escape }}</p>{% elsif page.website.kind == 'note' and page.description %}<p class="note-description">{{ page.description | escape }}</p>{% endif %}
     {% if page.website.theme == 'minimal' %}{% include website/portfolio-topics.html topics=page.website.theme_data.portfolio_topics url=page.website.routes.portfolio %}{% endif %}

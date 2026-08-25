@@ -503,6 +503,23 @@ class ThemeContractTest < Minitest::Test
     ], portfolio.data.dig("website", "theme_data", "portfolio_projects")
   end
 
+  def test_portfolio_readme_replaces_a_missing_index_without_becoming_a_project
+    result = compile(
+      note("index.md", "---\npublish: true\n---\n# Home"),
+      note("portfolio/README.md", "---\npublish: true\n---\n# Selected work\n\nREADME introduction."),
+      note("portfolio/project.md", "---\npublish: true\n---\n# Project"),
+      theme: "minimal"
+    )
+
+    assert result.success?, result.diagnostics.map(&:message).join("\n")
+    portfolio = page(result, "/portfolio/")
+    assert_equal "portfolio/README.md", portfolio.data.dig("website", "id")
+    assert_includes portfolio.content, "README introduction."
+    assert_equal ["portfolio/project.md"], portfolio.data.dig(
+      "website", "theme_data", "portfolio_projects"
+    ).map { |project| project.fetch("id") }
+  end
+
   def test_minimal_generates_a_portfolio_index_without_exposing_note_actions
     result = compile(
       note("index.md", "---\npublish: true\n---\n# Home"),
@@ -723,6 +740,36 @@ class ThemeContractTest < Minitest::Test
     manual_data = page(result, "/docs/").data.dig("website", "theme_data")
     assert_nil manual_data.fetch("previous")
     assert_equal "docs/install.md", manual_data.fetch("next").fetch("id")
+  end
+
+  def test_docs_readme_replaces_a_missing_folder_index
+    result = compile(
+      note("index.md", "---\npublish: true\n---\n# Home"),
+      note("docs/README.md", "---\npublish: true\nnav_order: 1\n---\n# Manual"),
+      note("docs/install.md", "---\npublish: true\nnav_order: 10\n---\n# Install"),
+      theme: "docs"
+    )
+
+    assert result.success?, result.diagnostics.map(&:message).join("\n")
+    home_data = page(result, "/").data.dig("website", "theme_data")
+    assert_equal "/docs/", home_data.fetch("docs_home_url")
+    assert_equal ["docs/install.md"], home_data.fetch("docs_tree").map { |node| node.fetch("id") }
+    manual_data = page(result, "/docs/").data.dig("website", "theme_data")
+    assert_nil manual_data.fetch("previous")
+    assert_equal "docs/install.md", manual_data.fetch("next").fetch("id")
+
+    blocked = compile(
+      note("index.md", "---\npublish: true\n---\n# Home"),
+      note("docs/index.md", "---\npublish: false\n---\n# Private manual"),
+      note("docs/README.md", "---\npublish: true\nnav_order: 1\n---\n# Ordinary README"),
+      note("docs/install.md", "---\npublish: true\nnav_order: 10\n---\n# Install"),
+      theme: "docs"
+    )
+    assert blocked.success?, blocked.diagnostics.map(&:message).join("\n")
+    assert_equal "/docs/README/", page(blocked, "/").data.dig("website", "theme_data", "docs_home_url")
+    assert_equal %w[docs/README.md docs/install.md], page(blocked, "/").data.dig(
+      "website", "theme_data", "docs_tree"
+    ).map { |node| node.fetch("id") }
   end
 
   def test_docs_folders_without_landings_link_to_their_first_ordered_page
