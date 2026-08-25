@@ -74,7 +74,7 @@ Windows 路径分隔符会在写入可移植配置前完成规范化：
 .\website\bin\integrate.cmd --source "Documentation\User Guide" --theme docs
 ```
 
-内容目录必须是仓库中已经存在的相对目录。路径遍历、与站点重叠、符号链接、Windows junction、reparse point 和路径大小写不一致都会被拒绝。内容根目录及其所有子目录都可以没有 `index.md`。无依赖命令负责校验集成路径；Actions 中的编译器继续负责 YAML、路由、链接、附件和发布规则，并要求发布策略至少选中一篇笔记。
+内容目录必须是仓库中已经存在的相对目录。路径遍历、与站点重叠、符号链接、Windows junction、reparse point 和路径大小写不一致都会被拒绝。内容根目录及其所有子目录都可以没有 `index.md`。物理 `index.md` 不存在时，同级且文件名精确为 `README.md` 的公开笔记会承担相同作用；已有的 `index.md` 即使未发布也保持优先。无依赖命令负责校验集成路径；Actions 中的编译器继续负责 YAML、路由、链接、附件和发布规则，并要求发布策略至少选中一篇笔记。
 
 主题标识只支持 `minimal` 和 `docs`。
 

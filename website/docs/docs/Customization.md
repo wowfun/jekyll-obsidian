@@ -9,7 +9,7 @@ related:
   - "[[docs/Localization]]"
 description: Adjust site identity, visual tokens, navigation, and repository links.
 created: 2026-07-31
-updated: 2026-08-09
+updated: 2026-08-22
 ---
 
 # Customization
@@ -68,7 +68,7 @@ An explicit YAML boolean always wins. `publish: false` excludes one note from a 
 
 `title`, `description`, and `lang` feed the shell, metadata, Atom, and accessibility labels. Set `website.repository` to an `owner/repository` pair to show the Edit link. If it is blank, the build checks `GITHUB_REPOSITORY` and the local `origin` remote. The action stays hidden when no repository can be identified. This host repository setting never changes the Built by Jekyll Obsidian footer link, which always identifies the official project at `https://github.com/wowfun/jekyll-obsidian`.
 
-Minimal Home renders the public root `index.md`, followed by the six most recent posts as editorial rows. A row with an image places a 16:9 thumbnail beside its summary on wide screens and above it on narrow screens; a row without an image uses the full width with no placeholder. Each summary can also show `subtitle`, a body excerpt, authors, and its publication date. The Blog link opens the complete reverse-chronological list at `/blog/`.
+Minimal Home renders the public root directory index, followed by the six most recent posts as editorial rows. The index is `index.md`, or the exact sibling `README.md` when no physical `index.md` exists. A selected directory index without an authored level-one heading does not render a substitute heading from its filename or frontmatter title; the resolved title remains available to metadata and navigation. A row with an image places a 16:9 thumbnail beside its summary on wide screens and above it on narrow screens; a row without an image uses the full width with no placeholder. Each summary can also show `subtitle`, a body excerpt, authors, and its publication date. The Blog link opens the complete reverse-chronological list at `/blog/`.
 
 Add `website.contacts` to place contact links after the recent-post section. Each entry requires a short `label` and an `https:`, `mailto:`, or `tel:` URL; use an empty list or omit it when the base configuration does not define contacts. Email, phone, GitHub, LinkedIn, X/Twitter, Mastodon, Bluesky, Instagram, YouTube, Telegram, RSS, and Website links receive an accessible icon automatically. Other providers keep their label as text, so the configuration stays provider-neutral and needs no icon field.
 
@@ -126,7 +126,7 @@ website:
       visible: true
 ```
 
-The Portfolio path is relative to `website.source`; an explicit path replaces the default `portfolio` path. Published Markdown descendants become Portfolio pages, so an explicit `content_type` within that path must be `page`. A public `<path>/index.md` keeps its authored introduction above the project grid. When it is absent, the compiler generates the Portfolio index at that route. The index itself is not a project. Projects with `pinned: true` appear first; each group is then ordered by `nav_order`, title, and path. Set `nav_exclude: true` on a project to omit its card, or set `website.navigation.portfolio.visible: false` to hide only the tab while keeping the Portfolio index and project pages public.
+The Portfolio path is relative to `website.source`; an explicit path replaces the default `portfolio` path. Published Markdown descendants become Portfolio pages, so an explicit `content_type` within that path must be `page`. A public directory index keeps its authored introduction above the project grid. Use `<path>/index.md`, or `<path>/README.md` when no physical index exists. When the selected index is not public, the compiler generates the Portfolio index at that route. The selected index itself is not a project. Projects with `pinned: true` appear first; each group is then ordered by `nav_order`, title, and path. Set `nav_exclude: true` on a project to omit its card, or set `website.navigation.portfolio.visible: false` to hide only the tab while keeping the Portfolio index and project pages public.
 
 Each project card uses its `image`, title, and `description`, falling back to a preview from the body when no description is present. Local GIF, WebP, AVIF, and APNG files are copied byte for byte and rendered with `<img>`, which preserves animation. The compiler does not transcode them or generate thumbnails.
 
@@ -134,7 +134,7 @@ A project can replace its local body with a public GitHub Markdown file by setti
 
 ## Custom tabs
 
-Minimal and Docs use the same custom-tab contract. Declare a tab on a published folder `index.md`; that note remains the canonical tab homepage, and its authored body appears above the generated member cards:
+Minimal and Docs use the same custom-tab contract. Declare a tab on a published folder index, either `index.md` or its eligible `README.md` fallback. That note remains the canonical tab homepage, and its authored body appears above the generated member cards:
 
 ```yaml
 ---
@@ -326,6 +326,6 @@ Wiki-link entries must be YAML double-quoted strings. Their visible label uses t
 
 An explicit `content_type: post | doc | page` wins over directory defaults. Post publication dates use `date`, then `created`, then the first Git commit. A production build rejects a post with no deterministic date. On Minimal Home and Blog, posts with `pinned: true` appear before unpinned posts; both groups retain reverse-chronological order. Pinning affects card presentation only, not Atom feed chronology or the previous and next post sequence.
 
-Docs navigation follows vault directories. `nav_order` sorts sibling documents and `nav_exclude: true` removes only that note link; children remain reachable. `index.md` is optional at every level. A published root `index.md` always owns `/`, so a different `permalink` on that note is rejected. A folder without an index links to its first visible child after `nav_order`, title, and path sorting. Minimal Home can render without a root index when posts exist; if neither exists, the root redirects to the first visible top-level navigation destination. Docs redirects an indexless root to its first navigation item. Every Docs page server-renders the complete documentation tree; JavaScript navigation preserves the shared shell while replacing only page-specific content and context. Search builds its index in a Web Worker. Local graphs are projected by the compiler; the browser fetches the complete graph only after its dialog opens.
+Docs navigation follows vault directories. `nav_order` sorts sibling documents and `nav_exclude: true` removes only that note link; children remain reachable. `index.md` is optional at every level. When no physical `index.md` exists, a published exact `README.md` becomes the folder index. An existing `index.md` reserves that role even when unpublished, leaving `README.md` as an ordinary note. A published root index always owns `/`, so a different `permalink` on that note is rejected. A folder without a public selected index links to its first visible child after `nav_order`, title, and path sorting. Minimal Home can render without a root index when posts exist; if neither exists, the root redirects to the first visible top-level navigation destination. Docs redirects an indexless root to its first navigation item. Every Docs page server-renders the complete documentation tree; JavaScript navigation preserves the shared shell while replacing only page-specific content and context. Search builds its index in a Web Worker. Local graphs are projected by the compiler; the browser fetches the complete graph only after its dialog opens.
 
 See [[docs/development/architecture|Architecture]] before changing compiler or adapter seams.

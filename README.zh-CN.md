@@ -100,7 +100,7 @@ tags:
 
 字符串 `"true"` 和 `"yes"` 不会被接受。如需递归发布整个文件夹，请把相对于内容根目录的路径加入 `website.content.publish_by_default`；使用 `.` 可选择完整内容树。默认发布范围内的单篇笔记仍可通过 YAML 布尔值 `publish: false` 排除。生成内容快照前会排除 Obsidian 的 `.obsidian/` 状态目录和 `.trash/` 目录。
 
-内容根目录及其所有子目录都可以不包含 `index.md`。Minimal 会先在 Home 页面显示公开的根 `index.md`，再显示最近六篇文章；没有根页面时，Home 仍可显示文章流。缺少索引的文件夹会链接到排序后的第一个公开页面。内容目录中没有任何公开笔记时，构建仍会失败。
+内容根目录及其所有子目录都可以不包含 `index.md`。如果文件夹中没有物理 `index.md`，同级且文件名精确为 `README.md` 的公开笔记会成为索引。即使 `index.md` 未发布，它仍然拥有更高优先级，此时 `README.md` 仍是普通笔记。README 被选为索引后仍保留原始路径和源码操作，但会发布到文件夹路由。Minimal 会先在 Home 页面显示选中的公开根索引，再显示最近六篇文章；没有根页面时，Home 仍可显示文章流。没有公开索引的文件夹会链接到排序后的第一个公开页面。内容目录中没有任何公开笔记时，构建仍会失败。
 
 在宿主仓库根目录更新已发布 tag 对应的安装：
 
@@ -120,7 +120,7 @@ website/bin/setup
 website/bin/dev
 ```
 
-本地服务器默认地址为 `http://127.0.0.1:58000/`。`website/bin/dev` 默认使用 Minimal 主题；传入 `--theme docs` 可预览独立文档手册。
+本地服务器默认地址为 `http://127.0.0.1:58000/`。`website/bin/dev` 默认使用 Minimal 主题；传入 `--theme docs` 可预览独立文档手册。运行 `website/bin/dev --help` 可查看专用的主机、端口、基础路径和主题参数。文件监听会自动启用，每次变更都会触发完整的原子重建；不支持 Jekyll 的 `--watch`、`--incremental` 或任意参数透传。
 
 在仓库根目录运行 `website/bin/clean` 可删除生成站点、Jekyll 与前端缓存、测试报告、覆盖率结果和构建临时目录；已安装的 Ruby 与 Node.js 依赖会保留。
 

@@ -7,7 +7,7 @@ tags:
   - i18n
 description: Publish locale overlays with localized navigation, search, and SEO metadata.
 created: 2026-08-04
-updated: 2026-08-09
+updated: 2026-08-22
 ---
 
 # Localization
@@ -56,7 +56,7 @@ content/
             └── Advanced.md
 ```
 
-Relative paths pair translations. In this example, `_translations/zh-CN/guide/Advanced.md` translates `guide/Advanced.md`. A translated note without a default note at the same path is an orphan and fails the build. Locale roots do not require `index.md`; each one redirects to its localized form of the default tree's first ordered page.
+Relative paths pair translations. In this example, `_translations/zh-CN/guide/Advanced.md` translates `guide/Advanced.md`. A translated note without a default note at the same path is an orphan and fails the build. Locale roots do not require `index.md`. When the default root uses the `README.md` fallback, its translation uses the same `_translations/<locale>/README.md` path. A locale with no public root index redirects to its localized form of the default tree's first ordered page.
 
 The default tree owns site structure. It decides which notes exist, how they are classified, their structural `nav_order`, custom-tab IDs and selectors, and which public routes they use. Translations supply localized content without creating a separate information architecture. A custom tab keeps the default language's member set even when translated tags or categories differ; cards use the current locale's content and may use its rendered titles as an ordering tie-breaker.
 

@@ -6,7 +6,7 @@ tags:
   - guide/portfolio
 description: Publish project pages and import a public GitHub README as a project body.
 created: 2026-08-07
-updated: 2026-08-09
+updated: 2026-08-22
 ---
 
 # Portfolio
@@ -17,7 +17,7 @@ Minimal can turn a source folder into a Portfolio tab, index, and project grid. 
 
 With no Portfolio configuration, Minimal checks the source-relative `portfolio` folder. The collection appears when that folder contains at least one published Markdown project that is not excluded with `nav_exclude: true`.
 
-Detection is recursive. The folder does not qualify when it contains only attachments, drafts, an `index.md`, or excluded projects. The index introduces the collection but is not a project.
+Detection is recursive. The folder does not qualify when it contains only attachments, drafts, the selected directory index, or excluded projects. The index introduces the collection but is not a project.
 
 Use a different folder, label, order, or tab visibility under `website.navigation`:
 
@@ -50,13 +50,13 @@ Local GIF, WebP, AVIF, and APNG files are copied byte for byte and shown with an
 
 ## Add an introduction or custom route
 
-Create `<path>/index.md` to place an authored introduction above the project grid. Its frontmatter, body, translations, outline, graph, and source actions work like any other public note. A `permalink` on that index chooses the Portfolio landing route.
+Create `<path>/index.md` to place an authored introduction above the project grid. If no physical `index.md` exists, `<path>/README.md` can take its place. The fallback name is exact, and an existing `index.md` keeps priority even when unpublished. The selected note's frontmatter, body, translations, outline, graph, and source actions work like any other public note. It keeps its source path while publishing at the Portfolio landing route. A `permalink` on that note chooses the landing route.
 
-Without an index, the compiler derives the route from a virtual `<path>/index.md` and generates a system page. That page has no source file, Markdown endpoint, comments, or source actions.
+Without a public selected index, the compiler derives the route from a virtual `<path>/index.md` and generates a system page. That page has no source file, Markdown endpoint, comments, or source actions.
 
 ## Import a GitHub Markdown file
 
-A Portfolio project can use one public Markdown file from `github.com` as its complete body:
+A Portfolio project can use one public Markdown file from `github.com` as its complete body. The selected Portfolio index is not a project wrapper, so `github_markdown` is rejected on both `index.md` and an eligible `README.md` fallback.
 
 ```yaml
 ---
@@ -97,7 +97,7 @@ Edit continues to open the local wrapper. View imported Markdown opens the exact
 | Symptom | Check |
 | --- | --- |
 | The Portfolio tab is absent | Confirm that Minimal is active and the configured path contains a published project without `nav_exclude: true`. |
-| The index exists but the collection is absent | `index.md` does not count as a project. Add a separate published Markdown file. |
+| The index exists but the collection is absent | The selected `index.md` or fallback `README.md` does not count as a project. Add a separate published Markdown file. |
 | A project reports a content type conflict | Remove an explicit `post` or `doc` type. Portfolio projects are pages. |
 | An imported body conflicts with local content | Keep the wrapper frontmatter, then remove every non-whitespace character after it. |
 | A GitHub link fails validation | Use a public `github.com` Markdown file. Use the mapping form for a reference that contains `/`. |

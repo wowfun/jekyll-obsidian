@@ -7,7 +7,7 @@ tags:
   - github-pages
 description: Add the website workspace to another repository and deploy its documentation without a local build toolchain.
 created: 2026-08-02
-updated: 2026-08-07
+updated: 2026-08-22
 ---
 
 # Host integration
@@ -80,7 +80,7 @@ Windows path separators are accepted and normalized before writing the portable 
 .\website\bin\integrate.cmd --source "Documentation\User Guide" --theme docs
 ```
 
-The source must be an existing repository-relative directory. Traversal, site overlap, symbolic links, Windows junctions, reparse points, and path casing mismatches are rejected. `index.md` is optional at the source root and in every subdirectory. The dependency-free command validates the integration path; the compiler in Actions remains authoritative for YAML, routing, link, attachment, and publication validation and requires at least one note selected by the publication policy.
+The source must be an existing repository-relative directory. Traversal, site overlap, symbolic links, Windows junctions, reparse points, and path casing mismatches are rejected. `index.md` is optional at the source root and in every subdirectory. When it is physically absent, a published sibling named exactly `README.md` takes the same role. An existing `index.md` keeps priority even when unpublished. The dependency-free command validates the integration path; the compiler in Actions remains authoritative for YAML, routing, link, attachment, and publication validation and requires at least one note selected by the publication policy.
 
 The supported theme identifiers are `minimal` and `docs`.
 

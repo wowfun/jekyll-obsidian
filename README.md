@@ -101,7 +101,7 @@ tags:
 
 The strings `"true"` and `"yes"` are not accepted. To publish a whole folder recursively, list its path under `website.content.publish_by_default`; use `.` to select the complete content tree. A note can opt out of either default with the YAML boolean `publish: false`. Obsidian's `.obsidian/` state and `.trash/` are excluded from the content snapshot.
 
-`index.md` is optional at the content root and in every nested folder. Minimal uses a public root `index.md` above the six most recent posts on Home; without one, Home can still show the post stream. A folder without an index links to its first ordered public page. A content directory with no public notes still fails the build.
+`index.md` is optional at the content root and in every nested folder. When a folder has no physical `index.md`, a published sibling named exactly `README.md` becomes its index. A physical `index.md` keeps priority even when it is unpublished; in that case, `README.md` remains an ordinary note. A selected README keeps its source path and source actions but publishes at the folder route. Minimal places the selected public root index above the six most recent posts on Home; without one, Home can still show the post stream. A folder without a public selected index links to its first ordered public page. A content directory with no public notes still fails the build.
 
 Update a tagged installation from the host repository root:
 
@@ -121,7 +121,7 @@ website/bin/setup
 website/bin/dev
 ```
 
-Open the URL printed by the local server, which is `http://127.0.0.1:58000/` by default. Local preview uses the Minimal theme unless you pass `--theme docs`.
+Open the URL printed by the local server, which is `http://127.0.0.1:58000/` by default. Local preview uses the Minimal theme unless you pass `--theme docs`; run `website/bin/dev --help` for the dedicated host, port, base URL, and theme options. File watching is automatic, and each change gets a complete atomic rebuild. Jekyll `--watch`, `--incremental`, and arbitrary passthrough options are not supported.
 
 Run `website/bin/clean` from the repository root to remove generated sites, Jekyll and frontend caches, test reports, coverage, and temporary build directories. Installed Ruby and Node.js dependencies are preserved.
 

@@ -68,7 +68,9 @@ website/bin/setup
 website/bin/dev
 ```
 
-`website/bin/setup` 会在 `website/` 中安装锁定版本的 Ruby 与 Node 依赖。`website/bin/dev` 会监视配置的内容和站点源码，在需要时重新构建前端资源，并默认用 Minimal 提供 `website/_site` 的本地预览。传入 `--theme docs` 可以预览文档手册。
+`website/bin/setup` 会在 `website/` 中安装锁定版本的 Ruby 与 Node 依赖。`website/bin/dev` 会监视配置的内容和站点源码，在需要时重新构建前端资源，并默认用 Minimal 提供 `website/_site` 的本地预览。传入 `--theme docs` 可以预览文档手册。运行 `website/bin/dev --help` 可查看专用的 `--host`、`--port`、`--baseurl` 和 `--theme` 参数及其默认值。
+
+文件监听始终启用。每次变更都会执行完整的原子重建，避免全局导航、搜索、关系图数据或已删除页面变得陈旧。因此，`website/bin/dev` 不接受 Jekyll 的 `--watch`、`--incremental`，也不接受 `--` 后的任意透传参数。
 
 如需在本地复现生产构建，请运行：
 

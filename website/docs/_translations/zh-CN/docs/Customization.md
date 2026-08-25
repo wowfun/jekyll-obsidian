@@ -60,7 +60,7 @@ website:
 
 `title`、`description` 和 `lang` 会进入站点外壳、元数据、Atom 和无障碍标签。将 `website.repository` 设为 `owner/repository` 可以显示 Edit 链接。该值为空时，构建会检查 `GITHUB_REPOSITORY` 和本地 `origin` remote。无法识别仓库时，操作会保持隐藏。这个宿主仓库配置不会更改页脚中的 Built by Jekyll Obsidian 链接；页脚始终指向官方项目 `https://github.com/wowfun/jekyll-obsidian`。
 
-Minimal Home 会先显示公开的根 `index.md`，再用编辑式列表显示最近六篇文章。带图片的条目在宽屏中把 16:9 缩略图放在摘要旁边，在窄屏中放到摘要上方；没有图片的条目会占满宽度，不显示占位图。摘要还可以显示 `subtitle`、正文摘录、作者和发布日期。Blog 链接会打开 `/blog/` 中完整的倒序文章列表。
+Minimal Home 会先显示公开的根目录索引，再用编辑式列表显示最近六篇文章。索引默认为 `index.md`；物理 `index.md` 不存在时，才会使用同级且文件名精确为 `README.md` 的公开笔记。被选中的目录索引没有正文一级标题时，不会再通过文件名或 frontmatter 标题补出可见标题；解析后的标题仍用于元数据和导航。带图片的条目在宽屏中把 16:9 缩略图放在摘要旁边，在窄屏中放到摘要上方；没有图片的条目会占满宽度，不显示占位图。摘要还可以显示 `subtitle`、正文摘录、作者和发布日期。Blog 链接会打开 `/blog/` 中完整的倒序文章列表。
 
 配置 `website.contacts` 后，可以在最近文章区之后显示联系方式。每个条目都需要简短的 `label`，以及采用 `https:`、`mailto:` 或 `tel:` 的 URL。基础配置没有联系方式时，可以省略该项或使用空数组。Email、Phone、GitHub、LinkedIn、X/Twitter、Mastodon、Bluesky、Instagram、YouTube、Telegram、RSS 和 Website 链接会自动获得无障碍图标。其他服务会直接显示文本标签，因此配置保持服务中立，不需要额外的 icon 字段。
 
@@ -118,7 +118,7 @@ website:
       visible: true
 ```
 
-作品集路径相对于 `website.source`；显式路径会取代默认的 `portfolio`。该路径下的已发布 Markdown 后代统一变成作品集页面，因此其中显式设置的 `content_type` 必须为 `page`。公开的 `<path>/index.md` 会在项目网格上方保留自定义介绍；没有索引时，编译器会在该路由生成作品集索引。索引本身不算项目。设置了 `pinned: true` 的项目排在最前；置顶组和普通组内部再依次按 `nav_order`、标题和路径排序。项目设置 `nav_exclude: true` 后不会显示卡片；设置 `website.navigation.portfolio.visible: false` 只会隐藏标签页，作品集索引和项目页面仍然公开。
+作品集路径相对于 `website.source`；显式路径会取代默认的 `portfolio`。该路径下的已发布 Markdown 后代统一变成作品集页面，因此其中显式设置的 `content_type` 必须为 `page`。公开的目录索引会在项目网格上方保留自定义介绍。可以使用 `<path>/index.md`；没有物理索引时，也可以使用 `<path>/README.md`。选中的索引未发布时，编译器会在该路由生成作品集索引。索引本身不算项目。设置了 `pinned: true` 的项目排在最前；置顶组和普通组内部再依次按 `nav_order`、标题和路径排序。项目设置 `nav_exclude: true` 后不会显示卡片；设置 `website.navigation.portfolio.visible: false` 只会隐藏标签页，作品集索引和项目页面仍然公开。
 
 项目卡片使用 `image`、标题和 `description`；未设置描述时，会回退到正文预览。本地 GIF、WebP、AVIF 与 APNG 文件会逐字节复制并通过 `<img>` 显示，从而保留动画。编译器不会转码或生成缩略图。
 
@@ -126,7 +126,7 @@ website:
 
 ## 自定义标签页
 
-Minimal 与 Docs 使用同一套自定义标签页契约。在已发布文件夹的 `index.md` 上声明标签页；该笔记仍是标签页的 canonical 主页，其正文显示在自动生成的成员卡片之前：
+Minimal 与 Docs 使用同一套自定义标签页契约。在已发布的文件夹索引上声明标签页，可以使用 `index.md`，也可以使用符合条件的 `README.md` 回退。该笔记仍是标签页的 canonical 主页，其正文显示在自动生成的成员卡片之前：
 
 ```yaml
 ---
@@ -318,6 +318,6 @@ Wiki 链接条目必须使用 YAML 双引号字符串。可见标签优先使用
 
 显式的 `content_type: post | doc | page` 优先于目录默认值。文章发布时间依次使用 `date`、`created` 和第一次 Git 提交时间。生产构建会拒绝没有确定日期的文章。在 Minimal Home 和 Blog 中，设置了 `pinned: true` 的文章排在普通文章之前，两组内部都保持时间倒序。置顶只影响卡片展示，不改变 Atom Feed 的时间顺序以及上一篇、下一篇文章序列。
 
-Docs 导航沿用内容目录结构。`nav_order` 对同级文档排序，`nav_exclude: true` 只移除当前笔记链接，子页面仍然可以访问。所有层级都可以没有 `index.md`。公开的根 `index.md` 始终拥有 `/`，因此该笔记使用其他 `permalink` 会被拒绝。没有索引的文件夹会打开依次按 `nav_order`、标题和路径排序的第一个可见子页面。存在文章时，Minimal Home 可以不需要根索引；两者都不存在时，根路径会重定向到第一个可见顶层导航目标。Docs 没有根索引时会重定向到第一项导航。每个 Docs 页面都由服务器渲染完整文档树；JavaScript 导航只替换页面内容与上下文，保留共享外壳。Search 在 Web Worker 中构建索引。局部图谱由编译器投影；浏览器只在打开对话框后读取完整图谱。
+Docs 导航沿用内容目录结构。`nav_order` 对同级文档排序，`nav_exclude: true` 只移除当前笔记链接，子页面仍然可以访问。所有层级都可以没有 `index.md`。物理 `index.md` 不存在时，同级且文件名精确为 `README.md` 的公开笔记会成为文件夹索引。已有的 `index.md` 即使未发布也会保留该位置，此时 `README.md` 仍是普通笔记。公开的根索引始终拥有 `/`，因此该笔记使用其他 `permalink` 会被拒绝。没有公开索引的文件夹会打开依次按 `nav_order`、标题和路径排序的第一个可见子页面。存在文章时，Minimal Home 可以不需要根索引；两者都不存在时，根路径会重定向到第一个可见顶层导航目标。Docs 没有根索引时会重定向到第一项导航。每个 Docs 页面都由服务器渲染完整文档树；JavaScript 导航只替换页面内容与上下文，保留共享外壳。Search 在 Web Worker 中构建索引。局部图谱由编译器投影；浏览器只在打开对话框后读取完整图谱。
 
 修改编译器或适配器边界前，请阅读 [[docs/development/architecture|架构]]。

@@ -8,7 +8,7 @@ tags:
   - guide/getting-started
 description: Publish a Markdown folder through GitHub Actions, with local preview available when you need it.
 created: 2026-07-31
-updated: 2026-08-07
+updated: 2026-08-22
 ---
 
 # Getting Started
@@ -75,7 +75,9 @@ website/bin/setup
 website/bin/dev
 ```
 
-`website/bin/setup` installs the locked Ruby and Node dependencies under `website/`. `website/bin/dev` watches the configured content and site sources, rebuilds frontend assets when needed, and serves `website/_site` with Minimal by default. Pass `--theme docs` to preview the handbook.
+`website/bin/setup` installs the locked Ruby and Node dependencies under `website/`. `website/bin/dev` watches the configured content and site sources, rebuilds frontend assets when needed, and serves `website/_site` with Minimal by default. Pass `--theme docs` to preview the handbook. Run `website/bin/dev --help` to see the dedicated `--host`, `--port`, `--baseurl`, and `--theme` options and their defaults.
+
+Watching is always enabled. Every change uses a complete atomic rebuild so global navigation, search, graph data, and removed pages cannot become stale. For that reason, `website/bin/dev` does not accept Jekyll's `--watch` or `--incremental` options, or arbitrary options after `--`.
 
 To reproduce a production build locally:
 
