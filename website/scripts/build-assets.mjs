@@ -7,6 +7,7 @@ import { stageGeneratedAssets } from "./cache-boundary.mjs";
 const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const outputDirectory = path.join(projectRoot, ".jekyll-obsidian-cache", "assets");
 const staged = await stageGeneratedAssets(projectRoot, outputDirectory);
+const quiet = process.argv.slice(2).includes("--quiet");
 
 try {
 
@@ -41,7 +42,7 @@ const result = await esbuild.build({
   sourcemap: false,
   minify: true,
   legalComments: "none",
-  logLevel: "info"
+  logLevel: quiet ? "warning" : "info"
 });
 
 const outputs = Object.entries(result.metafile.outputs)

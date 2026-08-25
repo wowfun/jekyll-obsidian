@@ -78,6 +78,66 @@ class DevWatchTest < Minitest::Test
     refute silencer.silenced?(Pathname("notes/note.md"), :file)
   end
 
+  def test_initial_build_status_reports_scope_and_elapsed_time
+    output = StringIO.new
+    warnings = StringIO.new
+    ticks = [10.0, 11.25]
+    build_assets = []
+
+    succeeded = JekyllObsidian::DevWatch.build_with_status(
+      initial: true,
+      build_assets: true,
+      build_runner: ->(with_assets) { build_assets << with_assets; true },
+      output:,
+      warnings:,
+      clock: -> { ticks.shift }
+    )
+
+    assert succeeded
+    assert_equal [true], build_assets
+    assert_equal "Building assets and site...\nBuilt assets and site in 1.25s.\n", output.string
+    assert_empty warnings.string
+  end
+
+  def test_rebuild_failure_status_keeps_the_last_successful_site_available
+    output = StringIO.new
+    warnings = StringIO.new
+    ticks = [20.0, 22.5]
+
+    succeeded = JekyllObsidian::DevWatch.build_with_status(
+      initial: false,
+      build_assets: false,
+      build_runner: ->(_with_assets) { false },
+      output:,
+      warnings:,
+      clock: -> { ticks.shift }
+    )
+
+    refute succeeded
+    assert_equal "Source changed. Rebuilding site...\n", output.string
+    assert_equal "Build failed after 2.50s. Continuing to serve the last successful site.\n", warnings.string
+  end
+
+  def test_initial_build_failure_status_explains_that_the_watcher_stays_active
+    output = StringIO.new
+    warnings = StringIO.new
+    ticks = [30.0, 31.0]
+
+    succeeded = JekyllObsidian::DevWatch.build_with_status(
+      initial: true,
+      build_assets: true,
+      build_runner: ->(_with_assets) { false },
+      output:,
+      warnings:,
+      clock: -> { ticks.shift }
+    )
+
+    refute succeeded
+    assert_equal "Building assets and site...\n", output.string
+    assert_equal "Initial build failed after 1.00s. The watcher will stay active so you can repair the source.\n",
+      warnings.string
+  end
+
   def test_failed_build_does_not_prevent_switching_to_a_valid_content_root
     listener_class = Struct.new(:stopped) do
       def stop
@@ -90,6 +150,9 @@ class DevWatchTest < Minitest::Test
     current_listener = listener_class.new(false)
     next_listener = listener_class.new(false)
     events = []
+    output = StringIO.new
+    warnings = StringIO.new
+    ticks = [40.0, 43.0]
 
     layout, listener = JekyllObsidian::DevWatch.rebuild_and_refresh(
       batch: [[:site, "_config.yml"]],
@@ -111,11 +174,14 @@ class DevWatchTest < Minitest::Test
         events << [:listen, source_root]
         next_listener
       end,
-      output: StringIO.new,
-      warnings: StringIO.new
+      output:,
+      warnings:,
+      clock: -> { ticks.shift }
     )
 
     assert_equal [[:build, false], [:resolve], [:listen, "/host/docs"]], events
+    assert_equal "Source changed. Rebuilding site...\nNow watching docs/ for published content.\n", output.string
+    assert_equal "Build failed after 3.00s. Continuing to serve the last successful site.\n", warnings.string
     assert current_listener.stopped
     assert_same next_layout, layout
     assert_same next_listener, listener
@@ -133,6 +199,9 @@ class DevWatchTest < Minitest::Test
     current_listener = listener_class.new(false)
     next_listener = listener_class.new(false)
     events = []
+    output = StringIO.new
+    warnings = StringIO.new
+    ticks = [50.0, 50.75]
 
     layout, listener = JekyllObsidian::DevWatch.rebuild_and_refresh(
       batch: [[:host_config, ".github/jekyll-obsidian.yml"]],
@@ -145,11 +214,15 @@ class DevWatchTest < Minitest::Test
       build_runner: ->(build_assets) { events << [:build, build_assets]; true },
       layout_resolver: ->(_site_dir, _destination) { events << [:resolve]; next_layout },
       listener_starter: ->(source_root, _changes) { events << [:listen, source_root]; next_listener },
-      output: StringIO.new,
-      warnings: StringIO.new
+      output:,
+      warnings:,
+      clock: -> { ticks.shift }
     )
 
     assert_equal [[:build, false], [:resolve], [:listen, "/host/docs"]], events
+    assert_equal "Source changed. Rebuilding site...\nRebuilt site in 0.75s.\n" \
+      "Now watching docs/ for published content.\n", output.string
+    assert_empty warnings.string
     assert current_listener.stopped
     assert_same next_layout, layout
     assert_same next_listener, listener
@@ -178,14 +251,84 @@ class DevWatchTest < Minitest::Test
 
     assert_includes source, 'Options.new(host: "127.0.0.1", port: 58_000, baseurl: "", theme: "minimal")'
     assert_includes source, 'command.concat(["--theme", options.theme])'
+    assert_includes source, 'command << "--quiet"'
+    assert_includes source, '"--trace", "--quiet",'
+    assert_includes source, 'Process.kill("INT", -server_pid)'
+    refute_includes source, 'Process.kill("TERM", -server_pid)'
   end
 
-  def test_local_server_help_reports_the_preview_theme_default
+  def test_local_server_help_supports_short_and_long_forms_and_explains_rebuild_policy
     command = File.expand_path("../../bin/dev", __dir__)
-    stdout, stderr, status = Open3.capture3(command, "--help")
+    %w[-h --help].each do |flag|
+      stdout, stderr, status = Open3.capture3(command, flag)
 
-    assert status.success?, stderr
-    assert_empty stderr
-    assert_includes stdout, "Preview theme (default: minimal)"
+      assert status.success?, "#{flag}: #{stderr}"
+      assert_empty stderr, flag
+      assert_includes stdout, "Preview host (default: 127.0.0.1)"
+      assert_includes stdout, "Preview port (default: 58000)"
+      assert_includes stdout, "Preview base URL (default: empty)"
+      assert_includes stdout, "Preview theme (default: minimal)"
+      assert_includes stdout, "Watching is always enabled."
+      assert_includes stdout, "--watch and --incremental are not supported."
+    end
+  end
+
+  def test_local_server_rejects_unsupported_and_unknown_options_without_a_ruby_backtrace
+    command = File.expand_path("../../bin/dev", __dir__)
+    %w[--watch --incremental --unknown].each do |flag|
+      stdout, stderr, status = Open3.capture3(command, flag)
+
+      refute status.success?, flag
+      assert_empty stdout, flag
+      assert_includes stderr, "Error: invalid option: #{flag}"
+      assert_includes stderr, "Run <site-dir>/bin/dev --help for supported options."
+      refute_includes stderr, "dev-watch.rb:"
+    end
+  end
+
+  def test_local_server_rejects_arguments_after_the_option_terminator
+    command = File.expand_path("../../bin/dev", __dir__)
+    stdout, stderr, status, timed_out = capture_command(command, "--", "--watch")
+
+    refute timed_out, "bin/dev started the watcher instead of rejecting trailing arguments"
+    refute status.success?
+    assert_empty stdout
+    assert_includes stderr, "Error: unexpected argument: --watch"
+    assert_includes stderr, "Run <site-dir>/bin/dev --help for supported options."
+    refute_includes stderr, "dev-watch.rb:"
+  end
+
+  private
+
+  def capture_command(*command)
+    stdout_text = nil
+    stderr_text = nil
+    status = nil
+    timed_out = false
+    Open3.popen3(*command, pgroup: true) do |stdin, stdout, stderr, waiter|
+      stdin.close
+      stdout_reader = Thread.new { stdout.read }
+      stderr_reader = Thread.new { stderr.read }
+      unless waiter.join(2)
+        timed_out = true
+        begin
+          Process.kill("TERM", -waiter.pid)
+        rescue Errno::ESRCH
+          nil
+        end
+        unless waiter.join(2)
+          begin
+            Process.kill("KILL", -waiter.pid)
+          rescue Errno::ESRCH
+            nil
+          end
+          waiter.join
+        end
+      end
+      status = waiter.value
+      stdout_text = stdout_reader.value
+      stderr_text = stderr_reader.value
+    end
+    [stdout_text, stderr_text, status, timed_out]
   end
 end

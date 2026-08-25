@@ -39,13 +39,32 @@ ASSET_WATCH_ENTRIES = %w[
 ].freeze
 
 options = Options.new(host: "127.0.0.1", port: 58_000, baseurl: "", theme: "minimal")
-OptionParser.new do |parser|
+parser = OptionParser.new do |parser|
   parser.banner = "Usage: <site-dir>/bin/dev [--host HOST] [--port PORT] [--baseurl PATH] [--theme minimal|docs]"
-  parser.on("--host HOST") { |value| options.host = value }
-  parser.on("--port PORT", Integer) { |value| options.port = value }
-  parser.on("--baseurl PATH") { |value| options.baseurl = value }
+  parser.on("--host HOST", "Preview host (default: 127.0.0.1)") { |value| options.host = value }
+  parser.on("--port PORT", Integer, "Preview port (default: 58000)") { |value| options.port = value }
+  parser.on("--baseurl PATH", "Preview base URL (default: empty)") { |value| options.baseurl = value }
   parser.on("--theme THEME", %w[minimal docs], "Preview theme (default: minimal)") { |value| options.theme = value }
-end.parse!
+  parser.on("-h", "--help", "Show this help") do
+    puts parser
+    exit 0
+  end
+  parser.separator ""
+  parser.separator "Watching is always enabled. Development uses complete atomic rebuilds;"
+  parser.separator "Jekyll --watch and --incremental are not supported."
+end
+begin
+  parser.parse!
+rescue OptionParser::ParseError => exception
+  warn "Error: #{exception.message}"
+  warn "Run <site-dir>/bin/dev --help for supported options."
+  exit 1
+end
+unless ARGV.empty?
+  warn "Error: unexpected argument: #{ARGV.first}"
+  warn "Run <site-dir>/bin/dev --help for supported options."
+  exit 1
+end
 
 site_dir = File.expand_path("..", __dir__)
 destination = "_site"
@@ -89,7 +108,7 @@ def under_entry?(path, entry)
   path == entry || path.start_with?("#{entry}/")
 end
 
-def run_build(site_dir, options, destination, build_assets:)
+def execute_build(site_dir, options, destination, build_assets:)
   command = [
     File.join(site_dir, "bin/build"),
     "--url", "http://#{options.host}:#{options.port}",
@@ -97,6 +116,7 @@ def run_build(site_dir, options, destination, build_assets:)
     "--destination", destination
   ]
   command.concat(["--theme", options.theme])
+  command << "--quiet"
   command << "--skip-assets" unless build_assets
 
   success = false
@@ -147,12 +167,15 @@ rescue JekyllObsidian::WorkspaceLayout::Invalid => exception
   exit 1
 end
 
-unless run_build(site_dir, options, destination, build_assets: true)
-  warn "Initial build failed. The watcher will stay active so you can repair the source."
-end
+JekyllObsidian::DevWatch.build_with_status(
+  initial: true,
+  build_assets: true,
+  build_runner: ->(with_assets) { execute_build(site_dir, options, destination, build_assets: with_assets) }
+)
 
 server_command = [
   "bundle", "exec", "jekyll", "serve",
+  "--trace", "--quiet",
   "--skip-initial-build",
   "--no-watch",
   "--config", configuration_paths(site_dir).join(","),
@@ -169,7 +192,7 @@ stop = proc do
 
   stopping = true
   begin
-    Process.kill("TERM", -server_pid)
+    Process.kill("INT", -server_pid)
   rescue Errno::ESRCH
     nil
   end
@@ -193,8 +216,10 @@ begin
 
     exited_server = Process.waitpid(server_pid, Process::WNOHANG)
     if exited_server
-      warn "Jekyll server exited. Stop the watcher and inspect the server output."
-      stopping = true
+      unless stopping
+        warn "Jekyll server exited. Stop the watcher and inspect the server output."
+        stopping = true
+      end
       next
     end
 
@@ -220,7 +245,7 @@ begin
       layout:,
       content_listener:,
       changes:,
-      build_runner: ->(with_assets) { run_build(site_dir, options, destination, build_assets: with_assets) },
+      build_runner: ->(with_assets) { execute_build(site_dir, options, destination, build_assets: with_assets) },
       layout_resolver: method(:resolve_layout),
       listener_starter: method(:start_content_listener)
     )

@@ -14,6 +14,7 @@ build_assets=1
 theme=""
 source_override=""
 example_mode=0
+quiet=0
 
 if [ "${PAGES_BASE_PATH+x}" = x ]; then
   base_path=$PAGES_BASE_PATH
@@ -24,7 +25,7 @@ elif [ "${JEKYLL_BASEURL+x}" = x ]; then
 fi
 
 usage() {
-  printf '%s\n' "Usage: <site-dir>/bin/build [--url ORIGIN] [--baseurl PATH] [--source PATH | --example] [--theme minimal|docs] [--destination _site[-NAME]] [--skip-assets]"
+  printf '%s\n' "Usage: <site-dir>/bin/build [--url ORIGIN] [--baseurl PATH] [--source PATH | --example] [--theme minimal|docs] [--destination _site[-NAME]] [--skip-assets] [--quiet]"
 }
 
 fail() {
@@ -70,6 +71,10 @@ while [ "$#" -gt 0 ]; do
       ;;
     --skip-assets)
       build_assets=0
+      shift
+      ;;
+    --quiet)
+      quiet=1
       shift
       ;;
     --help|-h)
@@ -250,14 +255,27 @@ yaml_string() {
 
 cd "$PROJECT_DIR"
 if [ "$build_assets" -eq 1 ]; then
-  npm run build
+  if [ "$quiet" -eq 1 ]; then
+    npm run --silent build -- --quiet
+  else
+    npm run build
+  fi
 fi
 
-JEKYLL_ENV=$build_environment bundle exec jekyll build --trace --config "$config_files,$overlay"
+if [ "$quiet" -eq 1 ]; then
+  JEKYLL_ENV=$build_environment bundle exec jekyll build --trace --config "$config_files,$overlay" > /dev/null
+else
+  JEKYLL_ENV=$build_environment bundle exec jekyll build --trace --config "$config_files,$overlay"
+fi
 
 if [ "$build_environment" = production ]; then
-  "$PROJECT_DIR/scripts/audit-site.sh" "$staging_destination"
-  bundle exec ruby "$PROJECT_DIR/scripts/verify-site-urls.rb" "$staging_destination" "$origin" "$base_path"
+  if [ "$quiet" -eq 1 ]; then
+    "$PROJECT_DIR/scripts/audit-site.sh" "$staging_destination" > /dev/null
+    bundle exec ruby "$PROJECT_DIR/scripts/verify-site-urls.rb" "$staging_destination" "$origin" "$base_path" > /dev/null
+  else
+    "$PROJECT_DIR/scripts/audit-site.sh" "$staging_destination"
+    bundle exec ruby "$PROJECT_DIR/scripts/verify-site-urls.rb" "$staging_destination" "$origin" "$base_path"
+  fi
 fi
 
 backup_destination=$application_cache/site-backup-$$

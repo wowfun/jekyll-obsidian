@@ -38,10 +38,12 @@ new_host() {
 set -eu
 previous=""
 config=""
+if [ -n "${CAPTURE_BUNDLE_ARGS:-}" ]; then
+  printf '%s\n' "$@" > "$CAPTURE_BUNDLE_ARGS"
+fi
 for argument in "$@"; do
   if [ "$previous" = "--config" ]; then
     config=$argument
-    break
   fi
   previous=$argument
 done
@@ -49,6 +51,12 @@ done
 overlay=${config##*,}
 cp "$overlay" "$CAPTURE_OVERLAY"
 printf '%s' "$config" > "$CAPTURE_CONFIG_PATHS"
+[ -z "${FAKE_BUNDLE_PROGRESS:-}" ] || printf '%s\n' "$FAKE_BUNDLE_PROGRESS"
+[ -z "${FAKE_BUNDLE_WARNING:-}" ] || printf '%s\n' "$FAKE_BUNDLE_WARNING" >&2
+[ -z "${FAKE_BUNDLE_ERROR:-}" ] || {
+  printf '%s\n' "$FAKE_BUNDLE_ERROR" >&2
+  exit 1
+}
 SH
   chmod +x "$new_host_path/fake-bin/bundle"
 }
@@ -112,5 +120,55 @@ if grep -Fq '.github/jekyll-obsidian.yml' "$example_host/config-paths.txt"; then
 fi
 grep -Fq '/website/scripts/example-config.yml' "$example_host/config-paths.txt" || fail "the bundled-example build omitted its project-only configuration."
 grep -Fqx '  source: "website/docs"' "$example_host/overlay.yml" || fail "the bundled-example build did not select website/docs."
+
+new_host
+quiet_host=$new_host_path
+cat > "$quiet_host/fake-bin/npm" <<'SH'
+#!/usr/bin/env sh
+set -eu
+printf '%s\n' "$@" > "$CAPTURE_NPM_ARGS"
+quiet=0
+for argument in "$@"; do
+  [ "$argument" = "--quiet" ] && quiet=1
+done
+[ "$quiet" -eq 1 ] || printf '%s\n' "Asset progress" >&2
+printf '%s\n' "Asset warning" >&2
+SH
+chmod +x "$quiet_host/fake-bin/npm"
+if ! CAPTURE_OVERLAY="$quiet_host/overlay.yml" \
+  CAPTURE_CONFIG_PATHS="$quiet_host/config-paths.txt" \
+  CAPTURE_BUNDLE_ARGS="$quiet_host/bundle-args.txt" \
+  CAPTURE_NPM_ARGS="$quiet_host/npm-args.txt" \
+  FAKE_BUNDLE_PROGRESS="Jekyll progress" \
+  FAKE_BUNDLE_WARNING="Jekyll warning" \
+  PATH="$quiet_host/fake-bin:$PATH" \
+  JEKYLL_ENV=development \
+    sh "$quiet_host/website/bin/build" --quiet --destination _site-quiet \
+      > "$quiet_host/stdout.txt" 2> "$quiet_host/stderr.txt"; then
+  fail "--quiet did not complete a development build."
+fi
+[ ! -s "$quiet_host/stdout.txt" ] || fail "--quiet emitted success progress."
+grep -Fqx "Asset warning" "$quiet_host/stderr.txt" || fail "--quiet swallowed an asset warning."
+grep -Fqx "Jekyll warning" "$quiet_host/stderr.txt" || fail "--quiet swallowed a warning."
+if grep -Fqx "Asset progress" "$quiet_host/stderr.txt"; then
+  fail "--quiet emitted asset success progress."
+fi
+if grep -Fqx -- "--quiet" "$quiet_host/bundle-args.txt"; then
+  fail "--quiet was forwarded to Jekyll and would suppress warnings."
+fi
+grep -Fqx -- "--quiet" "$quiet_host/npm-args.txt" || fail "--quiet did not silence the asset compiler."
+
+if CAPTURE_OVERLAY="$quiet_host/error-overlay.yml" \
+  CAPTURE_CONFIG_PATHS="$quiet_host/error-config-paths.txt" \
+  FAKE_BUNDLE_ERROR="Jekyll compile failure with trace" \
+  PATH="$quiet_host/fake-bin:$PATH" \
+  JEKYLL_ENV=development \
+    sh "$quiet_host/website/bin/build" --quiet --skip-assets --destination _site-quiet-error \
+      > "$quiet_host/error-stdout.txt" 2> "$quiet_host/error-stderr.txt"; then
+  fail "--quiet hid a failed Jekyll build."
+fi
+[ ! -s "$quiet_host/error-stdout.txt" ] || fail "a failed quiet build emitted success progress."
+grep -Fqx "Jekyll compile failure with trace" "$quiet_host/error-stderr.txt" || \
+  fail "--quiet swallowed a Jekyll compile error or trace."
 
 printf '%s\n' "Build integration contract passed."
