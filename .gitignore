@@ -1,6 +1,7 @@
 # Local reference material and task notes
 /.local/
 /.references/
+/.agents/skills/
 
 # Repository-local environment
 /.env
