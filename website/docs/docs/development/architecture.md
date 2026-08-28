@@ -13,7 +13,7 @@ updated: 2026-08-06
 
 # Architecture
 
-The project has three cooperating modules behind one compiler interface: the pure vault compiler, an internal theme presenter seam, and the Jekyll adapter. That shape keeps publication rules testable without a live site, gives two theme adapters one immutable content model, and keeps Jekyll lifecycle details out of note parsing.
+The project keeps one public compiler interface, `VaultCompiler.compile(BuildRequest)`. Behind it, the pure vault compiler delegates raw HTML authorization and projection to the internal `HtmlPublication` deep module, delegates presentation to the internal theme seam, and hands immutable output to the Jekyll adapter. That shape keeps publication rules testable without a live site, gives two theme adapters one immutable content model, and keeps Jekyll lifecycle details out of note parsing.
 
 ## Reader isolation
 
@@ -21,7 +21,9 @@ The project has three cooperating modules behind one compiler interface: the pur
 
 ## Compiler boundary
 
-The compiler receives an immutable snapshot of public-source bytes, attachment metadata, normalized paths, configuration, and optional Git dates. It does not read the filesystem, ask Jekyll for state, use the network, inspect environment variables, or read the current clock. Its sorted result contains pages, generated files, copied assets, and diagnostics. Localization stays behind this same `VaultCompiler.compile(BuildRequest)` interface: one locale plan creates default-authoritative overlay snapshots and combines their immutable outputs before Jekyll receives them. ^compiler-contract
+The compiler receives an immutable snapshot of public-source bytes, attachment metadata, normalized paths, configuration, and optional Git dates. It does not read the filesystem, ask Jekyll for state, use the network, inspect environment variables, or read the current clock. Its sorted result contains pages, generated files, projected files, and diagnostics. Localization stays behind this same `VaultCompiler.compile(BuildRequest)` interface: one locale plan creates default-authoritative overlay snapshots and combines their immutable outputs before Jekyll receives them. ^compiler-contract
+
+`HtmlPublication.resolve` validates explicit mappings, expands directory bundles, creates the source-to-route index, and emits the stable raw HTML manifest in one pass. Localized compilation reuses that resolution and merges raw HTML once as a shared projection instead of creating locale copies. The manifest is a publication allowlist, not a MIME policy; the deployment server remains responsible for safe `Content-Type` headers and content-sniffing behavior for uncommon extensions.
 
 The fixed pipeline is:
 
@@ -43,7 +45,7 @@ Embedded links remain relationships of their authored source note. They do not b
 
 ## Adapter boundary
 
-The adapter takes one filesystem snapshot from the content root, optionally scans Git history from the workspace root, and calls the compiler. Jekyll and frontend assets continue to use the site root, while caches and destinations stay below it. The adapter performs a global preflight before it appends any output to Jekyll. Generated HTML, JSON, and XML use pages without source files. Reachable attachments use a controlled static-file subclass because Jekyll's ordinary static files copy existing source files.
+The adapter takes one filesystem snapshot from the content root, optionally scans Git history from the workspace root, and calls the compiler. Jekyll and frontend assets continue to use the site root, while caches and destinations stay below it. The adapter performs a global preflight before it appends any output to Jekyll. Generated HTML, JSON, and XML use pages without source files. Source-backed attachments and raw HTML bundle files share `ProjectedFile` plus a controlled static-file subclass. The adapter pins inode, modification time, and size while atomically staging each projection, so a source cannot change between compilation and Jekyll's copy.
 
 The adapter also loads only the selected theme and feature closure from the hashed frontend manifest into `site.data`. Layouts pass routes through Jekyll's URL helpers, so JavaScript never assumes a deployment base path.
 

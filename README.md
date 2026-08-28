@@ -103,6 +103,16 @@ The strings `"true"` and `"yes"` are not accepted. To publish a whole folder rec
 
 `index.md` is optional at the content root and in every nested folder. When a folder has no physical `index.md`, a published sibling named exactly `README.md` becomes its index. A physical `index.md` keeps priority even when it is unpublished; in that case, `README.md` remains an ordinary note. A selected README keeps its source path and source actions but publishes at the folder route. Minimal places the selected public root index above the six most recent posts on Home; without one, Home can still show the post stream. A folder without a public selected index links to its first ordered public page. A content directory with no public notes still fails the build.
 
+Trusted standalone HTML slides can also publish at explicit routes without a theme or Liquid pass. Map one `.html` file or a directory bundle containing `index.html`; a bundle publishes its regular files with their relative structure intact, except Markdown and compiler locale manifests such as `_locale.yml`:
+
+```yaml
+website:
+  html:
+    slides/product-tour: /slides/product-tour/
+```
+
+HTML mappings are an explicit publication boundary independent of Markdown defaults. Raw pages stay out of navigation, Search, Graph, feeds, and sitemap, and they execute as trusted same-origin code. Review the complete bundle before publishing. See [Customization](website/docs/docs/Customization.md#standalone-html-slides) and the [working slide source](website/docs/slides/jekyll-obsidian/index.html).
+
 Update a tagged installation from the host repository root:
 
 ```sh

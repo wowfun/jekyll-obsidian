@@ -9,7 +9,7 @@ related:
   - "[[docs/Localization]]"
 description: Adjust site identity, visual tokens, navigation, and repository links.
 created: 2026-07-31
-updated: 2026-08-22
+updated: 2026-08-26
 ---
 
 # Customization
@@ -38,6 +38,8 @@ website:
       post: []
       doc: []
   features: {}
+  html:
+    slides/runtime: /presentations/runtime/
   contacts:
     - label: GitHub
       url: https://github.com/owner
@@ -63,6 +65,25 @@ website:
 ```
 
 An explicit YAML boolean always wins. `publish: false` excludes one note from a selected directory, while `publish: true` includes one note outside those directories. Publication directories do not classify content; `default_type`, `directories.post`, `directories.doc`, and a note's `content_type` still decide whether a published note is a page, post, or document. Attachments remain private unless a published note, its `image` property, or its transclusion closure references them.
+
+## Standalone HTML slides
+
+`website.html` explicitly publishes trusted HTML outside the theme renderer. Map a vault-relative source path to one root-relative public route:
+
+```yaml
+website:
+  html:
+    slides/runtime: /presentations/runtime/
+    slides/status.html: /status.html
+```
+
+A file mapping requires an exact `.html` source and an `.html` target, and publishes only that file. A directory mapping requires an exact `index.html` and a target ending in `/`; it preserves the relative paths of regular bundle files. The complete bundle can therefore include CSS, JavaScript, fonts, images, and application-specific data files. Markdown and compiler locale manifests such as `_locale.yml` remain under the normal compiler rules and are not copied with the bundle.
+
+The source must be a normalized, vault-relative POSIX path. Sources cannot overlap. The target must not include `baseurl`, a query, a fragment, encoded path separators, `/`, `/assets/website/`, or `/assets/vault/`. File, directory, locale, generated-system, and host Jekyll destination collisions fail before output is appended.
+
+The compiler copies these files byte for byte: it does not apply a theme, execute Liquid, inject metadata, synthesize a Content Security Policy, or rewrite relative URLs. Root-relative URLs authored inside raw HTML must already include the deployment `baseurl`; relative URLs are usually more portable. A normal Markdown link or `[[slides/runtime/index.html|Open slides]]` resolves to the configured route. Non-HTML bundle media referenced by a Markdown embed or an `image` property reuse their mapped route without creating a second vault-asset copy. `![[...html]]` is rejected because raw HTML cannot be embedded in a themed page.
+
+An HTML mapping is publication authorization independent of `website.content.publish_by_default`. Raw documents are shared across locales and stay out of navigation, Search, Graph, feeds, sitemap, Markdown resources, and automatic locale copies; link them manually from a public Markdown page. These documents execute as trusted same-origin code, so review the entire mapped bundle as public executable content. The manifest authorizes paths, not response MIME types: for files with uncommon extensions, verify that the deployment server sends the intended `Content-Type` and disables unsafe content sniffing. This repository's working example is the [[slides/jekyll-obsidian/index.html|five-minute Jekyll Obsidian slide tour]].
 
 ## Site identity
 

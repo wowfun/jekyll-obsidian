@@ -10,6 +10,8 @@ description: 从同一个 Markdown 文件夹发布通用站点或文档手册。
 
 这个可直接使用的示例也是 `jekyll-obsidian` 的使用手册。继续用任意文本编辑器写普通 Markdown 即可；Minimal 会把同一个内容目录变成个人站点或博客，Docs 则把它变成专注的文档手册。推送更改后，随附的 GitHub Actions 工作流会构建所选主题并发布到 Pages。你无需在本地运行构建命令，也不用维护付费服务器。
 
+[打开五分钟 HTML Slide](slides/jekyll-obsidian/index.html)，用图解快速了解这套发布方式。
+
 > [!note] 在 Obsidian 中打开源码
 > 编译器读取 `website/docs/`，但不会改写内容。你可以直接在 Obsidian 中打开这个目录，继续使用链接、属性、提示块与嵌入。
 

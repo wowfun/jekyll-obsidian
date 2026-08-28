@@ -40,7 +40,7 @@ tags:
 ---
 ```
 
-The value must be the boolean `true`. The strings `"true"` and `"yes"` are invalid. Without publication defaults, a Markdown file that omits `publish` stays out of HTML, Search, Graph data, feeds, sitemaps, and copied assets.
+The value must be the boolean `true`. The strings `"true"` and `"yes"` are invalid. Without publication defaults, a Markdown file that omits `publish` stays out of HTML, Search, Graph data, feeds, sitemaps, and projected attachments.
 
 To publish a directory recursively, add its source-relative path to `website.content.publish_by_default`. The special path `.` selects the complete content tree. Within that scope, set `publish: false` on an individual note to keep it out of the site. An explicit `publish: true` can still include a note outside the configured directories. The configured content directory's `.obsidian/` and `.trash/` trees are excluded before this publication check.
 
@@ -63,6 +63,18 @@ Only attachments reached from public notes, their `image` property, or their tra
 Every pull request and default-branch push runs the production compiler and project checks. A production build stops on ambiguous or private embeds, cycles, path escapes, symlinks, and URL collisions. Ordinary unresolved links stay visible and produce warnings.
 
 Open the workflow result before merging or sharing the site. The deployment job and **Settings → Pages** show the published URL. [[Deployment|Deployment]] explains project paths, custom domains, and the trusted deployment job.
+
+## Publish an HTML slide deck
+
+Keep a self-contained `.html` file or a complete slide bundle inside the content directory, then authorize one public route in the host configuration:
+
+```yaml
+website:
+  html:
+    slides/product-tour: /slides/product-tour/
+```
+
+The mapped directory must contain `index.html`. Its non-Markdown files are public byte for byte, so relative CSS, module JavaScript, fonts, and images keep working without a theme wrapper. Link to `slides/product-tour/index.html` from a public Markdown note; the compiler writes the configured, `baseurl`-aware route. Raw HTML is trusted same-origin executable code and is not added to navigation or discovery feeds. Review the complete directory before publishing. See [[Customization#Standalone HTML slides|Standalone HTML slides]] for file mappings, route rules, localization, and security boundaries.
 
 ## Optional local preview
 

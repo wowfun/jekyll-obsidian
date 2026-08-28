@@ -1,4 +1,6 @@
 website:
+  html:
+    slides/jekyll-obsidian: /slides/jekyll-obsidian/
   contacts:
     - label: GitHub
       url: https://github.com/wowfun

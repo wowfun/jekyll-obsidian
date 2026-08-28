@@ -4,6 +4,8 @@ lang: en
 website:
   source: website/docs
   theme: docs
+  html:
+    slides/jekyll-obsidian: /slides/jekyll-obsidian/
   contacts: []
   i18n:
     enabled: true

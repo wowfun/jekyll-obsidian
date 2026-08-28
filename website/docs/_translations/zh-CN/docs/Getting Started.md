@@ -33,7 +33,7 @@ tags:
 ---
 ```
 
-这里必须使用布尔值 `true`，不能使用字符串 `"true"` 或 `"yes"`。未设置默认发布范围时，省略 `publish` 的 Markdown 文件不会进入 HTML、Search、Graph 数据、订阅源、站点地图或复制的附件。
+这里必须使用布尔值 `true`，不能使用字符串 `"true"` 或 `"yes"`。未设置默认发布范围时，省略 `publish` 的 Markdown 文件不会进入 HTML、Search、Graph 数据、订阅源、站点地图或投影附件。
 
 如需递归发布一个目录，请把它相对于内容根目录的路径加入 `website.content.publish_by_default`。特殊路径 `.` 表示完整内容树。在这个范围中，可以用 `publish: false` 排除单篇笔记；范围之外的笔记仍可以通过显式的 `publish: true` 发布。执行发布检查前，编译器会排除内容目录中的 `.obsidian/` 和 `.trash/`。
 
@@ -56,6 +56,18 @@ tags:
 每个拉取请求和默认分支推送都会运行生产编译器与项目检查。生产构建遇到歧义或私密嵌入、循环、路径逃逸、符号链接和 URL 冲突时会停止。普通的未解析链接仍会显示，同时产生警告。
 
 合并或分享站点前，请检查工作流结果。部署作业和 **Settings → Pages** 都会显示公开地址。项目路径、自定义域名和受信任部署作业详见 [[Deployment|部署]]。
+
+## 发布 HTML Slide
+
+把自包含 `.html` 文件或完整 Slide bundle 放进内容目录，再在宿主配置中显式授权一个公开路由：
+
+```yaml
+website:
+  html:
+    slides/product-tour: /slides/product-tour/
+```
+
+映射目录必须包含 `index.html`，其中的非 Markdown 文件会逐字节公开，因此相对引用的 CSS、module JavaScript、字体和图片无需主题外壳也能继续工作。从公开 Markdown 笔记链接 `slides/product-tour/index.html` 时，编译器会写入配置后且包含 `baseurl` 的路由。Raw HTML 是可信的同源可执行代码，不会自动进入导航或内容发现资源；发布前应检查整个目录。文件映射、路由、本地化与安全边界详见 [[Customization#独立 HTML Slides|独立 HTML Slides]]。
 
 ## 可选的本地预览
 

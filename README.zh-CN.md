@@ -102,6 +102,16 @@ tags:
 
 内容根目录及其所有子目录都可以不包含 `index.md`。如果文件夹中没有物理 `index.md`，同级且文件名精确为 `README.md` 的公开笔记会成为索引。即使 `index.md` 未发布，它仍然拥有更高优先级，此时 `README.md` 仍是普通笔记。README 被选为索引后仍保留原始路径和源码操作，但会发布到文件夹路由。Minimal 会先在 Home 页面显示选中的公开根索引，再显示最近六篇文章；没有根页面时，Home 仍可显示文章流。没有公开索引的文件夹会链接到排序后的第一个公开页面。内容目录中没有任何公开笔记时，构建仍会失败。
 
+可信的独立 HTML Slide 也可以通过显式路由发布，不经过主题或 Liquid。可以映射单个 `.html` 文件，也可以映射包含 `index.html` 的目录 bundle；除 Markdown 和 `_locale.yml` 等编译器语言清单外，目录中的普通文件会按原相对结构公开：
+
+```yaml
+website:
+  html:
+    slides/product-tour: /slides/product-tour/
+```
+
+HTML 映射是独立于 Markdown 默认值的显式发布边界。Raw 页面不会进入导航、Search、Graph、Feed 或 sitemap，并会作为可信同源代码执行。发布前请审查整个 bundle。详见[自定义指南](website/docs/_translations/zh-CN/docs/Customization.md#独立-html-slides)和[真实 Slide 源码](website/docs/slides/jekyll-obsidian/index.html)。
+
 在宿主仓库根目录更新已发布 tag 对应的安装：
 
 ```sh

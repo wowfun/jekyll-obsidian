@@ -1,0 +1,1944 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <meta name="description" content="Jekyll Obsidian：让 Markdown 与 HTML Slides 从文件目录直接发布为网站。">
+  <title>把写作，直接变成网站 — Jekyll Obsidian</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;700;800;900&family=IBM+Plex+Mono:wght@500;600;700&family=Noto+Sans+SC:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+
+  <style>
+    /* ===========================================
+       THEME TOKENS
+       Change these variables to recolor the deck.
+       =========================================== */
+    :root {
+      --stage-bg: #d7d7d3;
+      --slide-bg: #f6f5f0;
+      --ink: #101010;
+      --muted: #676762;
+      --line: #101010;
+      --signal: #f23820;
+      --signal-soft: #ffd8cf;
+      --blue: #1649d8;
+      --green: #0b8053;
+      --font-display: "Archivo", "Noto Sans SC", sans-serif;
+      --font-body: "Noto Sans SC", sans-serif;
+      --font-mono: "IBM Plex Mono", monospace;
+      --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+      --duration: 520ms;
+    }
+
+    /* ===========================================
+       RESET
+       =========================================== */
+    * {
+      box-sizing: border-box;
+    }
+
+    button,
+    a {
+      font: inherit;
+    }
+
+    /* ===========================================
+       FIXED 16:9 STAGE: MANDATORY BASE STYLES
+       Include this ENTIRE file in every presentation.
+       Slides are authored at 1920×1080 and scaled as a whole.
+       =========================================== */
+
+    /* 1. Lock the browser viewport */
+    html,
+    body {
+        width: 100%;
+        height: 100%;
+        margin: 0;
+        overflow: hidden;
+        background: var(--stage-bg, #000);
+    }
+
+    /* 2. Full-window deck viewport */
+    .deck-viewport {
+        position: fixed;
+        inset: 0;
+        overflow: hidden;
+        background: var(--stage-bg, #000);
+    }
+
+    /* 3. Fixed 16:9 design canvas.
+       JavaScript sets transform: translate(...) scale(...). */
+    .deck-stage {
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 1920px;
+        height: 1080px;
+        overflow: hidden;
+        transform-origin: 0 0;
+        background: var(--slide-bg, #fff);
+    }
+
+    /* 4. Slides stack inside the fixed stage.
+       Content must be laid out at 1920×1080, not reflowed per device. */
+    .slide {
+        position: absolute;
+        inset: 0;
+        width: 1920px;
+        height: 1080px;
+        overflow: hidden;
+        display: block;
+        visibility: hidden;
+        opacity: 0;
+        pointer-events: none;
+        background: var(--slide-bg, #fff);
+    }
+
+    .slide.active,
+    .slide.visible {
+        visibility: visible;
+        opacity: 1;
+        pointer-events: auto;
+        z-index: 1;
+    }
+
+    /* 5. Keep media inside authored slide bounds */
+    img,
+    video,
+    canvas,
+    svg {
+        max-width: 100%;
+        max-height: 100%;
+    }
+
+    /* 6. Presentation chrome stays outside the slide design system */
+    .deck-controls {
+        position: fixed;
+        left: 50%;
+        bottom: 22px;
+        transform: translateX(-50%);
+        z-index: 1000;
+    }
+
+    /* 7. Print one fixed-size slide per page */
+    @media print {
+        html,
+        body {
+            width: 1920px;
+            height: auto;
+            overflow: visible;
+            background: #fff;
+        }
+
+        .deck-viewport {
+            position: static;
+            overflow: visible;
+            background: #fff;
+        }
+
+        .deck-stage {
+            position: static;
+            width: auto;
+            height: auto;
+            transform: none !important;
+            background: none;
+        }
+
+        .slide {
+            position: relative;
+            display: block !important;
+            visibility: visible !important;
+            opacity: 1 !important;
+            pointer-events: auto !important;
+            width: 1920px;
+            height: 1080px;
+            break-after: page;
+            page-break-after: always;
+        }
+
+        .slide:last-child {
+            break-after: auto;
+            page-break-after: auto;
+        }
+
+        .deck-controls {
+            display: none !important;
+        }
+    }
+
+    /* 8. Reduced motion */
+    @media (prefers-reduced-motion: reduce) {
+        *,
+        *::before,
+        *::after {
+            animation-duration: 0.01ms !important;
+            transition-duration: 0.2s !important;
+        }
+    }
+
+    /* ===========================================
+       SLIDE FRAME AND TYPOGRAPHY
+       Every slide shares one strict Swiss grid.
+       =========================================== */
+    .slide {
+      color: var(--ink);
+      font-family: var(--font-body);
+    }
+
+    .slide-frame {
+      position: absolute;
+      inset: 56px 64px;
+      border-top: 3px solid var(--line);
+      border-bottom: 3px solid var(--line);
+    }
+
+    .slide-header {
+      height: 90px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-family: var(--font-mono);
+      font-size: 20px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .slide-header__brand {
+      display: flex;
+      align-items: center;
+      gap: 22px;
+    }
+
+    .brand-dots {
+      position: relative;
+      width: 52px;
+      height: 22px;
+    }
+
+    .brand-dots::before,
+    .brand-dots::after {
+      content: "";
+      position: absolute;
+      top: 0;
+      width: 22px;
+      height: 22px;
+      border-radius: 50%;
+    }
+
+    .brand-dots::before {
+      left: 0;
+      background: var(--signal);
+    }
+
+    .brand-dots::after {
+      left: 30px;
+      background: var(--ink);
+    }
+
+    .slide-header__section {
+      color: var(--muted);
+    }
+
+    .slide-body {
+      position: absolute;
+      top: 122px;
+      right: 0;
+      bottom: 98px;
+      left: 0;
+    }
+
+    .slide-footer {
+      position: absolute;
+      right: 0;
+      bottom: 0;
+      left: 0;
+      height: 76px;
+      border-top: 2px solid var(--line);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 24px;
+      font-weight: 600;
+    }
+
+    .slide-footer__number {
+      color: var(--signal);
+      font: 900 52px/1 var(--font-display);
+      letter-spacing: -0.04em;
+    }
+
+    .eyebrow {
+      margin: 0 0 32px;
+      color: var(--signal);
+      font: 700 23px/1 var(--font-mono);
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+    }
+
+    h1,
+    h2,
+    h3,
+    p {
+      margin-top: 0;
+    }
+
+    h1,
+    h2,
+    h3 {
+      font-family: var(--font-display);
+    }
+
+    h1 {
+      margin-bottom: 0;
+      max-width: 1150px;
+      font-size: 148px;
+      line-height: 1.03;
+      font-weight: 900;
+      letter-spacing: -0.065em;
+    }
+
+    h2 {
+      margin-bottom: 34px;
+      font-size: 112px;
+      line-height: 1.06;
+      font-weight: 900;
+      letter-spacing: -0.055em;
+    }
+
+    h3 {
+      margin-bottom: 20px;
+      font-size: 42px;
+      line-height: 1.15;
+      font-weight: 800;
+      letter-spacing: -0.035em;
+    }
+
+    .lede {
+      max-width: 980px;
+      margin-bottom: 0;
+      color: var(--muted);
+      font-size: 32px;
+      line-height: 1.55;
+      font-weight: 500;
+    }
+
+    .signal-text {
+      color: var(--signal);
+    }
+
+    .mono {
+      font-family: var(--font-mono);
+    }
+
+    code {
+      font-family: var(--font-mono);
+      white-space: nowrap;
+    }
+
+    /* ===========================================
+       ENTRANCE ANIMATIONS
+       Fast, precise motion matches the Swiss system.
+       =========================================== */
+    .reveal,
+    .reveal-left,
+    .reveal-scale {
+      opacity: 0;
+      transition-duration: var(--duration);
+      transition-timing-function: var(--ease-out-expo);
+      transition-property: opacity, transform;
+      transition-delay: var(--delay, 0ms);
+    }
+
+    .reveal {
+      transform: translateY(28px);
+    }
+
+    .reveal-left {
+      transform: translateX(-42px);
+    }
+
+    .reveal-scale {
+      transform: scale(0.92);
+    }
+
+    .slide.visible .reveal,
+    .slide.visible .reveal-left,
+    .slide.visible .reveal-scale {
+      opacity: 1;
+      transform: none;
+    }
+
+    /* ===========================================
+       COVER LAYOUT
+       =========================================== */
+    .cover-grid {
+      height: auto;
+      display: grid;
+      grid-template-columns: 1120px 1fr;
+    }
+
+    .cover-copy {
+      align-self: center;
+      padding-right: 66px;
+    }
+
+    .cover-title-mark {
+      display: inline-block;
+      position: relative;
+    }
+
+    .cover-title-mark::after {
+      content: "";
+      position: absolute;
+      right: -4px;
+      bottom: -16px;
+      left: 8px;
+      height: 14px;
+      background: var(--signal);
+      transform: scaleX(0);
+      transform-origin: left;
+      transition: transform 780ms var(--ease-out-expo) 700ms;
+    }
+
+    .visible .cover-title-mark::after {
+      transform: scaleX(1);
+    }
+
+    .cover-graphic {
+      border-left: 2px solid var(--line);
+      display: grid;
+      place-items: center;
+    }
+
+    .route-graphic {
+      position: relative;
+      width: 560px;
+      height: 540px;
+    }
+
+    .route-graphic::before,
+    .route-graphic::after {
+      content: "";
+      position: absolute;
+      background: var(--line);
+    }
+
+    .route-graphic::before {
+      top: 269px;
+      right: 0;
+      left: 0;
+      height: 2px;
+    }
+
+    .route-graphic::after {
+      top: 0;
+      bottom: 0;
+      left: 279px;
+      width: 2px;
+    }
+
+    .route-node {
+      position: absolute;
+      top: 180px;
+      width: 180px;
+      height: 180px;
+      border: 3px solid var(--line);
+      background: var(--slide-bg);
+      display: grid;
+      place-items: center;
+      text-align: center;
+      font: 800 23px/1.25 var(--font-display);
+      letter-spacing: 0.07em;
+    }
+
+    .route-node small {
+      display: block;
+      margin-top: 10px;
+      color: var(--muted);
+      font: 600 17px/1.45 var(--font-body);
+      letter-spacing: 0;
+    }
+
+    .route-node--source {
+      left: 0;
+    }
+
+    .route-node--live {
+      right: 0;
+      border-color: var(--signal);
+      background: var(--signal);
+      color: #fff;
+    }
+
+    .route-node--live small {
+      color: #fff;
+    }
+
+    .route-arrow {
+      position: absolute;
+      top: 242px;
+      left: 230px;
+      width: 100px;
+      height: 56px;
+      background: var(--ink);
+      clip-path: polygon(0 38%, 62% 38%, 62% 0, 100% 50%, 62% 100%, 62% 62%, 0 62%);
+    }
+
+    /* ===========================================
+       STATEMENT AND CONTRAST LAYOUTS
+       =========================================== */
+    .statement-layout {
+      height: auto;
+      display: grid;
+      grid-template-columns: 1fr 360px;
+      gap: 76px;
+      align-items: center;
+    }
+
+    .statement-layout h2 {
+      margin: 0;
+      font-size: 154px;
+      line-height: 1.01;
+    }
+
+    .statement-aside {
+      align-self: stretch;
+      border-left: 2px solid var(--line);
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      padding-left: 42px;
+    }
+
+    .statement-aside strong {
+      display: block;
+      color: var(--signal);
+      font: 900 112px/1 var(--font-display);
+      letter-spacing: -0.06em;
+    }
+
+    .statement-aside p {
+      margin: 22px 0 0;
+      color: var(--muted);
+      font-size: 26px;
+      line-height: 1.5;
+    }
+
+    .strike {
+      position: relative;
+      white-space: nowrap;
+    }
+
+    .strike::after {
+      content: "";
+      position: absolute;
+      top: 54%;
+      right: -10px;
+      left: -10px;
+      height: 12px;
+      background: var(--signal);
+      transform: rotate(-2deg) scaleX(0);
+      transform-origin: left;
+      transition: transform 680ms var(--ease-out-expo) 480ms;
+    }
+
+    .visible .strike::after {
+      transform: rotate(-2deg) scaleX(1);
+    }
+
+    /* ===========================================
+       THREE-COLUMN FACTS
+       =========================================== */
+    .fact-grid {
+      height: auto;
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      border: 2px solid var(--line);
+    }
+
+    .fact {
+      position: relative;
+      padding: 44px 42px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+    }
+
+    .fact + .fact {
+      border-left: 2px solid var(--line);
+    }
+
+    .fact__number {
+      color: var(--signal);
+      font: 900 116px/1 var(--font-display);
+      letter-spacing: -0.07em;
+    }
+
+    .fact p {
+      max-width: 420px;
+      margin-bottom: 0;
+      color: var(--muted);
+      font-size: 27px;
+      line-height: 1.5;
+    }
+
+    /* ===========================================
+       SOURCE-TO-OUTPUT MAP
+       =========================================== */
+    .projection-map {
+      height: auto;
+      display: grid;
+      grid-template-columns: 550px 190px 1fr;
+      align-items: center;
+    }
+
+    .source-stack {
+      position: relative;
+      width: 470px;
+      height: 480px;
+    }
+
+    .source-sheet {
+      position: absolute;
+      width: 390px;
+      height: 380px;
+      border: 3px solid var(--line);
+      background: var(--slide-bg);
+      padding: 38px;
+      box-shadow: 12px 12px 0 var(--ink);
+    }
+
+    .source-sheet:nth-child(1) {
+      top: 0;
+      left: 0;
+      transform: rotate(-3deg);
+    }
+
+    .source-sheet:nth-child(2) {
+      top: 60px;
+      left: 65px;
+      transform: rotate(2deg);
+    }
+
+    .source-sheet:nth-child(3) {
+      top: 112px;
+      left: 20px;
+      background: var(--signal-soft);
+    }
+
+    .source-sheet code {
+      display: block;
+      margin-bottom: 76px;
+      color: var(--signal);
+      font-size: 24px;
+      font-weight: 700;
+    }
+
+    .source-sheet strong {
+      display: block;
+      font: 800 46px/1.15 var(--font-display);
+    }
+
+    .projection-arrow {
+      font: 900 108px/1 var(--font-display);
+      color: var(--signal);
+    }
+
+    .output-stack {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 24px;
+    }
+
+    .output-card {
+      min-height: 250px;
+      border: 3px solid var(--line);
+      padding: 34px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+    }
+
+    .output-card:nth-child(2) {
+      background: var(--ink);
+      color: #fff;
+    }
+
+    .output-card:nth-child(3) {
+      grid-column: 1 / -1;
+      min-height: 180px;
+      border-color: var(--signal);
+      background: var(--signal);
+      color: #fff;
+    }
+
+    .output-card span {
+      font: 700 19px/1 var(--font-mono);
+      letter-spacing: 0.12em;
+    }
+
+    .output-card strong {
+      font: 800 42px/1.15 var(--font-display);
+    }
+
+    /* ===========================================
+       FOUR-STEP PIPELINE
+       =========================================== */
+    .pipeline {
+      height: auto;
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      border-top: 3px solid var(--line);
+      border-bottom: 3px solid var(--line);
+    }
+
+    .pipeline-step {
+      position: relative;
+      padding: 42px 34px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+    }
+
+    .pipeline-step + .pipeline-step {
+      border-left: 2px solid var(--line);
+    }
+
+    .pipeline-step::after {
+      content: "→";
+      position: absolute;
+      top: 50%;
+      right: -28px;
+      width: 56px;
+      height: 56px;
+      border: 2px solid var(--line);
+      border-radius: 50%;
+      background: var(--slide-bg);
+      display: grid;
+      place-items: center;
+      color: var(--signal);
+      font: 800 30px/1 var(--font-display);
+      z-index: 2;
+      transform: translateY(-50%);
+    }
+
+    .pipeline-step:last-child::after {
+      content: none;
+    }
+
+    .pipeline-step__number {
+      color: var(--signal);
+      font: 900 78px/1 var(--font-display);
+    }
+
+    .pipeline-step p {
+      margin-bottom: 0;
+      color: var(--muted);
+      font-size: 24px;
+      line-height: 1.45;
+    }
+
+    /* ===========================================
+       PUBLICATION BOUNDARY
+       =========================================== */
+    .boundary {
+      height: auto;
+      display: grid;
+      grid-template-columns: 1fr 110px 1fr;
+      align-items: stretch;
+    }
+
+    .boundary-zone {
+      border: 3px solid var(--line);
+      padding: 44px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+    }
+
+    .boundary-zone--public {
+      border-color: var(--signal);
+      background: var(--signal);
+      color: #fff;
+    }
+
+    .boundary-zone__tag {
+      font: 700 21px/1 var(--font-mono);
+      letter-spacing: 0.13em;
+    }
+
+    .boundary-zone strong {
+      font: 900 72px/1.06 var(--font-display);
+      letter-spacing: -0.045em;
+    }
+
+    .boundary-gate {
+      display: grid;
+      place-items: center;
+      color: var(--signal);
+      font: 700 18px/1 var(--font-mono);
+      letter-spacing: 0.1em;
+      writing-mode: vertical-rl;
+    }
+
+    /* ===========================================
+       COMPILER RESPONSIBILITIES
+       =========================================== */
+    .chore-grid {
+      height: auto;
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 24px;
+    }
+
+    .chore {
+      border-top: 8px solid var(--signal);
+      background: #fff;
+      padding: 42px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+    }
+
+    .chore__glyph {
+      font: 900 112px/1 var(--font-display);
+      letter-spacing: -0.06em;
+    }
+
+    .chore p {
+      margin-bottom: 0;
+      color: var(--muted);
+      font-size: 27px;
+      line-height: 1.45;
+    }
+
+    /* ===========================================
+       THEME COMPARISON
+       =========================================== */
+    .theme-grid {
+      height: auto;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+    }
+
+    .theme-panel {
+      position: relative;
+      padding: 48px;
+      border: 3px solid var(--line);
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+    }
+
+    .theme-panel + .theme-panel {
+      border-left: 0;
+      background: var(--ink);
+      color: #fff;
+    }
+
+    .theme-panel__chrome {
+      height: 210px;
+      border: 2px solid currentColor;
+      display: grid;
+      grid-template-columns: 150px 1fr;
+      padding: 28px;
+      gap: 26px;
+      opacity: 0.8;
+    }
+
+    .theme-panel__chrome span {
+      border: 2px solid currentColor;
+    }
+
+    .theme-panel__chrome div {
+      background: repeating-linear-gradient(0deg, currentColor 0 3px, transparent 3px 24px);
+      opacity: 0.45;
+    }
+
+    .theme-panel__tag {
+      color: var(--signal);
+      font: 700 20px/1 var(--font-mono);
+      letter-spacing: 0.14em;
+    }
+
+    .theme-panel p {
+      margin-bottom: 0;
+      max-width: 650px;
+      color: var(--muted);
+      font-size: 27px;
+      line-height: 1.45;
+    }
+
+    .theme-panel + .theme-panel p {
+      color: #aaa;
+    }
+
+    /* ===========================================
+       MARKDOWN AND HTML HEROES
+       =========================================== */
+    .medium-hero {
+      height: auto;
+      display: grid;
+      grid-template-columns: 1.15fr 0.85fr;
+      align-items: center;
+    }
+
+    .medium-hero h2 {
+      margin: 0;
+      font-size: 142px;
+      line-height: 1.02;
+    }
+
+    .file-token {
+      justify-self: end;
+      width: 520px;
+      height: 520px;
+      border: 4px solid var(--line);
+      display: grid;
+      place-items: center;
+      background: #fff;
+      box-shadow: 18px 18px 0 var(--ink);
+      font: 900 128px/1 var(--font-display);
+      letter-spacing: -0.07em;
+    }
+
+    .file-token--html {
+      border-color: var(--signal);
+      background: var(--signal);
+      box-shadow: 18px 18px 0 var(--ink);
+      color: #fff;
+    }
+
+    /* ===========================================
+       RAW HTML BUNDLE AND ROUTE
+       =========================================== */
+    .bundle-layout {
+      height: auto;
+      display: grid;
+      grid-template-columns: 0.9fr 1.1fr;
+      gap: 52px;
+    }
+
+    .file-tree {
+      border: 3px solid var(--line);
+      padding: 42px;
+      background: #fff;
+    }
+
+    .file-tree p {
+      margin: 0 0 24px;
+      font: 600 27px/1.35 var(--font-mono);
+    }
+
+    .file-tree p:last-child {
+      margin-bottom: 0;
+    }
+
+    .file-tree .branch {
+      color: var(--muted);
+    }
+
+    .route-config {
+      border: 3px solid var(--line);
+      background: var(--ink);
+      color: #fff;
+      padding: 54px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+    }
+
+    .route-config pre {
+      margin: 0;
+      white-space: pre-wrap;
+      font: 600 28px/1.65 var(--font-mono);
+    }
+
+    .route-config .yaml-key {
+      color: #9fb8ff;
+    }
+
+    .route-config .yaml-route {
+      color: #ff8a72;
+    }
+
+    .route-config p {
+      margin: 0;
+      color: #aaa;
+      font-size: 25px;
+      line-height: 1.45;
+    }
+
+    /* ===========================================
+       TRUST BOUNDARY
+       =========================================== */
+    .trust-layout {
+      height: auto;
+      display: grid;
+      grid-template-columns: 0.9fr 1.1fr;
+      border: 3px solid var(--line);
+    }
+
+    .trust-signal {
+      background: var(--signal);
+      color: #fff;
+      padding: 48px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+    }
+
+    .trust-signal strong {
+      font: 900 112px/0.95 var(--font-display);
+      letter-spacing: -0.07em;
+    }
+
+    .trust-copy {
+      padding: 48px 58px;
+      display: grid;
+      align-content: center;
+      gap: 34px;
+    }
+
+    .trust-rule {
+      border-bottom: 2px solid var(--line);
+      padding-bottom: 28px;
+    }
+
+    .trust-rule:last-child {
+      border-bottom: 0;
+      padding-bottom: 0;
+    }
+
+    .trust-rule span {
+      display: block;
+      margin-bottom: 10px;
+      color: var(--signal);
+      font: 700 19px/1 var(--font-mono);
+      letter-spacing: 0.12em;
+    }
+
+    .trust-rule p {
+      margin: 0;
+      font-size: 29px;
+      line-height: 1.45;
+      font-weight: 600;
+    }
+
+    /* ===========================================
+       DEPLOYMENT PIPELINE
+       =========================================== */
+    .deploy-line {
+      position: relative;
+      height: auto;
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      align-items: center;
+      gap: 90px;
+    }
+
+    .deploy-line::before {
+      content: "";
+      position: absolute;
+      top: 50%;
+      right: 160px;
+      left: 160px;
+      height: 5px;
+      background: var(--signal);
+      transform: translateY(-50%);
+    }
+
+    .deploy-node {
+      position: relative;
+      z-index: 1;
+      width: 330px;
+      height: 330px;
+      justify-self: center;
+      border: 4px solid var(--line);
+      border-radius: 50%;
+      background: var(--slide-bg);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+    }
+
+    .deploy-node:nth-child(3) {
+      border-color: var(--signal);
+      background: var(--signal);
+      color: #fff;
+    }
+
+    .deploy-node span {
+      margin-bottom: 18px;
+      font: 700 20px/1 var(--font-mono);
+      letter-spacing: 0.12em;
+    }
+
+    .deploy-node strong {
+      font: 900 50px/1.1 var(--font-display);
+    }
+
+    /* ===========================================
+       CLOSING SLIDE
+       =========================================== */
+    .closing-layout {
+      height: auto;
+      display: grid;
+      grid-template-columns: 1fr 620px;
+      align-items: center;
+      gap: 70px;
+    }
+
+    .closing-layout h2 {
+      margin: 0;
+      font-size: 142px;
+      line-height: 1.01;
+    }
+
+    .next-step {
+      border: 3px solid var(--line);
+      padding: 44px;
+      background: #fff;
+    }
+
+    .next-step ol {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+      counter-reset: steps;
+    }
+
+    .next-step li {
+      counter-increment: steps;
+      display: grid;
+      grid-template-columns: 60px 1fr;
+      gap: 20px;
+      align-items: start;
+      padding: 24px 0;
+      border-bottom: 2px solid var(--line);
+      font-size: 27px;
+      line-height: 1.4;
+      font-weight: 600;
+    }
+
+    .next-step li::before {
+      content: counter(steps, decimal-leading-zero);
+      color: var(--signal);
+      font: 800 23px/1.45 var(--font-mono);
+    }
+
+    .next-step li:last-child {
+      border-bottom: 0;
+    }
+
+    .closing-link {
+      display: inline-flex;
+      align-items: center;
+      justify-content: space-between;
+      width: 100%;
+      margin-top: 28px;
+      padding: 22px 24px;
+      background: var(--signal);
+      color: #fff;
+      text-decoration: none;
+      font-size: 25px;
+      font-weight: 800;
+    }
+
+    /* ===========================================
+       PRESENTATION CONTROLS
+       The controls live outside the 1920×1080 stage.
+       =========================================== */
+    .deck-controls {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 7px;
+      border: 1px solid rgba(255, 255, 255, 0.18);
+      border-radius: 999px;
+      background: rgba(16, 16, 16, 0.9);
+      color: #fff;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 180ms ease;
+    }
+
+    .deck-controls.controls-visible,
+    .deck-controls:focus-within {
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    .deck-controls button {
+      width: 38px;
+      height: 38px;
+      border: 0;
+      border-radius: 50%;
+      background: transparent;
+      color: #fff;
+      cursor: pointer;
+    }
+
+    .deck-controls button:hover,
+    .deck-controls button:focus-visible {
+      outline: none;
+      background: var(--signal);
+    }
+
+    .deck-count {
+      min-width: 68px;
+      text-align: center;
+      font: 600 14px/1 var(--font-mono);
+    }
+
+    .progress-track {
+      position: fixed;
+      right: 0;
+      bottom: 0;
+      left: 0;
+      height: 4px;
+      background: transparent;
+      z-index: 999;
+    }
+
+    .progress-track span {
+      display: block;
+      width: 0;
+      height: 100%;
+      background: var(--signal);
+      transition: width 260ms var(--ease-out-expo);
+    }
+
+    /* ===========================================
+       INLINE EDITING
+       Hover the top-left corner or press E.
+       =========================================== */
+    .edit-hotzone {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 80px;
+      height: 80px;
+      z-index: 10000;
+      padding: 0;
+      border: 0;
+      background: transparent;
+      appearance: none;
+      cursor: pointer;
+    }
+
+    .edit-toggle,
+    .export-toggle {
+      position: fixed;
+      top: 18px;
+      z-index: 10001;
+      height: 42px;
+      border: 0;
+      border-radius: 999px;
+      background: var(--ink);
+      color: #fff;
+      cursor: pointer;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 200ms ease, background 200ms ease;
+    }
+
+    .edit-toggle {
+      left: 18px;
+      width: 42px;
+    }
+
+    .export-toggle {
+      left: 70px;
+      padding: 0 16px;
+      font-size: 13px;
+      font-weight: 700;
+    }
+
+    .edit-toggle.show,
+    .edit-toggle.active,
+    .export-toggle.show {
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    .edit-toggle.active {
+      background: var(--signal);
+    }
+
+    .editing [contenteditable="true"] {
+      outline: 2px dashed rgba(242, 56, 32, 0.45);
+      outline-offset: 5px;
+      cursor: text;
+    }
+
+    .edit-status {
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      z-index: 10002;
+      padding: 10px 16px;
+      border-radius: 999px;
+      background: var(--ink);
+      color: #fff;
+      font-size: 13px;
+      font-weight: 700;
+      opacity: 0;
+      transform: translateY(-8px);
+      pointer-events: none;
+      transition: opacity 180ms ease, transform 180ms ease;
+    }
+
+    .edit-status.show {
+      opacity: 1;
+      transform: none;
+    }
+
+    /* ===========================================
+       FOCUS AND PRINT POLISH
+       =========================================== */
+    .slide a:focus-visible {
+      outline: 5px solid var(--blue);
+      outline-offset: 6px;
+    }
+
+    @media print {
+      .edit-hotzone,
+      .edit-toggle,
+      .export-toggle,
+      .edit-status,
+      .progress-track {
+        display: none !important;
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <!-- === FIXED PRESENTATION STAGE === -->
+  <div class="deck-viewport">
+    <main class="deck-stage" id="deckStage" aria-label="Jekyll Obsidian 产品演示">
+
+      <!-- === 01 / COVER === -->
+      <section class="slide" id="slide-1" data-title="开场" aria-label="第 1 页：把写作直接变成网站">
+        <div class="slide-frame">
+          <header class="slide-header">
+            <div class="slide-header__brand"><span class="brand-dots" aria-hidden="true"></span>Jekyll Obsidian</div>
+            <div class="slide-header__section">Write / Ship / Share</div>
+          </header>
+          <div class="slide-body cover-grid">
+            <div class="cover-copy">
+              <p class="eyebrow reveal" style="--delay:80ms">A publishing layer for your files</p>
+              <h1 class="reveal" style="--delay:170ms">把写作，<br><span class="cover-title-mark">直接变成网站。</span></h1>
+            </div>
+            <div class="cover-graphic reveal-scale" style="--delay:260ms" aria-label="内容从原文件发布为网站">
+              <div class="route-graphic">
+                <div class="route-node route-node--source">SOURCE<small>Markdown<br>HTML Slides</small></div>
+                <span class="route-arrow" aria-hidden="true"></span>
+                <div class="route-node route-node--live">LIVE<small>链接 · 搜索<br>直接分享</small></div>
+              </div>
+            </div>
+          </div>
+          <footer class="slide-footer"><p>文件留在原地，发布成为一次确定的投影。</p><span class="slide-footer__number">01</span></footer>
+        </div>
+      </section>
+
+      <!-- === 02 / PROBLEM === -->
+      <section class="slide" id="slide-2" data-title="问题" aria-label="第 2 页：发布不该是第二份工作">
+        <div class="slide-frame">
+          <header class="slide-header">
+            <div class="slide-header__brand"><span class="brand-dots" aria-hidden="true"></span>Jekyll Obsidian</div>
+            <div class="slide-header__section">The problem</div>
+          </header>
+          <div class="slide-body statement-layout">
+            <h2 class="reveal-left">发布，<br>不该是<span class="strike">第二份工作</span>。</h2>
+            <aside class="statement-aside reveal" style="--delay:180ms">
+              <strong>2×</strong>
+              <p>先写内容，<br>再复制进另一个系统。</p>
+            </aside>
+          </div>
+          <footer class="slide-footer"><p>当“上线”需要重做一遍，写作就被工具打断。</p><span class="slide-footer__number">02</span></footer>
+        </div>
+      </section>
+
+      <!-- === 03 / EXISTING SYSTEM === -->
+      <section class="slide" id="slide-3" data-title="现有系统" aria-label="第 3 页：你已经有一个内容系统">
+        <div class="slide-frame">
+          <header class="slide-header">
+            <div class="slide-header__brand"><span class="brand-dots" aria-hidden="true"></span>Jekyll Obsidian</div>
+            <div class="slide-header__section">What you already have</div>
+          </header>
+          <div class="slide-body fact-grid">
+            <article class="fact reveal" style="--delay:60ms">
+              <span class="fact__number">01</span>
+              <div><h3>目录</h3><p>结构已经存在，不需要搬进后台重新分类。</p></div>
+            </article>
+            <article class="fact reveal" style="--delay:150ms">
+              <span class="fact__number">02</span>
+              <div><h3>链接</h3><p>Wiki links 和附件关系已经表达了内容上下文。</p></div>
+            </article>
+            <article class="fact reveal" style="--delay:240ms">
+              <span class="fact__number">03</span>
+              <div><h3>版本</h3><p>Git 已经知道每次修改，也知道如何协作和回退。</p></div>
+            </article>
+          </div>
+          <footer class="slide-footer"><p>你的文件夹，本来就是内容系统。</p><span class="slide-footer__number">03</span></footer>
+        </div>
+      </section>
+
+      <!-- === 04 / PROJECTION === -->
+      <section class="slide" id="slide-4" data-title="投影" aria-label="第 4 页：唯一来源多个输出">
+        <div class="slide-frame">
+          <header class="slide-header">
+            <div class="slide-header__brand"><span class="brand-dots" aria-hidden="true"></span>Jekyll Obsidian</div>
+            <div class="slide-header__section">One source, many outputs</div>
+          </header>
+          <div class="slide-body projection-map">
+            <div class="source-stack reveal-scale">
+              <div class="source-sheet"></div>
+              <div class="source-sheet"></div>
+              <div class="source-sheet"><code>notes/product.md</code><strong>唯一内容源</strong></div>
+            </div>
+            <div class="projection-arrow reveal" style="--delay:180ms">→</div>
+            <div class="output-stack">
+              <article class="output-card reveal" style="--delay:220ms"><span>THEMED</span><strong>博客与个人站</strong></article>
+              <article class="output-card reveal" style="--delay:300ms"><span>STRUCTURED</span><strong>项目文档</strong></article>
+              <article class="output-card reveal" style="--delay:380ms"><span>BYTE-FOR-BYTE</span><strong>原样 HTML Slides</strong></article>
+            </div>
+          </div>
+          <footer class="slide-footer"><p>内容不搬家；编译器只生成面向读者的投影。</p><span class="slide-footer__number">04</span></footer>
+        </div>
+      </section>
+
+      <!-- === 05 / LESS INFRASTRUCTURE === -->
+      <section class="slide" id="slide-5" data-title="更少维护" aria-label="第 5 页：不必维护另一套内容基础设施">
+        <div class="slide-frame">
+          <header class="slide-header">
+            <div class="slide-header__brand"><span class="brand-dots" aria-hidden="true"></span>Jekyll Obsidian</div>
+            <div class="slide-header__section">Less to maintain</div>
+          </header>
+          <div class="slide-body fact-grid">
+            <article class="fact reveal" style="--delay:60ms">
+              <span class="fact__number">0</span>
+              <div><h3>内容数据库</h3><p>普通文件就是长期可读、可迁移的源数据。</p></div>
+            </article>
+            <article class="fact reveal" style="--delay:150ms">
+              <span class="fact__number">0</span>
+              <div><h3>托管编辑器</h3><p>Obsidian、VS Code 或任何文本编辑器都能继续用。</p></div>
+            </article>
+            <article class="fact reveal" style="--delay:240ms">
+              <span class="fact__number">0</span>
+              <div><h3>本地发布命令</h3><p>默认路径交给 GitHub Actions 构建与部署。</p></div>
+            </article>
+          </div>
+          <footer class="slide-footer"><p>少一套系统，就少一份同步和维护成本。</p><span class="slide-footer__number">05</span></footer>
+        </div>
+      </section>
+
+      <!-- === 06 / WORKFLOW === -->
+      <section class="slide" id="slide-6" data-title="工作方式" aria-label="第 6 页：从写作到发布的四步流程">
+        <div class="slide-frame">
+          <header class="slide-header">
+            <div class="slide-header__brand"><span class="brand-dots" aria-hidden="true"></span>Jekyll Obsidian</div>
+            <div class="slide-header__section">The workflow</div>
+          </header>
+          <div class="slide-body pipeline">
+            <article class="pipeline-step reveal" style="--delay:40ms"><span class="pipeline-step__number">01</span><div><h3>写</h3><p>继续写 Markdown，保留原来的目录与链接。</p></div></article>
+            <article class="pipeline-step reveal" style="--delay:130ms"><span class="pipeline-step__number">02</span><div><h3>选</h3><p>明确哪些内容允许进入公开站点。</p></div></article>
+            <article class="pipeline-step reveal" style="--delay:220ms"><span class="pipeline-step__number">03</span><div><h3>编译</h3><p>一次处理路由、链接、资源与主题。</p></div></article>
+            <article class="pipeline-step reveal" style="--delay:310ms"><span class="pipeline-step__number">04</span><div><h3>推送</h3><p>GitHub Actions 验证并部署到 Pages。</p></div></article>
+          </div>
+          <footer class="slide-footer"><p>写 → 选 → 编译 → 发布。</p><span class="slide-footer__number">06</span></footer>
+        </div>
+      </section>
+
+      <!-- === 07 / PUBLICATION BOUNDARY === -->
+      <section class="slide" id="slide-7" data-title="公开边界" aria-label="第 7 页：公开是一项明确选择">
+        <div class="slide-frame">
+          <header class="slide-header">
+            <div class="slide-header__brand"><span class="brand-dots" aria-hidden="true"></span>Jekyll Obsidian</div>
+            <div class="slide-header__section">Publication boundary</div>
+          </header>
+          <div class="slide-body boundary">
+            <article class="boundary-zone reveal-left">
+              <span class="boundary-zone__tag">STAYS IN SOURCE</span>
+              <strong>草稿<br>未引用资源</strong>
+              <p class="lede">没有发布授权，就不会进入生成站点。</p>
+            </article>
+            <div class="boundary-gate reveal" style="--delay:150ms">EXPLICIT CHOICE</div>
+            <article class="boundary-zone boundary-zone--public reveal" style="--delay:240ms">
+              <span class="boundary-zone__tag">PROJECTED TO SITE</span>
+              <strong>公开笔记<br>实际使用的附件</strong>
+              <p class="lede" style="color:#fff">只输出获准内容及其必要依赖。</p>
+            </article>
+          </div>
+          <footer class="slide-footer"><p>公开策略控制生成站点；可读仓库仍不是保险箱。</p><span class="slide-footer__number">07</span></footer>
+        </div>
+      </section>
+
+      <!-- === 08 / COMPILER WORK === -->
+      <section class="slide" id="slide-8" data-title="编译器" aria-label="第 8 页：编译器处理容易出错的事情">
+        <div class="slide-frame">
+          <header class="slide-header">
+            <div class="slide-header__brand"><span class="brand-dots" aria-hidden="true"></span>Jekyll Obsidian</div>
+            <div class="slide-header__section">Compiler responsibilities</div>
+          </header>
+          <div class="slide-body chore-grid">
+            <article class="chore reveal" style="--delay:60ms"><span class="chore__glyph">/</span><div><h3>路由稳定</h3><p>主题切换，不改变笔记的公开 URL。</p></div></article>
+            <article class="chore reveal" style="--delay:150ms"><span class="chore__glyph">[[ ]]</span><div><h3>链接可达</h3><p>Wiki links、标题与附件统一解析。</p></div></article>
+            <article class="chore reveal" style="--delay:240ms"><span class="chore__glyph">✓</span><div><h3>冲突先失败</h3><p>路径逃逸、循环与目标碰撞在部署前停止。</p></div></article>
+          </div>
+          <footer class="slide-footer"><p>把机械检查集中起来，让作者只处理内容。</p><span class="slide-footer__number">08</span></footer>
+        </div>
+      </section>
+
+      <!-- === 09 / THEMES === -->
+      <section class="slide" id="slide-9" data-title="主题" aria-label="第 9 页：同一批内容两种阅读方式">
+        <div class="slide-frame">
+          <header class="slide-header">
+            <div class="slide-header__brand"><span class="brand-dots" aria-hidden="true"></span>Jekyll Obsidian</div>
+            <div class="slide-header__section">Same content, different reading</div>
+          </header>
+          <div class="slide-body theme-grid">
+            <article class="theme-panel reveal-left">
+              <span class="theme-panel__tag">MINIMAL</span>
+              <div class="theme-panel__chrome" aria-hidden="true"><span></span><div></div></div>
+              <div><h3>个人站 · 博客 · 作品集</h3><p>首页、文章流、标签与自定义栏目组合成完整站点。</p></div>
+            </article>
+            <article class="theme-panel reveal" style="--delay:160ms">
+              <span class="theme-panel__tag">DOCS</span>
+              <div class="theme-panel__chrome" aria-hidden="true"><span></span><div></div></div>
+              <div><h3>手册 · 知识库 · 项目文档</h3><p>目录树、上下篇与上下文导航专注于连续阅读。</p></div>
+            </article>
+          </div>
+          <footer class="slide-footer"><p>换阅读体验，不换内容源，也不换链接。</p><span class="slide-footer__number">09</span></footer>
+        </div>
+      </section>
+
+      <!-- === 10 / MARKDOWN === -->
+      <section class="slide" id="slide-10" data-title="Markdown" aria-label="第 10 页：内容交给 Markdown">
+        <div class="slide-frame">
+          <header class="slide-header">
+            <div class="slide-header__brand"><span class="brand-dots" aria-hidden="true"></span>Jekyll Obsidian</div>
+            <div class="slide-header__section">For authored content</div>
+          </header>
+          <div class="slide-body medium-hero">
+            <div>
+              <p class="eyebrow reveal">Readable source</p>
+              <h2 class="reveal" style="--delay:120ms">内容，<br>交给 Markdown。</h2>
+              <p class="lede reveal" style="--delay:220ms">适合文章、文档、笔记关系、搜索与长期维护。</p>
+            </div>
+            <div class="file-token reveal-scale" style="--delay:200ms">.md</div>
+          </div>
+          <footer class="slide-footer"><p>文本保持简单，网站能力由编译器补齐。</p><span class="slide-footer__number">10</span></footer>
+        </div>
+      </section>
+
+      <!-- === 11 / RAW HTML === -->
+      <section class="slide" id="slide-11" data-title="HTML Slides" aria-label="第 11 页：舞台交给 HTML">
+        <div class="slide-frame">
+          <header class="slide-header">
+            <div class="slide-header__brand"><span class="brand-dots" aria-hidden="true"></span>Jekyll Obsidian</div>
+            <div class="slide-header__section">For authored experiences</div>
+          </header>
+          <div class="slide-body medium-hero">
+            <div>
+              <p class="eyebrow reveal">Exact bytes, exact experience</p>
+              <h2 class="reveal" style="--delay:120ms">舞台，<br>交给 HTML。</h2>
+              <p class="lede reveal" style="--delay:220ms">动画、脚本与独立视觉不套主题，按作者做好的样子发布。</p>
+            </div>
+            <div class="file-token file-token--html reveal-scale" style="--delay:200ms">.html</div>
+          </div>
+          <footer class="slide-footer"><p>Markdown 负责内容；HTML 负责完整体验。</p><span class="slide-footer__number">11</span></footer>
+        </div>
+      </section>
+
+      <!-- === 12 / HTML BUNDLE === -->
+      <section class="slide" id="slide-12" data-title="自定义路由" aria-label="第 12 页：整套 HTML Bundle 按自定义路由发布">
+        <div class="slide-frame">
+          <header class="slide-header">
+            <div class="slide-header__brand"><span class="brand-dots" aria-hidden="true"></span>Jekyll Obsidian</div>
+            <div class="slide-header__section">Raw HTML publication</div>
+          </header>
+          <div class="slide-body bundle-layout">
+            <div class="file-tree reveal-left">
+              <p><strong>slides/product-tour/</strong></p>
+              <p class="branch">├── <strong>index.html</strong></p>
+              <p class="branch">├── slides.css</p>
+              <p class="branch">├── slides.js</p>
+              <p class="branch">└── media/diagram.svg</p>
+            </div>
+            <div class="route-config reveal" style="--delay:180ms">
+              <pre><span class="yaml-key">website:</span>
+  <span class="yaml-key">html:</span>
+    slides/product-tour:
+      <span class="yaml-route">/presentations/product/</span></pre>
+              <p>目录结构保持不变。HTML、CSS、JavaScript、字体和图片一起投影。</p>
+            </div>
+          </div>
+          <footer class="slide-footer"><p>源路径与公开路由分开选择。</p><span class="slide-footer__number">12</span></footer>
+        </div>
+      </section>
+
+      <!-- === 13 / TRUST === -->
+      <section class="slide" id="slide-13" data-title="信任边界" aria-label="第 13 页：原样发布意味着可信代码边界">
+        <div class="slide-frame">
+          <header class="slide-header">
+            <div class="slide-header__brand"><span class="brand-dots" aria-hidden="true"></span>Jekyll Obsidian</div>
+            <div class="slide-header__section">Trust boundary</div>
+          </header>
+          <div class="slide-body trust-layout">
+            <div class="trust-signal reveal-left">
+              <span class="mono">TRUSTED / SAME-ORIGIN</span>
+              <strong>原样发布，<br>也原样负责。</strong>
+            </div>
+            <div class="trust-copy">
+              <div class="trust-rule reveal" style="--delay:120ms"><span>01 / EXECUTION</span><p>作者脚本会作为同源代码运行。</p></div>
+              <div class="trust-rule reveal" style="--delay:200ms"><span>02 / SCOPE</span><p>把整个映射目录当作公开内容审查。</p></div>
+              <div class="trust-rule reveal" style="--delay:280ms"><span>03 / DISCOVERY</span><p>Raw 页面不会自动进入导航、Search、Graph、Feed 或 sitemap。</p></div>
+            </div>
+          </div>
+          <footer class="slide-footer"><p>自由来自清晰的授权边界，而不是隐式魔法。</p><span class="slide-footer__number">13</span></footer>
+        </div>
+      </section>
+
+      <!-- === 14 / DEPLOYMENT === -->
+      <section class="slide" id="slide-14" data-title="部署" aria-label="第 14 页：推送就是发布">
+        <div class="slide-frame">
+          <header class="slide-header">
+            <div class="slide-header__brand"><span class="brand-dots" aria-hidden="true"></span>Jekyll Obsidian</div>
+            <div class="slide-header__section">Deployment</div>
+          </header>
+          <div class="slide-body deploy-line">
+            <article class="deploy-node reveal-scale" style="--delay:50ms"><span>01 / SOURCE</span><strong>Git push</strong></article>
+            <article class="deploy-node reveal-scale" style="--delay:170ms"><span>02 / VERIFY</span><strong>GitHub<br>Actions</strong></article>
+            <article class="deploy-node reveal-scale" style="--delay:290ms"><span>03 / LIVE</span><strong>GitHub<br>Pages</strong></article>
+          </div>
+          <footer class="slide-footer"><p>默认发布路径不要求本地 Ruby、Node.js 或构建命令。</p><span class="slide-footer__number">14</span></footer>
+        </div>
+      </section>
+
+      <!-- === 15 / CLOSE === -->
+      <section class="slide" id="slide-15" data-title="开始" aria-label="第 15 页：从第一篇公开笔记开始">
+        <div class="slide-frame">
+          <header class="slide-header">
+            <div class="slide-header__brand"><span class="brand-dots" aria-hidden="true"></span>Jekyll Obsidian</div>
+            <div class="slide-header__section">Start small</div>
+          </header>
+          <div class="slide-body closing-layout">
+            <div>
+              <p class="eyebrow reveal">One folder. One note. One push.</p>
+              <h2 class="reveal" style="--delay:120ms">从第一篇<br><span class="signal-text">公开笔记</span>开始。</h2>
+            </div>
+            <aside class="next-step reveal" style="--delay:220ms">
+              <ol>
+                <li>选择 Markdown 内容目录</li>
+                <li>添加 <code>publish: true</code></li>
+                <li>推送，让工作流完成发布</li>
+              </ol>
+              <a class="closing-link" href="../../docs/Getting%20Started/">继续阅读快速开始 <span aria-hidden="true">↗</span></a>
+            </aside>
+          </div>
+          <footer class="slide-footer"><p>你的写作方式，不必为网站让路。</p><span class="slide-footer__number">15</span></footer>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <!-- === PRESENTATION CHROME === -->
+  <nav class="deck-controls" id="deckControls" aria-label="演示导航">
+    <button type="button" id="previousSlide" aria-label="上一页">←</button>
+    <span class="deck-count" aria-live="polite"><span id="currentSlide">1</span> / <span id="totalSlides">15</span></span>
+    <button type="button" id="nextSlide" aria-label="下一页">→</button>
+  </nav>
+  <div class="progress-track" aria-hidden="true"><span id="progressBar"></span></div>
+
+  <!-- === INLINE EDITING CHROME === -->
+  <aside class="edit-tools" aria-label="编辑与导出">
+    <button class="edit-hotzone" id="editHotzone" type="button" aria-label="打开编辑模式"></button>
+    <button class="edit-toggle" id="editToggle" type="button" title="编辑模式（E）" aria-label="切换编辑模式">✎</button>
+    <button class="export-toggle" id="exportToggle" type="button">下载 HTML</button>
+    <div class="edit-status" id="editStatus" role="status" aria-live="polite">已保存到浏览器</div>
+  </aside>
+
+  <script>
+    /* ===========================================
+       SLIDE PRESENTATION CONTROLLER
+       Keyboard, wheel, touch, controls, and fixed-stage scaling.
+       =========================================== */
+    class SlidePresentation {
+      constructor() {
+        this.slides = [...document.querySelectorAll(".slide")];
+        this.stage = document.getElementById("deckStage");
+        this.controls = document.getElementById("deckControls");
+        this.currentLabel = document.getElementById("currentSlide");
+        this.totalLabel = document.getElementById("totalSlides");
+        this.progressBar = document.getElementById("progressBar");
+        this.currentSlide = this.readInitialSlide();
+        this.wheelLocked = false;
+        this.touchStartX = 0;
+        this.touchStartY = 0;
+        this.controlsTimer = null;
+
+        this.totalLabel.textContent = String(this.slides.length);
+        this.setupStageScale();
+        this.setupKeyboardNavigation();
+        this.setupWheelNavigation();
+        this.setupTouchNavigation();
+        this.setupButtons();
+        this.setupControlReveal();
+        this.showSlide(this.currentSlide, false);
+      }
+
+      readInitialSlide() {
+        const match = window.location.hash.match(/^#slide-(\d+)$/);
+        if (!match) return 0;
+        return Math.max(0, Math.min(Number(match[1]) - 1, document.querySelectorAll(".slide").length - 1));
+      }
+
+      setupStageScale() {
+        const scale = () => {
+          const factor = Math.min(window.innerWidth / 1920, window.innerHeight / 1080);
+          const x = (window.innerWidth - 1920 * factor) / 2;
+          const y = (window.innerHeight - 1080 * factor) / 2;
+          this.stage.style.transform = `translate(${x}px, ${y}px) scale(${factor})`;
+        };
+        scale();
+        window.addEventListener("resize", scale);
+      }
+
+      setupKeyboardNavigation() {
+        document.addEventListener("keydown", (event) => {
+          if (document.body.classList.contains("editing") || event.target.isContentEditable) return;
+
+          if (["ArrowRight", "ArrowDown", " ", "PageDown"].includes(event.key)) {
+            event.preventDefault();
+            this.next();
+          } else if (["ArrowLeft", "ArrowUp", "PageUp"].includes(event.key)) {
+            event.preventDefault();
+            this.previous();
+          } else if (event.key === "Home") {
+            event.preventDefault();
+            this.showSlide(0);
+          } else if (event.key === "End") {
+            event.preventDefault();
+            this.showSlide(this.slides.length - 1);
+          }
+        });
+      }
+
+      setupWheelNavigation() {
+        window.addEventListener("wheel", (event) => {
+          if (document.body.classList.contains("editing") || this.wheelLocked || Math.abs(event.deltaY) < 18) return;
+          event.preventDefault();
+          this.wheelLocked = true;
+          event.deltaY > 0 ? this.next() : this.previous();
+          window.setTimeout(() => { this.wheelLocked = false; }, 620);
+        }, { passive: false });
+      }
+
+      setupTouchNavigation() {
+        window.addEventListener("touchstart", (event) => {
+          const touch = event.changedTouches[0];
+          this.touchStartX = touch.clientX;
+          this.touchStartY = touch.clientY;
+        }, { passive: true });
+
+        window.addEventListener("touchend", (event) => {
+          if (document.body.classList.contains("editing")) return;
+          const touch = event.changedTouches[0];
+          const deltaX = touch.clientX - this.touchStartX;
+          const deltaY = touch.clientY - this.touchStartY;
+          if (Math.max(Math.abs(deltaX), Math.abs(deltaY)) < 48) return;
+          if (Math.abs(deltaX) > Math.abs(deltaY)) {
+            deltaX < 0 ? this.next() : this.previous();
+          } else {
+            deltaY < 0 ? this.next() : this.previous();
+          }
+        }, { passive: true });
+      }
+
+      setupButtons() {
+        document.getElementById("previousSlide").addEventListener("click", () => this.previous());
+        document.getElementById("nextSlide").addEventListener("click", () => this.next());
+      }
+
+      setupControlReveal() {
+        const reveal = () => {
+          this.controls.classList.add("controls-visible");
+          window.clearTimeout(this.controlsTimer);
+          this.controlsTimer = window.setTimeout(() => this.controls.classList.remove("controls-visible"), 1600);
+        };
+        window.addEventListener("pointermove", reveal, { passive: true });
+        window.addEventListener("keydown", reveal);
+      }
+
+      showSlide(index, updateHash = true) {
+        const nextIndex = Math.max(0, Math.min(index, this.slides.length - 1));
+        this.currentSlide = nextIndex;
+
+        this.slides.forEach((slide, slideIndex) => {
+          slide.classList.remove("active", "visible");
+          slide.setAttribute("aria-hidden", slideIndex === nextIndex ? "false" : "true");
+        });
+
+        const activeSlide = this.slides[nextIndex];
+        activeSlide.classList.add("active");
+        window.requestAnimationFrame(() => activeSlide.classList.add("visible"));
+
+        this.currentLabel.textContent = String(nextIndex + 1);
+        this.progressBar.style.width = `${((nextIndex + 1) / this.slides.length) * 100}%`;
+        document.title = `${activeSlide.dataset.title} — Jekyll Obsidian`;
+
+        if (updateHash) history.replaceState(null, "", `#slide-${nextIndex + 1}`);
+      }
+
+      next() {
+        this.showSlide(this.currentSlide + 1);
+      }
+
+      previous() {
+        this.showSlide(this.currentSlide - 1);
+      }
+    }
+
+    /* ===========================================
+       INLINE DECK EDITOR
+       Text changes persist locally; download exports one HTML file.
+       =========================================== */
+    class DeckEditor {
+      constructor() {
+        this.storageKey = "jekyll-obsidian-slides.v1";
+        this.editables = [...document.querySelectorAll(".slide h1, .slide h2, .slide h3, .slide p, .slide li, .slide strong, .slide code")];
+        this.toggle = document.getElementById("editToggle");
+        this.exportButton = document.getElementById("exportToggle");
+        this.status = document.getElementById("editStatus");
+        this.isActive = false;
+        this.saveTimer = null;
+        this.statusTimer = null;
+
+        this.editables.forEach((element, index) => { element.dataset.editId = String(index); });
+        this.restore();
+        this.setupEvents();
+      }
+
+      setupEvents() {
+        this.toggle.addEventListener("click", () => this.toggleEditMode());
+        this.exportButton.addEventListener("click", () => this.downloadHtml());
+
+        this.editables.forEach((element) => {
+          element.addEventListener("input", () => {
+            window.clearTimeout(this.saveTimer);
+            this.saveTimer = window.setTimeout(() => this.save(), 350);
+          });
+        });
+
+        document.addEventListener("keydown", (event) => {
+          if ((event.key === "e" || event.key === "E") && !event.target.isContentEditable && !event.ctrlKey && !event.metaKey) {
+            event.preventDefault();
+            this.toggleEditMode();
+          }
+
+          if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "s" && this.isActive) {
+            event.preventDefault();
+            this.save();
+          }
+
+          if (event.key === "Escape" && this.isActive) this.toggleEditMode(false);
+        });
+      }
+
+      toggleEditMode(force) {
+        this.isActive = typeof force === "boolean" ? force : !this.isActive;
+        document.body.classList.toggle("editing", this.isActive);
+        this.toggle.classList.toggle("active", this.isActive);
+        this.exportButton.classList.toggle("show", this.isActive);
+        this.toggle.setAttribute("aria-pressed", String(this.isActive));
+        this.editables.forEach((element) => element.setAttribute("contenteditable", String(this.isActive)));
+        if (!this.isActive) this.save();
+      }
+
+      snapshot() {
+        return Object.fromEntries(this.editables.map((element) => [element.dataset.editId, element.innerHTML]));
+      }
+
+      save() {
+        localStorage.setItem(this.storageKey, JSON.stringify(this.snapshot()));
+        this.showStatus("已保存到浏览器");
+      }
+
+      restore() {
+        try {
+          const saved = JSON.parse(localStorage.getItem(this.storageKey) || "null");
+          if (!saved) return;
+          this.editables.forEach((element) => {
+            if (Object.prototype.hasOwnProperty.call(saved, element.dataset.editId)) element.innerHTML = saved[element.dataset.editId];
+          });
+        } catch (_error) {
+          localStorage.removeItem(this.storageKey);
+        }
+      }
+
+      showStatus(message) {
+        this.status.textContent = message;
+        this.status.classList.add("show");
+        window.clearTimeout(this.statusTimer);
+        this.statusTimer = window.setTimeout(() => this.status.classList.remove("show"), 1400);
+      }
+
+      downloadHtml() {
+        this.save();
+        const clone = document.documentElement.cloneNode(true);
+        clone.querySelector("body").classList.remove("editing");
+        clone.querySelectorAll("[contenteditable]").forEach((element) => element.removeAttribute("contenteditable"));
+        clone.querySelectorAll(".active, .visible, .show").forEach((element) => element.classList.remove("active", "visible", "show"));
+        const firstSlide = clone.querySelector(".slide");
+        firstSlide.classList.add("active", "visible");
+        const blob = new Blob(["<!doctype html>\n" + clone.outerHTML], { type: "text/html;charset=utf-8" });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = "jekyll-obsidian-slides.html";
+        link.click();
+        window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+        this.showStatus("HTML 已下载");
+      }
+    }
+
+    /* ===========================================
+       EDIT-HOTZONE HOVER BRIDGE
+       A grace period keeps the edit button reachable.
+       =========================================== */
+    const presentation = new SlidePresentation();
+    const editor = new DeckEditor();
+    const hotzone = document.getElementById("editHotzone");
+    const editToggle = document.getElementById("editToggle");
+    let hideEditTimer = null;
+
+    hotzone.addEventListener("mouseenter", () => {
+      window.clearTimeout(hideEditTimer);
+      editToggle.classList.add("show");
+    });
+
+    hotzone.addEventListener("mouseleave", () => {
+      hideEditTimer = window.setTimeout(() => {
+        if (!editor.isActive) editToggle.classList.remove("show");
+      }, 400);
+    });
+
+    editToggle.addEventListener("mouseenter", () => window.clearTimeout(hideEditTimer));
+    editToggle.addEventListener("mouseleave", () => {
+      hideEditTimer = window.setTimeout(() => {
+        if (!editor.isActive) editToggle.classList.remove("show");
+      }, 400);
+    });
+
+    hotzone.addEventListener("click", () => editor.toggleEditMode());
+  </script>
+</body>
+</html>

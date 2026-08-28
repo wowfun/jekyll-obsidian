@@ -30,6 +30,8 @@ website:
       post: []
       doc: []
   features: {}
+  html:
+    slides/runtime: /presentations/runtime/
   contacts:
     - label: GitHub
       url: https://github.com/owner
@@ -55,6 +57,25 @@ website:
 ```
 
 显式 YAML 布尔值始终优先。`publish: false` 会从已选择目录中排除一篇笔记，`publish: true` 则可以加入目录范围外的一篇笔记。发布目录不会决定内容分类；已发布笔记是页面、文章还是文档，仍由 `default_type`、`directories.post`、`directories.doc` 和笔记的 `content_type` 决定。附件只有在已发布笔记、其 `image` 属性或嵌入闭包引用时才会公开。
+
+## 独立 HTML Slides
+
+`website.html` 用于显式发布不经过主题渲染的可信 HTML。把内容目录中的相对源路径映射到一个根相对公开路由：
+
+```yaml
+website:
+  html:
+    slides/runtime: /presentations/runtime/
+    slides/status.html: /status.html
+```
+
+文件映射要求源文件名精确以 `.html` 结尾，目标也是 `.html` 文件路由，并且只发布该文件。目录映射要求目录中存在精确的 `index.html`，目标以 `/` 结尾，并保留普通 bundle 文件的相对结构。因此 bundle 可以包含 CSS、JavaScript、字体、图片和应用自己的数据文件。Markdown 和 `_locale.yml` 等编译器语言清单仍按普通编译规则处理，不会随 bundle 一起复制。
+
+源必须是经过 NFC 规范化的内容目录相对 POSIX 路径，且多个源不能重叠。目标不能包含 `baseurl`、query、fragment、编码后的路径分隔符，也不能使用 `/`、`/assets/website/` 或 `/assets/vault/`。HTML 与 Markdown 页面、目录首页、语言路由、系统产物和宿主 Jekyll 输出发生目标冲突时，构建会在写入前失败。
+
+编译器会逐字节复制这些文件，不套主题、不执行 Liquid、不注入元数据或 CSP，也不改写相对 URL。Raw HTML 中写死的根相对 URL 必须由作者自行包含部署 `baseurl`；相对 URL 通常更便于迁移。普通 Markdown 链接或 `[[slides/runtime/index.html|打开 Slides]]` 会解析到配置路由。主题页通过 Markdown embed 或 `image` 属性引用非 HTML bundle 媒体时，会复用其映射路由，不再生成第二份 vault asset；`![[...html]]` 仍会被拒绝，因为 raw HTML 不能嵌入主题页面。
+
+HTML 映射本身就是发布授权，不受 `website.content.publish_by_default` 控制。Raw 文档由所有语言共享，不会进入导航、Search、Graph、Feed、sitemap、Markdown 资源或自动语言副本；请从公开 Markdown 页面手动链接。它们会以可信同源代码运行，因此应把整个映射目录当作公开可执行内容审查。Manifest 授权的是路径，而不是响应 MIME；使用少见扩展名时，应确认部署服务器返回预期的 `Content-Type`，并禁用不安全的内容嗅探。本仓库提供了可直接查看的 [[slides/jekyll-obsidian/index.html|五分钟 Jekyll Obsidian Slide]]。
 
 ## 站点信息
 

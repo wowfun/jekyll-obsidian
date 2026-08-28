@@ -8,6 +8,8 @@ website:
   # jekyll-obsidian:managed-end
   repository: ""
   edit_branch: main
+  html:
+    slides/jekyll-obsidian: /slides/jekyll-obsidian/
   contacts:
     - label: GitHub
       url: https://github.com/wowfun

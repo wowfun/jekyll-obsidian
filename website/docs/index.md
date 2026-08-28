@@ -21,6 +21,8 @@ updated: 2026-08-07
 
 This working starter is also the manual for `jekyll-obsidian`. Write ordinary Markdown in any editor, including Obsidian. Minimal turns the same folder into a personal site or blog, while Docs turns it into a focused handbook. Push your changes to GitHub and the included workflow builds the selected theme and publishes it to Pages. You never need to run a local build command or maintain a paid server.
 
+[Open the five-minute HTML slide tour](slides/jekyll-obsidian/index.html) for a visual explanation of the publishing model.
+
 > [!note] Open the source in Obsidian
 > The compiler reads `website/docs/`, but never rewrites the source. Open this directory directly and keep using links, properties, callouts, and embeds in Obsidian.
 
