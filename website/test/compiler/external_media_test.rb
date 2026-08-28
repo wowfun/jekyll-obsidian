@@ -50,7 +50,7 @@ class ExternalMediaTest < Minitest::Test
     assert_equal url, download["href"]
     assert_equal ["https://cdn.example"], output.data.dig("website", "content_security", "media_sources")
     assert_empty result.relations
-    assert_empty result.copied_assets
+    assert_empty result.projected_files
   end
 
   def test_common_video_urls_become_canonical_lazy_players

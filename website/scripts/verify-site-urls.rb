@@ -8,6 +8,7 @@ require "set"
 require "uri"
 
 require_relative "../lib/jekyll_obsidian/external_media"
+require_relative "../lib/jekyll_obsidian/raw_html_manifest"
 
 class SiteUrlVerifier
   URL_ATTRIBUTES = [
@@ -63,9 +64,12 @@ class SiteUrlVerifier
     @baseurl = normalize_baseurl(baseurl)
     @errors = []
     @html_ids = {}
+    @raw_html_documents = Set.new
+    @raw_html_files = Set.new
   end
 
   def verify
+    load_raw_html_manifest
     html_files = Dir.glob(File.join(@site_dir, "**", "*.html")).sort
     add_error("site contains no HTML") if html_files.empty?
     html_files.each { |path| verify_html(path) }
@@ -94,68 +98,75 @@ class SiteUrlVerifier
   def verify_html(path)
     relative = relative_path(path)
     route = route_for_output(relative)
+    raw_html = @raw_html_documents.include?(relative)
     document = Nokogiri::HTML5.parse(File.read(path, encoding: "UTF-8"))
     @html_ids[path] = document.css("[id]").map { |node| node["id"] }.to_set
-    csp_node = document.css("meta[http-equiv]").find do |node|
-      node["http-equiv"].to_s.casecmp("Content-Security-Policy").zero?
-    end
-    csp = csp_node&.[]("content").to_s
-    add_error("#{relative}: missing production meta CSP") if csp.empty?
-    comments = !document.at_css("[data-website-comments-load]").nil?
-    analytics = verify_analytics(document, relative)
-    verify_csp(csp, relative, comments:, analytics:, document:) unless csp.empty?
-
-    canonical = document.at_css("link[rel~='canonical']")&.[]("href")
-    expected_canonical = "#{@origin}#{public_path(route)}"
-    decoded_canonical = canonical && URI.decode_uri_component(canonical)
-    noindex = document.at_css("meta[name='robots']")&.[]("content").to_s.split(/[\s,]+/).include?("noindex")
-    unless @origin.empty?
-      if noindex
-        verify_noindex_canonical(canonical, relative)
-      elsif decoded_canonical != expected_canonical
-        add_error("#{relative}: canonical #{canonical.inspect} != #{expected_canonical.inspect}")
+    unless raw_html
+      csp_node = document.css("meta[http-equiv]").find do |node|
+        node["http-equiv"].to_s.casecmp("Content-Security-Policy").zero?
       end
-    end
+      csp = csp_node&.[]("content").to_s
+      add_error("#{relative}: missing production meta CSP") if csp.empty?
+      comments = !document.at_css("[data-website-comments-load]").nil?
+      analytics = verify_analytics(document, relative)
+      verify_csp(csp, relative, comments:, analytics:, document:) unless csp.empty?
 
-    og_url = document.at_css("meta[property='og:url']")&.[]("content")
-    decoded_og_url = og_url && URI.decode_uri_component(og_url)
-    if !@origin.empty? && decoded_og_url != expected_canonical
-      add_error("#{relative}: og:url #{og_url.inspect} != #{expected_canonical.inspect}")
-    end
-
-    if comments
-      backlink = document.at_css("meta[name='giscus:backlink']")&.[]("content")
-      decoded_backlink = backlink && URI.decode_uri_component(backlink)
-      if !@origin.empty? && decoded_backlink != expected_canonical
-        add_error("#{relative}: giscus:backlink #{backlink.inspect} != #{expected_canonical.inspect}")
+      canonical = document.at_css("link[rel~='canonical']")&.[]("href")
+      expected_canonical = "#{@origin}#{public_path(route)}"
+      decoded_canonical = canonical && URI.decode_uri_component(canonical)
+      noindex = document.at_css("meta[name='robots']")&.[]("content").to_s.split(/[\s,]+/).include?("noindex")
+      unless @origin.empty?
+        if noindex
+          verify_noindex_canonical(canonical, relative)
+        elsif decoded_canonical != expected_canonical
+          add_error("#{relative}: canonical #{canonical.inspect} != #{expected_canonical.inspect}")
+        end
       end
-    end
 
-    verify_external_embeds(document, relative, comments:)
-    verify_external_media(document, relative)
+      og_url = document.at_css("meta[property='og:url']")&.[]("content")
+      decoded_og_url = og_url && URI.decode_uri_component(og_url)
+      if !@origin.empty? && decoded_og_url != expected_canonical
+        add_error("#{relative}: og:url #{og_url.inspect} != #{expected_canonical.inspect}")
+      end
+
+      if comments
+        backlink = document.at_css("meta[name='giscus:backlink']")&.[]("content")
+        decoded_backlink = backlink && URI.decode_uri_component(backlink)
+        if !@origin.empty? && decoded_backlink != expected_canonical
+          add_error("#{relative}: giscus:backlink #{backlink.inspect} != #{expected_canonical.inspect}")
+        end
+      end
+
+      verify_external_embeds(document, relative, comments:)
+      verify_external_media(document, relative)
+    end
 
     URL_ATTRIBUTES.each do |element, attribute|
       document.css("#{element}[#{attribute}]").each do |node|
         image = element == "img" || (element == "source" && node.ancestors.any? { |ancestor| ancestor.name == "picture" })
-        verify_reference(node[attribute], route, relative, image:)
+        verify_reference(node[attribute], route, relative, image:, raw_html:)
       end
     end
     document.css("img[srcset], source[srcset]").each do |node|
       image = node.name == "img" || node.ancestors.any? { |ancestor| ancestor.name == "picture" }
-      srcset_urls(node["srcset"]).each { |value| verify_reference(value, route, relative, image:) }
+      srcset_urls(node["srcset"]).each { |value| verify_reference(value, route, relative, image:, raw_html:) }
     end
     document.css("meta[name^='website:'][content]:not([name='website:analytics'])").each do |node|
+      next if raw_html
+
       verify_reference(node["content"], route, relative)
     end
   rescue StandardError => exception
     add_error("#{relative || path}: could not inspect HTML: #{exception.class}: #{exception.message}")
   end
 
-  def verify_reference(value, current_route, source, image: false)
+  def verify_reference(value, current_route, source, image: false, raw_html: false)
     return if value.nil? || value.empty?
     return if value.start_with?("mailto:", "tel:")
 
     scheme = value[/\A([a-z][a-z0-9+.-]*):/i, 1]&.downcase
+    return if raw_html && (scheme || value.start_with?("//"))
+
     if image && scheme == "http" && !same_origin_url?(value)
       add_error("#{source}: image URL must use HTTPS: #{value.inspect}")
       return
@@ -169,7 +180,7 @@ class SiteUrlVerifier
     path_and_query, fragment = value.split("#", 2)
     path = path_and_query.split("?", 2).first.to_s
     if path.empty?
-      verify_fragment(source, fragment) if fragment
+      verify_fragment(source, fragment) if fragment && !raw_html
       return
     end
 
@@ -182,7 +193,9 @@ class SiteUrlVerifier
     route = strip_baseurl(path)
     output = output_path_for_route(route)
     if File.file?(output)
-      verify_fragment_in_file(output, fragment, source) if fragment && !fragment.empty? && File.extname(output).downcase == ".html"
+      if !raw_html && fragment && !fragment.empty? && File.extname(output).downcase == ".html"
+        verify_fragment_in_file(output, fragment, source)
+      end
     else
       add_error("#{source}: local target does not exist for #{value.inspect}")
     end
@@ -445,6 +458,24 @@ class SiteUrlVerifier
     end
   end
 
+  def load_raw_html_manifest
+    manifest_path = JekyllObsidian::RawHtmlManifest::PATH
+    path = File.join(@site_dir, manifest_path)
+    return unless File.file?(path)
+
+    payload = JekyllObsidian::RawHtmlManifest.parse(File.read(path, encoding: "UTF-8"))
+    payload.fetch("files").each do |route|
+      @raw_html_files << relative_path(output_path_for_route(route))
+    end
+    payload.fetch("documents").each do |document|
+      @raw_html_documents << relative_path(output_path_for_route(document.fetch("output")))
+    end
+  rescue JekyllObsidian::RawHtmlManifest::Invalid => exception
+    add_error("#{manifest_path}: unsupported manifest schema: #{exception.message}")
+  rescue ArgumentError => exception
+    add_error("#{manifest_path}: invalid manifest route: #{exception.message}")
+  end
+
   def verify_xml_urls
     paths = [File.join(@site_dir, "sitemap.xml"), *Dir.glob(File.join(@site_dir, "{,*/}feed.xml"))].uniq.sort
     paths.each do |path|
@@ -469,9 +500,11 @@ class SiteUrlVerifier
 
   def verify_css_assets
     Dir.glob(File.join(@site_dir, "**", "*.css")).sort.each do |path|
+      raw_html = @raw_html_files.include?(relative_path(path))
       css = File.read(path, encoding: "UTF-8")
       css.scan(/url\((?:"|')?([^"')]+)(?:"|')?\)/).flatten.each do |reference|
         next if reference.start_with?("#", "data:", "http:", "https:")
+        next if raw_html && (reference.start_with?("//") || reference.match?(/\A[a-z][a-z0-9+.-]*:/i))
         reference_path = URI.decode_uri_component(reference.split(/[?#]/, 2).first)
         target = if reference_path.start_with?("/")
           unless baseurl_once?(reference_path)

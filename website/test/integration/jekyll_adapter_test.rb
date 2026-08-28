@@ -77,6 +77,7 @@ class JekyllAdapterTest < Minitest::Test
     refute File.exist?(File.join(destination, "assets", "vault", "media", "unused.png"))
     refute File.exist?(File.join(destination, "vault"))
     refute File.exist?(File.join(destination, "src"))
+    refute File.exist?(File.join(destination, "assets", "website", "raw-html.v1.json"))
 
     generated = Dir.glob(File.join(destination, "**", "*")).select { |path| File.file?(path) }.map { |path| File.binread(path) }.join("\n")
     refute_includes generated, "Private leak marker"
@@ -140,6 +141,66 @@ class JekyllAdapterTest < Minitest::Test
     published = File.join(destination, "assets", "vault", "media", "animated.apng")
     assert File.file?(published)
     assert_equal bytes, File.binread(published)
+  end
+
+  def test_real_site_publishes_an_html_slide_bundle_byte_for_byte_at_its_configured_route
+    slides_root = File.join(@temporary_root, "vault", "slides", "runtime")
+    FileUtils.mkdir_p(File.join(slides_root, "assets"))
+    html = <<~HTML.b
+      <!doctype html><meta charset="utf-8"><title>Runtime slides</title>
+      <link rel="stylesheet" href="./assets/deck.css">
+      <script type="module" src="./assets/deck.js"></script><script>window.inlineDeck = true</script>
+      <main>Literal {{ site.secret }}.</main>
+    HTML
+    css = "@font-face { font-family: Deck; src: url('./deck.woff2') }\n".b
+    javascript = "window.deckReady = true;\n".b
+    font = "\x77\x4f\x46\x32\x00\xffdeck".b
+    image = "<svg xmlns=\"http://www.w3.org/2000/svg\"><circle r=\"4\"/></svg>".b
+    deck_data = "opaque slide data\n".b
+    File.binwrite(File.join(slides_root, "index.html"), html)
+    File.binwrite(File.join(slides_root, "assets", "deck.css"), css)
+    File.binwrite(File.join(slides_root, "assets", "deck.js"), javascript)
+    File.binwrite(File.join(slides_root, "assets", "deck.woff2"), font)
+    File.binwrite(File.join(slides_root, "assets", "cover.svg"), image)
+    File.binwrite(File.join(slides_root, "timeline.deck"), deck_data)
+    File.open(File.join(@temporary_root, "vault", "index.md"), "ab") do |file|
+      file.write("\n[Open slides](slides/runtime/index.html)\n")
+    end
+
+    build_site(
+      "baseurl" => "/project",
+      "website" => website_config.merge("html" => { "slides/runtime" => "/talks/runtime/" })
+    ).process
+
+    assert_equal html, File.binread(File.join(destination, "talks", "runtime", "index.html"))
+    assert_equal css, File.binread(File.join(destination, "talks", "runtime", "assets", "deck.css"))
+    assert_equal javascript, File.binread(File.join(destination, "talks", "runtime", "assets", "deck.js"))
+    assert_equal font, File.binread(File.join(destination, "talks", "runtime", "assets", "deck.woff2"))
+    assert_equal image, File.binread(File.join(destination, "talks", "runtime", "assets", "cover.svg"))
+    assert_equal deck_data, File.binread(File.join(destination, "talks", "runtime", "timeline.deck"))
+    assert_includes File.read(File.join(destination, "index.html")), 'href="/project/talks/runtime/"'
+    manifest = JSON.parse(File.read(File.join(destination, "assets", "website", "raw-html.v1.json")))
+    assert_equal [
+      { "route" => "/talks/runtime/", "output" => "/talks/runtime/index.html" }
+    ], manifest.fetch("documents")
+    assert_includes manifest.fetch("files"), "/talks/runtime/timeline.deck"
+    refute_includes JSON.generate(manifest), "slides/runtime"
+  end
+
+  def test_html_route_cannot_overwrite_a_host_jekyll_page
+    File.write(File.join(@site_root, "status.html"), "---\ntitle: Host status\n---\nHost status")
+    slides_root = File.join(@temporary_root, "vault", "slides")
+    FileUtils.mkdir_p(slides_root)
+    File.write(File.join(slides_root, "status.html"), "<!doctype html><title>Raw status</title>")
+
+    site = build_site(
+      "website" => website_config.merge("html" => { "slides/status.html" => "/status.html" })
+    )
+    error = assert_raises(Jekyll::Errors::FatalException) { site.process }
+
+    assert_includes error.message, "output route collision"
+    assert_includes error.message, "status.html"
+    assert_includes error.message, "slides/status.html"
   end
 
   def test_github_markdown_manifest_drives_an_offline_build_and_is_exported_for_deployment
@@ -379,7 +440,7 @@ class JekyllAdapterTest < Minitest::Test
     refute_includes generated, "Deleted trash marker"
   end
 
-  def test_render_failure_cleans_staged_vault_assets
+  def test_render_failure_cleans_staged_projected_files
     File.write(
       File.join(@site_root, "_layouts", "website-minimal.html"),
       "{% include missing-staging-cleanup-fixture.html %}"
@@ -390,19 +451,19 @@ class JekyllAdapterTest < Minitest::Test
       error = assert_expected_failure(StandardError) { site.process }
       assert_includes error.message, "missing-staging-cleanup-fixture.html"
 
-      staging = Dir.glob(File.join(@site_root, ".jekyll-obsidian-cache", "vault-assets.*"))
+      staging = Dir.glob(File.join(@site_root, ".jekyll-obsidian-cache", "projected-files.*"))
       assert_empty staging
     end
   end
 
-  def test_write_failure_cleans_staged_vault_assets
+  def test_write_failure_cleans_staged_projected_files
     site = build_site
     site.define_singleton_method(:write) { raise IOError, "intentional write failure" }
 
     error = assert_raises(IOError) { site.process }
 
     assert_equal "intentional write failure", error.message
-    staging = Dir.glob(File.join(@site_root, ".jekyll-obsidian-cache", "vault-assets.*"))
+    staging = Dir.glob(File.join(@site_root, ".jekyll-obsidian-cache", "projected-files.*"))
     assert_empty staging
   end
 

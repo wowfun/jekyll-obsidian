@@ -78,7 +78,8 @@ module JekyllObsidian
     :comments,
     :analytics,
     :contacts,
-    :navigation
+    :navigation,
+    :html
   )
 
   BuildRequest = ImmutableRecord.define(:snapshot, :config, :tab_memberships)
@@ -88,7 +89,7 @@ module JekyllObsidian
   Relation = ImmutableRecord.define(:source_id, :target_id, :kind, :fragment, :source_span, :property)
   PageOutput = ImmutableRecord.define(:route, :content, :data)
   GeneratedFile = ImmutableRecord.define(:route, :content, :media_type)
-  CopiedAsset = ImmutableRecord.define(:source_path, :route, :media_type, :size, :device, :inode, :mtime_ns)
+  ProjectedFile = ImmutableRecord.define(:source_path, :route, :media_type, :size, :device, :inode, :mtime_ns)
   NoteOutput = ImmutableRecord.define(:id, :title, :route, :properties)
   ContentSecurityNeeds = ImmutableRecord.define(:media_sources, :frame_sources, :script_sources, :connect_sources)
 
@@ -171,7 +172,7 @@ module JekyllObsidian
   BuildSuccessBase = ImmutableRecord.define(
     :pages,
     :generated_files,
-    :copied_assets,
+    :projected_files,
     :diagnostics,
     :relations,
     :notes,

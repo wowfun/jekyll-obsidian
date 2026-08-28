@@ -25,7 +25,7 @@ class MediaAndFeedTest < Minitest::Test
     assert result.success?, result.diagnostics.map(&:message).join("\n")
     cards = page(result, "/portfolio/").data.dig("website", "theme_data", "portfolio_projects")
       .to_h { |card| [File.basename(card.fetch("id"), ".md"), card] }
-    assets = result.copied_assets.to_h { |asset| [File.extname(asset.source_path).delete_prefix("."), asset] }
+    assets = result.projected_files.to_h { |asset| [File.extname(asset.source_path).delete_prefix("."), asset] }
     formats.each do |extension, media_type|
       assert_equal(
         "https://example.test/assets/vault/media/animated.#{extension}",
@@ -45,7 +45,7 @@ class MediaAndFeedTest < Minitest::Test
     )
 
     assert result.success?, result.diagnostics.map(&:message).join("\n")
-    routes = result.copied_assets.map(&:route)
+    routes = result.projected_files.map(&:route)
     assert_equal [
       "/assets/vault/files/board.canvas",
       "/assets/vault/media/cover.png",

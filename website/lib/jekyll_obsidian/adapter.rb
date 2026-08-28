@@ -14,12 +14,12 @@ require_relative "workspace_layout"
 module JekyllObsidian
   module Adapter
     BUNDLED_FEATURE_IDS = %w[search graph previews math mermaid].freeze
-    CONFIG_KEYS = %w[source syntax_profile theme repository edit_branch content features i18n comments analytics contacts navigation].freeze
+    CONFIG_KEYS = %w[source syntax_profile theme repository edit_branch content features html i18n comments analytics contacts navigation].freeze
     GIT_FIRST_COMMIT_CACHE_VERSION = 1
     GITHUB_MARKDOWN_MANIFEST_INPUT = "JEKYLL_OBSIDIAN_GITHUB_MARKDOWN_MANIFEST_IN"
     GITHUB_MARKDOWN_MANIFEST_OUTPUT = "JEKYLL_OBSIDIAN_GITHUB_MARKDOWN_MANIFEST_OUT"
     IGNORED_CONTENT_DIRECTORIES = %w[.obsidian .trash].freeze
-    STAGING_BASENAME_PATTERN = /\Avault-assets\.[A-Za-z0-9.-]+\z/
+    STAGING_BASENAME_PATTERN = /\Aprojected-files\.[A-Za-z0-9.-]+\z/
     StagingLease = Struct.new(:parent, :path, keyword_init: true)
 
     module SiteProcessCleanup
@@ -68,9 +68,10 @@ module JekyllObsidian
     end
 
     class ProjectedStaticFile < Jekyll::StaticFile
-      attr_reader :website_route, :source_path
+      attr_reader :website_route, :source_path, :vault_relative_path
 
       def initialize(site, source_root, source_relative_path, route)
+        @vault_relative_path = source_relative_path
         @source_path = File.join(source_root, source_relative_path)
         @website_route = route
         super(site, source_root, File.dirname(source_relative_path), File.basename(source_relative_path))
@@ -120,15 +121,15 @@ module JekyllObsidian
         fatal("website compilation failed: #{summary}")
       end
 
-      staging_root = stage_vault_assets(site, layout, result)
+      staging_root = stage_projected_files(site, layout, result)
       begin
         site.data["website_feed_available"] = result.generated_files.any? { |output| output.route == "/feed.xml" }
         site.data.merge!(result.site_data)
-        pages, vault_assets = generated_objects(site, result, staging_root)
+        pages, projected_files = generated_objects(site, result, staging_root)
         app_assets = app_asset_objects(site, layout:, theme: result.theme, features: result.features)
-        preflight_collisions(site, pages, vault_assets + app_assets)
+        preflight_collisions(site, pages, projected_files + app_assets)
         site.pages.concat(pages)
-        site.static_files.concat(vault_assets).concat(app_assets)
+        site.static_files.concat(projected_files).concat(app_assets)
       rescue StandardError
         cleanup_staging(site)
         raise
@@ -168,6 +169,7 @@ module JekyllObsidian
         "edit_branch" => configured.fetch("edit_branch", "main"),
         "content" => configured["content"],
         "features" => configured["features"],
+        "html" => configured["html"],
         "i18n" => configured["i18n"],
         "comments" => configured["comments"],
         "analytics" => configured["analytics"],
@@ -396,6 +398,7 @@ module JekyllObsidian
           theme: website.fetch("theme"),
           content: website.fetch("content"),
           features: website.fetch("features"),
+          html: website.fetch("html"),
           i18n: website.fetch("i18n"),
           comments: website.fetch("comments"),
           analytics: website.fetch("analytics"),
@@ -456,13 +459,13 @@ module JekyllObsidian
       FileUtils.rm_f(temporary_path) if defined?(temporary_path) && temporary_path
     end
 
-    def stage_vault_assets(site, layout, result)
+    def stage_projected_files(site, layout, result)
       cleanup_staging(site)
       FileUtils.mkdir_p(layout.application_cache_root)
       validate_application_cache_root!(layout)
-      staging_root = Dir.mktmpdir("vault-assets.", layout.application_cache_root)
+      staging_root = Dir.mktmpdir("projected-files.", layout.application_cache_root)
       vault_root = layout.source_root
-      result.copied_assets.each do |output|
+      result.projected_files.each do |output|
         source_path = File.join(vault_root, output.source_path)
         destination = File.join(staging_root, output.source_path)
         FileUtils.mkdir_p(File.dirname(destination))
@@ -472,7 +475,7 @@ module JekyllObsidian
           actual_mtime_ns = stat.mtime.to_i * 1_000_000_000 + stat.mtime.nsec
           expected = [output.device, output.inode, output.size, output.mtime_ns]
           actual = [stat.dev, stat.ino, stat.size, actual_mtime_ns]
-          fatal("vault asset changed after compilation: #{output.source_path}") unless stat.file? && actual == expected
+          fatal("projected file changed after compilation: #{output.source_path}") unless stat.file? && actual == expected
           File.open(destination, File::WRONLY | File::CREAT | File::EXCL, 0o644) { |target| IO.copy_stream(file, target) }
         end
       end
@@ -492,7 +495,7 @@ module JekyllObsidian
         page_output = PageOutput.new(route: output.route, content: output.content, data: {})
         GeneratedPage.new(site, page_output, generated: true)
       end
-      assets = result.copied_assets.map do |output|
+      assets = result.projected_files.map do |output|
         ProjectedStaticFile.new(site, staging_root, output.source_path, output.route)
       end
       [pages + generated, assets]
@@ -659,13 +662,22 @@ module JekyllObsidian
         end
       end
       pages.each { |page| register_output!(registry, site, page, page.website_route, "website output") }
-      static_files.each { |file| register_output!(registry, site, file, file.website_route, "website asset") }
+      static_files.each do |file|
+        owner = if file.is_a?(ProjectedStaticFile)
+          "website projected source #{file.vault_relative_path}"
+        else
+          "website asset"
+        end
+        register_output!(registry, site, file, file.website_route, owner)
+      end
     end
 
     def register_output!(registry, site, output, route, owner)
       validate_output_route!(route)
       key = destination_collision_key(site, output.destination(site.dest))
-      fatal("output route collision at #{route} (already owned by #{registry[key]})") if registry.key?(key)
+      if registry.key?(key)
+        fatal("output route collision at #{route} (#{owner}; already owned by #{registry[key]})")
+      end
       registry[key] = owner
     end
 

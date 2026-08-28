@@ -720,7 +720,7 @@ class LocalizedCompilerTest < Minitest::Test
     assert_includes translated.content, "中文目标"
     assert_includes translated.content, 'lang="zh-CN">来自 中文目标'
     assert_includes translated.content, 'src="/assets/vault/shared.png"'
-    assert_equal ["/assets/vault/shared.png"], result.copied_assets.map(&:route)
+    assert_equal ["/assets/vault/shared.png"], result.projected_files.map(&:route)
   end
 
   def test_localized_compile_is_deterministic_across_snapshot_order
@@ -732,7 +732,7 @@ class LocalizedCompilerTest < Minitest::Test
     assert second.success?, second.diagnostics.map(&:message).join("\n")
     assert_equal first.pages, second.pages
     assert_equal first.generated_files, second.generated_files
-    assert_equal first.copied_assets, second.copied_assets
+    assert_equal first.projected_files, second.projected_files
     assert_equal first.notes, second.notes
     assert_equal first.relations, second.relations
     assert_equal first.site_data, second.site_data

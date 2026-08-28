@@ -18,7 +18,7 @@ class PublicationBoundaryTest < Minitest::Test
     refute_includes bytes, "Private marker"
     refute_includes bytes, "Draft marker"
     refute_includes bytes, "Attachment secret"
-    assert_empty result.copied_assets
+    assert_empty result.projected_files
   end
 
   def test_string_publish_is_a_fatal_frontmatter_error
@@ -70,7 +70,7 @@ class PublicationBoundaryTest < Minitest::Test
     assert_deeply_frozen(first, "result")
     refute_empty first.pages
     refute_empty first.generated_files
-    refute_empty first.copied_assets
+    refute_empty first.projected_files
     refute_empty first.diagnostics
     refute_empty first.relations
     refute_empty first.notes

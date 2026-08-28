@@ -230,7 +230,7 @@ class OfmRenderingTest < Minitest::Test
     )
 
     assert result.success?, result.diagnostics.map(&:message).join("\n")
-    assert_empty result.copied_assets
+    assert_empty result.projected_files
     assert_empty result.relations
     assert_includes page(result, "/").content, "![[media/private.png]] #private-code-tag"
     refute_includes generated_json(result, "/assets/website/catalog.v1.json").fetch("notes").first.fetch("tags"), "private-code-tag"
@@ -275,7 +275,7 @@ class OfmRenderingTest < Minitest::Test
     )
 
     assert result.success?, result.diagnostics.map(&:message).join("\n")
-    assert_equal ["/assets/vault/media/public.png"], result.copied_assets.map(&:route)
+    assert_equal ["/assets/vault/media/public.png"], result.projected_files.map(&:route)
     tags = generated_json(result, "/assets/website/catalog.v1.json").fetch("notes").first.fetch("tags")
     assert_includes tags, "visible-list"
     refute_includes tags, "hidden-list-code"
@@ -302,7 +302,7 @@ class OfmRenderingTest < Minitest::Test
     )
 
     assert result.success?, result.diagnostics.map(&:message).join("\n")
-    assert_equal ["/assets/vault/media/public.png"], result.copied_assets.map(&:route)
+    assert_equal ["/assets/vault/media/public.png"], result.projected_files.map(&:route)
     tags = generated_json(result, "/assets/website/catalog.v1.json").fetch("notes").first.fetch("tags")
     assert_includes tags, "visible-outside"
     refute_includes tags, "hidden-fence"

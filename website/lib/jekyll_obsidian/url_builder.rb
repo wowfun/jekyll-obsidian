@@ -42,6 +42,23 @@ module JekyllObsidian
       nil
     end
 
+    def validate_file_route(value, extension:)
+      return nil unless value.is_a?(String)
+      return nil unless value.start_with?("/") && !value.end_with?("/")
+
+      normalized = decode_safe_path(value).unicode_normalize(:nfc)
+      return nil if normalized.match?(INVALID_PERMALINK)
+      return nil if normalized.include?("//")
+      return nil unless File.extname(normalized) == extension
+
+      segments = normalized.split("/").reject(&:empty?)
+      return nil if segments.empty?
+
+      "/#{segments.map { |segment| encode_segment(segment) }.join('/')}"
+    rescue ArgumentError, EncodingError, URI::InvalidURIError
+      nil
+    end
+
     def href(route)
       return route if baseurl.empty?
       return "#{baseurl}/" if route == "/"

@@ -71,7 +71,7 @@ class RelationsAndTransclusionTest < Minitest::Test
     development = compile(*entries, environment: "development")
     assert development.success?
     assert_includes page(development, "/").content, "website-embed--unresolved"
-    assert_empty development.copied_assets
+    assert_empty development.projected_files
   end
 
   def test_missing_embed_is_placeholder_in_development_and_error_in_production

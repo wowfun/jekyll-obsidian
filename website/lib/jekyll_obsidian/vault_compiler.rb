@@ -163,15 +163,15 @@ module JekyllObsidian
       compile_single(request)
     end
 
-    def self.compile_single(request)
-      new(request).compile
+    def self.compile_single(request, html_publication: nil, include_html_projection: true)
+      new(request, html_publication:, include_html_projection:).compile
     end
 
     def self.giscus_language(locale)
       GISCUS_LANGUAGES.include?(locale.to_s) ? locale.to_s : "en"
     end
 
-    def initialize(request)
+    def initialize(request, html_publication: nil, include_html_projection: true)
       @request = request
       @config = request.config
       @diagnostics = []
@@ -182,7 +182,12 @@ module JekyllObsidian
       @attachment_basename_index = Hash.new { |hash, key| hash[key] = [] }
       @image_paths = {}
       @relations = []
-      @copied_asset_paths = Set.new
+      @projected_attachment_paths = Set.new
+      @html_publication = html_publication || HtmlPublication.empty_resolution
+      @provided_html_publication = html_publication
+      @include_html_projection = include_html_projection
+      @html_routes_by_source = {}
+      @html_document_sources = Set.new
       @transclusion_selection_cache = {}
       @url_builder = nil
       @theme = "minimal"
@@ -197,6 +202,7 @@ module JekyllObsidian
 
     def compile
       validate_request
+      resolve_html_publication
       index_snapshot
       parse_public_notes
       establish_identities
@@ -230,8 +236,11 @@ module JekyllObsidian
       theme_output = BuiltInThemes.resolve(@theme).render(model: published_site, config: theme_config)
       pages = theme_output.pages
       generated_files = theme_output.shared_files + build_generated_files(pages, published_site, theme_output)
-      copied_assets = build_copied_assets
-      preflight_routes(pages, generated_files, copied_assets, theme_output.reserved_namespaces)
+      raw_html_manifest = HtmlPublication.manifest(@html_publication) if @include_html_projection
+      generated_files << raw_html_manifest if raw_html_manifest
+      projected_files = build_projected_files
+      projected_files += @html_publication.projected_files if @include_html_projection
+      preflight_routes(pages, generated_files, projected_files, theme_output.reserved_namespaces)
 
       note_outputs = published_site.notes.map do |note|
         NoteOutput.new(id: note.id, title: note.title, route: note.route, properties: note.properties)
@@ -242,7 +251,7 @@ module JekyllObsidian
       BuildSuccess.new(
         pages: pages.sort_by(&:route),
         generated_files: generated_files.sort_by(&:route),
-        copied_assets: copied_assets.sort_by(&:route),
+        projected_files: projected_files.sort_by(&:route),
         diagnostics: diagnostics,
         relations: published_site.relations,
         notes: note_outputs,
@@ -279,6 +288,23 @@ module JekyllObsidian
     rescue ArgumentError => exception
       error("invalid_url_config", exception.message)
       @url_builder = UrlBuilder.new(origin: "", baseurl: "")
+    end
+
+    def resolve_html_publication
+      if @provided_html_publication
+        @html_routes_by_source = @html_publication.routes_by_source
+        @html_document_sources = Set.new(@html_publication.document_sources)
+        return
+      end
+
+      @html_publication = HtmlPublication.resolve(
+        snapshot: @request.snapshot,
+        mappings: @config.html,
+        url_builder: @url_builder
+      )
+      @html_routes_by_source = @html_publication.routes_by_source
+      @html_document_sources = Set.new(@html_publication.document_sources)
+      @diagnostics.concat(@html_publication.diagnostics)
     end
 
     def resolve_theme_config
@@ -1106,7 +1132,7 @@ module JekyllObsidian
               property: occurrence.property
             )
           elsif occurrence.resolved_type == :attachment
-            @copied_asset_paths << occurrence.target_path
+            @projected_attachment_paths << occurrence.target_path
           end
         end
 
@@ -1117,7 +1143,7 @@ module JekyllObsidian
         if ambiguous
           error_or_warning("ambiguous_attachment", "image property matches more than one attachment", note.id, nil, fatal: production?)
         elsif resolved && MediaPolicy.kind(resolved) == :image
-          @copied_asset_paths << resolved
+          @projected_attachment_paths << resolved unless @html_routes_by_source.key?(resolved)
           @image_paths[note.id] = resolved
         else
           error_or_warning("missing_image_property", "image property does not resolve to an attachment", note.id, nil, fatal: production?)
@@ -1236,6 +1262,29 @@ module JekyllObsidian
       end
 
       if attachment_target
+        if @html_routes_by_source.key?(attachment_target)
+          if occurrence.kind == :embed && @html_document_sources.include?(attachment_target)
+            occurrence.unresolved = true
+            error(
+              "html_embed_unsupported",
+              "raw HTML can only be linked as an independent page",
+              note.id,
+              occurrence.source_span
+            )
+          elsif occurrence.kind == :embed && !MediaPolicy.kind(attachment_target)
+            occurrence.unresolved = true
+            error(
+              "unsupported_attachment",
+              "mapped bundle file type is not supported for embedding",
+              note.id,
+              occurrence.source_span
+            )
+          else
+            occurrence.resolved_type = :projected_file
+            occurrence.target_path = attachment_target
+          end
+          return
+        end
         unless MediaPolicy.kind(attachment_target)
           occurrence.unresolved = true
           error(
@@ -1482,6 +1531,8 @@ module JekyllObsidian
         end
       elsif occurrence.resolved_type == :attachment
         transform_attachment_node(occurrence, node)
+      elsif occurrence.resolved_type == :projected_file
+        transform_projected_file_node(occurrence, node)
       elsif occurrence.resolved_type == :external_media
         transform_external_media_node(occurrence, node)
       end
@@ -1516,9 +1567,22 @@ module JekyllObsidian
       node.replace(replacement)
     end
 
-    def transform_attachment_node(occurrence, node)
+    def transform_projected_file_node(occurrence, node)
+      route = @html_routes_by_source.fetch(occurrence.target_path)
+      if occurrence.kind == :embed
+        transform_attachment_node(occurrence, node, route: route)
+        return
+      end
+
+      node.name = "a"
+      node["href"] = @url_builder.href(route)
+      node["class"] = [node["class"], "website-link"].compact.join(" ")
+      node.remove_attribute("data-website-occurrence")
+    end
+
+    def transform_attachment_node(occurrence, node, route: nil)
       entry = @attachments.fetch(occurrence.target_path)
-      route = @url_builder.attachment_route(occurrence.target_path)
+      route ||= @url_builder.attachment_route(occurrence.target_path)
       href = @url_builder.href(route)
 
       kind = MediaPolicy.kind(occurrence.target_path)
@@ -2011,7 +2075,7 @@ module JekyllObsidian
       path = @image_paths[note.id]
       return nil unless path
 
-      route = @url_builder.attachment_route(path)
+      route = @html_routes_by_source.fetch(path) { @url_builder.attachment_route(path) }
       @url_builder.absolute_url(route) || @url_builder.href(route)
     end
 
@@ -2201,10 +2265,10 @@ module JekyllObsidian
       [1, value.to_s]
     end
 
-    def build_copied_assets
-      @copied_asset_paths.to_a.sort.map do |path|
+    def build_projected_files
+      @projected_attachment_paths.to_a.sort.map do |path|
         entry = @attachments.fetch(path)
-        CopiedAsset.new(
+        ProjectedFile.new(
           source_path: path,
           route: @url_builder.attachment_route(path),
           media_type: entry.media_type,
@@ -2216,9 +2280,9 @@ module JekyllObsidian
       end
     end
 
-    def preflight_routes(pages, generated_files, copied_assets, reserved_namespaces)
+    def preflight_routes(pages, generated_files, projected_files, reserved_namespaces)
       registry = DestinationRegistry.new
-      (pages + generated_files + copied_assets).each do |output|
+      (pages + generated_files + projected_files).each do |output|
         destination = destination_key(output)
         conflict = registry.add(destination, output)
         if conflict
@@ -2232,7 +2296,11 @@ module JekyllObsidian
               note_id
             )
           else
-            error("route_collision", "output route collides with #{conflict.route}", output.route)
+            error(
+              "route_collision",
+              "#{output_owner(output)} at #{output.route} collides with #{output_owner(conflict)} at #{conflict.route}",
+              output.is_a?(ProjectedFile) ? output.source_path : output.route
+            )
           end
         end
       end
@@ -2259,6 +2327,17 @@ module JekyllObsidian
       note_id = website.is_a?(Hash) && website["id"]
       website.is_a?(Hash) && website["directory_index"] == true &&
         File.basename(note_id.to_s) == DirectoryIndexes::FALLBACK_BASENAME
+    end
+
+    def output_owner(output)
+      if output.is_a?(ProjectedFile)
+        "projected source #{output.source_path}"
+      elsif output.is_a?(PageOutput)
+        note_id = output.data.dig("website", "id")
+        note_id ? "note #{note_id}" : "theme page"
+      else
+        "generated artifact"
+      end
     end
 
     def destination_key(output)

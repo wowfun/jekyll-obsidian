@@ -78,7 +78,7 @@ class ContentPolicyTest < Minitest::Test
 
     assert result.success?, result.diagnostics.map(&:message).join("\n")
     assert_equal ["index.md"], result.notes.map(&:id)
-    assert_equal ["assets/public.png"], result.copied_assets.map(&:source_path)
+    assert_equal ["assets/public.png"], result.projected_files.map(&:source_path)
     refute result.pages.any? { |output| output.route == "/draft/" }
     refute result.generated_files.any? { |output| output.route == "/draft.md" }
     refute generated_json(result, "/assets/website/search.v1.json").to_s.include?("Draft")

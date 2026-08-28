@@ -183,6 +183,8 @@ module JekyllObsidian
       @diagnostic_origins = {}
       @default_locale = @config.lang.to_s
       @validated_navigation_locales = Set.new
+      @shared_html_routes = Set.new
+      @html_publication = HtmlPublication.empty_resolution
       @content_policy = ContentPolicy.resolve(nil).policy
     rescue ArgumentError => exception
       @diagnostics ||= []
@@ -197,16 +199,22 @@ module JekyllObsidian
       load_manifests if @diagnostics.none? { |item| item.severity == :error }
       snapshots = build_locale_snapshots if @diagnostics.none? { |item| item.severity == :error }
       return failure if @diagnostics.any? { |item| item.severity == :error }
+      resolve_html_publication(snapshots.fetch(@default_locale))
+      return failure if @diagnostics.any? { |item| item.severity == :error }
 
       results = {}
       tab_memberships = nil
       ([@default_locale] + @locales.reject { |locale| locale == @default_locale }).each do |locale|
         config = BuildConfig.new(**@config.to_h.merge(i18n: nil))
-        result = VaultCompiler.compile_single(BuildRequest.new(
-          snapshot: snapshots.fetch(locale),
-          config: config,
-          tab_memberships: tab_memberships
-        ))
+        result = VaultCompiler.compile_single(
+          BuildRequest.new(
+            snapshot: snapshots.fetch(locale),
+            config: config,
+            tab_memberships: tab_memberships
+          ),
+          html_publication: @html_publication,
+          include_html_projection: false
+        )
         @diagnostics.concat(localized_diagnostics(result.diagnostics, locale))
         results[locale] = result
         tab_memberships = tab_membership(result) if locale == @default_locale && result.success?
@@ -276,6 +284,15 @@ module JekyllObsidian
       if @enabled && !@locales.include?(@default_locale)
         error("missing_default_locale", "lang must name one of website.i18n.locales")
       end
+    end
+
+    def resolve_html_publication(snapshot)
+      @html_publication = HtmlPublication.resolve(
+        snapshot:,
+        mappings: @config.html,
+        url_builder: @url_builder
+      )
+      @diagnostics.concat(@html_publication.diagnostics)
     end
 
     def load_manifests
@@ -496,11 +513,13 @@ module JekyllObsidian
     def combine(results)
       pages = []
       generated_files = []
-      copied_assets = {}
+      projected_files = {}
       notes = []
       relations = []
-      default_routes = note_routes(results.fetch(@default_locale))
-      default_navigation_order = navigation_order(results.fetch(@default_locale))
+      default_result = results.fetch(@default_locale)
+      @shared_html_routes = raw_html_routes
+      default_routes = note_routes(default_result)
+      default_navigation_order = navigation_order(default_result)
 
       @locales.each do |locale|
         result = results.fetch(locale)
@@ -509,7 +528,7 @@ module JekyllObsidian
           localized = localize_generated_file(file, locale)
           generated_files << localized if localized
         end
-        result.copied_assets.each { |asset| copied_assets[asset.route] ||= asset }
+        result.projected_files.each { |file| projected_files[file.route] ||= file }
         result.notes.each do |note|
           notes << NoteOutput.new(
             id: locale == @default_locale ? note.id : "#{locale}:#{note.id}",
@@ -529,14 +548,18 @@ module JekyllObsidian
 
       generated_files.reject! { |file| file.route == "/sitemap.xml" }
       generated_files << GeneratedFile.new(route: "/sitemap.xml", content: sitemap_xml(pages), media_type: "application/xml")
-      preflight_routes(pages, generated_files, copied_assets.values)
+      # Raw HTML is constructed only after locale outputs are localized, so its
+      # shared manifest can never enter localize_generated_file.
+      raw_html_manifest = HtmlPublication.manifest(@html_publication)
+      generated_files << raw_html_manifest if raw_html_manifest
+      @html_publication.projected_files.each { |file| projected_files[file.route] ||= file }
+      preflight_routes(pages, generated_files, projected_files.values)
       return failure if @diagnostics.any? { |item| item.severity == :error }
 
-      default_result = results.fetch(@default_locale)
       BuildSuccess.new(
         pages: pages.sort_by(&:route),
         generated_files: generated_files.sort_by(&:route),
-        copied_assets: copied_assets.values.sort_by(&:route),
+        projected_files: projected_files.values.sort_by(&:route),
         diagnostics: sorted_diagnostics,
         relations: relations.freeze,
         notes: notes.freeze,
@@ -773,6 +796,8 @@ module JekyllObsidian
         return value
       end
       relative = "/" if relative.empty?
+      return value if @shared_html_routes.include?(relative)
+
       localized = if relative.start_with?("/assets/vault/", "/assets/website/")
         relative
       else
@@ -781,6 +806,11 @@ module JekyllObsidian
       result = @url_builder.href(localized)
       result = "#{@url_builder.origin}#{result}" if absolute
       "#{result}#{suffix}"
+    end
+
+    def raw_html_routes
+      document_routes = @html_publication.documents.map { |document| document.fetch("route") }
+      Set.new(document_routes + @html_publication.files)
     end
 
     def prefixed_route(route, locale)
@@ -861,10 +891,25 @@ module JekyllObsidian
       registry = DestinationRegistry.new
       (pages + files + assets).each do |output|
         destination = destination_key(output)
-        conflict = registry.add(destination, output.route)
+        conflict = registry.add(destination, output)
         if conflict
-          error("route_collision", "localized output collides with #{conflict}", output.route)
+          error(
+            "route_collision",
+            "#{output_owner(output)} at #{output.route} collides with #{output_owner(conflict)} at #{conflict.route}",
+            output.is_a?(ProjectedFile) ? output.source_path : output.route
+          )
         end
+      end
+    end
+
+    def output_owner(output)
+      if output.is_a?(ProjectedFile)
+        "projected source #{output.source_path}"
+      elsif output.is_a?(PageOutput)
+        note_id = output.data.dig("website", "id")
+        note_id ? "note #{note_id}" : "theme page"
+      else
+        "generated artifact"
       end
     end
 

@@ -1,11 +1,72 @@
 # frozen_string_literal: true
 
 require "fileutils"
+require "json"
 require "open3"
 require "tmpdir"
 require "test_helper"
 
 class SiteUrlVerifierTest < Minitest::Test
+  def test_raw_html_manifest_relaxes_theme_metadata_but_still_checks_local_assets_and_baseurl
+    Dir.mktmpdir("website-raw-html-verifier") do |site|
+      FileUtils.mkdir_p(File.join(site, "assets", "website"))
+      FileUtils.mkdir_p(File.join(site, "slides", "assets"))
+      File.write(File.join(site, "index.html"), managed_html("https://example.test/project/"))
+      File.write(File.join(site, "slides", "assets", "deck.js"), "window.deckReady = true")
+      File.write(File.join(site, "slides", "assets", "deck.css"), "body{background:url('./pixel.bin')}")
+      File.binwrite(File.join(site, "slides", "assets", "pixel.bin"), "pixel")
+      raw_path = File.join(site, "slides", "index.html")
+      File.write(raw_path, <<~HTML)
+        <!doctype html><title>Trusted slides</title>
+        <style>body { color: canvastext }</style>
+        <link rel="stylesheet" href="./assets/deck.css">
+        <script type="module" src="/project/slides/assets/deck.js"></script>
+        <script src="https://cdn.example/deck.js"></script>
+        <script>window.inlineDeck = true</script>
+        <img alt="inline" src="data:image/svg+xml,%3Csvg/%3E">
+        <video src="blob:https://example.test/deck"></video>
+      HTML
+      write_raw_html_manifest(site)
+
+      stdout, stderr, status = verify(site, "/project")
+      assert status.success?, "#{stdout}\n#{stderr}"
+
+      FileUtils.rm(File.join(site, "slides", "assets", "deck.js"))
+      _stdout, stderr, status = verify(site, "/project")
+      refute status.success?
+      assert_includes stderr, "local target does not exist"
+
+      File.write(File.join(site, "slides", "assets", "deck.js"), "window.deckReady = true")
+      File.write(raw_path, File.read(raw_path).sub("/project/slides/assets/deck.js", "/slides/assets/deck.js"))
+      _stdout, stderr, status = verify(site, "/project")
+      refute status.success?
+      assert_includes stderr, "baseurl is missing or repeated"
+    end
+  end
+
+  def test_rejects_raw_html_manifest_schema_drift_before_relaxing_html_checks
+    Dir.mktmpdir("website-raw-html-schema") do |site|
+      FileUtils.mkdir_p(File.join(site, "assets", "website"))
+      FileUtils.mkdir_p(File.join(site, "slides"))
+      File.write(File.join(site, "index.html"), managed_html("https://example.test/"))
+      File.write(File.join(site, "slides", "index.html"), "<!doctype html><title>Trusted slides</title>")
+      File.write(
+        File.join(site, "assets", "website", "raw-html.v1.json"),
+        JSON.generate(
+          "schema_version" => 1,
+          "documents" => [{ "route" => "/slides/", "output" => "/slides/index.html" }],
+          "files" => ["/slides/index.html"],
+          "unexpected" => true
+        )
+      )
+
+      _stdout, stderr, status = verify(site, "")
+
+      refute status.success?
+      assert_includes stderr, "unsupported manifest schema"
+    end
+  end
+
   def test_root_site_accepts_valid_csp_canonical_and_xml_urls
     Dir.mktmpdir("obsidian-url-verifier") do |site|
       FileUtils.mkdir_p(File.join(site, "assets", "website"))
@@ -387,5 +448,38 @@ class SiteUrlVerifierTest < Minitest::Test
       assert_includes stderr, "script-src"
       assert_includes stderr, "frame-src"
     end
+  end
+
+  private
+
+  def managed_html(canonical)
+    <<~HTML
+      <!doctype html><html><head>
+      <meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'self'; form-action 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' https:; media-src 'self'; object-src 'self'; font-src 'self'; connect-src 'self'; frame-src 'self'">
+      <link rel="canonical" href="#{canonical}">
+      <meta property="og:url" content="#{canonical}">
+      </head><body>Home</body></html>
+    HTML
+  end
+
+  def write_raw_html_manifest(site)
+    File.write(
+      File.join(site, "assets", "website", "raw-html.v1.json"),
+      JSON.generate(
+        "schema_version" => 1,
+        "documents" => [{ "route" => "/slides/", "output" => "/slides/index.html" }],
+        "files" => [
+          "/slides/index.html",
+          "/slides/assets/deck.css",
+          "/slides/assets/deck.js",
+          "/slides/assets/pixel.bin"
+        ]
+      )
+    )
+  end
+
+  def verify(site, baseurl)
+    script = File.expand_path("../../scripts/verify-site-urls.rb", __dir__)
+    Open3.capture3(Gem.ruby, script, site, "https://example.test", baseurl)
   end
 end

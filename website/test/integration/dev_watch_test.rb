@@ -76,6 +76,8 @@ class DevWatchTest < Minitest::Test
     assert silencer.silenced?(Pathname(".obsidian/workspace.json"), :file)
     assert silencer.silenced?(Pathname(".trash/deleted.md"), :file)
     refute silencer.silenced?(Pathname("notes/note.md"), :file)
+    refute silencer.silenced?(Pathname("slides/runtime/index.html"), :file)
+    refute silencer.silenced?(Pathname("slides/runtime/deck.js"), :file)
   end
 
   def test_initial_build_status_reports_scope_and_elapsed_time
