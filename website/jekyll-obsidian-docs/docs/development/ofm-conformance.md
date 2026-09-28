@@ -27,7 +27,7 @@ Each feature has one of three outcomes:
 
 | Obsidian syntax or behavior | Outcome | v1 contract |
 | --- | --- | --- |
-| CommonMark paragraphs, lists, quotations, code, tables, and strikethrough | render | Parsed once per public note with Commonmarker 2.9.0. |
+| CommonMark paragraphs, lists, quotations, code, tables, and strikethrough | render | Parsed once per public note with Commonmarker 2.10.0. |
 | Hard line breaks | render | Obsidian-style line breaks are enabled by the syntax profile. |
 | Wikilinks | render | Resolution checks a vault-relative path, then a source-relative path, then a unique basename. |
 | Wikilink display text | render | `[[note\|label]]` uses `label`. Frontmatter aliases do not become implicit link targets. |
