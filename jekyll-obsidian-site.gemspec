@@ -24,7 +24,7 @@ Gem::Specification.new do |spec|
       .select { |path| File.file?(path) }.sort
   end
   spec.add_runtime_dependency "jekyll", "4.4.1"
-  spec.add_runtime_dependency "commonmarker", "2.9.0"
+  spec.add_runtime_dependency "commonmarker", "2.10.0"
   spec.add_runtime_dependency "cgi", "~> 0.5"
   spec.add_runtime_dependency "nokogiri", "~> 1.18"
   spec.add_runtime_dependency "listen", "~> 3.10"
