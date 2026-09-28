@@ -1,0 +1,45 @@
+name: Jekyll Obsidian
+description: Build a Markdown or Obsidian folder with precompiled site themes.
+author: wowfun
+inputs:
+  url:
+    description: Production origin, such as https://example.com. Defaults to the site configuration.
+    required: false
+    default: ''
+  baseurl:
+    description: Deployment path, such as /project. Empty for a root site.
+    required: false
+    default: ''
+outputs:
+  site-path:
+    description: Absolute path of the verified static site.
+    value: ${{ steps.build.outputs.site-path }}
+runs:
+  using: composite
+  steps:
+    - name: Set up Ruby
+      uses: ruby/setup-ruby@95ef2b042f9d7a56d8268cba8559e2842e2ad01b
+      with:
+        ruby-version: '4.0.6'
+    - name: Install the site builder
+      id: install
+      shell: bash
+      env:
+        ACTION_ROOT: ${{ github.action_path }}
+      run: |
+        version=$(ruby -r "$ACTION_ROOT/website/lib/jekyll_obsidian/version" -e 'print JekyllObsidian::VERSION')
+        gem install jekyll-obsidian-site --version "$version" --no-document
+        printf 'version=%s\n' "$version" >> "$GITHUB_OUTPUT"
+    - name: Build and verify
+      id: build
+      shell: bash
+      working-directory: ${{ github.workspace }}
+      env:
+        SITE_ORIGIN: ${{ inputs.url }}
+        SITE_BASEURL: ${{ inputs.baseurl }}
+        BUILDER_VERSION: ${{ steps.install.outputs.version }}
+      run: |
+        args=(build --baseurl "$SITE_BASEURL")
+        if [[ -n "$SITE_ORIGIN" ]]; then args+=(--url "$SITE_ORIGIN"); fi
+        jekyll-obsidian "_${BUILDER_VERSION}_" "${args[@]}"
+        ruby -e 'File.open(ENV.fetch("GITHUB_OUTPUT"), "a") { |f| f.puts "site-path=#{File.join(Dir.pwd, ".jekyll-obsidian-cache", "site")}" }'

@@ -1,11 +1,11 @@
-title: Jekyll Obsidian
-description: A configurable website and documentation system built from Obsidian
+title: My Site
+description: ""
 lang: en
 url: ""
 baseurl: ""
 
 website:
-  source: website/docs
+  source: docs
   syntax_profile: ofm@1
   theme: minimal
   repository: ""
@@ -19,42 +19,3 @@ website:
       doc:
         - docs
   features: {}
-strict_front_matter: true
-safe: false
-incremental: false
-disable_disk_cache: true
-permalink: pretty
-encoding: UTF-8
-markdown: kramdown
-highlighter: none
-liquid:
-  error_mode: strict
-  strict_filters: true
-  strict_variables: false
-
-exclude:
-  - .bundle
-  - .jekyll-obsidian-cache
-  - .gitignore
-  - .nvmrc
-  - .ruby-version
-  - AGENTS.md
-  - Gemfile
-  - Gemfile.lock
-  - LICENSE
-  - README.md
-  - Rakefile
-  - bin
-  - docs
-  - lib
-  - node_modules
-  - package.json
-  - package-lock.json
-  - playwright.config.ts
-  - scripts
-  - src
-  - test
-  - tests
-  - tsconfig.json
-  - vendor
-  - vitest.config.ts

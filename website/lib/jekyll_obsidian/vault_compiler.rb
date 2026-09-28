@@ -729,7 +729,9 @@ module JekyllObsidian
     end
 
     def parse_public_notes
-      error("missing_public_notes", "the content directory must contain at least one public note", nil) if @notes.empty?
+      if @notes.empty?
+        error("missing_public_notes", "the content directory must contain at least one public note; add publish: true to a note or configure website.content.publish_by_default", nil)
+      end
     end
 
     def establish_identities

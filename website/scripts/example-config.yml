@@ -1,4 +1,10 @@
+title: Jekyll Obsidian
+description: A configurable website and documentation system built from Obsidian
+lang: en
+
 website:
+  source: website/jekyll-obsidian-docs
+  theme: minimal
   html:
     slides/jekyll-obsidian: /slides/jekyll-obsidian/
   contacts:

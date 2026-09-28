@@ -1,113 +1,52 @@
-import { copyFile, cp, mkdir, mkdtemp, rename, rm, symlink } from "node:fs/promises";
+import { copyFile, cp, mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
 const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
-const buildEnvironment = {
+const workspaceRoot = path.dirname(projectRoot);
+const environment = {
   ...process.env,
+  BUNDLE_GEMFILE: path.join(projectRoot, "Gemfile"),
   GITHUB_REPOSITORY: "example/jekyll-obsidian",
   JEKYLL_ENV: "production",
   JEKYLL_OBSIDIAN_GITHUB_MARKDOWN_MANIFEST_IN: ".jekyll-obsidian-cache/github-markdown-browser.json",
 };
 
-function build(script, arguments_) {
-  const result = spawnSync("sh", [script, ...arguments_], {
-    cwd: projectRoot,
-    env: buildEnvironment,
-    stdio: "inherit",
+function build(host, theme, name, config) {
+  const code = `require "jekyll_obsidian/runtime"; runtime = JekyllObsidian::Runtime.new(root: ARGV[0], config_path: ARGV[1], assets_root: ARGV[2], destination_name: ARGV[3]); runtime.build(theme: ARGV[4], url: "http://127.0.0.1:4173", baseurl: ARGV[5], quiet: true)`;
+  const result = spawnSync("bundle", ["exec", "ruby", "-e", code, host, config,
+    path.join(projectRoot, ".jekyll-obsidian-cache/assets"), `site-browser-${name}`, theme, `/__site__/${name}`], {
+    cwd: projectRoot, env: environment, stdio: "inherit",
   });
   if (result.error) throw result.error;
-  if (result.status !== 0) {
-    throw new Error(`browser fixture build exited with ${result.status ?? result.signal}`);
-  }
+  if (result.status !== 0) throw new Error(`browser fixture build exited with ${result.status ?? result.signal}`);
 }
 
-await mkdir(path.join(projectRoot, ".jekyll-obsidian-cache"), { recursive: true });
-await copyFile(
-  path.join(projectRoot, "tests/browser/fixtures/github-markdown-default.json"),
-  path.join(projectRoot, ".jekyll-obsidian-cache/github-markdown-browser.json"),
-);
-
+await mkdir(path.join(workspaceRoot, ".jekyll-obsidian-cache"), { recursive: true });
+await copyFile(path.join(projectRoot, "tests/browser/fixtures/github-markdown-default.json"),
+  path.join(workspaceRoot, ".jekyll-obsidian-cache/github-markdown-browser.json"));
 for (const theme of ["minimal", "docs"]) {
-  build(path.join(projectRoot, "bin/build"), [
-    "--example",
-    "--theme", theme,
-    "--url", "http://127.0.0.1:4173",
-    "--baseurl", `/__site__/${theme}`,
-    "--destination", `_site-browser-${theme}`,
-    "--skip-assets",
-  ]);
+  build(workspaceRoot, theme, theme, path.join(projectRoot, "scripts/example-config.yml"));
 }
 
 const fixtureHost = await mkdtemp(path.join(tmpdir(), "jekyll-obsidian-browser-"));
-let stagedDestination;
 try {
-  const fixtureWebsite = path.join(fixtureHost, "website");
-  const excludedEntries = new Set([
-    ".jekyll-cache",
-    ".jekyll-obsidian-cache",
-    "node_modules",
-    "playwright-report",
-    "test-results",
-    "vendor",
-  ]);
-  await cp(projectRoot, fixtureWebsite, {
-    recursive: true,
-    filter(source) {
-      const relative = path.relative(projectRoot, source);
-      if (!relative) return true;
-      const topLevel = relative.split(path.sep, 1)[0];
-      return !excludedEntries.has(topLevel) && !/^_site(?:-|$)/.test(topLevel);
-    },
-  });
+  await mkdir(path.join(fixtureHost, "website"));
+  await cp(path.join(projectRoot, "jekyll-obsidian-docs"), path.join(fixtureHost, "website/jekyll-obsidian-docs"), { recursive: true });
   await mkdir(path.join(fixtureHost, ".github"));
-  await copyFile(
-    path.join(projectRoot, "tests/browser/fixtures/i18n-host.yml"),
-    path.join(fixtureHost, ".github/jekyll-obsidian.yml"),
-  );
-  await symlink(path.join(projectRoot, "vendor"), path.join(fixtureWebsite, "vendor"), "dir");
-  await mkdir(path.join(fixtureWebsite, ".jekyll-obsidian-cache"));
-  await copyFile(
-    path.join(projectRoot, "tests/browser/fixtures/github-markdown-i18n.json"),
-    path.join(fixtureWebsite, ".jekyll-obsidian-cache/github-markdown-browser.json"),
-  );
-  await cp(
-    path.join(projectRoot, ".jekyll-obsidian-cache/assets"),
-    path.join(fixtureWebsite, ".jekyll-obsidian-cache/assets"),
-    { recursive: true },
-  );
-  build(path.join(fixtureWebsite, "bin/build"), [
-    "--url", "http://127.0.0.1:4173",
-    "--baseurl", "/__site__/docs-i18n",
-    "--destination", "_site-browser-docs-i18n",
-    "--skip-assets",
-  ]);
-  build(path.join(fixtureWebsite, "bin/build"), [
-    "--theme", "minimal",
-    "--url", "http://127.0.0.1:4173",
-    "--baseurl", "/__site__/minimal-i18n",
-    "--destination", "_site-browser-minimal-i18n",
-    "--skip-assets",
-  ]);
-  for (const siteName of ["docs-i18n", "minimal-i18n"]) {
-    const destination = path.join(projectRoot, `_site-browser-${siteName}`);
-    stagedDestination = path.join(
-      projectRoot,
-      ".jekyll-obsidian-cache",
-      `${path.basename(fixtureHost)}.${siteName}.site`,
-    );
-    await cp(path.join(fixtureWebsite, `_site-browser-${siteName}`), stagedDestination, {
-      recursive: true,
-    });
+  await copyFile(path.join(projectRoot, "tests/browser/fixtures/i18n-host.yml"), path.join(fixtureHost, ".github/jekyll-obsidian.yml"));
+  await mkdir(path.join(fixtureHost, ".jekyll-obsidian-cache"));
+  await copyFile(path.join(projectRoot, "tests/browser/fixtures/github-markdown-i18n.json"),
+    path.join(fixtureHost, ".jekyll-obsidian-cache/github-markdown-browser.json"));
+  for (const theme of ["docs", "minimal"]) {
+    const name = `${theme}-i18n`;
+    build(fixtureHost, theme, name, path.join(fixtureHost, ".github/jekyll-obsidian.yml"));
+    const destination = path.join(workspaceRoot, `.jekyll-obsidian-cache/site-browser-${name}`);
     await rm(destination, { force: true, recursive: true });
-    await rename(stagedDestination, destination);
-    stagedDestination = undefined;
+    await cp(path.join(fixtureHost, `.jekyll-obsidian-cache/site-browser-${name}`), destination, { recursive: true });
   }
 } finally {
-  if (stagedDestination) {
-    await rm(stagedDestination, { force: true, recursive: true });
-  }
   await rm(fixtureHost, { force: true, recursive: true });
 }

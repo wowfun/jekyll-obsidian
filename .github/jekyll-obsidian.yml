@@ -1,11 +1,9 @@
-# Host-repository overrides. The integration command only updates the marked lines.
 title: Jekyll Obsidian
+description: A configurable website and documentation system built from Obsidian
 
 website:
-  # jekyll-obsidian:managed-start
-  source: 'website/docs'
+  source: 'website/jekyll-obsidian-docs'
   theme: 'minimal'
-  # jekyll-obsidian:managed-end
   repository: ""
   edit_branch: main
   html:

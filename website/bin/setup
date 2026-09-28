@@ -26,7 +26,7 @@ case "$node_version" in 26.*) ;; *) fail "Expected Node.js 26.x, found $node_ver
 bundle config set --local path vendor/bundle
 bundle install
 npm ci
-npm run build
+bundle exec ruby scripts/package.rb
 
-printf '%s\n' "Setup complete. Run <site-dir>/bin/dev to start the local site."
-printf '%s\n' "Browser checks are optional locally. Install Chromium with: (cd <site-dir> && npx playwright install chromium)"
+printf '%s\n' "Setup complete. Run website/bin/dev to start the local site."
+printf '%s\n' "Browser checks are optional locally. Install Chromium with: (cd website && npx playwright install --with-deps chromium)"

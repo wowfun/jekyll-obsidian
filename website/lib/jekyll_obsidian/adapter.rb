@@ -104,7 +104,6 @@ module JekyllObsidian
     def prepare_site(site)
       site.singleton_class.prepend(SiteProcessCleanup) unless site.singleton_class < SiteProcessCleanup
       website, _layout = normalize_website_configuration(site)
-      exclude_bundled_source(site)
       site.config["website"] = website
     end
 
@@ -164,7 +163,7 @@ module JekyllObsidian
       website = {
         "source" => layout.source,
         "syntax_profile" => configured.fetch("syntax_profile", "ofm@1"),
-        "theme" => configured.fetch("theme", "docs"),
+        "theme" => configured.fetch("theme", "minimal"),
         "repository" => configured.fetch("repository", ""),
         "edit_branch" => configured.fetch("edit_branch", "main"),
         "content" => configured["content"],
@@ -183,12 +182,6 @@ module JekyllObsidian
       WorkspaceLayout.resolve(site:, source:)
     rescue WorkspaceLayout::Invalid => exception
       fatal(exception.message)
-    end
-
-    def exclude_bundled_source(site)
-      excluded = (Array(site.exclude).map(&:to_s) + [WorkspaceLayout::BUNDLED_SOURCE_BASENAME]).uniq
-      site.exclude = excluded
-      site.config["exclude"] = excluded
     end
 
     def assert_vault_was_not_read(site, layout)
@@ -279,8 +272,8 @@ module JekyllObsidian
       return {} unless head_status.success?
 
       head = head.strip
-      cache_path = File.join(layout.jekyll_cache_root, "jekyll-obsidian-git-times.json")
-      ensure_runtime_directory!(layout.jekyll_cache_root, "Jekyll cache")
+      cache_path = File.join(layout.application_cache_root, "git-times.json")
+      ensure_runtime_directory!(layout.application_cache_root, "application cache")
       cached_bytes = read_regular_cache_file(cache_path, "Git first-commit cache")
       if cached_bytes
         cached = JSON.parse(cached_bytes)
@@ -431,7 +424,7 @@ module JekyllObsidian
       raw = ENV.fetch(environment_key, "").to_s
       return nil if raw.empty?
 
-      path = File.expand_path(raw, layout.site_root)
+      path = File.expand_path(raw, layout.workspace_root)
       unless File.dirname(path) == layout.application_cache_root &&
           File.basename(path).match?(/\A[A-Za-z0-9][A-Za-z0-9._-]*\.json\z/)
         fatal("#{environment_key} must name a JSON file directly inside the application cache")
@@ -571,16 +564,16 @@ module JekyllObsidian
     end
 
     def validate_application_asset_root!(layout, root)
-      site_root = layout.site_root
       expanded_root = File.expand_path(root)
-      unless path_descendant?(expanded_root, site_root) && expanded_root != site_root
-        fatal("application asset cache escapes the site source")
-      end
+      fatal("unexpected application asset root") unless expanded_root == layout.application_assets_root
 
-      return unless File.exist?(expanded_root)
+      return unless File.exist?(expanded_root) || File.symlink?(expanded_root)
 
       stat = File.lstat(expanded_root)
-      fatal("application asset cache must be a non-symlink directory") unless stat.directory? && !stat.symlink?
+      if stat.symlink? || File.realpath(expanded_root) != expanded_root
+        fatal("application assets path contains a symbolic link")
+      end
+      fatal("application assets must be a directory") unless stat.directory?
     rescue SystemCallError => exception
       fatal("cannot validate application asset cache: #{exception.message}")
     end
@@ -723,6 +716,8 @@ module JekyllObsidian
       priority :highest
 
       def generate(site)
+        return unless site.config[WorkspaceLayout::CONTEXT_KEY]
+
         Adapter.generate(site)
       end
     end
@@ -730,7 +725,7 @@ module JekyllObsidian
 end
 
 Jekyll::Hooks.register :site, :after_init do |site|
-  JekyllObsidian::Adapter.prepare_site(site)
+  JekyllObsidian::Adapter.prepare_site(site) if site.config[JekyllObsidian::WorkspaceLayout::CONTEXT_KEY]
 end
 
 Jekyll::Hooks.register :site, :post_write do |site|

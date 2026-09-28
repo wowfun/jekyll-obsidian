@@ -2,9 +2,7 @@
 
 English | [简体中文](README.zh-CN.md)
 
-`jekyll-obsidian` turns any folder of Markdown files, including an Obsidian vault, into a general-purpose Jekyll site or a documentation handbook. Your content remains editable in Obsidian or any text editor. Copy the bundled `website/` directory into your repository and push; GitHub Actions handles the build and publishes to Pages, so you do not need a local toolchain or build command.
-
-**A complete blog or documentation site from a Markdown folder. Just push to GitHub. GitHub Actions builds and publishes it, with nothing to install or run locally.**
+`jekyll-obsidian` turns a Markdown folder, including an Obsidian vault, into a blog or documentation site. Keep writing in your editor and push to GitHub; Actions builds and publishes the site. Add a configuration file and a workflow to your repository. The implementation is installed as the `jekyll-obsidian-site` Ruby gem.
 
 Live preview: [sinputer.top/jekyll-obsidian](https://sinputer.top/jekyll-obsidian/)
 
@@ -18,7 +16,7 @@ Both themes enable search, wiki-link reading previews, the page outline, note re
 Switching themes does not change note URLs.
 The default build and deployment theme is `minimal`. Both themes can publish locale overlays from `_translations/<locale>/` and attach GitHub Discussions comments to posts. When the corresponding mapping is present and omits `enabled`, localization defaults on only for `docs`, while comments default on only for `minimal`.
 
-See [Localization](website/docs/docs/Localization.md) for locale manifests, which content controls site structure, fallback pages, and SEO behavior.
+See [Localization](website/jekyll-obsidian-docs/docs/Localization.md) for locale manifests, which content controls site structure, fallback pages, and SEO behavior.
 
 Minimal also provides Blog, tags, Atom feeds, contacts, source actions, and an automatically detected Portfolio with project cards. A project wrapper can use a public GitHub Markdown file as its body. Both themes generate Search and Graph data, canonical metadata, a sitemap, a 404 page, and frontmatter-free Markdown resources. Optional traffic measurement supports either Cloudflare Web Analytics or Google Analytics and stays off until configured.
 
@@ -34,59 +32,47 @@ Canvas and Bases files become downloads when a public note links to them. Inspec
 
 ## Add it to your repository
 
-1. Copy the complete `website/` directory to the root of your repository.
-2. Choose a content directory outside `website/`, such as `docs/`, and add at least one public Markdown note.
-3. Run the integration command from the repository root.
+1. Create `.github/jekyll-obsidian.yml`, using [the example configuration](examples/jekyll-obsidian.yml):
 
-On macOS, Linux, or WSL:
+```yaml
+title: My Site
+website:
+  source: docs
+  theme: minimal
+```
+
+2. Copy [the Pages workflow](examples/pages.yml) to `.github/workflows/pages.yml`.
+3. Put a Markdown note with `publish: true` in `docs/`, then select **Settings > Pages > Build and deployment > Source > GitHub Actions** and push.
+
+The content directory can also be `website/docs/` or another repository-relative directory. Edit `website.source` to select it. No local Ruby, Node.js, or build command is needed for Actions.
+
+For local initialization, install Ruby 4.0.x and run:
 
 ```sh
-website/bin/integrate --source docs
+gem install jekyll-obsidian-site
+jekyll-obsidian init --source docs
 ```
 
-On native Windows, from PowerShell:
-
-```powershell
-.\website\bin\integrate.cmd --source docs
-```
-
-The command defaults to `--source docs --theme minimal`. It creates `.github/jekyll-obsidian.yml` and `.github/workflows/pages.yml` without installing dependencies or contacting GitHub.
-
-Your repository will have this shape:
-
-```text
-repository/
-├── docs/
-│   └── Start.md
-├── website/
-└── .github/
-    ├── jekyll-obsidian.yml
-    └── workflows/
-        └── pages.yml
-```
-
-Open **Settings → Pages → Build and deployment** in GitHub and choose **GitHub Actions** as the Source. Commit and push the content directory, `website/`, and the generated `.github/` files. You do not need a `gh-pages` branch, deployment secret, or manual `url` and `baseurl` values.
-
-The integration command will not overwrite an unrelated Pages workflow unless you pass `--force-workflow`. See [Host Integration](website/docs/docs/Integration.md) for existing configuration, Windows details, and conflict handling.
+`init` creates the same configuration and workflow. It adds a public welcome note only when the content directory is absent or empty. Existing conflicting files are left unchanged. See [Host Integration](website/jekyll-obsidian-docs/docs/Integration.md) for Bundler, updates, and existing repositories.
 
 ## Preview the deployed site
 
-Wait for the **Verify and deploy Pages** workflow on the default branch to succeed. GitHub reports the deployed URL in the workflow's `deploy` job and in **Settings → Pages**.
+Wait for the **Build and deploy Pages** workflow on the default branch to succeed. GitHub reports the deployed URL in the workflow's `deploy` job and in **Settings → Pages**.
 
 Without a custom domain, the expected URL is:
 
 - `https://<owner>.github.io/<repository>/` for a normal project repository.
 - `https://<owner>.github.io/` when the repository itself is named `<owner>.github.io`.
 
-If you configure a custom domain, use the URL shown in **Settings → Pages**. The workflow reads GitHub Pages metadata and builds links for that URL automatically. See [Deployment](website/docs/docs/Deployment.md) for the workflow and custom-domain details.
+If you configure a custom domain, use the URL shown in **Settings → Pages**. The workflow reads GitHub Pages metadata and builds links for that URL automatically. See [Deployment](website/jekyll-obsidian-docs/docs/Deployment.md) for the workflow and custom-domain details.
 
 ## Configure and publish
 
-The generated `.github/jekyll-obsidian.yml` is the host repository's configuration. Edit it to set the site title, description, language, repository links, content types, and feature overrides. Keep the managed markers around `website.source` and `website.theme`; change those values by running `website/bin/integrate` again with the desired options.
+Edit `.github/jekyll-obsidian.yml` to configure the title, language, content directory, theme, and features. All entries are directly editable. Changing `website.source` or `website.theme` takes effect on the next build; the workflow does not need to be regenerated.
 
 The configuration interface is the root `website:` mapping.
 
-Both themes can store post comments in GitHub Discussions through Giscus. Comments use the publication repository by default and can point at a separate public repository. When `website.comments` exists and omits `enabled`, `minimal` enables comments by default; `docs` requires `website.comments.enabled: true`. Enabling comments before Discussions or the Giscus App is ready does not fail the build; incomplete Giscus configuration produces a warning and a non-interactive fallback. See [Comments](website/docs/docs/Comments.md) for repository setup, thread identity, privacy boundaries, and troubleshooting.
+Both themes can store post comments in GitHub Discussions through Giscus. Comments use the publication repository by default and can point at a separate public repository. When `website.comments` exists and omits `enabled`, `minimal` enables comments by default; `docs` requires `website.comments.enabled: true`. Enabling comments before Discussions or the Giscus App is ready does not fail the build; incomplete Giscus configuration produces a warning and a non-interactive fallback. See [Comments](website/jekyll-obsidian-docs/docs/Comments.md) for repository setup, thread identity, privacy boundaries, and troubleshooting.
 
 Open your content directory in Obsidian or any Markdown editor. By default, a note enters the site only when its frontmatter contains the YAML boolean `publish: true`:
 
@@ -111,43 +97,36 @@ website:
     slides/product-tour: /slides/product-tour/
 ```
 
-HTML mappings are an explicit publication boundary independent of Markdown defaults. Raw pages stay out of navigation, Search, Graph, feeds, and sitemap, and they execute as trusted same-origin code. Review the complete bundle before publishing. See [Customization](website/docs/docs/Customization.md#standalone-html-slides) and the [working slide source](website/docs/slides/jekyll-obsidian/index.html).
+HTML mappings are an explicit publication boundary independent of Markdown defaults. Raw pages stay out of navigation, Search, Graph, feeds, and sitemap, and they execute as trusted same-origin code. Review the complete bundle before publishing. See [Customization](website/jekyll-obsidian-docs/docs/Customization.md#standalone-html-slides) and the [working slide source](website/jekyll-obsidian-docs/slides/jekyll-obsidian/index.html).
 
-Update a tagged installation from the host repository root:
-
-```sh
-website/bin/update --check
-website/bin/update
-```
-
-The updater fetches an official stable Semantic Versioning release from an immutable annotated `vX.Y.Z` tag in an isolated temporary repository, verifies the installed snapshot, refreshes only tool-managed files, and leaves review and commit decisions to you. Each numeric core identifier is either `0` or has no leading zeroes, and `0.y.z` denotes initial development. Prerelease and build metadata tags are outside the stable updater channel; dates belong in release notes rather than version numbers. The updater never adds a remote to the host repository or runs `git pull`, `git add`, `git commit`, or `git push`. The first update of an older installation succeeds only when its committed `website/` exactly matches an official tag; otherwise replace it once with a tagged snapshot. See [Host Integration](website/docs/docs/Integration.md) for provenance, exit codes, Windows commands, and recovery behavior.
+Update the Action version in your workflow to use a new release. For a local gem installation, run `gem update jekyll-obsidian-site`; for Bundler, run `bundle update jekyll-obsidian-site` and commit the lockfile. Your content and configuration remain in your repository.
 
 ## Optional local preview
 
-Local preview requires Ruby 4.0.x, Node.js 26.x, and Git on macOS, Linux, or WSL. Native Windows users can run these commands in WSL.
+With Ruby 4.0.x on macOS, Linux, or WSL:
 
 ```sh
-website/bin/setup
-website/bin/dev
+gem install jekyll-obsidian-site
+jekyll-obsidian dev
 ```
 
-Open the URL printed by the local server, which is `http://127.0.0.1:58000/` by default. Local preview uses the Minimal theme unless you pass `--theme docs`; run `website/bin/dev --help` for the dedicated host, port, base URL, and theme options. File watching is automatic, and each change gets a complete atomic rebuild. Jekyll `--watch`, `--incremental`, and arbitrary passthrough options are not supported.
+Open `http://127.0.0.1:58000/`. Content and configuration changes trigger a complete rebuild. A failed rebuild leaves the last successful site available. Run `jekyll-obsidian dev --help` for host, port, base path, and theme options.
 
-Run `website/bin/clean` from the repository root to remove generated sites, Jekyll and frontend caches, test reports, coverage, and temporary build directories. Installed Ruby and Node.js dependencies are preserved.
+Build for another host with `jekyll-obsidian build --url https://example.com --baseurl /project`. Output is written to `.jekyll-obsidian-cache/site/`. `jekyll-obsidian clean` removes this project's cache and output. The gem includes frontend assets, so local use does not require Node.js.
 
 ## Guides
 
-- [Host Integration](website/docs/docs/Integration.md) covers installation and updates in another repository.
-- [Getting Started](website/docs/docs/Getting%20Started.md) covers GitHub Actions publishing, authoring, and optional local preview.
-- [Syntax](website/docs/docs/Syntax.md) documents the supported Obsidian-flavored Markdown.
-- [Customization](website/docs/docs/Customization.md) covers site identity, themes, navigation, and features.
-- [Portfolio](website/docs/docs/Portfolio.md) covers project collections and public GitHub Markdown bodies.
-- [Analytics](website/docs/docs/Analytics.md) covers optional Cloudflare and Google traffic measurement.
-- [Comments](website/docs/docs/Comments.md) covers GitHub Discussions setup and privacy boundaries.
-- [Localization](website/docs/docs/Localization.md) covers translations, fallback pages, and localized SEO.
-- [Deployment](website/docs/docs/Deployment.md) covers GitHub Pages, URL paths, and custom domains.
+- [Host Integration](website/jekyll-obsidian-docs/docs/Integration.md) covers installation and updates in another repository.
+- [Getting Started](website/jekyll-obsidian-docs/docs/Getting%20Started.md) covers GitHub Actions publishing, authoring, and optional local preview.
+- [Syntax](website/jekyll-obsidian-docs/docs/Syntax.md) documents the supported Obsidian-flavored Markdown.
+- [Customization](website/jekyll-obsidian-docs/docs/Customization.md) covers site identity, themes, navigation, and features.
+- [Portfolio](website/jekyll-obsidian-docs/docs/Portfolio.md) covers project collections and public GitHub Markdown bodies.
+- [Analytics](website/jekyll-obsidian-docs/docs/Analytics.md) covers optional Cloudflare and Google traffic measurement.
+- [Comments](website/jekyll-obsidian-docs/docs/Comments.md) covers GitHub Discussions setup and privacy boundaries.
+- [Localization](website/jekyll-obsidian-docs/docs/Localization.md) covers translations, fallback pages, and localized SEO.
+- [Deployment](website/jekyll-obsidian-docs/docs/Deployment.md) covers GitHub Pages, URL paths, and custom domains.
 
-Contributors can continue with the [Developer Guide](website/docs/docs/development/index.md).
+Contributors can continue with the [Developer Guide](website/jekyll-obsidian-docs/docs/development/index.md).
 
 ## License
 

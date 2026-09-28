@@ -1891,6 +1891,9 @@ test("desktop compact graphs keep every visible label separate and inside the ca
   const view = page.locator("[data-context-panel] [data-graph-view]");
   await expect(view).toBeVisible();
   await expect(view).toHaveAttribute("data-graph-ready", "true");
+  const expectedNodeCount = await page.locator("[data-context-panel] template[data-local-graph-data]")
+    .evaluate((template) => (template as HTMLTemplateElement).content.querySelectorAll("[data-graph-node]").length);
+  expect(expectedNodeCount).toBeGreaterThan(1);
 
   for (const direction of ["ltr", "rtl"] as const) {
     await page.locator("html").evaluate((root, value) => { root.setAttribute("dir", value); }, direction);
@@ -1933,7 +1936,7 @@ test("desktop compact graphs keep every visible label separate and inside the ca
       };
     });
 
-    expect(geometry.labelCount).toBe(10);
+    expect(geometry.labelCount).toBe(expectedNodeCount);
     expect(geometry.clipped, direction).toEqual([]);
     expect(geometry.intersections, direction).toEqual([]);
     expect(geometry.statusIntersections, direction).toEqual([]);

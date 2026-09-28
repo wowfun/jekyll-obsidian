@@ -8,7 +8,7 @@ const assetsRoot = path.join(projectRoot, ".jekyll-obsidian-cache", "assets");
 const siteRoots = Object.fromEntries(
   ["minimal", "docs", "docs-i18n", "minimal-i18n"].map((theme) => [
     theme,
-    path.join(projectRoot, `_site-browser-${theme}`)
+    path.join(projectRoot, "..", ".jekyll-obsidian-cache", `site-browser-${theme}`)
   ])
 );
 const manifest = JSON.parse(await readFile(path.join(assetsRoot, "manifest.json"), "utf8"));

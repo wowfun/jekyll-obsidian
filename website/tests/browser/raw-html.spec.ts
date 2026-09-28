@@ -1,6 +1,12 @@
 import { test, expect } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
 
+test.beforeEach(async ({ page }) => {
+  // Optional remote fonts must not hold up route, interaction, and accessibility checks.
+  await page.route("https://fonts.googleapis.com/**", (route) =>
+    route.fulfill({ contentType: "text/css", body: "" }));
+});
+
 for (const theme of ["minimal", "docs"] as const) {
   test(`${theme} serves the shared raw HTML slide bundle at its baseurl-aware route`, async ({ page }) => {
     await page.goto(`/__site__/${theme}/slides/jekyll-obsidian/`);

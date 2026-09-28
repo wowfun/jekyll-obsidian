@@ -1,9 +1,9 @@
 {
   "name": "jekyll-obsidian",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
-  "description": "Frontend assets and browser checks for the configurable Jekyll Obsidian template.",
+  "description": "Frontend development and browser checks for jekyll-obsidian.",
   "engines": {
     "node": ">=26 <27"
   },

@@ -1,9 +1,7 @@
 #!/usr/bin/env sh
 set -eu
-
 SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 PROJECT_DIR=$(CDPATH= cd -- "$SCRIPT_DIR/.." && pwd)
 export BUNDLE_GEMFILE="$PROJECT_DIR/Gemfile"
-
-cd "$PROJECT_DIR"
-exec bundle exec ruby "$PROJECT_DIR/scripts/dev-watch.rb" "$@"
+cd "$PROJECT_DIR/.."
+exec bundle exec ruby "$PROJECT_DIR/exe/jekyll-obsidian" dev "$@"

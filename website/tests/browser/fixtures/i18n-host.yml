@@ -2,7 +2,7 @@ title: Browser i18n fixture
 lang: en
 
 website:
-  source: website/docs
+  source: website/jekyll-obsidian-docs
   theme: docs
   html:
     slides/jekyll-obsidian: /slides/jekyll-obsidian/
