@@ -27,7 +27,7 @@
     "minisearch": "7.2.0"
   },
   "devDependencies": {
-    "@axe-core/playwright": "4.12.1",
+    "@axe-core/playwright": "4.13.0",
     "@playwright/test": "1.62.1",
     "@types/d3": "7.4.3",
     "esbuild": "0.28.1",
