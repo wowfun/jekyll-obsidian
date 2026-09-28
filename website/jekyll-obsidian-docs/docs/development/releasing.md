@@ -42,7 +42,7 @@ Commit the release changes and push an immutable tag matching the version, such 
 
 ## Publish and verify
 
-In GitHub Actions, open **Publish Ruby gem**, choose **Run workflow**, and enter the existing tag. The workflow checks that the tag and gem version agree, builds and tests the package, then publishes the tested artifact with Trusted Publishing.
+In GitHub Actions, open **Publish Ruby gem**, choose **Run workflow**, and enter the existing tag. The workflow checks that the tag and gem version agree, builds and tests the package, then publishes the tested artifact with Trusted Publishing. A final job uses that tag's Action to install the public gem and build an independent host.
 
 Wait for publication to finish before announcing the Action tag. In a fresh directory with Ruby 4.0.x and Git installed, verify the public package:
 
@@ -54,4 +54,4 @@ jekyll-obsidian _0.2.0_ build --url https://example.test
 
 Check a downstream Pages run using `wowfun/jekyll-obsidian@v0.2.0`. The downstream build must succeed without a checked-in `website/` implementation or npm dependencies.
 
-If publication fails, fix the cause before retrying. Never replace an already published gem version or move a released Action tag; prepare a new version instead.
+If publication fails, fix the cause before retrying. If only the installation check fails after publication, rerun that failed job without repeating the successful publish job. Never replace an already published gem version or move a released Action tag; prepare a new version instead.

@@ -75,3 +75,31 @@ jobs:
         uses: rubygems/configure-rubygems-credentials@dc5a8d8553e6ee01fc26761a49e99e733d17954a
       - name: Publish the tested gem
         run: gem push pkg/*.gem
+
+  verify_installation:
+    needs: publish
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ inputs.tag }}
+          path: .builder-action
+      - name: Create an independent host
+        run: |
+          mkdir -p .github docs
+          printf 'title: Package smoke test\nwebsite:\n  source: docs\n  theme: docs\n' > .github/jekyll-obsidian.yml
+          printf '%s\n' '---' 'publish: true' '---' '# Published package works' > docs/index.md
+      - name: Build with the released Action and public gem
+        id: build
+        uses: ./.builder-action
+        with:
+          url: https://example.invalid
+          baseurl: /package-smoke
+      - name: Verify the host output
+        env:
+          SITE_PATH: ${{ steps.build.outputs.site-path }}
+        run: |
+          test ! -d website
+          test -f "$SITE_PATH/index.html"
+          grep -q 'Published package works' "$SITE_PATH/index.html"
+          jekyll-obsidian --version
