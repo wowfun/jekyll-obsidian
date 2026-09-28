@@ -31,8 +31,8 @@ module JekyllObsidian
           @events << :config
         end
       end.tap(&:start)
-      rebuild(origin, initial: true)
       refresh_content_listener
+      rebuild(origin, initial: true)
       server_thread = Thread.new { server.start }
       @output.puts "Serving #{origin}#{@baseurl}/"
       @output.flush

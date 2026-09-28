@@ -41,13 +41,34 @@ class CliPreviewTest < Minitest::Test
       probe.close
       log_path = File.join(root, "preview.log")
       log = File.open(log_path, "w")
-      pid = Process.spawn(RbConfig.ruby, EXECUTABLE, "dev", "--port", port.to_s, "--baseurl", "/preview",
+      # Hold the first completed build so an edit during startup cannot be
+      # mistaken for the initial file state by a listener started afterwards.
+      boot = <<~RUBY
+        require "jekyll_obsidian/runtime"
+        JekyllObsidian::Runtime.prepend(Module.new do
+          def build(**options)
+            result = super
+            unless @initial_build_finished
+              @initial_build_finished = true
+              File.write("initial-build-ready", "")
+              sleep 0.01 until File.exist?("continue-preview")
+            end
+            result
+          end
+        end)
+        load ARGV.shift
+      RUBY
+      pid = Process.spawn(RbConfig.ruby, "-e", boot, EXECUTABLE, "dev", "--port", port.to_s, "--baseurl", "/preview",
         chdir: root, out: log, err: log)
       uri = URI("http://127.0.0.1:#{port}/preview/")
-      wait_for(log_path) { http_body(uri)&.include?("Welcome") }
+      wait_for(log_path) { File.exist?(File.join(root, "initial-build-ready")) }
+      assert_includes File.read(File.join(root, ".jekyll-obsidian-cache", "site", "index.html")), "Welcome"
       note = File.join(root, "docs", "index.md")
       File.write(note, "---\npublish: true\ntitle: Changed\n---\n# First edit\n")
+      File.write(File.join(root, "continue-preview"), "")
       wait_for(log_path) { http_body(uri)&.include?("First edit") }
+      File.write(note, "---\npublish: true\n---\n# Edited while serving\n")
+      wait_for(log_path) { http_body(uri)&.include?("Edited while serving") }
 
       FileUtils.mkdir_p(File.join(root, "website", "docs"))
       File.write(File.join(root, "website", "docs", "index.md"), "---\npublish: true\n---\n# New content root\n")
