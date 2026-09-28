@@ -25,7 +25,7 @@ jobs:
         with:
           ref: ${{ inputs.tag }}
           fetch-depth: 0
-      - uses: ruby/setup-ruby@95ef2b042f9d7a56d8268cba8559e2842e2ad01b
+      - uses: ruby/setup-ruby@14594264cd68ce8a2345dd349bc3d138a4ef85c8
         with:
           ruby-version: '4.0.6'
           bundler-cache: true
@@ -64,7 +64,7 @@ jobs:
       contents: read
       id-token: write
     steps:
-      - uses: ruby/setup-ruby@95ef2b042f9d7a56d8268cba8559e2842e2ad01b
+      - uses: ruby/setup-ruby@14594264cd68ce8a2345dd349bc3d138a4ef85c8
         with:
           ruby-version: '4.0.6'
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
