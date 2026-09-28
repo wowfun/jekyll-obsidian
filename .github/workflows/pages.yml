@@ -53,10 +53,16 @@ jobs:
           if-no-files-found: ignore
           retention-days: 3
       - name: Verify both themes at a root URL
+        env:
+          JEKYLL_OBSIDIAN_GITHUB_MARKDOWN_MANIFEST_IN: .jekyll-obsidian-cache/github-markdown-browser.json
         run: |
           for theme in minimal docs; do
             website/bin/build --example --theme "$theme" --url https://example.invalid --baseurl '' --destination "site-$theme-root" --skip-assets
           done
+      - name: Snapshot project README inputs from the checkout
+        run: |
+          bundle exec ruby website/scripts/snapshot-project-readmes.rb
+          echo 'JEKYLL_OBSIDIAN_GITHUB_MARKDOWN_MANIFEST_IN=.jekyll-obsidian-cache/github-markdown-project.json' >> "$GITHUB_ENV"
       - name: Read Pages metadata
         if: github.event_name != 'pull_request'
         id: pages
