@@ -32,8 +32,11 @@ pnpm-debug.log*
 /log/
 
 # Obsidian per-device state; stable example-vault settings remain tracked
-/docs/.obsidian/workspace.json
-/docs/.obsidian/workspace-mobile.json
-/docs/.obsidian/cache/
-/docs/.obsidian/plugins/
-/docs/.trash/
+/jekyll-obsidian-docs/.obsidian/workspace.json
+/jekyll-obsidian-docs/.obsidian/workspace-mobile.json
+/jekyll-obsidian-docs/.obsidian/cache/
+/jekyll-obsidian-docs/.obsidian/plugins/
+/jekyll-obsidian-docs/.trash/
+
+# Generated gem assets
+/assets/

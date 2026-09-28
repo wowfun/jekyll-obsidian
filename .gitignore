@@ -16,3 +16,7 @@
 /.vscode/
 .DS_Store
 Thumbs.db
+
+# Runtime output and release packages
+/.jekyll-obsidian-cache/
+/pkg/

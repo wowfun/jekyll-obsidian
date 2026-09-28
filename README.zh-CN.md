@@ -2,9 +2,7 @@
 
 [English](README.md) | 简体中文
 
-`jekyll-obsidian` 可以将任意 Markdown 文件夹发布为通用 Jekyll 站点或文档手册，Obsidian 知识库也可以直接使用。内容仍可通过 Obsidian 或任意文本编辑器直接编辑。只需将项目自带的 `website/` 目录复制到仓库并推送，GitHub Actions 就会完成构建并发布到 Pages，本地无需安装工具链或运行构建命令。
-
-**把 Markdown 文件夹直接变成完整的博客或文档站。推送到 GitHub 后，GitHub Actions 会自动构建并发布，本地不用安装构建工具，也不用运行构建命令。**
+`jekyll-obsidian` 可以将 Markdown 文件夹（包括 Obsidian 知识库）发布为博客或文档站。继续在编辑器中写作并推送，GitHub Actions 就会构建和发布。仓库只需添加配置文件和工作流，发布实现通过 `jekyll-obsidian-site` Ruby gem 安装。
 
 在线预览：[sinputer.top/jekyll-obsidian](https://sinputer.top/jekyll-obsidian/)
 
@@ -17,7 +15,7 @@
 
 切换主题不会改变笔记 URL。默认构建和部署主题为 `minimal`。两个主题都支持通过 `_translations/<locale>/` 发布语言覆盖层，也可以为文章接入 GitHub Discussions 评论。存在对应配置但省略 `enabled` 时，本地化仅在 `docs` 中默认启用，评论仅在 `minimal` 中默认启用。
 
-语言清单、默认语言与译文的职责边界、回退页面和 SEO 行为详见[本地化指南](website/docs/_translations/zh-CN/docs/Localization.md)。
+语言清单、默认语言与译文的职责边界、回退页面和 SEO 行为详见[本地化指南](website/jekyll-obsidian-docs/_translations/zh-CN/docs/Localization.md)。
 
 Minimal 还提供 Blog、标签、Atom 订阅源、联系方式、源码操作，以及自动检测并生成项目卡片的作品集。项目页可以直接使用一篇公开 GitHub Markdown 作为正文。两个主题都会生成 Search 与 Graph 数据、canonical 元数据、站点地图、404 页面和不含 frontmatter 的 Markdown 资源。可选流量统计支持 Cloudflare Web Analytics 或 Google Analytics，配置前始终关闭。
 
@@ -33,59 +31,47 @@ Minimal 还提供 Blog、标签、Atom 订阅源、联系方式、源码操作�
 
 ## 集成到你的仓库
 
-1. 将完整的 `website/` 目录复制到仓库根目录。
-2. 在 `website/` 之外选择一个内容目录，例如 `docs/`，并添加至少一篇公开 Markdown 笔记。
-3. 在仓库根目录运行集成命令。
+1. 根据[配置示例](examples/jekyll-obsidian.yml)创建 `.github/jekyll-obsidian.yml`：
 
-在 macOS、Linux 或 WSL 中运行：
+```yaml
+title: My Site
+website:
+  source: docs
+  theme: minimal
+```
+
+2. 将 [Pages 工作流](examples/pages.yml)复制到 `.github/workflows/pages.yml`。
+3. 在 `docs/` 中添加一篇带 `publish: true` 的 Markdown 笔记，在 **Settings > Pages > Build and deployment > Source** 中选择 **GitHub Actions**，然后推送。
+
+内容也可以放在 `website/docs/` 或仓库内的其他目录，直接修改 `website.source` 即可。通过 Actions 发布时，本地无需安装 Ruby、Node.js，也不用运行构建命令。
+
+如果希望在本地初始化，请先安装 Ruby 4.0.x，再运行：
 
 ```sh
-website/bin/integrate --source docs
+gem install jekyll-obsidian-site
+jekyll-obsidian init --source docs
 ```
 
-在原生 Windows 的 PowerShell 中运行：
-
-```powershell
-.\website\bin\integrate.cmd --source docs
-```
-
-该命令默认使用 `--source docs --theme minimal`。它无需安装依赖或访问 GitHub，即可生成 `.github/jekyll-obsidian.yml` 和 `.github/workflows/pages.yml`。
-
-你的仓库将具有以下结构：
-
-```text
-repository/
-├── docs/
-│   └── Start.md
-├── website/
-└── .github/
-    ├── jekyll-obsidian.yml
-    └── workflows/
-        └── pages.yml
-```
-
-打开 GitHub 中的 **Settings → Pages → Build and deployment**，将 **Source** 设为 **GitHub Actions**。提交并推送内容目录、`website/` 和生成的 `.github/` 文件。你不需要创建 `gh-pages` 分支、配置部署密钥，也不需要手动设置 `url` 和 `baseurl`。
-
-除非传入 `--force-workflow`，否则集成命令不会覆盖不属于本项目的 Pages 工作流。已有配置、Windows 使用方式和冲突处理详见[宿主集成](website/docs/_translations/zh-CN/docs/Integration.md)。
+`init` 会创建同样的配置和工作流，只在内容目录不存在或为空时添加公开的欢迎页。已有冲突文件不会被覆盖。Bundler、版本更新和已有仓库的接入方式见[宿主集成](website/jekyll-obsidian-docs/_translations/zh-CN/docs/Integration.md)。
 
 ## 预览已部署站点
 
-等待默认分支上的 **Verify and deploy Pages** 工作流执行成功。GitHub 会在工作流的 `deploy` 作业和 **Settings → Pages** 中显示部署地址。
+等待默认分支上的 **Build and deploy Pages** 工作流执行成功。GitHub 会在工作流的 `deploy` 作业和 **Settings → Pages** 中显示部署地址。
 
 未配置自定义域名时，地址通常为：
 
 - 普通项目仓库：`https://<owner>.github.io/<repository>/`
 - 仓库名称为 `<owner>.github.io`：`https://<owner>.github.io/`
 
-如果配置了自定义域名，请使用 **Settings → Pages** 中显示的地址。工作流会读取 GitHub Pages 元数据，并自动为该地址构建站内链接。工作流和自定义域名设置详见[部署指南](website/docs/_translations/zh-CN/docs/Deployment.md)。
+如果配置了自定义域名，请使用 **Settings → Pages** 中显示的地址。工作流会读取 GitHub Pages 元数据，并自动为该地址构建站内链接。工作流和自定义域名设置详见[部署指南](website/jekyll-obsidian-docs/_translations/zh-CN/docs/Deployment.md)。
 
 ## 配置与发布
 
-生成的 `.github/jekyll-obsidian.yml` 是宿主仓库的配置文件。你可以在其中设置站点标题、描述、语言、仓库链接、内容类型和功能开关。请保留 `website.source` 与 `website.theme` 周围的托管标记，并通过带有相应参数的 `website/bin/integrate` 命令修改这两个值。
+直接编辑 `.github/jekyll-obsidian.yml`，设置标题、语言、内容目录、主题和功能。修改 `website.source` 或 `website.theme` 会在下一次构建时生效，无需重新生成工作流。
 
 所有配置均位于根级 `website:` 映射中。
 
-两个主题都可以通过 Giscus 将文章评论存储在 GitHub Discussions 中。评论默认使用发布仓库，也可以指向另一个公开仓库。存在 `website.comments` 但省略 `enabled` 时，`minimal` 默认启用评论；`docs` 需要显式设置 `website.comments.enabled: true`。在 Discussions 或 Giscus App 尚未就绪时启用评论不会导致构建失败；Giscus 配置不完整时会产生警告，并显示非交互式回退内容。仓库设置、讨论串标识、隐私边界和故障排查详见[评论指南](website/docs/_translations/zh-CN/docs/Comments.md)。
+两个主题都可以通过 Giscus 将文章评论存储在 GitHub Discussions 中。评论默认使用发布仓库，也可以指向另一个公开仓库。存在 `website.comments` 但省略 `enabled` 时，`minimal` 默认启用评论；`docs` 需要显式设置 `website.comments.enabled: true`。在 Discussions 或 Giscus App 尚未就绪时启用评论不会导致构建失败；Giscus 配置不完整时会产生警告，并显示非交互式回退内容。仓库设置、讨论串标识、隐私边界和故障排查详见[评论指南](website/jekyll-obsidian-docs/_translations/zh-CN/docs/Comments.md)。
 
 使用 Obsidian 或任意 Markdown 编辑器打开内容目录。默认情况下，只有 frontmatter 中包含 YAML 布尔值 `publish: true` 的笔记才会进入站点：
 
@@ -110,43 +96,36 @@ website:
     slides/product-tour: /slides/product-tour/
 ```
 
-HTML 映射是独立于 Markdown 默认值的显式发布边界。Raw 页面不会进入导航、Search、Graph、Feed 或 sitemap，并会作为可信同源代码执行。发布前请审查整个 bundle。详见[自定义指南](website/docs/_translations/zh-CN/docs/Customization.md#独立-html-slides)和[真实 Slide 源码](website/docs/slides/jekyll-obsidian/index.html)。
+HTML 映射是独立于 Markdown 默认值的显式发布边界。Raw 页面不会进入导航、Search、Graph、Feed 或 sitemap，并会作为可信同源代码执行。发布前请审查整个 bundle。详见[自定义指南](website/jekyll-obsidian-docs/_translations/zh-CN/docs/Customization.md#独立-html-slides)和[真实 Slide 源码](website/jekyll-obsidian-docs/slides/jekyll-obsidian/index.html)。
 
-在宿主仓库根目录更新已发布 tag 对应的安装：
-
-```sh
-website/bin/update --check
-website/bin/update
-```
-
-更新器会在隔离的临时仓库中获取官方日历版本 tag，验证当前快照，并仅刷新工具托管的文件；审阅和提交仍由你决定。它不会为宿主添加 remote，也不会运行 `git pull`、`git add`、`git commit` 或 `git push`。更新需要官方 annotated release。旧安装首次更新时，其已提交的 `website/` 必须与某个官方 tag 完全一致；否则需要先手工完整替换到一个带 tag 的快照。来源锁定、退出码、Windows 命令和恢复行为详见[宿主集成](website/docs/_translations/zh-CN/docs/Integration.md)。
+使用新版本时，修改工作流中的 Action 版本。本地 gem 安装通过 `gem update jekyll-obsidian-site` 更新；使用 Bundler 时运行 `bundle update jekyll-obsidian-site` 并提交锁文件。内容和配置始终保留在自己的仓库中。
 
 ## 可选的本地预览
 
-本地预览需要在 macOS、Linux 或 WSL 中安装 Ruby 4.0.x、Node.js 26.x 和 Git。原生 Windows 用户可以在 WSL 中运行以下命令：
+在 macOS、Linux 或 WSL 中安装 Ruby 4.0.x 后运行：
 
 ```sh
-website/bin/setup
-website/bin/dev
+gem install jekyll-obsidian-site
+jekyll-obsidian dev
 ```
 
-本地服务器默认地址为 `http://127.0.0.1:58000/`。`website/bin/dev` 默认使用 Minimal 主题；传入 `--theme docs` 可预览独立文档手册。运行 `website/bin/dev --help` 可查看专用的主机、端口、基础路径和主题参数。文件监听会自动启用，每次变更都会触发完整的原子重建；不支持 Jekyll 的 `--watch`、`--incremental` 或任意参数透传。
+打开 `http://127.0.0.1:58000/`。修改内容或配置会触发完整重建，构建失败时仍可浏览上一次成功生成的站点。运行 `jekyll-obsidian dev --help` 查看主机、端口、基础路径和主题选项。
 
-在仓库根目录运行 `website/bin/clean` 可删除生成站点、Jekyll 与前端缓存、测试报告、覆盖率结果和构建临时目录；已安装的 Ruby 与 Node.js 依赖会保留。
+部署到其他主机时，可运行 `jekyll-obsidian build --url https://example.com --baseurl /project`。输出位于 `.jekyll-obsidian-cache/site/`；`jekyll-obsidian clean` 清理本项目的缓存和输出。gem 已包含前端资源，本地使用无需安装 Node.js。
 
 ## 使用指南
 
-- [宿主集成](website/docs/_translations/zh-CN/docs/Integration.md)：介绍如何安装到其他仓库及后续更新。
-- [快速开始](website/docs/_translations/zh-CN/docs/Getting%20Started.md)：介绍 GitHub Actions 发布、写作和可选本地预览。
-- [语法](website/docs/_translations/zh-CN/docs/Syntax.md)：介绍支持的 Obsidian 风格 Markdown。
-- [自定义](website/docs/_translations/zh-CN/docs/Customization.md)：介绍站点信息、主题、导航和功能。
-- [作品集](website/docs/_translations/zh-CN/docs/Portfolio.md)：介绍项目集合和公开 GitHub Markdown 正文。
-- [流量统计](website/docs/_translations/zh-CN/docs/Analytics.md)：介绍可选的 Cloudflare 与 Google 访问统计。
-- [评论](website/docs/_translations/zh-CN/docs/Comments.md)：介绍 GitHub Discussions 配置和隐私边界。
-- [本地化](website/docs/_translations/zh-CN/docs/Localization.md)：介绍译文、回退页面和本地化 SEO。
-- [部署](website/docs/_translations/zh-CN/docs/Deployment.md)：介绍 GitHub Pages、URL 路径和自定义域名。
+- [宿主集成](website/jekyll-obsidian-docs/_translations/zh-CN/docs/Integration.md)：介绍如何安装到其他仓库及后续更新。
+- [快速开始](website/jekyll-obsidian-docs/_translations/zh-CN/docs/Getting%20Started.md)：介绍 GitHub Actions 发布、写作和可选本地预览。
+- [语法](website/jekyll-obsidian-docs/_translations/zh-CN/docs/Syntax.md)：介绍支持的 Obsidian 风格 Markdown。
+- [自定义](website/jekyll-obsidian-docs/_translations/zh-CN/docs/Customization.md)：介绍站点信息、主题、导航和功能。
+- [作品集](website/jekyll-obsidian-docs/_translations/zh-CN/docs/Portfolio.md)：介绍项目集合和公开 GitHub Markdown 正文。
+- [流量统计](website/jekyll-obsidian-docs/_translations/zh-CN/docs/Analytics.md)：介绍可选的 Cloudflare 与 Google 访问统计。
+- [评论](website/jekyll-obsidian-docs/_translations/zh-CN/docs/Comments.md)：介绍 GitHub Discussions 配置和隐私边界。
+- [本地化](website/jekyll-obsidian-docs/_translations/zh-CN/docs/Localization.md)：介绍译文、回退页面和本地化 SEO。
+- [部署](website/jekyll-obsidian-docs/_translations/zh-CN/docs/Deployment.md)：介绍 GitHub Pages、URL 路径和自定义域名。
 
-贡献者可以继续阅读[开发者指南](website/docs/docs/development/index.md)。
+贡献者可以继续阅读[开发者指南](website/jekyll-obsidian-docs/docs/development/index.md)。
 
 ## 许可证
 

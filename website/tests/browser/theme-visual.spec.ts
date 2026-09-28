@@ -3,7 +3,7 @@ import { readdir, stat } from "node:fs/promises";
 import path from "node:path";
 
 async function outputSizes(theme: string) {
-  const root = path.resolve(`_site-browser-${theme}`);
+  const root = path.resolve(`../.jekyll-obsidian-cache/site-browser-${theme}`);
   const entries = await readdir(root, { recursive: true, withFileTypes: true });
   const files = entries.filter((entry) => entry.isFile());
   const sizes = await Promise.all(files.map(async (entry) => {

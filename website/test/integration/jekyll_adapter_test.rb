@@ -15,14 +15,15 @@ class JekyllAdapterTest < Minitest::Test
     @previous_github_markdown_manifest_in = ENV["JEKYLL_OBSIDIAN_GITHUB_MARKDOWN_MANIFEST_IN"]
     @previous_github_markdown_manifest_out = ENV["JEKYLL_OBSIDIAN_GITHUB_MARKDOWN_MANIFEST_OUT"]
     ENV["JEKYLL_ENV"] = "production"
-    @temporary_root = Dir.mktmpdir("jekyll-obsidian-integration")
-    @site_root = File.join(@temporary_root, "website")
+    @temporary_root = File.realpath(Dir.mktmpdir("jekyll-obsidian-integration"))
+    @cache_root = File.join(@temporary_root, ".jekyll-obsidian-cache")
+    @site_root = File.join(@cache_root, "runtime")
     FileUtils.mkdir_p(File.join(@site_root, "_layouts"))
-    FileUtils.mkdir_p(File.join(@site_root, "docs"))
+    FileUtils.mkdir_p(File.join(@temporary_root, "website", "jekyll-obsidian-docs"))
     FileUtils.mkdir_p(File.join(@temporary_root, "vault", "media"))
     FileUtils.mkdir_p(File.join(@temporary_root, "src"))
     File.write(File.join(@temporary_root, "src", "private.rb"), "Host source leak marker")
-    File.write(File.join(@site_root, "docs", "private.md"), "Bundled example leak marker")
+    File.write(File.join(@temporary_root, "website", "jekyll-obsidian-docs", "private.md"), "Bundled example leak marker")
     %w[website-minimal website-docs].each do |layout|
       File.write(File.join(@site_root, "_layouts", "#{layout}.html"), <<~LIQUID)
         <!doctype html><html data-theme="#{layout.delete_prefix("website-")}"><body><div data-layout="once">{{ content }}</div></body></html>
@@ -66,7 +67,6 @@ class JekyllAdapterTest < Minitest::Test
 
   def test_real_site_process_isolates_vault_and_renders_layout_once
     site = build_site("exclude" => [])
-    assert_includes site.config.fetch("exclude"), "docs"
     site.process
 
     index = File.read(File.join(destination, "index.html"))
@@ -228,7 +228,7 @@ class JekyllAdapterTest < Minitest::Test
       digest: Digest::SHA256.hexdigest(markdown),
       markdown: markdown
     )
-    cache_root = File.join(@site_root, ".jekyll-obsidian-cache")
+    cache_root = @cache_root
     input_path = File.join(cache_root, "github-markdown-input.json")
     output_path = File.join(cache_root, "github-markdown-output.json")
     File.write(input_path, JekyllObsidian::GitHubMarkdown.dump_manifest([document]))
@@ -350,7 +350,7 @@ class JekyllAdapterTest < Minitest::Test
     install_project_layout
 
     %w[minimal docs].each do |theme|
-      themed_destination = File.join(@site_root, "_site-#{theme}")
+      themed_destination = File.join(@cache_root, "site-#{theme}")
       build_site(
         "destination" => themed_destination,
         "website" => website_config.merge("theme" => theme)
@@ -395,7 +395,7 @@ class JekyllAdapterTest < Minitest::Test
     install_project_layout
 
     %w[minimal docs].each do |theme|
-      themed_destination = File.join(@site_root, "_site-related-#{theme}")
+      themed_destination = File.join(@cache_root, "site-related-#{theme}")
       config = website_config.merge(
         "theme" => theme,
         "features" => { "relations" => false, "graph" => false }
@@ -451,7 +451,7 @@ class JekyllAdapterTest < Minitest::Test
       error = assert_expected_failure(StandardError) { site.process }
       assert_includes error.message, "missing-staging-cleanup-fixture.html"
 
-      staging = Dir.glob(File.join(@site_root, ".jekyll-obsidian-cache", "projected-files.*"))
+      staging = Dir.glob(File.join(@cache_root, "projected-files.*"))
       assert_empty staging
     end
   end
@@ -463,7 +463,7 @@ class JekyllAdapterTest < Minitest::Test
     error = assert_raises(IOError) { site.process }
 
     assert_equal "intentional write failure", error.message
-    staging = Dir.glob(File.join(@site_root, ".jekyll-obsidian-cache", "projected-files.*"))
+    staging = Dir.glob(File.join(@cache_root, "projected-files.*"))
     assert_empty staging
   end
 
@@ -784,15 +784,12 @@ class JekyllAdapterTest < Minitest::Test
     assert_empty site.static_files.select { |file| file.path.to_s.include?("docs") }
   end
 
-  def test_bundled_docs_source_is_excluded_before_reader_and_compiled_by_the_adapter
-    FileUtils.remove_entry(File.join(@site_root, "docs"))
-    FileUtils.mv(File.join(@temporary_root, "vault"), File.join(@site_root, "docs"))
+  def test_host_website_docs_is_compiled_without_conflicting_with_project_documentation
+    FileUtils.mv(File.join(@temporary_root, "vault"), File.join(@temporary_root, "website", "docs"))
     site = build_site(
       "exclude" => [],
       "website" => website_config.merge("source" => "website/docs")
     )
-
-    assert_includes site.config.fetch("exclude"), "docs"
 
     site.process
 
@@ -800,7 +797,7 @@ class JekyllAdapterTest < Minitest::Test
     refute File.exist?(File.join(destination, "private.md"))
     refute File.exist?(File.join(destination, "media", "unused.png"))
     assert_empty site.pages.reject { |page| page.respond_to?(:website_route) }
-    assert_empty site.static_files.select { |file| file.path.to_s.start_with?(File.join(@site_root, "docs")) }
+    assert_empty site.static_files.select { |file| file.path.to_s.start_with?(File.join(@temporary_root, "website", "jekyll-obsidian-docs")) }
 
     homepage = site.pages.find { |page| page.respond_to?(:website_route) && page.website_route == "/" }
     assert_equal(
@@ -810,10 +807,11 @@ class JekyllAdapterTest < Minitest::Test
   end
 
   def test_missing_website_configuration_uses_public_defaults
+    FileUtils.mkdir_p(File.join(@temporary_root, "docs"))
     site = build_site("website" => nil)
 
-    assert_equal "website/docs", site.config.dig("website", "source")
-    assert_equal "docs", site.config.dig("website", "theme")
+    assert_equal "docs", site.config.dig("website", "source")
+    assert_equal "minimal", site.config.dig("website", "theme")
     assert_nil site.config.dig("website", "content")
     assert_nil site.config.dig("website", "features")
     assert_nil site.config.dig("website", "comments")
@@ -846,7 +844,7 @@ class JekyllAdapterTest < Minitest::Test
 
     profiles.each do |provider, profile|
       %w[minimal docs].each do |theme|
-        themed_destination = File.join(@site_root, "_site-#{theme}-#{provider}")
+        themed_destination = File.join(@cache_root, "site-#{theme}-#{provider}")
         configured_analytics = profile.fetch("configuration")
         site = build_site(
           "destination" => themed_destination,
@@ -1208,9 +1206,9 @@ class JekyllAdapterTest < Minitest::Test
   def test_source_overlapping_the_jekyll_site_is_rejected_during_initialization
     FileUtils.mkdir_p(File.join(@site_root, "content"))
     error = assert_raises(Jekyll::Errors::FatalException) do
-      build_site("website" => website_config.merge("source" => "website/content"))
+      build_site("website" => website_config.merge("source" => ".jekyll-obsidian-cache/runtime/content"))
     end
-    assert_includes error.message, "must not overlap the Jekyll source"
+    assert_includes error.message, "must not overlap the application cache"
   end
 
   def test_vault_symlink_is_rejected
@@ -1299,7 +1297,7 @@ class JekyllAdapterTest < Minitest::Test
     error = assert_raises(Jekyll::Errors::FatalException) do
       build_site("destination" => File.join(redirect, "site")).process
     end
-    assert_includes error.message, "destination must be a top-level _site"
+    assert_includes error.message, "destination must be a site directory inside the application cache"
     assert_equal "preserve me", File.read(canary)
   end
 
@@ -1322,7 +1320,7 @@ class JekyllAdapterTest < Minitest::Test
     error = assert_raises(Jekyll::Errors::FatalException) do
       build_site("destination" => unsafe_destination)
     end
-    assert_includes error.message, "destination must stay inside the Jekyll source"
+    assert_includes error.message, "destination must be a site directory inside the application cache"
   end
 
   def test_destination_cannot_contain_the_jekyll_site
@@ -1368,7 +1366,7 @@ class JekyllAdapterTest < Minitest::Test
   end
 
   def test_non_development_builds_require_the_application_asset_manifest
-    FileUtils.rm(File.join(@site_root, ".jekyll-obsidian-cache", "assets", "manifest.json"))
+    FileUtils.rm(File.join(@cache_root, "assets", "manifest.json"))
 
     %w[production ci].each do |environment|
       ENV["JEKYLL_ENV"] = environment
@@ -1381,7 +1379,7 @@ class JekyllAdapterTest < Minitest::Test
 
   def test_development_allows_a_missing_application_asset_manifest
     ENV["JEKYLL_ENV"] = "development"
-    FileUtils.rm(File.join(@site_root, ".jekyll-obsidian-cache", "assets", "manifest.json"))
+    FileUtils.rm(File.join(@cache_root, "assets", "manifest.json"))
     site = build_site
 
     site.process
@@ -1389,7 +1387,7 @@ class JekyllAdapterTest < Minitest::Test
   end
 
   def test_missing_active_theme_asset_fails_before_atomic_append
-    FileUtils.rm(File.join(@site_root, ".jekyll-obsidian-cache", "assets", "minimal.js"))
+    FileUtils.rm(File.join(@cache_root, "assets", "minimal.js"))
     site = build_site
 
     error = assert_raises(Jekyll::Errors::FatalException) { site.process }
@@ -1415,8 +1413,8 @@ class JekyllAdapterTest < Minitest::Test
   end
 
   def test_application_asset_cache_root_symlink_is_rejected_before_atomic_append
-    cache_root = File.join(@site_root, ".jekyll-obsidian-cache", "assets")
-    external_root = Dir.mktmpdir("obsidian-assets-outside")
+    cache_root = File.join(@cache_root, "assets")
+    external_root = File.realpath(Dir.mktmpdir("obsidian-assets-outside"))
     external_assets = File.join(external_root, "assets")
     FileUtils.mv(cache_root, external_assets)
     File.symlink(external_assets, cache_root)
@@ -1429,9 +1427,9 @@ class JekyllAdapterTest < Minitest::Test
   end
 
   def test_application_asset_intermediate_symlink_is_rejected_before_atomic_append
-    cache_root = File.join(@site_root, ".jekyll-obsidian-cache", "assets")
+    cache_root = File.join(@cache_root, "assets")
     feature_root = File.join(cache_root, "features")
-    external_root = Dir.mktmpdir("obsidian-feature-assets-outside")
+    external_root = File.realpath(Dir.mktmpdir("obsidian-feature-assets-outside"))
     external_features = File.join(external_root, "features")
     FileUtils.mv(feature_root, external_features)
     File.symlink(external_features, feature_root)
@@ -1664,8 +1662,8 @@ class JekyllAdapterTest < Minitest::Test
       end
     end
     layout = JekyllObsidian::WorkspaceLayout.resolve(site: build_site, source: "vault")
-    FileUtils.mkdir_p(layout.jekyll_cache_root)
-    cache_path = File.join(layout.jekyll_cache_root, "jekyll-obsidian-git-times.json")
+    FileUtils.mkdir_p(layout.application_cache_root)
+    cache_path = File.join(layout.application_cache_root, "git-times.json")
     File.write(cache_path, JSON.generate(
       "head" => "abc123",
       "source" => "vault",
@@ -1674,7 +1672,7 @@ class JekyllAdapterTest < Minitest::Test
     canary = File.join(@temporary_root, "git-cache-canary.json")
     File.write(canary, "preserve me")
     predictable_temporary = File.join(
-      layout.jekyll_cache_root,
+      layout.application_cache_root,
       "jekyll-obsidian-git-times.json.#{Process.pid}.tmp"
     )
     File.symlink(canary, predictable_temporary)
@@ -1731,7 +1729,7 @@ class JekyllAdapterTest < Minitest::Test
   end
 
   def destination
-    File.join(@site_root, "_site")
+    File.join(@cache_root, "site")
   end
 
   def website_config
@@ -1762,7 +1760,10 @@ class JekyllAdapterTest < Minitest::Test
         "lang" => "en",
         "url" => "https://example.test",
         "baseurl" => "",
-        "exclude" => [".jekyll-obsidian-cache"],
+        "exclude" => ["docs"],
+        JekyllObsidian::WorkspaceLayout::CONTEXT_KEY => {
+          "workspace_root" => @temporary_root, "assets_root" => File.join(@cache_root, "assets")
+        },
         "website" => website_config
       }.merge(overrides)
     )
@@ -1789,7 +1790,7 @@ class JekyllAdapterTest < Minitest::Test
   end
 
   def write_asset_manifest(overrides)
-    root = File.join(@site_root, ".jekyll-obsidian-cache", "assets")
+    root = File.join(@cache_root, "assets")
     FileUtils.mkdir_p(root)
     manifest = { "schema_version" => 1, "features" => {} }.merge(overrides)
     files = manifest.fetch("entries").values.flat_map { |entry| entry.fetch("files") }

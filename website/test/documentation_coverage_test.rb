@@ -4,7 +4,7 @@ require_relative "test_helper"
 require "jekyll_obsidian/adapter"
 
 class DocumentationCoverageTest < Minitest::Test
-  DOCS_ROOT = File.expand_path("../docs", __dir__)
+  DOCS_ROOT = File.expand_path("../jekyll-obsidian-docs", __dir__)
   USER_GUIDES = [
     "Getting Started",
     "Integration",
