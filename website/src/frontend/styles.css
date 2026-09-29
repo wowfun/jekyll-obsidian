@@ -200,12 +200,14 @@
 
   .site-mark {
     display: inline-flex;
+    min-inline-size: 0;
     align-items: baseline;
     gap: 0.6rem;
     text-decoration: none;
   }
 
   .site-mark__glyph {
+    flex: none;
     color: var(--violet);
     font-family: var(--font-article);
     font-size: 1.8rem;
@@ -215,6 +217,7 @@
   }
 
   .site-mark__name {
+    min-inline-size: 0;
     font-size: 0.86rem;
     font-weight: 700;
     letter-spacing: 0.08em;
@@ -2542,8 +2545,9 @@
 
   .site-mark__name {
     max-inline-size: 14ch;
-    overflow-wrap: anywhere;
-    white-space: normal;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .site-action__label,
