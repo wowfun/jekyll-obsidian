@@ -1448,7 +1448,7 @@ module JekyllObsidian
         note.authored_text = visible_text(authored)
         note.preview = truncate(note.properties["description"] || note.authored_text, 240)
         note.feature_flags = {
-          "math" => !fragment.css("[data-math-style], .math, math").empty? || note.body.match?(/\$[^$]+\$/),
+          "math" => !fragment.css("[data-math-style], .math, math").empty?,
           "mermaid" => !fragment.css("pre code.language-mermaid").empty?
         }
       end
