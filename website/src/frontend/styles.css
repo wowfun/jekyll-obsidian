@@ -2544,7 +2544,6 @@
   }
 
   .site-mark__name {
-    max-inline-size: 14ch;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
