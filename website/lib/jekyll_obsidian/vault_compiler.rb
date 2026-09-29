@@ -230,6 +230,7 @@ module JekyllObsidian
         analytics: @analytics,
         contacts: @contacts,
         navigation: navigation,
+        home: @home_config,
         site: @config,
         url_builder: @url_builder
       )
@@ -283,11 +284,46 @@ module JekyllObsidian
       resolve_analytics_config
       resolve_contacts_config
       resolve_navigation_config
+      resolve_output_config
       @url_builder = UrlBuilder.new(origin: @config.url, baseurl: @config.baseurl)
       error("missing_origin", "production builds require a non-empty url origin") if production? && @url_builder.origin.empty?
     rescue ArgumentError => exception
       error("invalid_url_config", exception.message)
       @url_builder = UrlBuilder.new(origin: "", baseurl: "")
+    end
+
+    def resolve_output_config
+      @search_config = output_options("search", @config.search, {
+        "mode" => "full", "max_entries" => nil, "excerpt_length" => 240, "content_types" => []
+      })
+      @feed_config = output_options("feed", @config.feed, { "max_entries" => nil })
+      @home_config = output_options("home", @config.home, { "recent_posts_limit" => 6 })
+      validate_output_option(@search_config, "search", "mode", "full") { |value| %w[full summary].include?(value) }
+      validate_output_option(@search_config, "search", "content_types", []) do |value|
+        value.is_a?(Array) && value.all? { |item| %w[page post doc].include?(item) }
+      end
+      validate_output_option(@search_config, "search", "excerpt_length", 240) { |value| value.is_a?(Integer) && value.positive? }
+      [[@search_config, "search"], [@feed_config, "feed"]].each do |options, name|
+        validate_output_option(options, name, "max_entries", nil) { |value| value.nil? || (value.is_a?(Integer) && value.positive?) }
+      end
+      validate_output_option(@home_config, "home", "recent_posts_limit", 6) { |value| value.is_a?(Integer) && value >= 0 }
+    end
+
+    def output_options(name, value, defaults)
+      return defaults.dup if value.nil?
+      unless value.is_a?(Hash) && value.keys.all? { |key| key.is_a?(String) }
+        error("invalid_#{name}_config", "website.#{name} must be a mapping with string keys")
+        return defaults.dup
+      end
+      (value.keys - defaults.keys).sort.each { |key| error("invalid_#{name}_config", "unknown website.#{name} setting #{key.inspect}") }
+      defaults.merge(value.select { |key, _| defaults.key?(key) })
+    end
+
+    def validate_output_option(options, name, key, fallback)
+      return if yield options[key]
+
+      error("invalid_#{name}_config", "invalid website.#{name}.#{key}")
+      options[key] = fallback
     end
 
     def resolve_html_publication
@@ -2173,16 +2209,22 @@ module JekyllObsidian
     end
 
     def search_payload(model)
+      notes = model.notes
+      types = @search_config.fetch("content_types")
+      notes = notes.select { |note| types.include?(note.content_type) } unless types.empty?
+      if (limit = @search_config.fetch("max_entries"))
+        notes = notes.sort_by { |note| [note.published_at || note.updated || "", note.id] }.reverse.first(limit)
+      end
       {
         "schema_version" => 1,
-        "documents" => model.notes.map do |note|
+        "documents" => notes.map do |note|
           {
             "id" => note.id,
             "title" => note.title,
             "url" => @url_builder.href(note.route),
             "aliases" => Array(note.properties["aliases"]),
             "tags" => Array(note.properties["tags"]),
-            "text" => note.authored_text
+            "text" => @search_config.fetch("mode") == "summary" ? note.preview.to_s[0, @search_config.fetch("excerpt_length")] : note.authored_text
           }
         end
       }
@@ -2233,6 +2275,7 @@ module JekyllObsidian
       return nil if candidates.empty?
 
       notes = candidates.sort_by { |note| [chronology_key(feed_timestamp(note)), note.id] }.reverse
+      notes = notes.first(@feed_config.fetch("max_entries")) if @feed_config.fetch("max_entries")
       updated = feed_timestamp(notes.first)
       entries = notes.map do |note|
         published = note.published_at ? "\n    <published>#{h(note.published_at)}</published>" : ""

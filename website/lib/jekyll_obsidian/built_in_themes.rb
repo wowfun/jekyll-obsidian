@@ -679,7 +679,7 @@ module JekyllObsidian
 
       def home_theme_data(posts, config, taxonomy)
         {
-          "recent_posts" => posts.first(6).map { |post| note_card(post, config, taxonomy) },
+          "recent_posts" => posts.first(config.home.fetch("recent_posts_limit")).map { |post| note_card(post, config, taxonomy) },
           "view_all_url" => config.url_builder.href("/blog/"),
           "contacts" => config.contacts,
           "topic_summaries" => taxonomy.fetch("summaries")

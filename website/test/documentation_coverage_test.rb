@@ -30,7 +30,10 @@ class DocumentationCoverageTest < Minitest::Test
     "comments" => ["Comments.md", "Configure the site", "`website.comments`"],
     "contacts" => ["Customization.md", "Site identity", "`website.contacts`"],
     "navigation" => ["Customization.md", "Minimal navigation", "`website.navigation`"],
-    "analytics" => ["Analytics.md", "Configuration and security", "`website.analytics`"]
+    "analytics" => ["Analytics.md", "Configuration and security", "`website.analytics`"],
+    "search" => ["Customization.md", "Output limits", "`website.search.mode`"],
+    "feed" => ["Customization.md", "Output limits", "`website.feed.max_entries`"],
+    "home" => ["Customization.md", "Output limits", "`website.home.recent_posts_limit`"]
   }.freeze
 
   def test_every_user_guide_has_a_simplified_chinese_source

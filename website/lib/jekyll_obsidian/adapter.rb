@@ -14,7 +14,7 @@ require_relative "workspace_layout"
 module JekyllObsidian
   module Adapter
     BUNDLED_FEATURE_IDS = %w[search graph previews math mermaid].freeze
-    CONFIG_KEYS = %w[source syntax_profile theme repository edit_branch content features html i18n comments analytics contacts navigation].freeze
+    CONFIG_KEYS = %w[source syntax_profile theme repository edit_branch content features html i18n comments analytics contacts navigation search feed home].freeze
     GIT_FIRST_COMMIT_CACHE_VERSION = 1
     GITHUB_MARKDOWN_MANIFEST_INPUT = "JEKYLL_OBSIDIAN_GITHUB_MARKDOWN_MANIFEST_IN"
     GITHUB_MARKDOWN_MANIFEST_OUTPUT = "JEKYLL_OBSIDIAN_GITHUB_MARKDOWN_MANIFEST_OUT"
@@ -173,7 +173,10 @@ module JekyllObsidian
         "comments" => configured["comments"],
         "analytics" => configured["analytics"],
         "contacts" => configured["contacts"],
-        "navigation" => configured["navigation"]
+        "navigation" => configured["navigation"],
+        "search" => configured["search"],
+        "feed" => configured["feed"],
+        "home" => configured["home"]
       }
       [website, layout]
     end
@@ -397,6 +400,9 @@ module JekyllObsidian
           analytics: website.fetch("analytics"),
           contacts: website.fetch("contacts"),
           navigation: website.fetch("navigation"),
+          search: website.fetch("search"),
+          feed: website.fetch("feed"),
+          home: website.fetch("home"),
           repository: repository.to_s,
           edit_branch: website.fetch("edit_branch"),
           environment: ENV.fetch("JEKYLL_ENV", "development")

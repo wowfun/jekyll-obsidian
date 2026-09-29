@@ -289,6 +289,27 @@ messages:
 
 请在自己的样式表中覆盖 token，不要编辑带 hash 的构建输出。浅色与深色配色中的文本和焦点对比度都应达到 WCAG AA。
 
+## 输出数量限制
+
+大型站点可以限制生成索引的大小，同时保留全部公开页面。每种语言分别应用这些配置。省略时维持全文搜索、不限条数的订阅源，以及 Minimal 首页的六篇最新文章。
+
+```yaml
+website:
+  search:
+    mode: summary
+    max_entries: 3000
+    excerpt_length: 240
+    content_types: [post]
+  feed:
+    max_entries: 100
+  home:
+    recent_posts_limit: 0
+```
+
+`website.search.mode` 支持 `full` 和 `summary`。摘要模式使用现有页面预览文本，由正整数 `excerpt_length` 限制长度，默认 240。可选正整数 `max_entries` 按发布日期排序，未提供发布日期时采用更新时间，同时间按笔记 ID 稳定排序。`content_types` 可选择 `page`、`post`、`doc`，默认空数组包含全部类型。
+
+`website.feed.max_entries` 用正整数限制现有排序下的订阅条目数。`website.home.recent_posts_limit` 为非负整数，设为零时隐藏自动生成的最新文章列表，保留手写首页正文。上述限制不会移除页面、归档、Markdown 下载或 sitemap 条目。
+
 ## 页面属性
 
 编译器为发布行为保留以下笔记属性，并按封闭结构逐项校验：

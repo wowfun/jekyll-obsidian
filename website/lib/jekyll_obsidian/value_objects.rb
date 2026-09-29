@@ -79,6 +79,9 @@ module JekyllObsidian
     :analytics,
     :contacts,
     :navigation,
+    :search,
+    :feed,
+    :home,
     :html
   )
 
@@ -156,6 +159,7 @@ module JekyllObsidian
     :analytics,
     :contacts,
     :navigation,
+    :home,
     :site,
     :url_builder
   )

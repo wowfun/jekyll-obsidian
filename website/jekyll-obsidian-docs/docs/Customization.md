@@ -297,6 +297,27 @@ Articles and controls use the platform sans-serif stack, with installed Noto San
 
 Override tokens in your own stylesheet rather than editing hashed build output. Keep text and focus contrast above WCAG AA in both color schemes.
 
+## Output limits
+
+Large sites can bound generated indexes without removing published pages. These settings apply independently to every locale. Omitted settings preserve full-text search, an unlimited feed, and six recent posts on Minimal Home.
+
+```yaml
+website:
+  search:
+    mode: summary
+    max_entries: 3000
+    excerpt_length: 240
+    content_types: [post]
+  feed:
+    max_entries: 100
+  home:
+    recent_posts_limit: 0
+```
+
+`website.search.mode` accepts `full` or `summary`. Summary mode uses each note's existing preview, capped by the positive integer `excerpt_length` (default 240). `max_entries` is an optional positive integer; when set, the newest publication dates (or update dates for undated notes) come first, with note ID as a deterministic tie-breaker. `content_types` filters to any of `page`, `post`, and `doc`; its default empty array includes all types.
+
+`website.feed.max_entries` optionally limits the existing feed order to a positive number of entries. `website.home.recent_posts_limit` is a nonnegative integer; zero hides the automatic recent-post rows while retaining authored Home content. These limits do not remove pages, archives, Markdown downloads, or sitemap entries.
+
 ## Page properties
 
 The compiler reserves these note properties for publication behavior and validates each one with a closed schema:
