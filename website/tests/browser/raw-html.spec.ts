@@ -25,6 +25,10 @@ for (const theme of ["minimal", "docs"] as const) {
       .toContain(`/__site__/${theme}/docs/Getting%20Started/`);
     expect(await page.evaluate(() => document.documentElement.scrollWidth))
       .toBeLessThanOrEqual(await page.evaluate(() => document.documentElement.clientWidth));
+    // A visible slide can still contain translucent text during its staggered reveal.
+    await expect.poll(() => page.locator("#slide-15 .reveal").evaluateAll((elements) =>
+      elements.every((element) => getComputedStyle(element).opacity === "1")))
+      .toBe(true);
     expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
   });
 }

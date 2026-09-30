@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: Existing release tag, such as v0.2.0
+        description: Existing release tag, such as v0.2.1
         required: true
         type: string
 
@@ -79,16 +79,31 @@ jobs:
   verify_installation:
     needs: publish
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        host: [standalone, bundled]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           ref: ${{ inputs.tag }}
           path: .builder-action
+      - uses: ruby/setup-ruby@14594264cd68ce8a2345dd349bc3d138a4ef85c8
+        with:
+          ruby-version: '4.0.6'
       - name: Create an independent host
+        env:
+          HOST_MODE: ${{ matrix.host }}
         run: |
           mkdir -p .github docs
           printf 'title: Package smoke test\nwebsite:\n  source: docs\n  theme: docs\n' > .github/jekyll-obsidian.yml
           printf '%s\n' '---' 'publish: true' '---' '# Published package works' > docs/index.md
+          if [ "$HOST_MODE" = bundled ]; then
+            version=$(ruby -r ./.builder-action/website/lib/jekyll_obsidian/version -e 'print JekyllObsidian::VERSION')
+            printf 'source "https://rubygems.org"\ngem "jekyll-obsidian-site", "=%s"\n' "$version" > Gemfile
+            bundle lock
+            sha256sum Gemfile Gemfile.lock > bundle-before.sha256
+          fi
       - name: Build with the released Action and public gem
         id: build
         uses: ./.builder-action
@@ -98,8 +113,14 @@ jobs:
       - name: Verify the host output
         env:
           SITE_PATH: ${{ steps.build.outputs.site-path }}
+          HOST_MODE: ${{ matrix.host }}
         run: |
           test ! -d website
           test -f "$SITE_PATH/index.html"
           grep -q 'Published package works' "$SITE_PATH/index.html"
-          jekyll-obsidian --version
+          if [ "$HOST_MODE" = bundled ]; then
+            sha256sum -c bundle-before.sha256
+            bundle exec jekyll-obsidian --version
+          else
+            jekyll-obsidian --version
+          fi

@@ -16,7 +16,7 @@ A host repository needs content, `.github/jekyll-obsidian.yml`, and a Pages work
 
 ## Deploy without installing a toolchain
 
-Copy [the configuration example](https://github.com/wowfun/jekyll-obsidian/blob/v0.2.0/examples/jekyll-obsidian.yml) to `.github/jekyll-obsidian.yml` and [the Pages workflow](https://github.com/wowfun/jekyll-obsidian/blob/v0.2.0/examples/pages.yml) to `.github/workflows/pages.yml`.
+Copy [the configuration example](https://github.com/wowfun/jekyll-obsidian/blob/v0.2.1/examples/jekyll-obsidian.yml) to `.github/jekyll-obsidian.yml` and [the Pages workflow](https://github.com/wowfun/jekyll-obsidian/blob/v0.2.1/examples/pages.yml) to `.github/workflows/pages.yml`.
 
 ```yaml
 title: My Site
@@ -49,7 +49,7 @@ For a project with a Gemfile:
 
 ```ruby
 source "https://rubygems.org"
-gem "jekyll-obsidian-site", "~> 0.2.0"
+gem "jekyll-obsidian-site", "0.2.1"
 ```
 
 ```sh
@@ -58,11 +58,15 @@ bundle exec jekyll-obsidian init --source docs
 bundle exec jekyll-obsidian dev
 ```
 
-Commit `Gemfile` and `Gemfile.lock` to pin local dependencies. The Action selects its matching gem version independently, so keep its release reference aligned with your local gem version. An existing Jekyll `_config.yml` and its plugins are not loaded by this tool.
+Commit `Gemfile` and `Gemfile.lock` to pin dependencies for both local builds and the Action. When both files exist at the repository root, the Action installs the locked bundle in frozen mode and runs the CLI through `bundle exec`. It never generates or updates your lockfile. The locked `jekyll-obsidian-site` version must match the Action release.
+
+With neither file, the Action installs its exact builder gem version directly. Indirect dependencies then follow the gem's version constraints. Having only one of the two files, omitting the builder from the lockfile, or locking a different builder version is an error. Keep the Action reference, Gemfile, and lockfile aligned when upgrading.
+
+An existing Jekyll `_config.yml` and its plugins are not loaded by this tool.
 
 ## Update
 
-Change `uses: wowfun/jekyll-obsidian@v0.2.0` in the workflow to the desired release tag. The Action installs that release's exact gem version.
+Change `uses: wowfun/jekyll-obsidian@v0.2.1` in the workflow to the desired release tag. The Action installs that release's exact gem version.
 
 For a direct installation, use `gem update jekyll-obsidian-site`. For Bundler, adjust the version constraint when necessary, run `bundle update jekyll-obsidian-site`, and commit the lockfile. Package updates do not rewrite host content or configuration.
 

@@ -38,20 +38,20 @@ Run the full suite before tagging:
 RUN_BROWSER_TESTS=1 website/bin/test
 ```
 
-Commit the release changes and push an immutable tag matching the version, such as `v0.2.0`. The release workflow must also be present on the default branch so GitHub can display its manual trigger.
+Commit the release changes and push an immutable tag matching the version, such as `v0.2.1`. The release workflow must also be present on the default branch so GitHub can display its manual trigger.
 
 ## Publish and verify
 
-In GitHub Actions, open **Publish Ruby gem**, choose **Run workflow**, and enter the existing tag. The workflow checks that the tag and gem version agree, builds and tests the package, then publishes the tested artifact with Trusted Publishing. A final job uses that tag's Action to install the public gem and build an independent host.
+In GitHub Actions, open **Publish Ruby gem**, choose **Run workflow**, and enter the existing tag. The workflow checks that the tag and gem version agree, builds and tests the package, then publishes the tested artifact with Trusted Publishing. The final job matrix uses that tag's Action and the public gem to build two independent hosts: one without a Gemfile and one with a committed bundle. The bundled host must keep both dependency files unchanged.
 
 Wait for publication to finish before announcing the Action tag. In a fresh directory with Ruby 4.0.x and Git installed, verify the public package:
 
 ```sh
-gem install jekyll-obsidian-site --version 0.2.0
-jekyll-obsidian _0.2.0_ init
-jekyll-obsidian _0.2.0_ build --url https://example.test
+gem install jekyll-obsidian-site --version 0.2.1
+jekyll-obsidian _0.2.1_ init
+jekyll-obsidian _0.2.1_ build --url https://example.test
 ```
 
-Check a downstream Pages run using `wowfun/jekyll-obsidian@v0.2.0`. The downstream build must succeed without a checked-in `website/` implementation or npm dependencies.
+Check a downstream Pages run using `wowfun/jekyll-obsidian@v0.2.1`. The downstream build must succeed without a checked-in `website/` implementation or npm dependencies.
 
 If publication fails, fix the cause before retrying. If only the installation check fails after publication, rerun that failed job without repeating the successful publish job. Never replace an already published gem version or move a released Action tag; prepare a new version instead.

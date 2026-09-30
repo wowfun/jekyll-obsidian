@@ -12,7 +12,7 @@ updated: 2026-08-19
 
 # Deployment
 
-The [Pages workflow example](https://github.com/wowfun/jekyll-obsidian/blob/v0.2.0/examples/pages.yml) uses the versioned Jekyll Obsidian Action. The Action installs Ruby and the matching `jekyll-obsidian-site` gem, then builds the host content. No npm installation or project regression suite runs in downstream repositories.
+The [Pages workflow example](https://github.com/wowfun/jekyll-obsidian/blob/v0.2.1/examples/pages.yml) uses the versioned Jekyll Obsidian Action. The Action installs Ruby and builds with the matching `jekyll-obsidian-site` gem. If the host commits a Gemfile and lockfile, it uses that frozen bundle; otherwise it installs the gem directly. No npm installation or project regression suite runs in downstream repositories.
 
 ## Pull requests and pushes
 
