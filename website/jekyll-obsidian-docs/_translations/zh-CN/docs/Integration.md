@@ -10,7 +10,7 @@ description: 通过 RubyGems 或 GitHub Actions 安装发布工具，内容和�
 
 ## 无需安装工具链即可部署
 
-将[配置示例](https://github.com/wowfun/jekyll-obsidian/blob/v0.2.0/examples/jekyll-obsidian.yml)复制到 `.github/jekyll-obsidian.yml`，将 [Pages 工作流](https://github.com/wowfun/jekyll-obsidian/blob/v0.2.0/examples/pages.yml)复制到 `.github/workflows/pages.yml`。
+将[配置示例](https://github.com/wowfun/jekyll-obsidian/blob/v0.2.1/examples/jekyll-obsidian.yml)复制到 `.github/jekyll-obsidian.yml`，将 [Pages 工作流](https://github.com/wowfun/jekyll-obsidian/blob/v0.2.1/examples/pages.yml)复制到 `.github/workflows/pages.yml`。
 
 ```yaml
 title: My Site
@@ -43,7 +43,7 @@ jekyll-obsidian dev
 
 ```ruby
 source "https://rubygems.org"
-gem "jekyll-obsidian-site", "~> 0.2.0"
+gem "jekyll-obsidian-site", "0.2.1"
 ```
 
 ```sh
@@ -52,11 +52,15 @@ bundle exec jekyll-obsidian init --source docs
 bundle exec jekyll-obsidian dev
 ```
 
-提交 `Gemfile` 和 `Gemfile.lock` 以锁定本地依赖。Action 会独立选择与其版本对应的 gem，请让工作流引用与本地 gem 版本保持一致。本工具不会载入宿主已有的 Jekyll `_config.yml` 或插件。
+提交 `Gemfile` 和 `Gemfile.lock`，即可同时固定本地与 Action 构建的依赖。仓库根目录中两份文件齐全时，Action 以 frozen 模式安装锁定的依赖，并通过 `bundle exec` 运行 CLI，不会生成或更新锁文件。锁定的 `jekyll-obsidian-site` 版本必须与 Action 发行版本一致。
+
+两份文件都不存在时，Action 直接安装其对应版本的 builder gem，间接依赖按 gem 的版本约束解析。只存在一份文件、锁文件未包含 builder，或 builder 版本与 Action 不匹配时，构建会明确报错。升级时同步修改 Action 引用、Gemfile 和锁文件。
+
+本工具不加载已有 Jekyll `_config.yml` 及其插件。
 
 ## 更新
 
-将工作流中的 `uses: wowfun/jekyll-obsidian@v0.2.0` 改为需要的发行 tag，Action 会安装该版本对应的 gem。
+将工作流中的 `uses: wowfun/jekyll-obsidian@v0.2.1` 改为需要的发行 tag，Action 会安装该版本对应的 gem。
 
 直接安装的 gem 用 `gem update jekyll-obsidian-site` 更新。使用 Bundler 时，按需要调整版本约束，运行 `bundle update jekyll-obsidian-site` 并提交锁文件。包更新不会改写宿主内容和配置。
 
