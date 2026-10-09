@@ -2,13 +2,14 @@
 
 require "date"
 require "psych"
+require "uri"
 
 module JekyllObsidian
   class FrontMatter
     XML_INVALID_CHARACTER = OutputText::INVALID_CHARACTER
     SUPPORTED = %w[
       publish title subtitle aliases tags author categories description permalink image cssclasses created updated
-      content_type date pinned nav_order nav_exclude tab tabs comments github_markdown related
+      source_url content_type date pinned nav_order nav_exclude tab tabs comments github_markdown related
     ].freeze
     ARRAY_PROPERTIES = %w[aliases tags author categories cssclasses].freeze
     LINK_ARRAY_PROPERTIES = %w[author categories].freeze
@@ -109,6 +110,17 @@ module JekyllObsidian
         end
 
         case key
+        when "source_url"
+          begin
+            uri = URI.parse(value) if value.is_a?(String) && self.class.valid_output_text?(value) && !value.match?(/[[:space:][:cntrl:]]/)
+            if uri && %w[http https].include?(uri.scheme) && uri.host && !uri.userinfo
+              properties[key] = value
+            else
+              error("invalid_property", "source_url must be an absolute HTTP(S) URL without credentials")
+            end
+          rescue URI::InvalidURIError
+            error("invalid_property", "source_url must be an absolute HTTP(S) URL without credentials")
+          end
         when "publish", "comments", "pinned"
           if value == true || value == false
             properties[key] = value

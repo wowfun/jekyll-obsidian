@@ -1,0 +1,7 @@
+<nav class="archive-pagination" aria-label="{{ ui.page_label | default: 'Page' | escape }}" data-archive-pagination data-page-label="{{ ui.page_label | default: 'Page {page} of {pages}' | escape }}" data-result-label="{{ ui.archive_results | default: '{count} entries' | escape }}">
+  <button type="button" data-archive-page="prev" disabled>{{ ui.previous | default: 'Previous' | escape }}</button>
+  <span data-archive-page-status></span>
+  <button type="button" data-archive-page="next"{% if page.website.theme_data.archive.total <= page.website.theme_data.archive.page_size %} disabled{% endif %}>{{ ui.next | default: 'Next' | escape }}</button>
+</nav>
+<p role="status" aria-live="polite" data-archive-status data-loading="{{ ui.archive_loading | default: 'Loading selected entries…' | escape }}" data-unavailable="{{ ui.archive_unavailable | default: 'Selected entries could not be loaded. Retry or clear the filters.' | escape }}"></p>
+<button type="button" data-archive-retry hidden>{{ ui.retry | default: 'Retry' | escape }}</button>

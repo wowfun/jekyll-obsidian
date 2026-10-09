@@ -361,3 +361,16 @@ Wiki 链接条目必须使用 YAML 双引号字符串。可见标签优先使用
 Docs 导航沿用内容目录结构。`nav_order` 对同级文档排序，`nav_exclude: true` 只移除当前笔记链接，子页面仍然可以访问。所有层级都可以没有 `index.md`。物理 `index.md` 不存在时，同级且文件名精确为 `README.md` 的公开笔记会成为文件夹索引。已有的 `index.md` 即使未发布也会保留该位置，此时 `README.md` 仍是普通笔记。公开的根索引始终拥有 `/`，因此该笔记使用其他 `permalink` 会被拒绝。没有公开索引的文件夹会打开依次按 `nav_order`、标题和路径排序的第一个可见子页面。存在文章时，Minimal Home 可以不需要根索引；两者都不存在时，根路径会重定向到第一个可见顶层导航目标。Docs 没有根索引时会重定向到第一项导航。每个 Docs 页面都由服务器渲染完整文档树；JavaScript 导航只替换页面内容与上下文，保留共享外壳。Search 在 Web Worker 中构建索引。局部图谱由编译器投影；浏览器只在打开对话框后读取完整图谱。
 
 修改编译器或适配器边界前，请阅读 [[docs/development/architecture|架构]]。
+
+
+使用 `website.home.layout: archive` 将倒序归档设为首页。
+`website.blog.page_size` 开启分页（1–100，默认完整归档）。
+`website.blog.facets` 将查询参数映射到标签前缀，例如
+`{source: "source/", topic: "topics/"}`。组内为 OR，组间及时间范围为 AND。
+`website.blog.utc_offset: "+08:00"` 设置归档日期显示偏移。
+首屏由 HTML 输出，其他页按需加载带版本指纹的卡片分块和筛选位图。
+加载失败保留上次成功页面并提供重试；未知标签匹配空结果。
+语言清单可用 `tag_labels` 提供完整稳定标签的显示名称，
+用扁平化 `tag_aliases` 保留旧标签查询。语言切换保留筛选状态。
+
+`source_url`: an absolute HTTP(S) URL without credentials; shown as a clickable original source link.

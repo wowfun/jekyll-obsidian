@@ -98,6 +98,7 @@ module JekyllObsidian
           "directory_index" => note.directory_index,
           "has_h1" => note.has_h1,
           "source_links" => note.source_links,
+          "source_url" => properties["source_url"],
           "home_route" => home_route,
           "home_url" => home_url,
           "routes" => { "home" => home_route },
@@ -450,7 +451,9 @@ module JekyllObsidian
           "subtitle" => note.properties["subtitle"],
           "image" => note.image_url,
           "authors" => note.topics.select { |topic| topic.fetch("kind") == "author" },
-          "tags" => Array(note.properties["tags"])
+          "tags" => Array(note.properties["tags"]),
+          "source_url" => note.properties["source_url"],
+          "date_basis" => note.properties["date_basis"]
         }
       end
 
@@ -514,6 +517,7 @@ module JekyllObsidian
         website["active_navigation_id"] = active_id
         routes = navigation.items.to_h { |item| [item.fetch("id"), item.fetch("url")] }
         routes["home"] ||= website.fetch("home_url")
+        routes["blog"] = config.url_builder.href("/") if config.home["layout"] == "archive"
         routes["portfolio"] = config.url_builder.href(navigation.portfolio.route) if navigation.portfolio
         routes["tags"] = config.url_builder.href("/tags/") if config.theme == "docs" && config.features.fetch("tags")
         routes["feed"] = config.url_builder.href("/feed.xml") if config.features.fetch("feed")
@@ -526,7 +530,8 @@ module JekyllObsidian
     class Minimal < Presenter
       def render(model:, config:)
         posts = ordered_posts(model)
-        displayed = displayed_posts(posts)
+        paged = config.home["layout"] == "archive" || config.blog["page_size"]
+        displayed = paged ? posts.reverse : displayed_posts(posts)
         taxonomy = taxonomy_for(posts, config)
         timeline = timeline_for(displayed, &:published_at)
         documentation = config.navigation
@@ -597,20 +602,26 @@ module JekyllObsidian
         end
         attach_custom_tab_theme_data(theme_data, model, config)
         authored_root_route = model.notes.any? { |note| note.route == "/" }
-        home = home_page(displayed, config, system_theme_data, taxonomy) if !root && !authored_root_route && displayed.any?
+        home = home_page(displayed, config, system_theme_data, taxonomy) if !root && !authored_root_route && displayed.any? && config.home["layout"] != "archive"
         groups = archive_groups(displayed, config, taxonomy)
-        blog = if displayed.any?
+        archive_data = paged && PagedArchive.build(displayed.map { |post| note_card(post, config, taxonomy) }, config)
+        if archive_data
+          groups = archive_data.fetch("archive_groups")
+          timeline = archive_data.fetch("timeline")
+        end
+        blog = if (displayed.any? || config.home["layout"] == "archive") && !(root && config.home["layout"] == "archive")
           system_page(
             config,
-            "/blog/",
-            navigation_label(config, "blog", "Blog"),
+            config.home["layout"] == "archive" ? "/" : "/blog/",
+            config.home["layout"] == "archive" ? config.site.title : navigation_label(config, "blog", "Blog"),
             "blog-index",
             system_theme_data,
             {
               "archive_groups" => groups,
               "topic_summaries" => taxonomy.fetch("summaries"),
               "topic_filter_count" => displayed.length,
-              "timeline" => timeline
+              "timeline" => timeline,
+              "archive" => archive_data && archive_data.fetch("archive")
             },
             home_route: "/",
             home_url: config.url_builder.href("/")
@@ -649,9 +660,16 @@ module JekyllObsidian
           theme_pages: theme_pages,
           system_theme_data: system_theme_data,
           taxonomy: taxonomy,
-          feed_notes: posts
+          feed_notes: posts,
+          shared_files: archive_data ? archive_data.fetch("files") : []
         ) do |note, output|
-          note.id == root&.id ? authored_home_page(output) : output
+          if note.id == root&.id && config.home["layout"] == "archive"
+            website = output.data.fetch("website").merge("kind" => "blog-index", "has_h1" => false,
+              "theme_data" => system_theme_data.merge(archive_data.reject { |key, _| key == "files" }))
+            PageOutput.new(route: output.route, content: "", data: output.data.merge("website" => website))
+          else
+            note.id == root&.id ? authored_home_page(output) : output
+          end
         end
       end
 

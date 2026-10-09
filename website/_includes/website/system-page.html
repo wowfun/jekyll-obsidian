@@ -21,8 +21,13 @@
 {% when 'portfolio-index' %}
   {% include website/portfolio-grid.html index=true %}
 {% when 'blog-index' %}
-  <h1 class="visually-hidden">{{ page.title | default: ui.blog | default: 'Blog' | escape }}</h1>
-  {% include website/tag-filter.html summaries=page.website.theme_data.topic_summaries total=page.website.theme_data.topic_filter_count %}
+  {% if page.website.theme_data.archive %}
+    <h1 class="archive-title">{{ page.title | escape }}</h1>
+    {% include website/archive-facets.html %}
+  {% else %}
+    <h1 class="visually-hidden">{{ page.title | default: ui.blog | default: 'Blog' | escape }}</h1>
+    {% include website/tag-filter.html summaries=page.website.theme_data.topic_summaries total=page.website.theme_data.topic_filter_count %}
+  {% endif %}
 {% when 'tags' %}
   <h1>{{ ui.tags | default: 'Tags' | escape }}</h1>
   {% for group in page.website.theme_data.tag_groups %}<section id="{{ group.anchor | escape }}"><h2>{{ group.name | escape }}</h2><ul>{% for note in group.notes %}<li><a href="{{ note.url | escape }}">{{ note.title | escape }}</a></li>{% endfor %}</ul></section>{% endfor %}

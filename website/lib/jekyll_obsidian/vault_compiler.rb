@@ -219,7 +219,8 @@ module JekyllObsidian
         content: @content,
         url_builder: @url_builder,
         theme: @theme,
-        member_ids_by_tab_id: @request.tab_memberships
+        member_ids_by_tab_id: @request.tab_memberships,
+        home_archive: @home_config["layout"] == "archive"
       )
       @diagnostics.concat(navigation.diagnostics)
       theme_config = EffectiveThemeConfig.new(
@@ -231,6 +232,7 @@ module JekyllObsidian
         contacts: @contacts,
         navigation: navigation,
         home: @home_config,
+        blog: @blog_config,
         site: @config,
         url_builder: @url_builder
       )
@@ -297,7 +299,14 @@ module JekyllObsidian
         "mode" => "full", "max_entries" => nil, "excerpt_length" => 240, "content_types" => []
       })
       @feed_config = output_options("feed", @config.feed, { "max_entries" => nil })
-      @home_config = output_options("home", @config.home, { "recent_posts_limit" => 6 })
+      @home_config = output_options("home", @config.home, { "recent_posts_limit" => 6, "layout" => "recent" })
+      @blog_config = output_options("blog", @config.blog, { "page_size" => nil, "utc_offset" => nil, "facets" => { "source" => "source/", "topic" => "topics/" } })
+      validate_output_option(@home_config, "home", "layout", "recent") { |value| %w[recent archive].include?(value) }
+      validate_output_option(@blog_config, "blog", "page_size", nil) { |value| value.nil? || (value.is_a?(Integer) && value.between?(1, 100)) }
+      validate_output_option(@blog_config, "blog", "utc_offset", nil) { |value| value.nil? || value.is_a?(String) && value.match?(/\A[+-](?:0\d|1[0-4]):[0-5]\d\z/) }
+      validate_output_option(@blog_config, "blog", "facets", { "source" => "source/", "topic" => "topics/" }) do |value|
+        value.is_a?(Hash) && !value.empty? && value.all? { |key, prefix| key.is_a?(String) && key.match?(/\A[a-z][a-z0-9_-]*\z/) && prefix.is_a?(String) && prefix.match?(/\A[a-z][a-z0-9_-]*\/\z/) } && value.values.uniq.length == value.length
+      end
       validate_output_option(@search_config, "search", "mode", "full") { |value| %w[full summary].include?(value) }
       validate_output_option(@search_config, "search", "content_types", []) do |value|
         value.is_a?(Array) && value.all? { |item| %w[page post doc].include?(item) }

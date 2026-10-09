@@ -33,7 +33,8 @@ class DocumentationCoverageTest < Minitest::Test
     "analytics" => ["Analytics.md", "Configuration and security", "`website.analytics`"],
     "search" => ["Customization.md", "Output limits", "`website.search.mode`"],
     "feed" => ["Customization.md", "Output limits", "`website.feed.max_entries`"],
-    "home" => ["Customization.md", "Output limits", "`website.home.recent_posts_limit`"]
+    "home" => ["Customization.md", "Output limits", "`website.home.recent_posts_limit`"],
+    "blog" => ["Customization.md", "Output limits", "`website.blog.page_size`"]
   }.freeze
 
   def test_every_user_guide_has_a_simplified_chinese_source

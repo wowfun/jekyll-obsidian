@@ -36,6 +36,11 @@ module JekyllObsidian
       "filter_by_topic" => "Filter by topic",
       "chronology" => "Chronology",
       "no_matching_entries" => "No entries match these filters.",
+      "sources" => "Sources", "clear_filters" => "Clear filters", "retry" => "Retry",
+      "archive_loading" => "Loading selected entries…",
+      "archive_unavailable" => "Selected entries could not be loaded. Retry or clear the filters.",
+      "archive_results" => "{count} entries", "page_label" => "Page {page} of {pages}",
+      "first_observed" => "First observed", "original" => "Original",
       "contact" => "Contact",
       "graph" => "Graph",
       "feed" => "Feed",
@@ -205,7 +210,7 @@ module JekyllObsidian
       results = {}
       tab_memberships = nil
       ([@default_locale] + @locales.reject { |locale| locale == @default_locale }).each do |locale|
-        config = BuildConfig.new(**@config.to_h.merge(i18n: nil))
+        config = BuildConfig.new(**@config.to_h.merge(i18n: nil, tag_labels: @locale_data.fetch(locale).fetch("tag_labels"), tag_aliases: @locale_data.fetch(locale).fetch("tag_aliases")))
         result = VaultCompiler.compile_single(
           BuildRequest.new(
             snapshot: snapshots.fetch(locale),
@@ -313,7 +318,7 @@ module JekyllObsidian
           error("invalid_locale_manifest", "locale manifest must be a YAML mapping with string keys", path)
           next
         end
-        unknown = raw.keys - %w[name hreflang dir messages]
+        unknown = raw.keys - %w[name hreflang dir messages tag_labels tag_aliases]
         unknown.each { |key| error("invalid_locale_manifest", "unknown locale setting #{key.inspect}", path) }
         name = raw["name"]
         unless valid_text?(name) && !name.empty?
@@ -333,13 +338,32 @@ module JekyllObsidian
           error("invalid_locale_message", "unknown message key #{key.inspect}", path) unless MESSAGE_DEFAULTS.key?(key)
           error("invalid_locale_message", "message #{key.inspect} must be a string", path) unless valid_text?(value)
         end
+        maps = %w[tag_labels tag_aliases].to_h do |key|
+          value = raw.fetch(key, {})
+          unless value.is_a?(Hash) && value.all? { |tag, label| valid_text?(tag) && !tag.empty? && valid_text?(label) && !label.empty? }
+            error("invalid_locale_manifest", "#{key} must map non-empty tags to non-empty strings", path)
+            value = {}
+          end
+          [key, value]
+        end
+        maps.fetch("tag_aliases").each do |tag, replacement|
+          if tag == replacement || maps.fetch("tag_aliases").key?(replacement) || tag.split("/").first != replacement.split("/").first
+            error("invalid_locale_manifest", "tag_aliases must be flattened replacements within one namespace", path)
+          end
+        end
         @locale_data[locale] = {
           "code" => locale,
           "name" => name,
           "hreflang" => hreflang,
           "dir" => direction,
+          "tag_labels" => maps.fetch("tag_labels"),
+          "tag_aliases" => maps.fetch("tag_aliases"),
           "messages" => MESSAGE_DEFAULTS.merge(messages.select { |key, value| MESSAGE_DEFAULTS.key?(key) && valid_text?(value) })
         }
+      end
+      aliases = @locale_data.fetch(@default_locale, {}).fetch("tag_aliases", {})
+      @locale_data.each do |locale, data|
+        error("invalid_locale_manifest", "tag_aliases must share stable replacements across locales", locale) unless data.fetch("tag_aliases") == aliases
       end
     end
 
@@ -612,6 +636,11 @@ module JekyllObsidian
       website["alternates"] = alternates
       website["robots"] = "noindex" unless actual
       website["resources"] = resource_urls(locale)
+      archive = website.dig("theme_data", "archive")
+      if archive
+        archive_route = archive.fetch("url").delete_prefix(@config.baseurl.to_s)
+        archive["url"] = @url_builder.href(generated_route(archive_route, locale))
+      end
       website["home_route"] = prefixed_route(website.fetch("home_route", "/"), locale)
       localize_navigation_labels!(website, locale_data.fetch("messages"))
       preserve_default_navigation_order!(website, default_navigation_order)

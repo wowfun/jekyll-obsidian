@@ -318,6 +318,18 @@ website:
 
 `website.feed.max_entries` optionally limits the existing feed order to a positive number of entries. `website.home.recent_posts_limit` is a nonnegative integer; zero hides the automatic recent-post rows while retaining authored Home content. These limits do not remove pages, archives, Markdown downloads, or sitemap entries.
 
+
+Use `website.home.layout: archive` to show the chronological archive at `/`.
+`website.blog.page_size` enables a paged archive (1–100; default full archive).
+`website.blog.facets` maps query parameters to tag prefixes, for example
+`{source: "source/", topic: "topics/"}`. Each group uses OR; groups and chronology use AND.
+`website.blog.utc_offset: "+08:00"` controls displayed archive dates.
+The first page is rendered in HTML. Remaining pages use generation-scoped card chunks
+and lazy bitmaps. Counts are global, selections survive language switching,
+and unknown IDs match zero entries. Loading failures retain the last successful page.
+Locale manifests may provide `tag_labels` and flattened `tag_aliases` keyed by complete
+stable tags. Labels can differ across languages; IDs remain shared.
+
 ## Page properties
 
 The compiler reserves these note properties for publication behavior and validates each one with a closed schema:
@@ -369,3 +381,5 @@ An explicit `content_type: post | doc | page` wins over directory defaults. Post
 Docs navigation follows vault directories. `nav_order` sorts sibling documents and `nav_exclude: true` removes only that note link; children remain reachable. `index.md` is optional at every level. When no physical `index.md` exists, a published exact `README.md` becomes the folder index. An existing `index.md` reserves that role even when unpublished, leaving `README.md` as an ordinary note. A published root index always owns `/`, so a different `permalink` on that note is rejected. A folder without a public selected index links to its first visible child after `nav_order`, title, and path sorting. Minimal Home can render without a root index when posts exist; if neither exists, the root redirects to the first visible top-level navigation destination. Docs redirects an indexless root to its first navigation item. Every Docs page server-renders the complete documentation tree; JavaScript navigation preserves the shared shell while replacing only page-specific content and context. Search builds its index in a Web Worker. Local graphs are projected by the compiler; the browser fetches the complete graph only after its dialog opens.
 
 See [[docs/development/architecture|Architecture]] before changing compiler or adapter seams.
+
+`source_url`: an absolute HTTP(S) URL without credentials; shown as a clickable original source link.

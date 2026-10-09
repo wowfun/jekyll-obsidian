@@ -82,6 +82,9 @@ module JekyllObsidian
     :search,
     :feed,
     :home,
+    :blog,
+    :tag_labels,
+    :tag_aliases,
     :html
   )
 
@@ -160,6 +163,7 @@ module JekyllObsidian
     :contacts,
     :navigation,
     :home,
+    :blog,
     :site,
     :url_builder
   )

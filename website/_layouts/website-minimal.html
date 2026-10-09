@@ -23,7 +23,7 @@
     <a class="skip-link" href="#main-content">{{ ui.skip_to_content | default: 'Skip to content' | escape }}</a>
     {% include website/header.html theme='minimal' %}
 
-    <main class="minimal-shell{% unless page.website.kind == 'note' %} minimal-shell--system{% endunless %}{% if is_authored_home %} minimal-shell--authored-home{% endif %}{% if is_docs_page %} minimal-shell--docs{% endif %}{% if page.website.kind == 'blog-index' %} minimal-shell--blog{% endif %}" id="main-content"{% if page.website.kind == 'blog-index' %} data-filter-page{% endif %}>
+    <main class="minimal-shell{% unless page.website.kind == 'note' %} minimal-shell--system{% endunless %}{% if is_authored_home %} minimal-shell--authored-home{% endif %}{% if is_docs_page %} minimal-shell--docs{% endif %}{% if page.website.kind == 'blog-index' %} minimal-shell--blog{% endif %}" id="main-content"{% if page.website.kind == 'blog-index' %} data-filter-page{% if page.website.theme_data.archive %} data-paged-archive data-archive-url="{{ page.website.theme_data.archive.url | escape }}" data-observed-label="{{ ui.first_observed | default: 'First observed' | escape }}"{% endif %}{% endif %}>
       {% if is_docs_page %}
         <aside class="minimal-docs-sidebar">
           <nav class="docs-tree" aria-label="{{ ui.documentation | default: 'Documentation' | escape }}" data-docs-navigation>
@@ -66,6 +66,7 @@
           </div>
         {% endif %}
 
+        {% if page.website.theme_data.archive %}{% include website/archive-pagination.html %}{% endif %}
         {% if is_docs_page %}{% include website/docs-navigation.html %}{% else %}{% include website/blog-navigation.html %}{% endif %}
       </div>
 

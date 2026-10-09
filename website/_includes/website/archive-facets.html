@@ -1,0 +1,9 @@
+{% assign archive = page.website.theme_data.archive %}
+{% for group in archive.facets %}
+  <nav class="tag-filter archive-facet" aria-label="{% if group[0] == 'source' %}{{ ui.sources | default: 'Sources' | escape }}{% else %}{{ ui.topics | default: 'Topics' | escape }}{% endif %}">
+    <h2 class="archive-facet-label">{% if group[0] == 'source' %}{{ ui.sources | default: 'Sources' | escape }}{% else %}{{ ui.topics | default: 'Topics' | escape }}{% endif %}</h2>
+    <ul class="tag-filter__list"><li><button class="tag-chip" type="button" data-archive-facet="{{ group[0] | escape }}" data-archive-value="" aria-pressed="true">{{ ui.all | default: 'All' | escape }} <span>{{ archive.total }}</span></button></li>
+    {% for option in group[1] %}<li><button class="tag-chip" type="button" data-archive-facet="{{ group[0] | escape }}" data-archive-value="{{ option.id | escape }}" aria-pressed="false">{{ option.name | escape }} <span>{{ option.count }}</span></button></li>{% endfor %}</ul>
+  </nav>
+{% endfor %}
+<p class="filter-empty" data-archive-empty hidden>{{ ui.no_matching_entries | default: 'No entries match these filters.' | escape }} <button type="button" data-archive-clear>{{ ui.clear_filters | default: 'Clear filters' | escape }}</button></p>
