@@ -35,7 +35,7 @@
       <div class="minimal-reading-column" data-docs-main>
         <article class="minimal-entry{% if page.website.cssclasses %} {{ page.website.cssclasses | join: ' ' }}{% endif %}">
           {% if page.website.i18n.fallback %}<aside class="translation-fallback" role="status">{{ ui.translation_missing | default: 'This page is not translated yet. The default-language version is shown.' | escape }}</aside>{% endif %}
-          {% unless page.website.has_h1 %}{% include website/page-actions.html %}{% endunless %}
+          {% unless page.website.theme_data.archive %}{% unless page.website.has_h1 %}{% include website/page-actions.html %}{% endunless %}{% endunless %}
           {% include website/note-header.html %}
           {% if page.website.has_h1 %}{% include website/page-actions.html %}{% endif %}
           <div class="note-content" lang="{{ page.website.i18n.content_lang | default: page.website.i18n.locale | default: site.lang | default: 'en' | escape }}" dir="{{ page.website.i18n.content_dir | default: page.website.i18n.dir | default: 'ltr' | escape }}" data-copy-code-label="{{ ui.copy_code | default: 'Copy code' | escape }}" data-copy-diagram-label="{{ ui.copy_diagram_source | default: 'Copy diagram source' | escape }}" data-expand-diagram-label="{{ ui.expand_diagram | default: 'Expand diagram' | escape }}" data-close-diagram-label="{{ ui.close_diagram | default: 'Close diagram' | escape }}" data-image-label="{{ ui.image | default: 'Image' | escape }}" data-expand-image-label="{{ ui.expand_image | default: 'Expand image' | escape }}" data-close-image-label="{{ ui.close_image | default: 'Close image' | escape }}" data-copy-formula-label="{{ ui.copy_formula_source | default: 'Copy formula source' | escape }}" data-copy-code-success="{{ ui.copied | default: 'Copied' | escape }}" data-copy-code-error="{{ ui.copy_code_failed | default: 'Copy failed' | escape }}">
@@ -66,7 +66,7 @@
           </div>
         {% endif %}
 
-        {% if page.website.theme_data.archive %}{% include website/archive-pagination.html %}{% endif %}
+        {% if page.website.theme_data.archive %}<div class="archive-page-controls">{% include website/archive-pagination.html %}</div>{% endif %}
         {% if is_docs_page %}{% include website/docs-navigation.html %}{% else %}{% include website/blog-navigation.html %}{% endif %}
       </div>
 

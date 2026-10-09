@@ -970,6 +970,7 @@ module JekyllObsidian
 
     def localize_page_copy!(data, kind, messages)
       if kind == "blog-index"
+        return if data.dig("website", "theme_data", "archive") && data.dig("website", "home_route") == data.dig("website", "route")
         data["title"] = localized_builtin_label(data.fetch("website"), "blog", messages)
         return
       end
