@@ -852,6 +852,11 @@
 }
 
 @media (max-width: 620px) {
+  .minimal-shell--archive-item .note-title {
+    font-size: clamp(2rem, 8vw, 2.5rem);
+    line-height: 1.12;
+  }
+
   .minimal-shell {
     padding-inline: max(1.25rem, 5vw);
   }
