@@ -18,6 +18,21 @@ class SiteAuditTest < Minitest::Test
     end
   end
 
+  def test_accepts_only_generation_scoped_archive_artifact_names
+    Dir.mktmpdir("garden-archive-audit") do |site|
+      File.write(File.join(site, "index.html"), "<!doctype html><title>Garden</title>")
+      directory = File.join(site, "assets", "website", "i18n", "zh-CN", "archive", "a" * 64)
+      FileUtils.mkdir_p(directory)
+      %w[manifest.json cards-0.json].each { |name| File.write(File.join(directory, name), "{}") }
+      _stdout, stderr, status = audit(site)
+      assert status.success?, stderr
+      File.write(File.join(directory, "credentials.json"), "{}")
+      _stdout, stderr, status = audit(site)
+      refute status.success?
+      assert_includes stderr, "extension allowlist"
+    end
+  end
+
   def test_rejects_control_characters_in_output_names
     Dir.mktmpdir("garden-site-audit") do |site|
       File.write(File.join(site, "index.html"), "<!doctype html><title>Garden</title>")
