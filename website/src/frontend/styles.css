@@ -334,6 +334,19 @@
     letter-spacing: 0.02em;
   }
 
+  .site-action--github {
+    justify-content: center;
+    inline-size: 2.3rem;
+    padding-inline: 0;
+    color: var(--graphite);
+  }
+
+  .site-action--github svg {
+    inline-size: 1.15rem;
+    block-size: 1.15rem;
+    fill: currentColor;
+  }
+
   .language-switcher {
     position: relative;
   }

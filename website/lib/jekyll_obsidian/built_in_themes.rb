@@ -510,6 +510,8 @@ module JekyllObsidian
       def attach_navigation(page, config)
         navigation = config.navigation
         website = page.data.fetch("website").dup
+        repository = config.site.repository.to_s
+        website["repository_url"] = "https://github.com/#{repository}" if repository.match?(/\A[\w.-]+\/[\w.-]+\z/)
         active_id = if website["kind"] == "note"
           navigation.active_by_note_id[website["id"]]
         else
