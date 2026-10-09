@@ -536,7 +536,7 @@ module JekyllObsidian
       def render(model:, config:)
         posts = ordered_posts(model)
         paged = config.home["layout"] == "archive" || config.blog["page_size"]
-        displayed = paged ? posts.reverse : displayed_posts(posts)
+        displayed = paged ? posts.select(&:published_at).reverse + posts.reject(&:published_at) : displayed_posts(posts)
         taxonomy = taxonomy_for(posts, config)
         timeline = timeline_for(displayed, &:published_at)
         documentation = config.navigation

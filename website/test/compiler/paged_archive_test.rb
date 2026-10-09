@@ -25,6 +25,17 @@ class PagedArchiveTest < Minitest::Test
     assert_equal "/garden/", page(result, "/items/100/").data.dig("website", "routes", "blog")
     assert_equal "2026-10-13T12:00:00+08:00", page(result, "/items/100/").data.dig("website", "published_at")
   end
+  def test_undated_posts_follow_dated_posts_in_paged_archives
+    result = compile(
+      note("index.md", "---\npublish: true\n---\n# Home"),
+      note("items/undated.md", "---\npublish: true\ncontent_type: post\n---\n# Undated"),
+      note("items/dated.md", "---\npublish: true\ncontent_type: post\ndate: 2026-10-09\n---\n# Dated"),
+      environment: "development", home: { "layout" => "archive" }
+    )
+    assert result.success?, result.diagnostics.map(&:message).join("\n")
+    assert_equal %w[2026 Undated], page(result, "/").data.dig("website", "theme_data", "archive_groups").map { |group| group.fetch("label") }
+  end
+
   def test_source_url_rejects_unsafe_schemes_and_credentials
     %w[javascript:alert(1) https://user:pass@example.test/].each do |url|
       result = compile(note("index.md", "---\npublish: true\nsource_url: #{url}\n---\n# Hello"))
