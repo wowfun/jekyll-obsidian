@@ -1,4 +1,3 @@
-{% if page.website.source_url %}<p class="archive-source-url"><a href="{{ page.website.source_url | escape }}" rel="noopener noreferrer">{{ page.website.source_url | escape }}</a></p>{% endif %}
 {% if page.website.source_links and page.website.source_links.size > 0 %}
   {% assign ui = page.website.i18n.messages %}
   {% assign source_actions_label = ui.contribute | default: 'Contribute to this page' %}

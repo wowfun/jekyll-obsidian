@@ -651,6 +651,36 @@ class JekyllAdapterTest < Minitest::Test
     end
   end
 
+  def test_archive_post_places_facets_and_source_above_body_without_tag_index
+    FileUtils.mkdir_p(File.join(@temporary_root, "vault", "items"))
+    File.write(File.join(@temporary_root, "vault", "items", "story.md"), <<~MARKDOWN)
+      ---
+      publish: true
+      content_type: post
+      title: Story
+      date: 2026-10-09
+      tags: [source/openai, topics/agents]
+      source_url: https://example.test/original
+      ---
+      Body marker.
+    MARKDOWN
+    install_project_layout
+    build_site("website" => website_config.merge(
+      "home" => { "layout" => "archive" }, "features" => { "tags" => false }
+    )).process
+    document = Nokogiri::HTML(File.read(File.join(destination, "items", "story", "index.html")))
+    tags = document.at_css("[data-note-tags]")
+    source = document.at_css(".note-source-url")
+    body = document.at_css(".note-content")
+    refute_nil tags
+    assert_equal ["/?source=openai", "/?topic=agents"], tags.css("a").map { |link| link["href"] }
+    assert_equal "https://example.test/original", source.at_css("a")["href"]
+    assert_equal 1, document.css(".note-source-url").length
+    order = document.css(".minimal-entry *")
+    assert_operator order.index(tags), :<, order.index(source)
+    assert_operator order.index(source), :<, order.index(body)
+  end
+
   def test_post_byline_uses_resolved_authors_and_preserves_each_title_owner
     FileUtils.mkdir_p(File.join(@temporary_root, "vault", "blog"))
     FileUtils.mkdir_p(File.join(@temporary_root, "vault", "people"))

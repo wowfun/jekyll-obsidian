@@ -25,6 +25,24 @@ class PagedArchiveTest < Minitest::Test
     assert_equal "/garden/", page(result, "/items/100/").data.dig("website", "routes", "blog")
     assert_equal "2026-10-13T12:00:00+08:00", page(result, "/items/100/").data.dig("website", "published_at")
   end
+  def test_archive_note_facets_are_available_with_tag_index_disabled
+    result = compile(
+      note("index.md", "---\npublish: true\n---\n# Home"),
+      note("items/a.md", "---\npublish: true\ncontent_type: post\ndate: 2026-10-09\ntags: [source/hn, topics/old, topics/agents]\n---\nBody"),
+      baseurl: "/garden", home: { "layout" => "archive" }, features: { "tags" => false },
+      tag_labels: { "source/hn" => "Hacker News", "topics/agents" => "Agents" },
+      tag_aliases: { "topics/old" => "topics/agents" }
+    )
+    assert result.success?, result.diagnostics.map(&:message).join("\n")
+    data = page(result, "/items/a/").data.fetch("website")
+    assert_equal false, data.fetch("features").fetch("tags")
+    assert_equal [
+      { "facet" => "source", "id" => "hn", "name" => "Hacker News" },
+      { "facet" => "topic", "id" => "agents", "name" => "Agents" }
+    ], data.fetch("archive_facets")
+    assert_equal "/garden/", data.fetch("routes").fetch("blog")
+  end
+
   def test_undated_posts_follow_dated_posts_in_paged_archives
     result = compile(
       note("index.md", "---\npublish: true\n---\n# Home"),

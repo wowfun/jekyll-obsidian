@@ -11,6 +11,22 @@ module JekyllObsidian
   module PagedArchive
     module_function
 
+    def facet_values(tags, config)
+      aliases = config.site.tag_aliases || {}
+      resolved = Array(tags).map { |tag| aliases.fetch(tag, tag) }.uniq
+      config.blog.fetch("facets").to_h do |name, prefix|
+        [name, resolved.filter_map { |tag| tag.delete_prefix(prefix) if tag.start_with?(prefix) }]
+      end
+    end
+
+    def facet_links(tags, config)
+      labels = config.site.tag_labels || {}
+      facet_values(tags, config).flat_map do |name, ids|
+        prefix = config.blog.fetch("facets").fetch(name)
+        ids.map { |id| { "facet" => name, "id" => id, "name" => labels.fetch("#{prefix}#{id}", id) } }
+      end
+    end
+
     def build(cards, config)
       size = config.blog.fetch("page_size") || 50
       labels = config.site.tag_labels || {}
@@ -20,10 +36,7 @@ module JekyllObsidian
       records = cards.map do |card|
         stamp = card["published_at"]
         date = stamp && (offset ? DateTime.iso8601(stamp).new_offset(offset).iso8601 : stamp)
-        tags = Array(card["tags"]).map { |tag| aliases.fetch(tag, tag) }.uniq
-        values = facets.to_h do |name, prefix|
-          [name, tags.filter_map { |tag| tag.delete_prefix(prefix) if tag.start_with?(prefix) }]
-        end
+        values = facet_values(card["tags"], config)
         card.slice("id", "title", "url", "source_url", "date_basis").merge(
           "published_at" => date, "display_date" => date&.slice(0, 10),
           "year" => date&.slice(0, 4) || "Undated", "month" => date&.slice(0, 7),

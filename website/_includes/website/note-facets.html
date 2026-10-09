@@ -1,0 +1,6 @@
+{% if page.website.archive_facets.size > 0 %}
+  {% assign blog_url = page.website.routes.blog %}
+  <ul class="note-tags" data-note-tags>
+    {% for tag in page.website.archive_facets %}<li><a class="tag-chip" href="{{ blog_url | escape }}?{{ tag.facet | url_encode }}={{ tag.id | url_encode }}" data-note-facet="{{ tag.facet | escape }}" data-note-value="{{ tag.id | escape }}">{{ tag.name | escape }}</a></li>{% endfor %}
+  </ul>
+{% endif %}

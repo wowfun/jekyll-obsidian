@@ -49,6 +49,10 @@
     padding-block-start: 1rem;
   }
 
+  .minimal-shell--archive-item {
+    --reading-width: 960px;
+  }
+
   .minimal-shell:has(> .minimal-context) {
     grid-template-columns: minmax(0, 1fr) 220px;
   }
@@ -180,6 +184,14 @@
 
   .theme-minimal .note-title {
     max-inline-size: 20ch;
+  }
+
+  .minimal-shell--archive-item .note-title {
+    max-inline-size: none;
+  }
+
+  .minimal-shell--archive-item .note-header {
+    margin-block-end: 1.25rem;
   }
 
   .theme-minimal .note-content {
