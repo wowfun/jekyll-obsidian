@@ -23,6 +23,7 @@ class PagedArchiveTest < Minitest::Test
     posting = generated_json(result, prefix + archive.fetch("facets").fetch("source").first.fetch("posting"))
     assert_equal 13, Base64.strict_decode64(posting.fetch("bitmap")).bytesize
     assert_equal "/garden/", page(result, "/items/100/").data.dig("website", "routes", "blog")
+    assert_equal "2026-10-13T12:00:00+08:00", page(result, "/items/100/").data.dig("website", "published_at")
   end
   def test_source_url_rejects_unsafe_schemes_and_credentials
     %w[javascript:alert(1) https://user:pass@example.test/].each do |url|

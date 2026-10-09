@@ -77,11 +77,14 @@ module JekyllObsidian
       def note_page(note, config, theme_data, topic_anchors, topic_summaries, local_graph, home_route, home_url)
         properties = note.properties
         comments = page_comments(note, config)
+        display_time = lambda do |value|
+          value && config.blog["utc_offset"] ? DateTime.iso8601(value).new_offset(config.blog.fetch("utc_offset")).iso8601 : value
+        end
         website = {
           "kind" => "note",
           "id" => note.id,
           "content_type" => note.content_type,
-          "published_at" => note.published_at,
+          "published_at" => display_time.call(note.published_at),
           "route" => note.route,
           "href" => config.url_builder.href(note.route),
           "absolute_url" => config.url_builder.absolute_url(note.route),
@@ -94,11 +97,13 @@ module JekyllObsidian
           "topic_links" => blog_topic_links(note, topic_anchors),
           "cssclasses" => Array(properties["cssclasses"]),
           "created" => note.created,
-          "updated" => note.updated,
+          "updated" => display_time.call(note.updated),
           "directory_index" => note.directory_index,
           "has_h1" => note.has_h1,
           "source_links" => note.source_links,
           "source_url" => properties["source_url"],
+          "date_basis" => properties["date_basis"],
+          "archive_item" => note.content_type == "post" && config.home["layout"] == "archive",
           "home_route" => home_route,
           "home_url" => home_url,
           "routes" => { "home" => home_route },
