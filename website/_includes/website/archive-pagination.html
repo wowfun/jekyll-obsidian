@@ -1,4 +1,4 @@
-<nav class="archive-pagination" aria-label="{{ ui.page_label | default: 'Page' | escape }}" data-archive-pagination data-page-label="{{ ui.page_label | default: 'Page {page} of {pages}' | escape }}" data-result-label="{{ ui.archive_results | default: '{count} entries' | escape }}">
+<nav class="archive-pagination" aria-label="{{ ui.page_label | default: 'Page' | escape }}" data-archive-pagination data-page-label="{{ ui.page_label | escape }}" data-result-label="{{ ui.archive_results | escape }}">
   <button type="button" data-archive-page="prev" disabled>{{ ui.previous | default: 'Previous' | escape }}</button>
   <span data-archive-page-status></span>
   <button type="button" data-archive-page="next"{% if page.website.theme_data.archive.total <= page.website.theme_data.archive.page_size %} disabled{% endif %}>{{ ui.next | default: 'Next' | escape }}</button>

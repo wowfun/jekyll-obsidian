@@ -112,7 +112,7 @@ module JekyllObsidian
         case key
         when "source_url"
           begin
-            uri = URI.parse(value) if value.is_a?(String) && self.class.valid_output_text?(value) && !value.match?(/[[:space:][:cntrl:]]/)
+            uri = URI.parse(value) if value.is_a?(String) && self.class.valid_output_text?(value) && !value.match?(/\s|[\x00-\x1f]/)
             if uri && %w[http https].include?(uri.scheme) && uri.host && !uri.userinfo
               properties[key] = value
             else
