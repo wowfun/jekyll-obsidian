@@ -67,7 +67,7 @@ jobs:
       - uses: ruby/setup-ruby@14594264cd68ce8a2345dd349bc3d138a4ef85c8
         with:
           ruby-version: '4.0.6'
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
         with:
           name: release-gem
           path: pkg
