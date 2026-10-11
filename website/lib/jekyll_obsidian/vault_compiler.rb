@@ -311,7 +311,7 @@ module JekyllObsidian
       validate_output_option(@blog_config, "blog", "page_size", nil) { |value| value.nil? || (value.is_a?(Integer) && value.between?(1, 100)) }
       validate_output_option(@blog_config, "blog", "utc_offset", nil) { |value| value.nil? || value.is_a?(String) && value.match?(/\A[+-](?:0\d|1[0-4]):[0-5]\d\z/) }
       validate_output_option(@blog_config, "blog", "facets", { "source" => "source/", "topic" => "topics/" }) do |value|
-        value.is_a?(Hash) && !value.empty? && value.all? { |key, prefix| key.is_a?(String) && key.match?(/\A[a-z][a-z0-9_-]*\z/) && prefix.is_a?(String) && prefix.match?(/\A[a-z][a-z0-9_-]*\/\z/) } && value.values.uniq.length == value.length
+        value.is_a?(Hash) && !value.empty? && value.all? { |key, prefix| key.is_a?(String) && key.match?(/\A[a-z][a-z0-9_-]*\z/) && !%w[page year month].include?(key) && prefix.is_a?(String) && prefix.match?(/\A[a-z][a-z0-9_-]*\/\z/) } && value.values.uniq.length == value.length
       end
       validate_output_option(@search_config, "search", "mode", "full") { |value| %w[full summary].include?(value) }
       validate_output_option(@search_config, "search", "content_types", []) do |value|

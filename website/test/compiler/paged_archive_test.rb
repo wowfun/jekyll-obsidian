@@ -54,6 +54,17 @@ class PagedArchiveTest < Minitest::Test
     assert_equal %w[2026 Undated], page(result, "/").data.dig("website", "theme_data", "archive_groups").map { |group| group.fetch("label") }
   end
 
+  def test_archive_facet_names_cannot_collide_with_query_controls
+    %w[page year month].each do |name|
+      result = compile(
+        note("index.md", "---\npublish: true\n---\n# Home"),
+        home: { "layout" => "archive" }, blog: { "facets" => { name => "#{name}/" } }
+      )
+      refute result.success?, "#{name} must remain an archive query control"
+      assert result.diagnostics.any? { |diagnostic| diagnostic.code == "invalid_blog_config" }
+    end
+  end
+
   def test_source_url_rejects_unsafe_schemes_and_credentials
     %w[javascript:alert(1) https://user:pass@example.test/].each do |url|
       result = compile(note("index.md", "---\npublish: true\nsource_url: #{url}\n---\n# Hello"))

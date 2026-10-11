@@ -2383,12 +2383,20 @@ test("Mobile typography and wide content stay inside narrow viewports", async ({
           clientWidth: element.clientWidth,
           scrollWidth: element.scrollWidth,
           overflow: style.overflow,
-          whiteSpace: style.whiteSpace
+          whiteSpace: style.whiteSpace,
+          textOverflow: style.textOverflow,
+          height: element.getBoundingClientRect().height,
+          lineHeight: Number.parseFloat(style.lineHeight)
         };
       });
-      expect(dimensions.scrollWidth, `${route} title at ${width}px`).toBeLessThanOrEqual(dimensions.clientWidth);
-      expect(dimensions.overflow, `${route} title at ${width}px`).toBe("visible");
-      expect(dimensions.whiteSpace, `${route} title at ${width}px`).toBe("normal");
+      expect(dimensions.clientWidth, `${route} title at ${width}px`).toBeGreaterThan(0);
+      expect(dimensions.overflow, `${route} title at ${width}px`).toBe("hidden");
+      expect(dimensions.whiteSpace, `${route} title at ${width}px`).toBe("nowrap");
+      expect(dimensions.textOverflow, `${route} title at ${width}px`).toBe("ellipsis");
+      expect(dimensions.height, `${route} title at ${width}px`).toBeLessThanOrEqual(dimensions.lineHeight + 1);
+      const accessibleName = await page.locator(".site-mark").getAttribute("aria-label");
+      expect(accessibleName).toContain((await title.textContent())!.trim());
+      await expect(page.locator(".site-mark")).toHaveAccessibleName(accessibleName!);
       expect(await page.locator(".site-header").evaluate((element) => element.scrollWidth <= element.clientWidth),
         `${route} header at ${width}px`).toBe(true);
     }

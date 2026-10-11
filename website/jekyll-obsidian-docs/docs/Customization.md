@@ -323,6 +323,7 @@ Use `website.home.layout: archive` to show the chronological archive at `/`.
 `website.blog.page_size` enables a paged archive (1–100; default full archive).
 `website.blog.facets` maps query parameters to tag prefixes, for example
 `{source: "source/", topic: "topics/"}`. Each group uses OR; groups and chronology use AND.
+The query names `page`, `year`, and `month` are reserved for pagination and chronology.
 `website.blog.utc_offset: "+08:00"` controls displayed archive dates.
 The first page is rendered in HTML. Remaining pages use generation-scoped card chunks
 and lazy bitmaps. Counts are global, selections survive language switching,
