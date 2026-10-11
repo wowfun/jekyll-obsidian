@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 const assetsRoot = path.join(projectRoot, ".jekyll-obsidian-cache", "assets");
 const siteRoots = Object.fromEntries(
-  ["minimal", "docs", "docs-i18n", "minimal-i18n"].map((theme) => [
+  ["minimal", "docs", "docs-i18n", "minimal-i18n", "minimal-properties", "docs-properties"].map((theme) => [
     theme,
     path.join(projectRoot, "..", ".jekyll-obsidian-cache", `site-browser-${theme}`)
   ])
@@ -188,8 +188,8 @@ async function serveFile(response, root, relative) {
 
 const server = createServer(async (request, response) => {
   const pathname = new URL(request.url ?? "/", "http://127.0.0.1").pathname;
-  const siteMatch = pathname.match(/^\/__site__\/(minimal-i18n|minimal|docs-i18n|docs)(\/.*)?$/);
-  if (siteMatch) {
+  const siteMatch = pathname.match(/^\/__site__\/([^/]+)(\/.*)?$/);
+  if (siteMatch && Object.hasOwn(siteRoots, siteMatch[1])) {
     const root = siteRoots[siteMatch[1]];
     const sitePath = siteMatch[2] || "/";
     try {
