@@ -21,25 +21,13 @@ runs:
       uses: ruby/setup-ruby@14594264cd68ce8a2345dd349bc3d138a4ef85c8
       with:
         ruby-version: '4.0.6'
-    - name: Install the site builder
-      id: install
-      shell: bash
-      env:
-        ACTION_ROOT: ${{ github.action_path }}
-      run: |
-        version=$(ruby -r "$ACTION_ROOT/website/lib/jekyll_obsidian/version" -e 'print JekyllObsidian::VERSION')
-        gem install jekyll-obsidian-site --version "$version" --no-document
-        printf 'version=%s\n' "$version" >> "$GITHUB_OUTPUT"
-    - name: Build and verify
+    - name: Install, build, and verify
       id: build
       shell: bash
       working-directory: ${{ github.workspace }}
       env:
+        ACTION_ROOT: ${{ github.action_path }}
         SITE_ORIGIN: ${{ inputs.url }}
         SITE_BASEURL: ${{ inputs.baseurl }}
-        BUILDER_VERSION: ${{ steps.install.outputs.version }}
       run: |
-        args=(build --baseurl "$SITE_BASEURL")
-        if [[ -n "$SITE_ORIGIN" ]]; then args+=(--url "$SITE_ORIGIN"); fi
-        jekyll-obsidian "_${BUILDER_VERSION}_" "${args[@]}"
-        ruby -e 'File.open(ENV.fetch("GITHUB_OUTPUT"), "a") { |f| f.puts "site-path=#{File.join(Dir.pwd, ".jekyll-obsidian-cache", "site")}" }'
+        ruby "$ACTION_ROOT/scripts/build-action.rb"

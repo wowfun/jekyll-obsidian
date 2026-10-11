@@ -1,6 +1,6 @@
 {
   "name": "jekyll-obsidian",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "private": true,
   "type": "module",
   "description": "Frontend development and browser checks for jekyll-obsidian.",
@@ -28,12 +28,12 @@
   },
   "devDependencies": {
     "@axe-core/playwright": "4.13.0",
-    "@playwright/test": "1.62.1",
+    "@playwright/test": "1.63.0",
     "@types/d3": "7.4.3",
     "esbuild": "0.28.2",
-    "happy-dom": "20.11.2",
+    "happy-dom": "20.14.5",
     "typescript": "7.0.2",
-    "vitest": "4.1.11"
+    "vitest": "5.0.3"
   },
   "allowScripts": {
     "esbuild@0.28.2": true

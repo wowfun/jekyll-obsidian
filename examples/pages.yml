@@ -29,7 +29,7 @@ jobs:
         uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d
       - name: Build the site
         id: build
-        uses: wowfun/jekyll-obsidian@v0.2.0
+        uses: wowfun/jekyll-obsidian@v0.2.1
         with:
           url: ${{ steps.pages.outputs.origin || 'https://example.invalid' }}
           baseurl: ${{ github.event_name == 'pull_request' && '/preview' || steps.pages.outputs.base_path }}

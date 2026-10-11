@@ -6,7 +6,7 @@ description: 使用随附的 GitHub Pages 工作流检查并部署任意内置�
 
 # 部署
 
-[Pages 工作流示例](https://github.com/wowfun/jekyll-obsidian/blob/v0.2.0/examples/pages.yml)使用版本化的 Jekyll Obsidian Action。Action 安装 Ruby 和对应版本的 `jekyll-obsidian-site` gem，然后构建宿主内容。下游仓库无需安装 npm 依赖或运行本项目的回归测试。
+[Pages 工作流示例](https://github.com/wowfun/jekyll-obsidian/blob/v0.2.1/examples/pages.yml)使用版本化的 Jekyll Obsidian Action。Action 安装 Ruby，并使用对应版本的 `jekyll-obsidian-site` gem 构建宿主内容。宿主提交了 Gemfile 和锁文件时，Action 使用 frozen bundle；否则直接安装 gem。下游仓库无需安装 npm 依赖或运行本项目的回归测试。
 
 ## 拉取请求与推送
 
