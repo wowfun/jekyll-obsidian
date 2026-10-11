@@ -5,6 +5,17 @@ require "test_helper"
 class NavigationConfigurationTest < Minitest::Test
   I18N = { "locales" => %w[en zh-CN] }.freeze
 
+  def test_docs_archive_home_owns_post_navigation
+    result = compile(
+      note("index.md", "---\npublish: true\n---\n# Home"),
+      note("story.md", "---\npublish: true\ncontent_type: post\ndate: 2026-10-10\n---\n# Story"),
+      theme: "docs", home: { "layout" => "archive" }
+    )
+
+    assert result.success?, result.diagnostics.map(&:message).join("\n")
+    assert_equal "home", current_navigation_id(result, "/story/")
+  end
+
   def test_frontmatter_tab_is_an_explicit_strict_mapping
     parsed = JekyllObsidian::FrontMatter.parse("about/index.md", <<~MARKDOWN)
       ---

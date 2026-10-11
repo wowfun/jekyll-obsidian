@@ -137,6 +137,7 @@ module JekyllObsidian
       def docs_items(documentation, custom_tabs)
         items = []
         root = directory_index(".")
+        posts = @model.notes.select { |note| note.content_type == "post" }
         docs = @model.notes.select { |note| note.content_type == "doc" }
         add_builtin(
           items,
