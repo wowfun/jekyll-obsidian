@@ -337,10 +337,32 @@ The compiler reserves these note properties for publication behavior and validat
 - `publish`, `title`, `subtitle`, `aliases`, `tags`, `author`, `categories`, and `description`
 - `permalink`, `image`, and `cssclasses`
 - `created` and `updated`
-- `content_type`, `date`, `pinned`, `nav_order`, `nav_exclude`, `tab`, and `tabs`
-- `comments`, `github_markdown`, and `related`
+- `content_type`, `date`, `date_basis`, `pinned`, `nav_order`, `nav_exclude`, `tab`, and `tabs`
+- `comments`, `github_markdown`, `related`, and `source_url`
 
-Other top-level properties may contain scalar values or flat scalar lists. Custom property names must be normalized, single-line text without leading or trailing whitespace. A complete wiki link in one of those values becomes an ordinary note relation when it is a YAML double-quoted string. Custom properties remain compiler metadata: their keys and raw values never flow into Liquid, HTML, feeds, or generated JSON.
+Other top-level properties may contain scalar values or flat scalar lists. Custom property names must be normalized, single-line text without leading or trailing whitespace. Both themes display these fields by default in an expanded property block below tags and the original source link, above the body. Labels use the original field names and fields retain their authored order. Nested lists and mappings are not supported.
+
+Plain strings are escaped text with their line breaks preserved; Markdown, HTML, and Liquid inside them are not evaluated. A complete HTTP(S) URL without credentials becomes a clickable link. Numbers and booleans retain their values, including `0` and `false`. Native YAML dates and timestamps use ISO 8601 `<time>` values; a quoted date remains a string. Null, empty strings, and empty lists display as `null`, `""`, and `[]`. Flat lists retain order and duplicates, with each value rendered by its type.
+
+Authored property values display in full, like the note body. The search and feed output limits apply to generated indexes; they do not truncate page properties.
+
+A complete wiki link becomes an ordinary note relation when it is a YAML double-quoted string. In the property block it also links to the public target, using the authored alias or the target title. Unresolved links retain their authored alias or target as text, with the existing compiler diagnostics. Wiki targets follow the page locale; ordinary external URLs remain unchanged.
+
+Use `website.properties.hidden` to hide named custom fields from the display projection. It defaults to an empty list and does not change relation discovery. Reserved fields above already have separate rendering or publication behavior and are excluded from this block, as are `alias`, `layout`, and `render_with_liquid`. Custom fields are public by default; the compiler supplies typed display data rather than merging raw properties into Jekyll page controls.
+
+`date_basis` is optional authored metadata: `published` labels the post date as Published; `observed` labels it as First observed. Omission uses Published. It changes the date label only, without changing date selection or chronology. The compiler does not derive `date_basis`, including when a post's publication date comes from Git. Translations inherit the default note's value and cannot change it.
+
+Themes read the typed field array from `page.website.display_properties`. The separate `site.website.properties` mapping holds site-wide display configuration, including `hidden`.
+
+```yaml
+website:
+  properties:
+    hidden: [first_seen, internal_id]
+```
+
+Hidden names must be unique valid property names. The setting is site-wide; page-level display overrides are not supported. A page with no visible custom fields has no property block. `source_url` remains a separate clickable original source link beneath the tags.
+
+The ignored Jekyll controls `alias`, `layout`, and `render_with_liquid` do not create note relations, even when their values resemble wiki links.
 
 ```yaml
 project: "[[portfolio/fauni-search|Fauni Search]]"
@@ -352,7 +374,7 @@ related:
   - "[[docs/Getting Started|Start here]]"
 ```
 
-`related` is the curated list variant. It accepts only a list of double-quoted wiki links, preserves the authored order, removes repeated targets, and shows the resolved pages as Recent-post-style cards at the bottom of the page. Broken related links fail a production build. Other custom-property links still join Direct links, Backlinks, and Graph data but do not create a second visible field table.
+`related` is the curated list variant. It accepts only a list of double-quoted wiki links, preserves the authored order, removes repeated targets, and shows the resolved pages as Recent-post-style cards at the bottom of the page. Broken related links fail a production build. Other custom-property links join Direct links, Backlinks, and Graph data independently of their property-block visibility: hiding a field's display does not remove its note relations.
 
 `aliases`, `tags`, `author`, `categories`, `cssclasses`, and `tabs` are string arrays; `subtitle` is a string. `publish`, `pinned`, `nav_exclude`, and `comments` use YAML booleans. `tab` is the closed mapping documented above. `github_markdown` accepts only the URL or mapping documented in [[Portfolio|Portfolio]], and only on a Portfolio project wrapper. Dates use ISO 8601. A note title comes from `title`, its first level-one heading, or its filename, in that order.
 
@@ -373,6 +395,8 @@ categories:
 ```
 
 Wiki-link entries must be YAML double-quoted strings. Their visible label uses the alias after `|`, or the target note title when no alias is supplied. Every Home Topics capsule opens the matching Blog filter; a wiki-linked author shown in a post summary may additionally link directly to that public author page. On Minimal Blog, tags and categories appear together below each archive date and as filter capsules beside the publication date on the article page. Repeating the same name across `tags` and `categories` shows one topic. Unresolved wiki links produce a compiler warning and remain filterable text instead of leaking `[[...]]` into the site.
+
+Author and category wiki links now use the same UTF-8 percent-encoded fragments as body links, related cards, and custom-property links. For example, a heading fragment `#你好-世界` appears in a generated URL as `#%E4%BD%A0%E5%A5%BD-%E4%B8%96%E7%95%8C`. The heading ID and destination stay the same; existing links using the unencoded fragment still identify that heading.
 
 ## Content and navigation
 

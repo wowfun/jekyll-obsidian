@@ -102,6 +102,7 @@ module JekyllObsidian
           "has_h1" => note.has_h1,
           "source_links" => note.source_links,
           "source_url" => properties["source_url"],
+          "display_properties" => note.display_properties,
           "date_basis" => properties["date_basis"],
           "archive_item" => note.content_type == "post" && config.home["layout"] == "archive",
           "archive_facets" => note.content_type == "post" && config.home["layout"] == "archive" ? PagedArchive.facet_links(properties["tags"], config) : [],

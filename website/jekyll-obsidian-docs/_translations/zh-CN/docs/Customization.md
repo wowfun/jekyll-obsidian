@@ -317,10 +317,32 @@ website:
 - `publish`、`title`、`subtitle`、`aliases`、`tags`、`author`、`categories` 和 `description`
 - `permalink`、`image` 和 `cssclasses`
 - `created` 和 `updated`
-- `content_type`、`date`、`pinned`、`nav_order`、`nav_exclude`、`tab` 和 `tabs`
-- `comments`、`github_markdown` 和 `related`
+- `content_type`、`date`、`date_basis`、`pinned`、`nav_order`、`nav_exclude`、`tab` 和 `tabs`
+- `comments`、`github_markdown`、`related` 和 `source_url`
 
-其他顶层属性可以使用标量或一层标量列表。自定义属性名必须是经过规范化的单行文本，且不能带首尾空白。其中完整的 Wiki 链接只有写成 YAML 双引号字符串时，才会成为普通笔记关系。自定义属性只属于编译器元数据；属性名和原始值不会进入 Liquid、HTML、Feed 或生成的 JSON。
+其他顶层属性可以使用标量或一层标量列表。自定义属性名必须是经过规范化的单行文本，且不能带首尾空白。两个主题默认在标签和原文链接下方、正文上方显示展开的属性区。标签使用原始字段名，字段保留书写顺序。不支持嵌套列表或映射。
+
+普通字符串按纯文本转义，保留换行，不执行其中的 Markdown、HTML 或 Liquid。完整且不含凭据的 HTTP(S) URL 显示为可点击链接。数字和布尔值保留其值，包括 `0` 和 `false`。原生 YAML 日期和时间戳用 ISO 8601 `<time>` 显示；加引号的日期仍是字符串。空值、空字符串和空列表分别显示为 `null`、`""` 和 `[]`。一层列表保留顺序和重复项，每项按自身类型渲染。
+
+作者填写的属性值与正文一样完整显示。搜索和订阅源的输出限制作用于生成的索引，不会截断页面属性。
+
+完整 Wiki 链接只有写成 YAML 双引号字符串时，才会成为普通笔记关系。它也会在属性区链接到公开目标，文本使用作者提供的别名或目标标题。无法解析的链接按作者提供的别名或目标显示为纯文本，并保留现有编译诊断。Wiki 目标跟随页面语言，普通外部 URL 保持不变。
+
+通过 `website.properties.hidden` 可以从显示投影中隐藏指定的自定义字段。默认值为空列表，不影响笔记关系的发现。上述保留字段已有独立渲染或发布逻辑，不进入属性区；`alias`、`layout` 和 `render_with_liquid` 也会被排除。自定义字段默认公开；编译器提供独立的类型化显示数据，不把原始属性混入 Jekyll 页面控制字段。
+
+`date_basis` 是可选的作者元数据：`published` 将文章日期标为“发布”，`observed` 将其标为“首次发现”，省略时使用“发布”。它只改变日期标签，不改变日期选取和时间排序。编译器不会推导 `date_basis`，即使文章发布时间来自 Git。译文继承默认语言笔记的值，不能修改。
+
+主题通过 `page.website.display_properties` 读取类型化字段数组。独立的 `site.website.properties` 映射保存站点级显示配置，包括 `hidden`。
+
+```yaml
+website:
+  properties:
+    hidden: [first_seen, internal_id]
+```
+
+隐藏列表必须使用不重复的合法属性名。该设置对整个站点生效，不支持单页显示覆盖。没有可见自定义字段的页面不生成属性区。`source_url` 仍作为标签下方独立的可点击原文链接显示。
+
+被忽略的 Jekyll 控制字段 `alias`、`layout` 和 `render_with_liquid` 不生成笔记关系，即使其值看起来是 Wiki 链接。
 
 ```yaml
 project: "[[portfolio/fauni-search|Fauni Search]]"
@@ -332,7 +354,7 @@ related:
   - "[[docs/Getting Started|从这里开始]]"
 ```
 
-`related` 是用于精选列表的专用字段。它只接受双引号 Wiki 链接列表，保留书写顺序并去除重复目标，在页面底部以「最新文章」相同的卡片样式显示。生产构建会拒绝断开的相关文章链接。其他自定义属性链接仍会进入直接链接、反向链接和关系图，但不会额外生成一张可见属性表。
+`related` 是用于精选列表的专用字段。它只接受双引号 Wiki 链接列表，保留书写顺序并去除重复目标，在页面底部以「最新文章」相同的卡片样式显示。生产构建会拒绝断开的相关文章链接。其他自定义属性链接是否进入直接链接、反向链接和关系图，不受属性区显示设置影响：隐藏字段的显示不会移除它的笔记关系。
 
 `aliases`、`tags`、`author`、`categories`、`cssclasses` 和 `tabs` 是字符串数组，`subtitle` 是字符串。`publish`、`pinned`、`nav_exclude` 和 `comments` 使用 YAML 布尔值。`tab` 是前文说明的封闭映射。`github_markdown` 只接受 [[Portfolio|作品集]]中说明的 URL 或映射形式，并且只能用于作品集项目页。日期使用 ISO 8601。笔记标题依次取自 `title`、第一个一级标题和文件名。
 
@@ -353,6 +375,8 @@ categories:
 ```
 
 Wiki 链接条目必须使用 YAML 双引号字符串。可见标签优先使用 `|` 后的别名，没有别名时使用目标笔记标题。Home Topics 中的每个主题标签都会打开对应的 Blog 筛选；文章摘要中带 Wiki 链接的作者还可以直接打开公开作者页面。在 Minimal Blog 中，标签与分类会一起显示在归档列表的日期下方，并在文章页的发布日期右侧显示为筛选胶囊；`tags` 与 `categories` 中的同名项只显示一次。无法解析的 Wiki 链接会产生编译器警告，但仍保留为可筛选文本，不会把 `[[...]]` 泄漏到站点中。
+
+作者和分类 Wiki 链接现在与正文链接、相关文章卡片、自定义属性链接一样，对片段进行 UTF-8 百分号编码。例如，标题片段 `#你好-世界` 在生成的 URL 中显示为 `#%E4%BD%A0%E5%A5%BD-%E4%B8%96%E7%95%8C`。标题 ID 和目标保持不变；已有的未编码片段链接仍指向同一标题。
 
 ## 内容与导航
 

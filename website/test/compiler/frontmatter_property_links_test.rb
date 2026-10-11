@@ -3,7 +3,7 @@
 require "test_helper"
 
 class FrontmatterPropertyLinksTest < Minitest::Test
-  def test_custom_property_wiki_links_join_the_existing_relation_model_without_reaching_page_data
+  def test_custom_property_wiki_links_join_relations_and_an_isolated_display_projection
     result = compile(
       note("index.md", <<~MARKDOWN),
         ---
@@ -36,6 +36,8 @@ class FrontmatterPropertyLinksTest < Minitest::Test
     public_data = JSON.generate(home.data)
     refute_includes public_data, '"project":'
     refute_includes public_data, '"references":'
+    assert_equal %w[project references], home.data.dig("website", "display_properties").map { |field| field.fetch("name") }
+    assert_equal "Alpha project", home.data.dig("website", "display_properties")[0].fetch("values")[0].fetch("text")
     assert_equal ["index.md"], page(result, "/projects/alpha/").data.dig("website", "backlinks").map { |link| link.fetch("id") }
   end
 

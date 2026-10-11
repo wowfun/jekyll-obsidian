@@ -24,6 +24,7 @@ class DocumentationCoverageTest < Minitest::Test
     "repository" => ["Customization.md", "Site identity", "`website.repository`"],
     "edit_branch" => ["Customization.md", "Site identity", "`website.edit_branch`"],
     "content" => ["Customization.md", "Publication defaults", "`website.content.publish_by_default`"],
+    "properties" => ["Customization.md", "Page properties", "`website.properties.hidden`"],
     "features" => ["Customization.md", "Site themes", "`website.features`"],
     "html" => ["Customization.md", "Standalone HTML slides", "`website.html`"],
     "i18n" => ["Localization.md", "Enable localization", "`website.i18n`"],

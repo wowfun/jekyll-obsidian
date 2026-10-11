@@ -146,6 +146,7 @@ module JekyllObsidian
       :anchor_id,
       :unresolved,
       :property,
+      :property_index,
       :external_media,
       keyword_init: true
     )
@@ -295,6 +296,11 @@ module JekyllObsidian
     end
 
     def resolve_output_config
+      @properties_config = output_options("properties", @config.properties, { "hidden" => [] })
+      validate_output_option(@properties_config, "properties", "hidden", []) do |value|
+        value.is_a?(Array) && value.all? { |name| FrontMatter.valid_custom_property_name?(name) } && value.uniq.length == value.length
+      end
+      @hidden_property_names = Set.new(@properties_config.fetch("hidden")).freeze
       @search_config = output_options("search", @config.search, {
         "mode" => "full", "max_entries" => nil, "excerpt_length" => 240, "content_types" => []
       })
@@ -1160,7 +1166,8 @@ module JekyllObsidian
           kind: :link,
           syntax: :frontmatter_property,
           source_span: link.source_span,
-          property: link.property
+          property: link.property,
+          property_index: link.index
         )
       end
     end
@@ -1560,8 +1567,7 @@ module JekyllObsidian
 
       if occurrence.resolved_type == :note
         target = @notes.fetch(occurrence.target_id)
-        anchor = occurrence.anchor_id ? "^#{occurrence.anchor_id}" : occurrence.fragment
-        href = @url_builder.href(target.route) + @url_builder.fragment(anchor)
+        href = occurrence_href(target.route, occurrence)
         if occurrence.kind == :embed
           placeholder = Nokogiri::XML::Node.new("website-embed", node.document)
           placeholder["data-source-id"] = target.id
@@ -1840,6 +1846,7 @@ module JekyllObsidian
           route: note.route,
           content: content,
           properties: note.properties,
+          display_properties: published_properties(note),
           markdown_source: PublishedMarkdown.content(
             title: note.title,
             body: note.body,
@@ -1878,6 +1885,30 @@ module JekyllObsidian
       )
     end
 
+    def published_properties(note)
+      return [] unless note.properties.any? { |name, _| NoteProperties.visible?(name, hidden: @hidden_property_names) }
+
+      links = {}
+      note.occurrences.each do |occurrence|
+        next unless occurrence.syntax == :frontmatter_property
+        next unless NoteProperties.visible?(occurrence.property, hidden: @hidden_property_names)
+        next unless occurrence.resolved_type == :note && !occurrence.unresolved
+
+        target = @notes.fetch(occurrence.target_id)
+        links[[occurrence.property, occurrence.property_index]] = {
+          "kind" => "wiki_link",
+          "text" => occurrence.display || target.title,
+          "url" => occurrence_href(target.route, occurrence)
+        }
+      end
+      NoteProperties.project(note.properties, hidden: @hidden_property_names, links: links)
+    end
+
+    def occurrence_href(target_route, occurrence)
+      fragment = occurrence.anchor_id ? "^#{occurrence.anchor_id}" : occurrence.fragment
+      @url_builder.href(target_route) + @url_builder.fragment(fragment)
+    end
+
     def content_security_needs(content)
       fragment = Nokogiri::HTML5.fragment(content)
       media_sources = fragment.css("video[src], audio[src], video source[src], audio source[src]")
@@ -1908,8 +1939,7 @@ module JekyllObsidian
         name = occurrence.display || target&.title || occurrence.raw_target
         value = { "kind" => topic.kind, "name" => name }
         if target && !occurrence.unresolved
-          fragment = occurrence.anchor_id || occurrence.fragment
-          value["url"] = "#{@url_builder.href(target.route)}#{fragment && !fragment.empty? ? "##{fragment}" : ""}"
+          value["url"] = occurrence_href(target.route, occurrence)
         end
         value
       end.uniq
@@ -2519,11 +2549,10 @@ module JekyllObsidian
 
         seen[occurrence.target_id] = true
         target = @notes.fetch(occurrence.target_id)
-        fragment = occurrence.anchor_id ? "^#{occurrence.anchor_id}" : occurrence.fragment
         {
           "id" => target.id,
           "title" => occurrence.display || target.title,
-          "url" => @url_builder.href(target.route) + @url_builder.fragment(fragment)
+          "url" => occurrence_href(target.route, occurrence)
         }
       end
     end

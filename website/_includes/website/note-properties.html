@@ -1,0 +1,27 @@
+{% if page.website.display_properties and page.website.display_properties.size > 0 %}
+  <dl class="note-properties" data-note-properties lang="{{ page.website.i18n.content_lang | default: page.website.i18n.locale | default: site.lang | default: 'en' | escape }}" dir="{{ page.website.i18n.content_dir | default: page.website.i18n.dir | default: 'ltr' | escape }}">
+    {% for property in page.website.display_properties %}
+      <div class="note-properties__row" data-property-name="{{ property.name | escape }}">
+        <dt>{{ property.name | escape }}</dt>
+        <dd>
+          {% if property.kind == 'list' and property.values.size == 0 %}
+            <span class="note-property-value note-property-value--empty_list">[]</span>
+          {% else %}
+            {% if property.kind == 'list' %}<ul>{% endif %}
+            {% for value in property.values %}
+              {% if property.kind == 'list' %}<li>{% endif %}
+              {% case value.kind %}
+                {% when 'wiki_link' %}<a href="{{ value.url | escape }}">{{ value.text | escape }}</a>
+                {% when 'url' %}<a href="{{ value.external_url | escape }}" rel="noopener noreferrer">{{ value.text | escape }}</a>
+                {% when 'date' or 'datetime' %}<time datetime="{{ value.datetime | escape }}">{{ value.text | escape }}</time>
+                {% else %}<span class="note-property-value note-property-value--{{ value.kind | escape }}">{{ value.text | escape }}</span>
+              {% endcase %}
+              {% if property.kind == 'list' %}</li>{% endif %}
+            {% endfor %}
+            {% if property.kind == 'list' %}</ul>{% endif %}
+          {% endif %}
+        </dd>
+      </div>
+    {% endfor %}
+  </dl>
+{% endif %}

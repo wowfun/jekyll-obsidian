@@ -30,8 +30,8 @@ class PublicationBoundaryTest < Minitest::Test
     assert_equal :error, diagnostic.severity
   end
 
-  def test_unknown_and_jekyll_control_properties_never_escape
-    result = compile(note("index.md", <<~MARKDOWN))
+  def test_hidden_custom_properties_and_jekyll_controls_never_escape
+    result = compile(note("index.md", <<~MARKDOWN), properties: { "hidden" => ["unknown_private_key"] })
       ---
       publish: true
       title: Safe
@@ -78,6 +78,24 @@ class PublicationBoundaryTest < Minitest::Test
     assert_raises(FrozenError) { first.pages.first.content << "mutation" }
     assert_raises(FrozenError) { first.pages.first.data["website"] = {} }
     assert_raises(FrozenError) { first.notes.first.properties["tags"] << "mutation" }
+  end
+
+  def test_jekyll_control_wiki_values_never_join_public_relations
+    %w[minimal docs].each do |theme|
+      result = compile(
+        note("index.md", "---\npublish: true\nalias: \"[[missing]]\"\nlayout: \"[[target]]\"\nrender_with_liquid: [\"[[target]]\"]\n---\n# Home"),
+        note("target.md", "---\npublish: true\n---\n# Target"),
+        theme: theme, features: { "relations" => true, "graph" => true }
+      )
+
+      assert result.success?, result.diagnostics.map(&:message).join("\n")
+      assert_empty result.relations
+      assert_empty page(result, "/").data.dig("website", "links")
+      assert_empty page(result, "/target/").data.dig("website", "backlinks")
+      assert_empty generated_json(result, "/assets/website/graph.v1.json").fetch("edges")
+      assert_empty page(result, "/").data.dig("website", "display_properties")
+      refute result.diagnostics.any? { |item| item.code == "unresolved_property_link" }
+    end
   end
 
   def test_snapshot_paths_use_full_unicode_case_folding_for_collisions

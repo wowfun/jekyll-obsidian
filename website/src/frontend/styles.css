@@ -484,6 +484,7 @@
   :is(.minimal-entry, .docs-article) > :where(
     .note-header,
     .note-source-url,
+    .note-properties,
     .source-actions,
     .tab-collection,
     .related-articles,
@@ -599,6 +600,50 @@
   .note-source-url {
     margin-block: 0 1.75rem;
     font-size: 0.85rem;
+  }
+
+  .note-properties {
+    margin-block: 0 2rem;
+    font-family: var(--font-ui);
+    font-size: 0.85rem;
+    line-height: 1.6;
+  }
+
+  .note-properties__row {
+    display: grid;
+    grid-template-columns: minmax(0, 12rem) minmax(0, 1fr);
+    gap: 0.25rem 1rem;
+    padding-block: 0.35rem;
+    overflow-wrap: anywhere;
+  }
+
+  .note-properties dt {
+    color: var(--graphite);
+    font-weight: 500;
+  }
+
+  .note-properties dd {
+    min-inline-size: 0;
+    margin: 0;
+  }
+
+  .note-properties ul {
+    margin: 0;
+    padding-inline-start: 1.25rem;
+  }
+
+  .note-property-value--number,
+  .note-property-value--boolean,
+  .note-property-value--null,
+  .note-property-value--empty_string,
+  .note-property-value--empty_list {
+    font-family: var(--font-mono);
+  }
+
+  .note-property-value--text { white-space: pre-wrap; }
+
+  @media (max-width: 520px) {
+    .note-properties__row { grid-template-columns: minmax(0, 1fr); }
   }
 
   .note-meta__topics {
