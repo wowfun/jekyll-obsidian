@@ -146,6 +146,7 @@ module JekyllObsidian
       :anchor_id,
       :unresolved,
       :property,
+      :property_index,
       :external_media,
       keyword_init: true
     )
@@ -219,7 +220,8 @@ module JekyllObsidian
         content: @content,
         url_builder: @url_builder,
         theme: @theme,
-        member_ids_by_tab_id: @request.tab_memberships
+        member_ids_by_tab_id: @request.tab_memberships,
+        home_archive: @home_config["layout"] == "archive"
       )
       @diagnostics.concat(navigation.diagnostics)
       theme_config = EffectiveThemeConfig.new(
@@ -230,6 +232,8 @@ module JekyllObsidian
         analytics: @analytics,
         contacts: @contacts,
         navigation: navigation,
+        home: @home_config,
+        blog: @blog_config,
         site: @config,
         url_builder: @url_builder
       )
@@ -283,11 +287,58 @@ module JekyllObsidian
       resolve_analytics_config
       resolve_contacts_config
       resolve_navigation_config
+      resolve_output_config
       @url_builder = UrlBuilder.new(origin: @config.url, baseurl: @config.baseurl)
       error("missing_origin", "production builds require a non-empty url origin") if production? && @url_builder.origin.empty?
     rescue ArgumentError => exception
       error("invalid_url_config", exception.message)
       @url_builder = UrlBuilder.new(origin: "", baseurl: "")
+    end
+
+    def resolve_output_config
+      @properties_config = output_options("properties", @config.properties, { "hidden" => [] })
+      validate_output_option(@properties_config, "properties", "hidden", []) do |value|
+        value.is_a?(Array) && value.all? { |name| FrontMatter.valid_custom_property_name?(name) } && value.uniq.length == value.length
+      end
+      @hidden_property_names = Set.new(@properties_config.fetch("hidden")).freeze
+      @search_config = output_options("search", @config.search, {
+        "mode" => "full", "max_entries" => nil, "excerpt_length" => 240, "content_types" => []
+      })
+      @feed_config = output_options("feed", @config.feed, { "max_entries" => nil })
+      @home_config = output_options("home", @config.home, { "recent_posts_limit" => 6, "layout" => "recent" })
+      @blog_config = output_options("blog", @config.blog, { "page_size" => nil, "utc_offset" => nil, "facets" => { "source" => "source/", "topic" => "topics/" } })
+      validate_output_option(@home_config, "home", "layout", "recent") { |value| %w[recent archive].include?(value) }
+      validate_output_option(@blog_config, "blog", "page_size", nil) { |value| value.nil? || (value.is_a?(Integer) && value.between?(1, 100)) }
+      validate_output_option(@blog_config, "blog", "utc_offset", nil) { |value| value.nil? || value.is_a?(String) && value.match?(/\A[+-](?:0\d|1[0-4]):[0-5]\d\z/) }
+      validate_output_option(@blog_config, "blog", "facets", { "source" => "source/", "topic" => "topics/" }) do |value|
+        value.is_a?(Hash) && !value.empty? && value.all? { |key, prefix| key.is_a?(String) && key.match?(/\A[a-z][a-z0-9_-]*\z/) && !%w[page year month].include?(key) && prefix.is_a?(String) && prefix.match?(/\A[a-z][a-z0-9_-]*\/\z/) } && value.values.uniq.length == value.length
+      end
+      validate_output_option(@search_config, "search", "mode", "full") { |value| %w[full summary].include?(value) }
+      validate_output_option(@search_config, "search", "content_types", []) do |value|
+        value.is_a?(Array) && value.all? { |item| %w[page post doc].include?(item) }
+      end
+      validate_output_option(@search_config, "search", "excerpt_length", 240) { |value| value.is_a?(Integer) && value.positive? }
+      [[@search_config, "search"], [@feed_config, "feed"]].each do |options, name|
+        validate_output_option(options, name, "max_entries", nil) { |value| value.nil? || (value.is_a?(Integer) && value.positive?) }
+      end
+      validate_output_option(@home_config, "home", "recent_posts_limit", 6) { |value| value.is_a?(Integer) && value >= 0 }
+    end
+
+    def output_options(name, value, defaults)
+      return defaults.dup if value.nil?
+      unless value.is_a?(Hash) && value.keys.all? { |key| key.is_a?(String) }
+        error("invalid_#{name}_config", "website.#{name} must be a mapping with string keys")
+        return defaults.dup
+      end
+      (value.keys - defaults.keys).sort.each { |key| error("invalid_#{name}_config", "unknown website.#{name} setting #{key.inspect}") }
+      defaults.merge(value.select { |key, _| defaults.key?(key) })
+    end
+
+    def validate_output_option(options, name, key, fallback)
+      return if yield options[key]
+
+      error("invalid_#{name}_config", "invalid website.#{name}.#{key}")
+      options[key] = fallback
     end
 
     def resolve_html_publication
@@ -1115,7 +1166,8 @@ module JekyllObsidian
           kind: :link,
           syntax: :frontmatter_property,
           source_span: link.source_span,
-          property: link.property
+          property: link.property,
+          property_index: link.index
         )
       end
     end
@@ -1412,7 +1464,7 @@ module JekyllObsidian
         note.authored_text = visible_text(authored)
         note.preview = truncate(note.properties["description"] || note.authored_text, 240)
         note.feature_flags = {
-          "math" => !fragment.css("[data-math-style], .math, math").empty? || note.body.match?(/\$[^$]+\$/),
+          "math" => !fragment.css("[data-math-style], .math, math").empty?,
           "mermaid" => !fragment.css("pre code.language-mermaid").empty?
         }
       end
@@ -1515,8 +1567,7 @@ module JekyllObsidian
 
       if occurrence.resolved_type == :note
         target = @notes.fetch(occurrence.target_id)
-        anchor = occurrence.anchor_id ? "^#{occurrence.anchor_id}" : occurrence.fragment
-        href = @url_builder.href(target.route) + @url_builder.fragment(anchor)
+        href = occurrence_href(target.route, occurrence)
         if occurrence.kind == :embed
           placeholder = Nokogiri::XML::Node.new("website-embed", node.document)
           placeholder["data-source-id"] = target.id
@@ -1795,6 +1846,7 @@ module JekyllObsidian
           route: note.route,
           content: content,
           properties: note.properties,
+          display_properties: published_properties(note),
           markdown_source: PublishedMarkdown.content(
             title: note.title,
             body: note.body,
@@ -1833,6 +1885,30 @@ module JekyllObsidian
       )
     end
 
+    def published_properties(note)
+      return [] unless note.properties.any? { |name, _| NoteProperties.visible?(name, hidden: @hidden_property_names) }
+
+      links = {}
+      note.occurrences.each do |occurrence|
+        next unless occurrence.syntax == :frontmatter_property
+        next unless NoteProperties.visible?(occurrence.property, hidden: @hidden_property_names)
+        next unless occurrence.resolved_type == :note && !occurrence.unresolved
+
+        target = @notes.fetch(occurrence.target_id)
+        links[[occurrence.property, occurrence.property_index]] = {
+          "kind" => "wiki_link",
+          "text" => occurrence.display || target.title,
+          "url" => occurrence_href(target.route, occurrence)
+        }
+      end
+      NoteProperties.project(note.properties, hidden: @hidden_property_names, links: links)
+    end
+
+    def occurrence_href(target_route, occurrence)
+      fragment = occurrence.anchor_id ? "^#{occurrence.anchor_id}" : occurrence.fragment
+      @url_builder.href(target_route) + @url_builder.fragment(fragment)
+    end
+
     def content_security_needs(content)
       fragment = Nokogiri::HTML5.fragment(content)
       media_sources = fragment.css("video[src], audio[src], video source[src], audio source[src]")
@@ -1863,8 +1939,7 @@ module JekyllObsidian
         name = occurrence.display || target&.title || occurrence.raw_target
         value = { "kind" => topic.kind, "name" => name }
         if target && !occurrence.unresolved
-          fragment = occurrence.anchor_id || occurrence.fragment
-          value["url"] = "#{@url_builder.href(target.route)}#{fragment && !fragment.empty? ? "##{fragment}" : ""}"
+          value["url"] = occurrence_href(target.route, occurrence)
         end
         value
       end.uniq
@@ -2173,16 +2248,22 @@ module JekyllObsidian
     end
 
     def search_payload(model)
+      notes = model.notes
+      types = @search_config.fetch("content_types")
+      notes = notes.select { |note| types.include?(note.content_type) } unless types.empty?
+      if (limit = @search_config.fetch("max_entries"))
+        notes = notes.sort_by { |note| [note.published_at || note.updated || "", note.id] }.reverse.first(limit)
+      end
       {
         "schema_version" => 1,
-        "documents" => model.notes.map do |note|
+        "documents" => notes.map do |note|
           {
             "id" => note.id,
             "title" => note.title,
             "url" => @url_builder.href(note.route),
             "aliases" => Array(note.properties["aliases"]),
             "tags" => Array(note.properties["tags"]),
-            "text" => note.authored_text
+            "text" => @search_config.fetch("mode") == "summary" ? note.preview.to_s[0, @search_config.fetch("excerpt_length")] : note.authored_text
           }
         end
       }
@@ -2233,6 +2314,7 @@ module JekyllObsidian
       return nil if candidates.empty?
 
       notes = candidates.sort_by { |note| [chronology_key(feed_timestamp(note)), note.id] }.reverse
+      notes = notes.first(@feed_config.fetch("max_entries")) if @feed_config.fetch("max_entries")
       updated = feed_timestamp(notes.first)
       entries = notes.map do |note|
         published = note.published_at ? "\n    <published>#{h(note.published_at)}</published>" : ""
@@ -2467,11 +2549,10 @@ module JekyllObsidian
 
         seen[occurrence.target_id] = true
         target = @notes.fetch(occurrence.target_id)
-        fragment = occurrence.anchor_id ? "^#{occurrence.anchor_id}" : occurrence.fragment
         {
           "id" => target.id,
           "title" => occurrence.display || target.title,
-          "url" => @url_builder.href(target.route) + @url_builder.fragment(fragment)
+          "url" => occurrence_href(target.route, occurrence)
         }
       end
     end

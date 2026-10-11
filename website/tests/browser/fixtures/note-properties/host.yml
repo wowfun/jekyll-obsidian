@@ -1,0 +1,13 @@
+title: Property fixture
+lang: en
+website:
+  source: vault
+  theme: minimal
+  contacts: []
+  features:
+    tags: true
+  properties:
+    hidden: [hidden_marker]
+  i18n:
+    enabled: true
+    locales: [en, zh-CN]

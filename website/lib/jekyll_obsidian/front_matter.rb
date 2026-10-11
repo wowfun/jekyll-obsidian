@@ -2,18 +2,21 @@
 
 require "date"
 require "psych"
+require "uri"
 
 module JekyllObsidian
   class FrontMatter
     XML_INVALID_CHARACTER = OutputText::INVALID_CHARACTER
     SUPPORTED = %w[
       publish title subtitle aliases tags author categories description permalink image cssclasses created updated
-      content_type date pinned nav_order nav_exclude tab tabs comments github_markdown related
+      source_url content_type date date_basis pinned nav_order nav_exclude tab tabs comments github_markdown related
     ].freeze
+    JEKYLL_CONTROL_KEYS = %w[alias layout render_with_liquid].freeze
     ARRAY_PROPERTIES = %w[aliases tags author categories cssclasses].freeze
     LINK_ARRAY_PROPERTIES = %w[author categories].freeze
     STRING_PROPERTIES = %w[title subtitle description permalink image].freeze
     CONTENT_TYPES = %w[post doc page].freeze
+    DATE_BASES = %w[published observed].freeze
     TAB_KEYS = %w[id label order topics].freeze
     TAB_ID_PATTERN = /\A[a-z][a-z0-9-]*\z/.freeze
 
@@ -25,6 +28,24 @@ module JekyllObsidian
 
     def self.valid_output_text?(value)
       OutputText.valid?(value)
+    end
+
+    def self.public_url?(value)
+      return false unless valid_output_text?(value) && value.match?(/\Ahttps?:\/\//i)
+      return false if value.match?(/[\x00-\x20]/)
+
+      uri = URI.parse(value)
+      uri.host && !uri.host.empty? && !uri.userinfo
+    rescue URI::InvalidURIError
+      false
+    end
+
+    def self.valid_custom_property_name?(value)
+      valid_output_text?(value) && !value.empty? &&
+        !value.match?(/\A\p{Space}|\p{Space}\z/u) &&
+        value == value.unicode_normalize(:nfc) && !value.match?(/[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/u)
+    rescue EncodingError
+      false
     end
 
     def self.parse_wiki_link(value)
@@ -89,7 +110,7 @@ module JekyllObsidian
       property_links = []
       parsed.each do |key, value|
         unless SUPPORTED.include?(key)
-          unless valid_custom_property_name?(key)
+          unless self.class.valid_custom_property_name?(key)
             error(
               "invalid_property",
               "custom property names must be non-empty NFC text without leading, trailing, or control characters",
@@ -102,13 +123,19 @@ module JekyllObsidian
           next unless valid
 
           properties[key] = normalized
-          unless key == "alias"
+          unless JEKYLL_CONTROL_KEYS.include?(key)
             property_links.concat(custom_property_links(key, normalized, property_nodes[key]))
           end
           next
         end
 
         case key
+        when "source_url"
+          if self.class.public_url?(value)
+            properties[key] = value
+          else
+            error("invalid_property", "source_url must be an absolute HTTP(S) URL without credentials")
+          end
         when "publish", "comments", "pinned"
           if value == true || value == false
             properties[key] = value
@@ -152,6 +179,12 @@ module JekyllObsidian
           else
             error("invalid_property", "content_type must be one of: #{CONTENT_TYPES.join(', ')}")
           end
+        when "date_basis"
+          if DATE_BASES.include?(value)
+            properties[key] = value
+          else
+            error("invalid_property", "date_basis must be one of: #{DATE_BASES.join(', ')}")
+          end
         when "created", "updated", "date"
           normalized = normalize_time(value)
           normalized ? properties[key] = normalized : error("invalid_property", "#{key} must be an ISO-8601 date or date-time")
@@ -189,23 +222,13 @@ module JekyllObsidian
       [properties, property_links]
     end
 
-    def valid_custom_property_name?(value)
-      self.class.valid_output_text?(value) &&
-        !value.empty? &&
-        !value.match?(/\A\p{Space}|\p{Space}\z/u) &&
-        value == value.unicode_normalize(:nfc) &&
-        !value.match?(/[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/u)
-    rescue EncodingError
-      false
-    end
-
     def normalize_custom_property(key, value, property_node)
       if value.is_a?(Array)
         if value.all? { |item| custom_scalar?(item) }
-          return [true, value.map { |item| normalize_custom_scalar(item) }]
+          return [true, value]
         end
       elsif custom_scalar?(value)
-        return [true, normalize_custom_scalar(value)]
+        return [true, value]
       end
 
       if unquoted_wiki_link_node?(property_node)
@@ -277,12 +300,6 @@ module JekyllObsidian
       return true if value.is_a?(Date) || value.is_a?(DateTime) || value.is_a?(Time)
 
       self.class.valid_output_text?(value)
-    end
-
-    def normalize_custom_scalar(value)
-      return normalize_time(value) if value.is_a?(Date) || value.is_a?(DateTime) || value.is_a?(Time)
-
-      value
     end
 
     def custom_property_links(property, value, property_node)

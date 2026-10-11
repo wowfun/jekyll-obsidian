@@ -651,6 +651,108 @@ class JekyllAdapterTest < Minitest::Test
     end
   end
 
+  def test_archive_post_places_facets_and_source_above_body_without_tag_index
+    FileUtils.mkdir_p(File.join(@temporary_root, "vault", "items"))
+    File.write(File.join(@temporary_root, "vault", "items", "story.md"), <<~MARKDOWN)
+      ---
+      publish: true
+      content_type: post
+      title: Story
+      date: 2026-10-09
+      tags: [source/openai, topics/agents]
+      source_url: https://example.test/original
+      ---
+      Body marker.
+    MARKDOWN
+    install_project_layout
+    build_site("website" => website_config.merge(
+      "home" => { "layout" => "archive" }, "features" => { "tags" => false }
+    )).process
+    document = Nokogiri::HTML(File.read(File.join(destination, "items", "story", "index.html")))
+    tags = document.at_css("[data-note-tags]")
+    source = document.at_css(".note-source-url")
+    body = document.at_css(".note-content")
+    refute_nil tags
+    assert_equal ["/?source=openai", "/?topic=agents"], tags.css("a").map { |link| link["href"] }
+    assert_equal "https://example.test/original", source.at_css("a")["href"]
+    assert_equal 1, document.css(".note-source-url").length
+    order = document.css(".minimal-entry *")
+    assert_operator order.index(tags), :<, order.index(source)
+    assert_operator order.index(source), :<, order.index(body)
+  end
+
+  def test_typed_properties_render_safely_above_the_body_in_both_themes
+    FileUtils.mkdir_p(File.join(@temporary_root, "vault", "items"))
+    File.write(File.join(@temporary_root, "vault", "items", "typed.md"), <<~MARKDOWN)
+      ---
+      publish: true
+      content_type: post
+      title: Typed properties
+      date: 2026-10-10
+      date_basis: observed
+      tags: [source/openai, topics/agents]
+      source_url: https://example.test/original
+      repo_url: https://github.com/example/project
+      zero: 0
+      enabled: false
+      absent: null
+      empty: ""
+      list: [false, 0, null, "", 2026-10-10, same, same]
+      nothing: []
+      day: 2026-10-10
+      instant: 2026-10-10T12:34:56Z
+      quoted_day: "2026-10-10"
+      project: "[[index|Home alias]]"
+      hidden: hidden-marker
+      literal: "<script>{{ site.secret }}</script>"
+      unsafe: javascript:alert(1)
+      credentials: https://user:pass@example.test/private
+      multiline: |-
+        first line
+        second line
+      ---
+      Body marker.
+    MARKDOWN
+    install_project_layout
+    %w[minimal docs].each do |theme|
+      build_site("secret" => "expanded-secret-marker", "website" => website_config.merge(
+        "theme" => theme, "home" => { "layout" => "archive" },
+        "properties" => { "hidden" => ["hidden"] }, "features" => { "tags" => false }
+      )).process
+      document = Nokogiri::HTML(File.read(File.join(destination, "items", "typed", "index.html")))
+      fields = document.at_css("[data-note-properties]")
+      refute_nil fields
+      assert_equal 1, document.css("[data-note-properties]").length
+      assert_equal "false", fields.at_css('[data-property-name="enabled"] dd').text.strip
+      assert_equal "0", fields.at_css('[data-property-name="zero"] dd').text.strip
+      assert_equal "null", fields.at_css('[data-property-name="absent"] dd').text.strip
+      assert_equal '""', fields.at_css('[data-property-name="empty"] dd').text.strip
+      assert_equal "[]", fields.at_css('[data-property-name="nothing"] dd').text.strip
+      assert_equal ["false", "0", "null", '""', "2026-10-10", "same", "same"],
+        fields.css('[data-property-name="list"] li').map { |element| element.text.strip }
+      assert_equal "2026-10-10", fields.at_css('[data-property-name="day"] time')["datetime"]
+      assert_equal "2026-10-10T12:34:56Z", fields.at_css('[data-property-name="instant"] time')["datetime"]
+      assert_equal "2026-10-10", fields.at_css('[data-property-name="quoted_day"] dd').text.strip
+      assert_nil fields.at_css('[data-property-name="quoted_day"] time')
+      assert_equal "https://github.com/example/project", fields.at_css('[data-property-name="repo_url"] a')["href"]
+      assert_equal "/", fields.at_css('[data-property-name="project"] a')["href"]
+      assert_equal "Home alias", fields.at_css('[data-property-name="project"] a').text
+      assert_equal "<script>{{ site.secret }}</script>", fields.at_css('[data-property-name="literal"] dd').text.strip
+      assert_nil fields.at_css("script")
+      assert_nil fields.at_css('[data-property-name="unsafe"] a')
+      assert_nil fields.at_css('[data-property-name="credentials"] a')
+      assert_equal "first line\nsecond line", fields.at_css('[data-property-name="multiline"] dd').text.strip
+      refute_includes document.to_html, "hidden-marker"
+      refute_includes document.to_html, "expanded-secret-marker"
+      assert_equal 1, document.css(".note-source-url").length
+      assert_equal "First observed 2026-10-10", document.at_css(".note-meta time").text.strip
+      order = document.css("article *")
+      assert_operator order.index(document.at_css(".note-source-url")), :<, order.index(fields)
+      assert_operator order.index(fields), :<, order.index(document.at_css(".note-content"))
+      %w[title date date_basis source_url tags publish].each { |key| assert_nil fields.at_css("[data-property-name='#{key}']") }
+    end
+  end
+
   def test_post_byline_uses_resolved_authors_and_preserves_each_title_owner
     FileUtils.mkdir_p(File.join(@temporary_root, "vault", "blog"))
     FileUtils.mkdir_p(File.join(@temporary_root, "vault", "people"))

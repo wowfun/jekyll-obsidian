@@ -33,25 +33,27 @@ module JekyllObsidian
 
     module_function
 
-    def build(model:, settings:, content:, url_builder:, theme:, member_ids_by_tab_id: nil)
+    def build(model:, settings:, content:, url_builder:, theme:, member_ids_by_tab_id: nil, home_archive: false)
       Builder.new(
         model: model,
         settings: settings,
         content: content,
         url_builder: url_builder,
         theme: theme,
-        member_ids_by_tab_id: member_ids_by_tab_id
+        member_ids_by_tab_id: member_ids_by_tab_id,
+        home_archive: home_archive
       ).build
     end
 
     class Builder
-      def initialize(model:, settings:, content:, url_builder:, theme:, member_ids_by_tab_id:)
+      def initialize(model:, settings:, content:, url_builder:, theme:, member_ids_by_tab_id:, home_archive:)
         @model = model
         @settings = settings
         @content = content
         @url_builder = url_builder
         @theme = theme
         @member_ids_by_tab_id = member_ids_by_tab_id
+        @home_archive = home_archive
         @diagnostics = []
       end
 
@@ -96,7 +98,7 @@ module JekyllObsidian
           "Home",
           @url_builder.href("/"),
           !portfolio_owns_root_navigation && (root || posts.any?),
-          note_ids: root ? [root.id] : [],
+          note_ids: (root ? [root.id] : []) + (@home_archive ? posts.map(&:id) : []),
           routes: ["/"]
         )
         add_builtin(
@@ -104,7 +106,7 @@ module JekyllObsidian
           "blog",
           "Blog",
           @url_builder.href("/blog/"),
-          posts.any?,
+          posts.any? && !@home_archive,
           note_ids: posts.map(&:id),
           routes: ["/blog/"]
         )
@@ -135,6 +137,7 @@ module JekyllObsidian
       def docs_items(documentation, custom_tabs)
         items = []
         root = directory_index(".")
+        posts = @model.notes.select { |note| note.content_type == "post" }
         docs = @model.notes.select { |note| note.content_type == "doc" }
         add_builtin(
           items,
@@ -142,7 +145,7 @@ module JekyllObsidian
           "Overview",
           @url_builder.href("/"),
           !root.nil?,
-          note_ids: root ? [root.id] : [],
+          note_ids: (root ? [root.id] : []) + (@home_archive ? posts.map(&:id) : []),
           routes: ["/"]
         )
         add_builtin(

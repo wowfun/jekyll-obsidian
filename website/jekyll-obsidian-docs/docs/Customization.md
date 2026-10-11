@@ -85,7 +85,7 @@ An HTML mapping is publication authorization independent of `website.content.pub
 
 ## Site identity
 
-`title`, `description`, and `lang` feed the shell, metadata, Atom, and accessibility labels. Set `website.repository` to an `owner/repository` pair to show the Edit link. If it is blank, the build checks `GITHUB_REPOSITORY` and the local `origin` remote. The action stays hidden when no repository can be identified. This host repository setting never changes the Built by Jekyll Obsidian footer link, which always identifies the official project at `https://github.com/wowfun/jekyll-obsidian`.
+`title`, `description`, and `lang` feed the shell, metadata, Atom, and accessibility labels. Set `website.repository` to an `owner/repository` pair to show the Edit link and a GitHub icon on the right of the header. If it is blank, the build checks `GITHUB_REPOSITORY` and the local `origin` remote. These actions stay hidden when no repository can be identified. This host repository setting never changes the Built by Jekyll Obsidian footer link, which always identifies the official project at `https://github.com/wowfun/jekyll-obsidian`.
 
 Minimal Home renders the public root directory index, followed by the six most recent posts as editorial rows. The index is `index.md`, or the exact sibling `README.md` when no physical `index.md` exists. A selected directory index without an authored level-one heading does not render a substitute heading from its filename or frontmatter title; the resolved title remains available to metadata and navigation. A row with an image places a 16:9 thumbnail beside its summary on wide screens and above it on narrow screens; a row without an image uses the full width with no placeholder. Each summary can also show `subtitle`, a body excerpt, authors, and its publication date. The Blog link opens the complete reverse-chronological list at `/blog/`.
 
@@ -297,6 +297,40 @@ Articles and controls use the platform sans-serif stack, with installed Noto San
 
 Override tokens in your own stylesheet rather than editing hashed build output. Keep text and focus contrast above WCAG AA in both color schemes.
 
+## Output limits
+
+Large sites can bound generated indexes without removing published pages. These settings apply independently to every locale. Omitted settings preserve full-text search, an unlimited feed, and six recent posts on Minimal Home.
+
+```yaml
+website:
+  search:
+    mode: summary
+    max_entries: 3000
+    excerpt_length: 240
+    content_types: [post]
+  feed:
+    max_entries: 100
+  home:
+    recent_posts_limit: 0
+```
+
+`website.search.mode` accepts `full` or `summary`. Summary mode uses each note's existing preview, capped by the positive integer `excerpt_length` (default 240). `max_entries` is an optional positive integer; when set, the newest publication dates (or update dates for undated notes) come first, with note ID as a deterministic tie-breaker. `content_types` filters to any of `page`, `post`, and `doc`; its default empty array includes all types.
+
+`website.feed.max_entries` optionally limits the existing feed order to a positive number of entries. `website.home.recent_posts_limit` is a nonnegative integer; zero hides the automatic recent-post rows while retaining authored Home content. These limits do not remove pages, archives, Markdown downloads, or sitemap entries.
+
+
+Use `website.home.layout: archive` to show the chronological archive at `/`.
+`website.blog.page_size` enables a paged archive (1–100; default full archive).
+`website.blog.facets` maps query parameters to tag prefixes, for example
+`{source: "source/", topic: "topics/"}`. Each group uses OR; groups and chronology use AND.
+The query names `page`, `year`, and `month` are reserved for pagination and chronology.
+`website.blog.utc_offset: "+08:00"` controls displayed archive dates.
+The first page is rendered in HTML. Remaining pages use generation-scoped card chunks
+and lazy bitmaps. Counts are global, selections survive language switching,
+and unknown IDs match zero entries. Loading failures retain the last successful page.
+Locale manifests may provide `tag_labels` and flattened `tag_aliases` keyed by complete
+stable tags. Labels can differ across languages; IDs remain shared.
+
 ## Page properties
 
 The compiler reserves these note properties for publication behavior and validates each one with a closed schema:
@@ -304,10 +338,32 @@ The compiler reserves these note properties for publication behavior and validat
 - `publish`, `title`, `subtitle`, `aliases`, `tags`, `author`, `categories`, and `description`
 - `permalink`, `image`, and `cssclasses`
 - `created` and `updated`
-- `content_type`, `date`, `pinned`, `nav_order`, `nav_exclude`, `tab`, and `tabs`
-- `comments`, `github_markdown`, and `related`
+- `content_type`, `date`, `date_basis`, `pinned`, `nav_order`, `nav_exclude`, `tab`, and `tabs`
+- `comments`, `github_markdown`, `related`, and `source_url`
 
-Other top-level properties may contain scalar values or flat scalar lists. Custom property names must be normalized, single-line text without leading or trailing whitespace. A complete wiki link in one of those values becomes an ordinary note relation when it is a YAML double-quoted string. Custom properties remain compiler metadata: their keys and raw values never flow into Liquid, HTML, feeds, or generated JSON.
+Other top-level properties may contain scalar values or flat scalar lists. Custom property names must be normalized, single-line text without leading or trailing whitespace. Both themes display these fields by default in an expanded property block below tags and the original source link, above the body. Labels use the original field names and fields retain their authored order. Nested lists and mappings are not supported.
+
+Plain strings are escaped text with their line breaks preserved; Markdown, HTML, and Liquid inside them are not evaluated. A complete HTTP(S) URL without credentials becomes a clickable link. Numbers and booleans retain their values, including `0` and `false`. Native YAML dates and timestamps use ISO 8601 `<time>` values; a quoted date remains a string. Null, empty strings, and empty lists display as `null`, `""`, and `[]`. Flat lists retain order and duplicates, with each value rendered by its type.
+
+Authored property values display in full, like the note body. The search and feed output limits apply to generated indexes; they do not truncate page properties.
+
+A complete wiki link becomes an ordinary note relation when it is a YAML double-quoted string. In the property block it also links to the public target, using the authored alias or the target title. Unresolved links retain their authored alias or target as text, with the existing compiler diagnostics. Wiki targets follow the page locale; ordinary external URLs remain unchanged.
+
+Use `website.properties.hidden` to hide named custom fields from the display projection. It defaults to an empty list and does not change relation discovery. Reserved fields above already have separate rendering or publication behavior and are excluded from this block, as are `alias`, `layout`, and `render_with_liquid`. Custom fields are public by default; the compiler supplies typed display data rather than merging raw properties into Jekyll page controls.
+
+`date_basis` is optional authored metadata: `published` labels the post date as Published; `observed` labels it as First observed. Omission uses Published. It changes the date label only, without changing date selection or chronology. The compiler does not derive `date_basis`, including when a post's publication date comes from Git. Translations inherit the default note's value and cannot change it.
+
+Themes read the typed field array from `page.website.display_properties`. The separate `site.website.properties` mapping holds site-wide display configuration, including `hidden`.
+
+```yaml
+website:
+  properties:
+    hidden: [first_seen, internal_id]
+```
+
+Hidden names must be unique valid property names. The setting is site-wide; page-level display overrides are not supported. A page with no visible custom fields has no property block. `source_url` remains a separate clickable original source link beneath the tags.
+
+The ignored Jekyll controls `alias`, `layout`, and `render_with_liquid` do not create note relations, even when their values resemble wiki links.
 
 ```yaml
 project: "[[portfolio/fauni-search|Fauni Search]]"
@@ -319,7 +375,7 @@ related:
   - "[[docs/Getting Started|Start here]]"
 ```
 
-`related` is the curated list variant. It accepts only a list of double-quoted wiki links, preserves the authored order, removes repeated targets, and shows the resolved pages as Recent-post-style cards at the bottom of the page. Broken related links fail a production build. Other custom-property links still join Direct links, Backlinks, and Graph data but do not create a second visible field table.
+`related` is the curated list variant. It accepts only a list of double-quoted wiki links, preserves the authored order, removes repeated targets, and shows the resolved pages as Recent-post-style cards at the bottom of the page. Broken related links fail a production build. Other custom-property links join Direct links, Backlinks, and Graph data independently of their property-block visibility: hiding a field's display does not remove its note relations.
 
 `aliases`, `tags`, `author`, `categories`, `cssclasses`, and `tabs` are string arrays; `subtitle` is a string. `publish`, `pinned`, `nav_exclude`, and `comments` use YAML booleans. `tab` is the closed mapping documented above. `github_markdown` accepts only the URL or mapping documented in [[Portfolio|Portfolio]], and only on a Portfolio project wrapper. Dates use ISO 8601. A note title comes from `title`, its first level-one heading, or its filename, in that order.
 
@@ -341,6 +397,8 @@ categories:
 
 Wiki-link entries must be YAML double-quoted strings. Their visible label uses the alias after `|`, or the target note title when no alias is supplied. Every Home Topics capsule opens the matching Blog filter; a wiki-linked author shown in a post summary may additionally link directly to that public author page. On Minimal Blog, tags and categories appear together below each archive date and as filter capsules beside the publication date on the article page. Repeating the same name across `tags` and `categories` shows one topic. Unresolved wiki links produce a compiler warning and remain filterable text instead of leaking `[[...]]` into the site.
 
+Author and category wiki links now use the same UTF-8 percent-encoded fragments as body links, related cards, and custom-property links. For example, a heading fragment `#你好-世界` appears in a generated URL as `#%E4%BD%A0%E5%A5%BD-%E4%B8%96%E7%95%8C`. The heading ID and destination stay the same; existing links using the unencoded fragment still identify that heading.
+
 ## Content and navigation
 
 An explicit `content_type: post | doc | page` wins over directory defaults. Post publication dates use `date`, then `created`, then the first Git commit. A production build rejects a post with no deterministic date. On Minimal Home and Blog, posts with `pinned: true` appear before unpinned posts; both groups retain reverse-chronological order. Pinning affects card presentation only, not Atom feed chronology or the previous and next post sequence.
@@ -348,3 +406,5 @@ An explicit `content_type: post | doc | page` wins over directory defaults. Post
 Docs navigation follows vault directories. `nav_order` sorts sibling documents and `nav_exclude: true` removes only that note link; children remain reachable. `index.md` is optional at every level. When no physical `index.md` exists, a published exact `README.md` becomes the folder index. An existing `index.md` reserves that role even when unpublished, leaving `README.md` as an ordinary note. A published root index always owns `/`, so a different `permalink` on that note is rejected. A folder without a public selected index links to its first visible child after `nav_order`, title, and path sorting. Minimal Home can render without a root index when posts exist; if neither exists, the root redirects to the first visible top-level navigation destination. Docs redirects an indexless root to its first navigation item. Every Docs page server-renders the complete documentation tree; JavaScript navigation preserves the shared shell while replacing only page-specific content and context. Search builds its index in a Web Worker. Local graphs are projected by the compiler; the browser fetches the complete graph only after its dialog opens.
 
 See [[docs/development/architecture|Architecture]] before changing compiler or adapter seams.
+
+`source_url`: an absolute HTTP(S) URL without credentials; shown as a clickable original source link.

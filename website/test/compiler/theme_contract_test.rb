@@ -838,6 +838,12 @@ class ThemeContractTest < Minitest::Test
     assert_instance_of JekyllObsidian::BuildFailure, wrong_root
   end
 
+  def test_escaped_currency_and_code_do_not_enable_the_math_bundle
+    result = compile(note("index.md", "---\npublish: true\nupdated: 2026-07-30\n---\n# Prices\n\\$10 and \\$20. `cost = $30`."))
+    assert result.success?, result.diagnostics.map(&:message).join("\n")
+    assert_equal false, result.features.fetch("math")
+  end
+
   def test_effective_features_include_content_bundles_and_public_dom_is_neutral
     result = compile(
       note("index.md", <<~MARKDOWN),

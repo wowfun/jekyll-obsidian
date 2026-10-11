@@ -43,6 +43,8 @@ A note ID is its NFC-normalized vault-relative path, including `.md`. Relations 
 
 Embedded links remain relationships of their authored source note. They do not become new relationships of every host that transcludes them.
 
+Custom frontmatter retains native scalar types through locale overlays. The compiler derives a separate typed property display projection, filtering reserved and configured hidden names before it reaches page data. Resolved Wiki values reuse public link occurrences and locale routes; ordinary HTTP(S) values stay external URLs. Both themes consume this projection without merging raw custom fields into Jekyll controls. Display hiding does not change relation discovery.
+
 ## Adapter boundary
 
 The adapter takes one filesystem snapshot from the content root, optionally scans Git history from the workspace root, and calls the compiler. Frontend assets are read from the package manifest. Runtime caches, staged builds, and the final site belong to the host application cache. The adapter performs a global preflight before it appends any output to Jekyll. Generated HTML, JSON, and XML use pages without source files. Source-backed attachments and raw HTML bundle files share `ProjectedFile` plus a controlled static-file subclass. The adapter pins inode, modification time, and size while atomically staging each projection, so a source cannot change between compilation and Jekyll's copy.

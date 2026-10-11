@@ -79,6 +79,13 @@ module JekyllObsidian
     :analytics,
     :contacts,
     :navigation,
+    :search,
+    :feed,
+    :home,
+    :blog,
+    :properties,
+    :tag_labels,
+    :tag_aliases,
     :html
   )
 
@@ -103,6 +110,7 @@ module JekyllObsidian
     :route,
     :content,
     :properties,
+    :display_properties,
     :markdown_source,
     :authored_text,
     :preview,
@@ -156,6 +164,8 @@ module JekyllObsidian
     :analytics,
     :contacts,
     :navigation,
+    :home,
+    :blog,
     :site,
     :url_builder
   )

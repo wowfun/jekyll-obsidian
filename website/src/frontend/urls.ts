@@ -1,6 +1,6 @@
 const META_PREFIX = "website:";
 
-export type SiteDataName = "catalog" | "search" | "search-worker" | "graph" | "preview";
+export type SiteDataName = "catalog" | "archive-worker" | "search" | "search-worker" | "graph" | "preview";
 
 export function readSiteUrl(name: SiteDataName): string | null {
   const element = document.querySelector<HTMLMetaElement>(

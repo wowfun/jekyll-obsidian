@@ -20,6 +20,7 @@ const result = await esbuild.build({
     "docs-navigation": "src/frontend/docs-navigation.ts",
     search: "src/frontend/search.ts",
     "search-worker": "src/frontend/search-worker.ts",
+    "archive-worker": "src/frontend/archive-worker.ts",
     graph: "src/frontend/graph.ts",
     previews: "src/frontend/preview.ts",
     math: "src/frontend/math.ts",
@@ -89,7 +90,7 @@ function assetClosure(initialOutputs, { includeDynamicImports }) {
 }
 
 const themeSources = {
-  minimal: ["src/frontend/entries/minimal.ts", "src/frontend/docs-navigation.ts"],
+  minimal: ["src/frontend/entries/minimal.ts", "src/frontend/docs-navigation.ts", "src/frontend/archive-worker.ts"],
   docs: ["src/frontend/entries/docs.ts", "src/frontend/docs-navigation.ts"]
 };
 const colorSchemeBootstrap = outputForEntryPoint("src/frontend/color-scheme-bootstrap.ts");
@@ -115,6 +116,7 @@ const entries = Object.fromEntries(
       theme,
       {
         js: path.relative(staged.stagingDirectory, entry.outputPath).split(path.sep).join("/"),
+        ...(theme === "minimal" ? { archive_worker: path.relative(staged.stagingDirectory, outputForEntryPoint("src/frontend/archive-worker.ts").outputPath).split(path.sep).join("/") } : {}),
         color_scheme: colorSchemeBootstrapPath,
         ...(css ? { css } : {}),
         files: assetClosure([entry, ...ownedEntries, colorSchemeBootstrap], { includeDynamicImports: false })

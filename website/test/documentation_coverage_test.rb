@@ -24,13 +24,18 @@ class DocumentationCoverageTest < Minitest::Test
     "repository" => ["Customization.md", "Site identity", "`website.repository`"],
     "edit_branch" => ["Customization.md", "Site identity", "`website.edit_branch`"],
     "content" => ["Customization.md", "Publication defaults", "`website.content.publish_by_default`"],
+    "properties" => ["Customization.md", "Page properties", "`website.properties.hidden`"],
     "features" => ["Customization.md", "Site themes", "`website.features`"],
     "html" => ["Customization.md", "Standalone HTML slides", "`website.html`"],
     "i18n" => ["Localization.md", "Enable localization", "`website.i18n`"],
     "comments" => ["Comments.md", "Configure the site", "`website.comments`"],
     "contacts" => ["Customization.md", "Site identity", "`website.contacts`"],
     "navigation" => ["Customization.md", "Minimal navigation", "`website.navigation`"],
-    "analytics" => ["Analytics.md", "Configuration and security", "`website.analytics`"]
+    "analytics" => ["Analytics.md", "Configuration and security", "`website.analytics`"],
+    "search" => ["Customization.md", "Output limits", "`website.search.mode`"],
+    "feed" => ["Customization.md", "Output limits", "`website.feed.max_entries`"],
+    "home" => ["Customization.md", "Output limits", "`website.home.recent_posts_limit`"],
+    "blog" => ["Customization.md", "Output limits", "`website.blog.page_size`"]
   }.freeze
 
   def test_every_user_guide_has_a_simplified_chinese_source
