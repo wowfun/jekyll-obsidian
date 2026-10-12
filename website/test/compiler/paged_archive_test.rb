@@ -18,6 +18,8 @@ class PagedArchiveTest < Minitest::Test
     prefix = archive.fetch("url").delete_prefix("/garden").delete_suffix("manifest.json")
     chunk = generated_json(result, prefix + archive.fetch("chunks").first)
     assert_equal "Item 100", chunk.fetch("cards").first.fetch("title")
+    assert_equal "Summary", chunk.fetch("cards").first.fetch("summary")
+    assert_equal "Summary", root.data.dig("website", "theme_data", "archive_groups").first.fetch("posts").first.fetch("summary")
     assert_equal "https://example.test/100", chunk.fetch("cards").first.fetch("source_url")
     assert_equal "Hacker News", archive.fetch("facets").fetch("source").first.fetch("name")
     posting = generated_json(result, prefix + archive.fetch("facets").fetch("source").first.fetch("posting"))

@@ -21,6 +21,11 @@
     </nav>
 
     <div class="site-actions">
+      {% if page.website.theme_data.archive %}
+        <button class="site-action archive-reading-switch" type="button" role="switch" aria-checked="false" aria-controls="archive-ledger" data-archive-reading-toggle hidden data-loading="{{ ui.reading_loading | default: 'Loading article…' | escape }}" data-unavailable="{{ ui.reading_unavailable | default: 'Article could not be loaded.' | escape }}" data-retry="{{ ui.retry | default: 'Retry' | escape }}">
+          <span>{{ ui.flat_reading | default: 'Read in full' | escape }}</span><span class="archive-reading-switch__track" aria-hidden="true"></span>
+        </button>
+      {% endif %}
       {% if page.website.features.search %}
         <button class="site-action" type="button" data-search-open aria-label="{{ ui.search | default: 'Search' | escape }}">
           <span class="site-action__label">{{ ui.search | default: 'Search' | escape }}</span><kbd class="site-action__shortcut" aria-hidden="true">⌘K</kbd>

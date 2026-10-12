@@ -16,7 +16,7 @@ const environment = {
 
 function build(host, theme, name, config) {
   const code = `require "jekyll_obsidian/runtime"; runtime = JekyllObsidian::Runtime.new(root: ARGV[0], config_path: ARGV[1], assets_root: ARGV[2], destination_name: ARGV[3]); runtime.build(theme: ARGV[4], url: "http://127.0.0.1:4173", baseurl: ARGV[5], quiet: true)`;
-  const result = spawnSync("bundle", ["exec", "ruby", "-e", code, host, config,
+  const result = spawnSync("ruby", ["-S", "bundle", "exec", "ruby", "-e", code, host, config,
     path.join(projectRoot, ".jekyll-obsidian-cache/assets"), `site-browser-${name}`, theme, `/__site__/${name}`], {
     cwd: projectRoot, env: environment, stdio: "inherit",
   });
@@ -76,7 +76,7 @@ try {
   await writeFile(path.join(archiveHost, "host.yml"),
     "title: Archive fixture\nwebsite:\n  source: vault\n  theme: minimal\n  contacts: []\n  home:\n    layout: archive\n  blog:\n    page_size: 2\n  i18n:\n    enabled: true\n    locales: [en, zh-CN]\n");
   await writeFile(path.join(archiveHost, "vault/_locale.yml"), "name: English\n");
-  await writeFile(path.join(archiveHost, "vault/_translations/zh-CN/_locale.yml"), "name: 简体中文\n");
+  await writeFile(path.join(archiveHost, "vault/_translations/zh-CN/_locale.yml"), "name: 简体中文\nmessages:\n  flat_reading: 平铺阅读\n");
   await writeFile(path.join(archiveHost, "vault/index.md"), "---\npublish: true\n---\n# Archive\n");
   for (const [id, title, date, source, topic] of [
     ["a", "Newest", "2026-10-10", "hn", "agents"],
@@ -84,7 +84,7 @@ try {
     ["c", "Oldest", "2025-12-31", "hn", "agents"]
   ]) {
     await writeFile(path.join(archiveHost, `vault/items/${id}.md`),
-      `---\npublish: true\ncontent_type: post\ntitle: ${title}\ndate: ${date}\ntags: [source/${source}, topics/${topic}]\n---\nBody.\n`);
+      `---\npublish: true\ncontent_type: post\ntitle: ${title}\ndescription: Description of ${title}\ndate: ${date}\ntags: [source/${source}, topics/${topic}]\n---\nFirst paragraph of ${title}.\n\nSecond paragraph with a [link](https://example.com/${id}).\n`);
   }
   build(archiveHost, "minimal", "minimal-archive", path.join(archiveHost, "host.yml"));
   const destination = path.join(workspaceRoot, ".jekyll-obsidian-cache/site-browser-minimal-archive");

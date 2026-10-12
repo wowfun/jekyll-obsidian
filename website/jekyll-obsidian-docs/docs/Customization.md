@@ -328,6 +328,11 @@ The query names `page`, `year`, and `month` are reserved for pagination and chro
 The first page is rendered in HTML. Remaining pages use generation-scoped card chunks
 and lazy bitmaps. Counts are global, selections survive language switching,
 and unknown IDs match zero entries. Loading failures retain the last successful page.
+Each ledger entry shows its description (or the note preview when no description is set).
+The header's **Read in full** switch expands the current page's articles in place,
+following pagination and filters. The choice persists across reloads and languages.
+Bodies load only while enabled, with at most four requests at once; individual failures
+keep the entry and offer retry. Switching off restores the compact ledger.
 Locale manifests may provide `tag_labels` and flattened `tag_aliases` keyed by complete
 stable tags. Labels can differ across languages; IDs remain shared.
 

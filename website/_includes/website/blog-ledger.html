@@ -8,7 +8,7 @@
         <li{% if include.filterable %} data-filter-item data-topic-anchors="{{ post.topic_anchors | join: ' ' | escape }}"{% if post.filter_month %} data-filter-month="{{ post.filter_month | escape }}"{% endif %}{% endif %}>
           <div class="blog-ledger__meta"><time datetime="{{ post.published_at | escape }}">{% if post.display_date %}{{ post.display_date | escape }}{% else %}{{ post.published_at | date: "%Y-%m-%d" }}{% endif %}</time></div>
           <div class="blog-ledger__content">
-            <a class="blog-ledger__main" href="{{ post.url | escape }}"><strong>{{ post.title | escape }}</strong>{% if post.summary and post.summary != '' and page.website.theme_data.archive == nil %}<span class="blog-ledger__description">{{ post.summary | escape }}</span>{% endif %}</a>
+            <a class="blog-ledger__main" href="{{ post.url | escape }}"><strong>{{ post.title | escape }}</strong>{% if post.summary and post.summary != '' %}<span class="blog-ledger__description">{{ post.summary | escape }}</span>{% endif %}</a>
             {% if post.archive_facets %}{% include website/archive-card-footer.html post=post %}{% endif %}
             {% unless post.archive_facets %}{% if post.topics and post.topics.size > 0 %}<ul class="blog-ledger__topics" aria-label="{{ ui.topics | default: 'Topics' | escape }}">{% for topic in post.topics %}<li><a href="{{ blog_url | escape }}?topic={{ topic.anchor | url_encode }}" data-topic-filter-option data-topic-anchor="{{ topic.anchor | escape }}">{{ topic.name | escape }}</a></li>{% endfor %}</ul>{% endif %}{% endunless %}
           </div>

@@ -32,6 +32,24 @@ website/bin/dev
 
 Setup installs locked Ruby and Node dependencies and builds the gem. After editing frontend sources, rerun the package command before previewing. Restart the preview after changing Ruby implementation files.
 
+On native Windows, install RubyInstaller Ruby+Devkit 4.0.6, Bundler 4.0.16, Node 26 and Git globally, then open a fresh PowerShell. Use the underlying commands instead of the Unix shell wrappers:
+
+```powershell
+cd website
+gem install bundler -v 4.0.16 --no-document
+bundle install
+npm ci
+npm run build
+bundle exec ruby scripts/package.rb --skip-assets
+bundle exec ruby -Itest -Ilib test/compiler/paged_archive_test.rb
+npm run test:prepared
+npm run build:browser-sites
+npx playwright install chromium
+npx playwright test paged-archive.spec.ts
+```
+
+Gems use the shared Ruby installation. The lockfile includes `x64-mingw-ucrt`; npm dependencies stay under `website/node_modules`. The Ruby tests that create file symlinks need Windows symlink privileges (for example, an administrator terminal); a permission error there does not test the rejection behavior.
+
 ## Run the tests
 
 ```sh

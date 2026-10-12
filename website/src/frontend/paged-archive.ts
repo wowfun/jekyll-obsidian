@@ -1,5 +1,6 @@
 import { archiveState, decodeBitmap, type ArchiveCard, type ArchiveManifest, type ArchiveQuery } from "./archive-query";
 import { requireSiteUrl } from "./urls";
+import { initialiseArchiveReading } from "./archive-reading";
 
 type Matches = { ordinals: number[]; count: number; page: number; pages: number };
 function object(value: unknown): Record<string, unknown> {
@@ -27,6 +28,7 @@ export function initialisePagedArchive(root: HTMLElement): () => void {
   const prev = pagination.querySelector<HTMLButtonElement>("[data-archive-page=prev]")!;
   const next = pagination.querySelector<HTMLButtonElement>("[data-archive-page=next]")!;
   const controller = new AbortController();
+  const reading = initialiseArchiveReading(root);
   const worker = new Worker(requireSiteUrl("archive-worker"), { type: "module" });
   const pending = new Map<number, { resolve: (result: Matches) => void; reject: (error: Error) => void }>();
   const cache = new Map<string, unknown>();
@@ -103,6 +105,7 @@ export function initialisePagedArchive(root: HTMLElement): () => void {
       const row = document.createElement("li"); row.dataset.filterItem = ""; row.dataset.itemId = card.id;
       const meta = textElement("div", "", "blog-ledger__meta"), time = textElement("time", card.display_date || ""); time.dateTime = card.published_at || ""; meta.append(time);
       const content = textElement("div", "", "blog-ledger__content"), title = textElement("a", "", "blog-ledger__main"); title.href = publicUrl(card.url); title.append(textElement("strong", card.title)); content.append(title);
+      if (card.summary) title.append(textElement("span", card.summary, "blog-ledger__description"));
       const footer = textElement("footer", "", "archive-card-footer"), tags = textElement("ul", "", "blog-ledger__topics");
       for (const [name, ids] of Object.entries(card.facets)) for (const id of ids) {
         const label = data.labels[data.prefixes[name]! + id] || id;
@@ -116,6 +119,7 @@ export function initialisePagedArchive(root: HTMLElement): () => void {
       content.append(footer); row.append(meta, content); ol!.append(row);
     }
     list.replaceChildren(fragment);
+    reading.refresh();
   }
   async function refresh(): Promise<void> {
     const turn = ++epoch; status.textContent = status.dataset.loading || "Loading…"; retry.hidden = true;
@@ -189,5 +193,5 @@ export function initialisePagedArchive(root: HTMLElement): () => void {
   document.addEventListener("click", click); window.addEventListener("popstate", onPop); window.addEventListener("pageshow", onPop);
   // SSR is immediately useful; hydration verifies the complete page projection.
   void refresh();
-  return () => { alive = false; controller.abort(); worker.terminate(); for (const job of pending.values()) job.reject(new Error("Archive disposed")); pending.clear(); document.removeEventListener("click", click); window.removeEventListener("popstate", onPop); window.removeEventListener("pageshow", onPop); };
+  return () => { alive = false; controller.abort(); reading.dispose(); worker.terminate(); for (const job of pending.values()) job.reject(new Error("Archive disposed")); pending.clear(); document.removeEventListener("click", click); window.removeEventListener("popstate", onPop); window.removeEventListener("pageshow", onPop); };
 }

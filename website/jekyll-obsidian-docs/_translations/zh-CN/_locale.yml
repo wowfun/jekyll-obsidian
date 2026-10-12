@@ -2,6 +2,9 @@ name: 简体中文
 hreflang: zh-Hans
 dir: ltr
 messages:
+  flat_reading: 平铺阅读
+  reading_loading: 正在载入正文…
+  reading_unavailable: 正文载入失败。
   language: 语言
   translation_missing: 本页尚无译文，以下显示默认语言版本。
   skip_to_content: 跳到正文

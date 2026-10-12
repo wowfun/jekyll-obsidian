@@ -127,6 +127,8 @@ jekyll-obsidian dev
 
 贡献者可以继续阅读[开发者指南](website/jekyll-obsidian-docs/docs/development/index.md)。
 
+Windows 原生开发可使用 RubyInstaller Ruby+Devkit 4.0.6、Bundler 4.0.16 和 Node 26。开发者指南提供了 PowerShell 构建与归档测试命令。创建文件符号链接的 Ruby 测试需要相应的 Windows 权限。
+
 ## 许可证
 
 MIT

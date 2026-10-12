@@ -37,7 +37,7 @@ module JekyllObsidian
         stamp = card["published_at"]
         date = stamp && (offset ? DateTime.iso8601(stamp).new_offset(offset).iso8601 : stamp)
         values = facet_values(card["tags"], config)
-        card.slice("id", "title", "url", "source_url", "date_basis").merge(
+        card.slice("id", "title", "url", "summary", "source_url", "date_basis").merge(
           "published_at" => date, "display_date" => date&.slice(0, 10),
           "year" => date&.slice(0, 4) || "Undated", "month" => date&.slice(0, 7),
           "facets" => values

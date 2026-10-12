@@ -128,6 +128,8 @@ Build for another host with `jekyll-obsidian build --url https://example.com --b
 
 Contributors can continue with the [Developer Guide](website/jekyll-obsidian-docs/docs/development/index.md).
 
+Native Windows contributors can use RubyInstaller Ruby+Devkit 4.0.6, Bundler 4.0.16 and Node 26. The Developer Guide includes PowerShell build and archive-test commands. Ruby tests that create file symlinks require Windows symlink privileges.
+
 ## License
 
 MIT

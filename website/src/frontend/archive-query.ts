@@ -6,7 +6,7 @@ export interface ArchiveManifest {
   years: Record<string, [number, number]>; months: Record<string, [number, number]>; chunks: string[];
 }
 export interface ArchiveCard {
-  id: string; title: string; url: string; source_url?: string | null;
+  id: string; title: string; url: string; summary?: string | null; source_url?: string | null;
   published_at: string | null; display_date: string | null; year: string; month: string | null;
   facets: Record<string, string[]>; date_basis?: string | null;
 }

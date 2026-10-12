@@ -58,7 +58,7 @@
         {% endif %}
 
         {% if page.website.kind == 'blog-index' and page.website.theme_data.archive_groups %}
-          <div class="archive-ledger" data-filter-list>
+          <div class="archive-ledger" id="archive-ledger" data-filter-list>
             {% for group in page.website.theme_data.archive_groups %}
               <section data-filter-group>
                 <h2>{{ group.label | default: group.year | escape }}</h2>

@@ -252,7 +252,7 @@ module JekyllObsidian
         flags = File::RDONLY | (File.const_defined?(:NOFOLLOW) ? File::NOFOLLOW : 0)
         File.open(absolute, flags) do |file|
           pinned = file.stat
-          fatal("vault file changed during snapshot: #{relative}") unless pinned.file? && pinned.dev == stat.dev && pinned.ino == stat.ino
+          fatal("vault file changed during snapshot: #{relative}") unless opened_file_matches?(absolute, file, stat)
           entries << SnapshotEntry.new(
             path: normalized,
             bytes: %i[note locale_manifest].include?(kind) ? file.read : nil,
@@ -352,14 +352,21 @@ module JekyllObsidian
       fatal("#{label} must be a non-symlink regular file") unless before.file? && !before.symlink?
       flags = File::RDONLY | (File.const_defined?(:NOFOLLOW) ? File::NOFOLLOW : 0)
       File.open(path, flags) do |file|
-        opened = file.stat
-        unless opened.file? && opened.dev == before.dev && opened.ino == before.ino
+        unless opened_file_matches?(path, file, before)
           fatal("#{label} changed while opening")
         end
         file.read
       end
     rescue SystemCallError => exception
       fatal("cannot read #{label}: #{exception.message}")
+    end
+
+    def opened_file_matches?(path, file, before)
+      current = File.lstat(path)
+      # Ruby on Windows reports different dev values for lstat and IO#stat.
+      # File.identical? compares the native handle identity on that platform.
+      current.file? && !current.symlink? && file.stat.file? &&
+        current.dev == before.dev && current.ino == before.ino && File.identical?(path, file)
     end
 
     def repository_identity(site, layout)
