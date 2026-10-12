@@ -2,6 +2,7 @@
 
 require "cgi/escape"
 require "date"
+require_relative "archive_chronology"
 
 module JekyllObsidian
   # The only internal theme seam. Each built-in adapter consumes the same
@@ -77,14 +78,11 @@ module JekyllObsidian
       def note_page(note, config, theme_data, topic_anchors, topic_summaries, local_graph, home_route, home_url)
         properties = note.properties
         comments = page_comments(note, config)
-        display_time = lambda do |value|
-          value && config.blog["utc_offset"] ? DateTime.iso8601(value).new_offset(config.blog.fetch("utc_offset")).iso8601 : value
-        end
         website = {
           "kind" => "note",
           "id" => note.id,
           "content_type" => note.content_type,
-          "published_at" => display_time.call(note.published_at),
+          "published_at" => ArchiveChronology.local_time(note.published_at, config.blog["utc_offset"]),
           "route" => note.route,
           "href" => config.url_builder.href(note.route),
           "absolute_url" => config.url_builder.absolute_url(note.route),
@@ -97,7 +95,7 @@ module JekyllObsidian
           "topic_links" => blog_topic_links(note, topic_anchors),
           "cssclasses" => Array(properties["cssclasses"]),
           "created" => note.created,
-          "updated" => display_time.call(note.updated),
+          "updated" => ArchiveChronology.local_time(note.updated, config.blog["utc_offset"]),
           "directory_index" => note.directory_index,
           "has_h1" => note.has_h1,
           "source_links" => note.source_links,
@@ -279,29 +277,17 @@ module JekyllObsidian
         daily = config.blog["timeline_granularity"] == "day"
         counts = Hash.new(0)
         notes.each do |note|
-          date = archive_time(yield(note), config)
+          date = ArchiveChronology.local_time(yield(note), config.blog["utc_offset"])
           key = daily ? date&.slice(0, 10) : month_key(date)
           counts[key] += 1 if key
         end
 
-        counts.keys.group_by { |key| key[0, 4] }.sort.reverse.map do |year, keys|
-          {
-            "year" => year,
-            "count" => keys.sum { |key| counts.fetch(key) },
-            (daily ? "days" : "months") => (daily ? keys.sort.reverse : keys.sort).map do |key|
-              { "key" => key, "label" => key[5..], "count" => counts.fetch(key) }
-            end
-          }
-        end
+        ArchiveChronology.timeline(counts, daily: daily)
       end
 
       def month_key(value)
         match = value.to_s.match(/\A(\d{4})-(0[1-9]|1[0-2])/)
         match && "#{match[1]}-#{match[2]}"
-      end
-
-      def archive_time(value, config)
-        value && config.blog["utc_offset"] ? DateTime.iso8601(value).new_offset(config.blog.fetch("utc_offset")).iso8601 : value
       end
 
       def redirect_page(landing_note, config, home_route, home_url)
@@ -548,7 +534,6 @@ module JekyllObsidian
         paged = config.home["layout"] == "archive" || config.blog["page_size"]
         displayed = paged ? posts.select(&:published_at).reverse + posts.reject(&:published_at) : displayed_posts(posts)
         taxonomy = taxonomy_for(posts, config)
-        timeline = timeline_for(displayed, config, &:published_at)
         documentation = config.navigation
         portfolio = documentation.portfolio
         portfolio_notes = portfolio ? portfolio.project_note_ids.map { |id| model.notes_by_id.fetch(id) } : []
@@ -618,11 +603,13 @@ module JekyllObsidian
         attach_custom_tab_theme_data(theme_data, model, config)
         authored_root_route = model.notes.any? { |note| note.route == "/" }
         home = home_page(displayed, config, system_theme_data, taxonomy) if !root && !authored_root_route && displayed.any? && config.home["layout"] != "archive"
-        groups = archive_groups(displayed, config, taxonomy)
         archive_data = paged && PagedArchive.build(displayed.map { |post| note_card(post, config, taxonomy) }, config)
         if archive_data
           groups = archive_data.fetch("archive_groups")
           timeline = archive_data.fetch("timeline")
+        else
+          groups = archive_groups(displayed, config, taxonomy)
+          timeline = timeline_for(displayed, config, &:published_at)
         end
         blog = if (displayed.any? || config.home["layout"] == "archive") && !(root && config.home["layout"] == "archive")
           system_page(
@@ -824,7 +811,7 @@ module JekyllObsidian
       end
 
       def note_card(note, config, taxonomy)
-        date = archive_time(note.published_at, config)
+        date = ArchiveChronology.local_time(note.published_at, config.blog["utc_offset"])
         content_card(note, config).merge(
           "markdown_url" => config.url_builder.href(PublishedMarkdown.route(note.route)),
           "published_at" => date,

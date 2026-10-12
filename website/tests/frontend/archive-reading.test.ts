@@ -1,12 +1,17 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { createArchiveClient, type ArchiveClient } from "../../src/frontend/archive-client";
 import { articleBody, initialiseArchiveReading } from "../../src/frontend/archive-reading";
 
 let dispose = () => {};
+let client: ArchiveClient;
 beforeEach(() => {
   localStorage.clear();
+  document.head.innerHTML = '<meta name="website:archive-worker" content="/worker.js">';
+  vi.stubGlobal("Worker", class { terminate() {} });
+  client = createArchiveClient("/archive/manifest.json");
   document.body.innerHTML = '<button data-archive-reading-toggle hidden></button><main><div data-filter-list></div></main>';
 });
-afterEach(() => { dispose(); vi.unstubAllGlobals(); });
+afterEach(() => { dispose(); client.dispose(); vi.unstubAllGlobals(); });
 function rows(count: number, offset = 0): void {
   document.querySelector('[data-filter-list]')!.innerHTML = Array.from({ length: count }, (_, i) => `<li data-filter-item><div class="blog-ledger__content"><a class="blog-ledger__main" href="/items/${i + offset}/">Item</a><span class="blog-ledger__description">Description</span></div></li>`).join('');
 }
@@ -26,7 +31,7 @@ it("keeps prose and links, resolves relative URLs and scopes fragments without e
 it("loads only the current page on demand and retains successful bodies across toggles", async () => {
   rows(2);
   const fetch = vi.fn(async (_url: URL) => response()); vi.stubGlobal('fetch', fetch);
-  const reading = initialiseArchiveReading(document.querySelector('main')!); dispose = reading.dispose;
+  const reading = initialiseArchiveReading(document.querySelector('main')!, client); dispose = reading.dispose;
   expect(fetch).not.toHaveBeenCalled();
   const toggle = document.querySelector<HTMLButtonElement>('button')!; toggle.click();
   await vi.waitFor(() => expect(document.querySelectorAll('[data-reading-loaded]')).toHaveLength(2));
@@ -39,13 +44,29 @@ it("loads only the current page on demand and retains successful bodies across t
   await vi.waitFor(() => expect(document.querySelectorAll('[data-reading-loaded]')).toHaveLength(1));
   expect(fetch).toHaveBeenCalledTimes(3);
   expect(String(fetch.mock.calls[2]![0])).toContain('/items/2/');
+  rows(2); reading.refresh();
+  await vi.waitFor(() => expect(document.querySelectorAll('[data-reading-loaded]')).toHaveLength(2));
+  expect(fetch).toHaveBeenCalledTimes(3);
+});
+
+it('resolves article media and local fragments against the final redirect URL', async () => {
+  rows(1);
+  const redirected = response('<h2 id="heading">Heading</h2><a href="/canonical/note/#heading">Jump</a><img src="image.png">');
+  Object.defineProperty(redirected, 'url', { value: new URL('/canonical/note/', location.href).href });
+  vi.stubGlobal('fetch', vi.fn(async () => redirected));
+  const reading = initialiseArchiveReading(document.querySelector('main')!, client); dispose = reading.dispose;
+  document.querySelector<HTMLButtonElement>('button')!.click();
+  await vi.waitFor(() => expect(document.querySelector('[data-reading-loaded]')).not.toBeNull());
+  const body = document.querySelector('.archive-reading__body')!;
+  expect(body.querySelector('img')!.getAttribute('src')).toBe(new URL('/canonical/note/image.png', location.href).href);
+  expect(body.querySelector('a')!.getAttribute('href')).toBe('#' + body.querySelector('h2')!.id);
 });
 
 it("bounds concurrent loads, cancels queued work on switch-off, and ignores late responses", async () => {
   rows(8);
   const resolve: ((value: Response) => void)[] = [];
   const fetch = vi.fn(() => new Promise<Response>(done => resolve.push(done))); vi.stubGlobal('fetch', fetch);
-  const reading = initialiseArchiveReading(document.querySelector('main')!); dispose = reading.dispose;
+  const reading = initialiseArchiveReading(document.querySelector('main')!, client); dispose = reading.dispose;
   const toggle = document.querySelector<HTMLButtonElement>('button')!; toggle.click();
   expect(fetch).toHaveBeenCalledTimes(4);
   toggle.click(); resolve.forEach(done => done(response()));
@@ -57,10 +78,27 @@ it("bounds concurrent loads, cancels queued work on switch-off, and ignores late
 it("retries a failed article while keeping successful articles and the description", async () => {
   rows(2);
   const fetch = vi.fn().mockResolvedValueOnce(new Response('', { status: 503 })).mockImplementation(async () => response()); vi.stubGlobal('fetch', fetch);
-  const reading = initialiseArchiveReading(document.querySelector('main')!); dispose = reading.dispose;
+  const reading = initialiseArchiveReading(document.querySelector('main')!, client); dispose = reading.dispose;
   document.querySelector<HTMLButtonElement>('button')!.click();
   await vi.waitFor(() => expect(document.querySelector('[data-reading-retry]')).not.toBeNull());
   document.querySelector<HTMLButtonElement>('[data-reading-retry]')!.click();
+  await vi.waitFor(() => expect(document.querySelectorAll('[data-reading-loaded]')).toHaveLength(2));
+  expect(fetch).toHaveBeenCalledTimes(3);
+});
+
+it('retries only the failed row without aborting another article still loading', async () => {
+  rows(2);
+  let finish!: (value: Response) => void, pendingSignal!: AbortSignal;
+  const fetch = vi.fn().mockResolvedValueOnce(new Response('', { status: 503 }))
+    .mockImplementationOnce((_url, options) => { pendingSignal = options.signal; return new Promise<Response>(resolve => { finish = resolve; }); })
+    .mockImplementation(async () => response());
+  vi.stubGlobal('fetch', fetch);
+  const reading = initialiseArchiveReading(document.querySelector('main')!, client); dispose = reading.dispose;
+  document.querySelector<HTMLButtonElement>('button')!.click();
+  await vi.waitFor(() => expect(document.querySelector('[data-reading-retry]')).not.toBeNull());
+  document.querySelector<HTMLButtonElement>('[data-reading-retry]')!.click();
+  expect(pendingSignal.aborted).toBe(false);
+  finish(response());
   await vi.waitFor(() => expect(document.querySelectorAll('[data-reading-loaded]')).toHaveLength(2));
   expect(fetch).toHaveBeenCalledTimes(3);
 });

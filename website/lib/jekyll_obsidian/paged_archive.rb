@@ -3,7 +3,7 @@
 require "json"
 require "digest"
 require "base64"
-require "date"
+require_relative "archive_chronology"
 
 module JekyllObsidian
   # A static archive query interface: the browser fetches selected postings and
@@ -32,10 +32,9 @@ module JekyllObsidian
       labels = config.site.tag_labels || {}
       aliases = config.site.tag_aliases || {}
       facets = config.blog.fetch("facets")
-      offset = config.blog["utc_offset"]
       records = cards.map do |card|
-        stamp = card["published_at"]
-        date = stamp && (offset ? DateTime.iso8601(stamp).new_offset(offset).iso8601 : stamp)
+        # The presenter supplies dates already normalized to the display offset.
+        date = card["published_at"]
         values = facet_values(card["tags"], config)
         card.slice("id", "title", "url", "markdown_url", "summary", "source_url", "date_basis").merge(
           "published_at" => date, "display_date" => date&.slice(0, 10),
@@ -64,7 +63,17 @@ module JekyllObsidian
       months = {}
       years = {}
       days = {}
+      previous_day = nil
+      undated = false
       records.each_with_index do |record, ordinal|
+        day = record["display_date"]
+        if day
+          # Export ranges rely on descending, contiguous calendar-day blocks.
+          raise ArgumentError, "Paged archive dates must be descending with undated cards last" if undated || (previous_day && day > previous_day)
+          previous_day = day
+        else
+          undated = true
+        end
         [ [months, record["month"]], [years, record["year"]], [days, record["display_date"]] ].each do |mapping, key|
           next unless key
           mapping[key] ||= [ordinal, ordinal]
@@ -80,7 +89,7 @@ module JekyllObsidian
       manifest = {
         "version" => 1, "generation" => generation, "total" => records.length,
         "page_size" => size, "facets" => groups, "prefixes" => facets,
-        "export_max_days" => config.blog.fetch("export_max_days", 7),
+        "export_max_days" => config.blog.fetch("export_max_days"),
         "labels" => labels, "aliases" => aliases, "years" => years, "months" => months, "days" => days,
         "chunks" => chunks
       }
@@ -88,11 +97,8 @@ module JekyllObsidian
       url = config.url_builder.href("#{root}/manifest.json")
       first = records.first(size).map { |record| card_labels(record, manifest) }
       daily = config.blog["timeline_granularity"] == "day"
-      timeline = years.reject { |year, _| year == "Undated" }.map do |year, range|
-        { "year" => year, "count" => range[1] - range[0], (daily ? "days" : "months") => (daily ? days : months).filter_map do |key, bounds|
-          { "key" => key, "label" => key[5..], "count" => bounds[1] - bounds[0] } if key.start_with?(year)
-        end }
-      end
+      counts = (daily ? days : months).transform_values { |bounds| bounds[1] - bounds[0] }
+      timeline = ArchiveChronology.timeline(counts, daily: daily)
       {
         "archive" => manifest.merge("url" => url),
         "archive_groups" => first.group_by { |card| card.fetch("year") }.map { |year, posts| { "label" => year, "posts" => posts } },

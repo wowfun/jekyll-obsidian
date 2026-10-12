@@ -1,3 +1,5 @@
+import { archiveConcurrent, type ArchiveClient } from "./archive-client";
+
 const ELEMENTS = new Set("A ABBR B BLOCKQUOTE BR CODE DD DEL DETAILS DIV DL DT EM FIGCAPTION FIGURE H1 H2 H3 H4 H5 H6 HR I IMG KBD LI MARK OL P PRE S SECTION SMALL SPAN STRONG SUB SUMMARY SUP TABLE TBODY TD TFOOT TH THEAD TR UL".split(" "));
 const BLOCKED = new Set("SCRIPT STYLE IFRAME OBJECT EMBED FORM INPUT BUTTON SELECT TEXTAREA TEMPLATE NOSCRIPT SVG MATH".split(" "));
 
@@ -45,12 +47,58 @@ export function articleBody(html: string, url: string, prefix: string): Document
   return result;
 }
 
-export function initialiseArchiveReading(root: HTMLElement): { refresh: () => void; dispose: () => void } {
+export function initialiseArchiveReading(root: HTMLElement, client: Pick<ArchiveClient, "article">): { refresh: () => void; dispose: () => void } {
   const toggle = document.querySelector<HTMLButtonElement>("[data-archive-reading-toggle]");
   if (!toggle) return { refresh() {}, dispose() {} };
   let enabled = false, disposed = false, controller = new AbortController(), sequence = 0;
+  const loading = new WeakMap<HTMLElement, AbortSignal>();
+  const cache = new Map<string, { body: DocumentFragment; weight: number }>();
+  let cacheWeight = 0;
   try { enabled = localStorage.getItem("website-archive-reading") === "true"; } catch { /* Storage is optional. */ }
   toggle.hidden = false;
+  function cloneBody(body: DocumentFragment): DocumentFragment {
+    const clone = body.cloneNode(true) as DocumentFragment, ids = new Map<string, string>();
+    const prefix = `archive-article-${++sequence}`;
+    for (const [index, element] of [...clone.querySelectorAll('[id]')].entries()) {
+      const id = `${prefix}-${index}`; ids.set(element.id, id); element.id = id;
+    }
+    for (const link of clone.querySelectorAll('a[href^="#"]')) {
+      const id = ids.get(link.getAttribute('href')!.slice(1)); if (id) link.setAttribute('href', '#' + id);
+    }
+    return clone;
+  }
+  async function load(row: HTMLElement, signal: AbortSignal): Promise<void> {
+    const link = row.querySelector<HTMLAnchorElement>(".blog-ledger__main");
+    const content = row.querySelector<HTMLElement>(".blog-ledger__content");
+    if (!link || !content || row.dataset.readingLoaded || loading.get(row) === signal) return;
+    loading.set(row, signal);
+    let body = content.querySelector<HTMLElement>(".archive-reading__body");
+    if (!body) { body = document.createElement("div"); body.className = "archive-reading__body note-content"; content.append(body); }
+    body.textContent = toggle!.dataset.loading || "Loading article…";
+    body.setAttribute("aria-busy", "true");
+    try {
+      let cached = cache.get(link.href);
+      if (cached) { cache.delete(link.href); cache.set(link.href, cached); }
+      else {
+        const article = await client.article(link.href, signal); signal.throwIfAborted();
+        cached = { body: articleBody(article.html, article.url, 'archive-template'), weight: article.html.length * 2 };
+        cache.set(link.href, cached); cacheWeight += cached.weight;
+        // Bound both item count and source size; retain only sanitized bodies.
+        while (cache.size > 100 || cacheWeight > 4 * 1024 * 1024) {
+          const key = cache.keys().next().value!; cacheWeight -= cache.get(key)!.weight; cache.delete(key);
+        }
+      }
+      signal.throwIfAborted(); body.replaceChildren(cloneBody(cached.body)); row.dataset.readingLoaded = "true";
+    } catch {
+      if (signal.aborted) return;
+      const message = document.createElement("p"); message.textContent = toggle!.dataset.unavailable || "Article could not be loaded.";
+      const retry = document.createElement("button"); retry.type = "button"; retry.dataset.readingRetry = ""; retry.textContent = toggle!.dataset.retry || "Retry";
+      body.replaceChildren(message, retry);
+    } finally {
+      if (loading.get(row) === signal) loading.delete(row);
+      if (!signal.aborted) body.removeAttribute("aria-busy");
+    }
+  }
   function refresh(): void {
     controller.abort(); controller = new AbortController();
     root.classList.toggle("archive-reading", enabled);
@@ -58,36 +106,7 @@ export function initialiseArchiveReading(root: HTMLElement): { refresh: () => vo
     if (!enabled || disposed) return;
     const signal = controller.signal;
     const rows = Array.from(root.querySelectorAll<HTMLElement>("[data-filter-item]"));
-    let index = 0;
-    async function load(row: HTMLElement): Promise<void> {
-      const link = row.querySelector<HTMLAnchorElement>(".blog-ledger__main");
-      const content = row.querySelector<HTMLElement>(".blog-ledger__content");
-      if (!link || !content || row.dataset.readingLoaded) return;
-      let body = content.querySelector<HTMLElement>(".archive-reading__body");
-      if (!body) { body = document.createElement("div"); body.className = "archive-reading__body note-content"; content.append(body); }
-      body.textContent = toggle!.dataset.loading || "Loading article…";
-      body.setAttribute("aria-busy", "true");
-      try {
-        const url = new URL(link.href);
-        if (url.origin !== location.origin) throw new Error("Invalid article origin");
-        const response = await fetch(url, { signal: AbortSignal.any([signal, AbortSignal.timeout(15000)]), headers: { Accept: "text/html" } });
-        if (!response.ok || new URL(response.url || url.href).origin !== location.origin || !response.headers.get("content-type")?.includes("text/html")) throw new Error("Article load failed");
-        const html = await response.text();
-        if (signal.aborted) return;
-        body.replaceChildren(articleBody(html, url.href, `archive-article-${++sequence}`));
-        row.dataset.readingLoaded = "true";
-      } catch {
-        if (signal.aborted) return;
-        const message = document.createElement("p"); message.textContent = toggle!.dataset.unavailable || "Article could not be loaded.";
-        const retry = document.createElement("button"); retry.type = "button"; retry.dataset.readingRetry = ""; retry.textContent = toggle!.dataset.retry || "Retry";
-        body.replaceChildren(message, retry);
-      } finally { if (!signal.aborted) body.removeAttribute("aria-busy"); }
-    }
-    // Each successful body belongs to its current-page row. Replacing the page
-    // releases it; switching off cancels the remaining requests immediately.
-    void Promise.all(Array.from({ length: Math.min(4, rows.length) }, async () => {
-      while (!signal.aborted && index < rows.length) await load(rows[index++]!);
-    }));
+    void archiveConcurrent(rows, row => load(row, signal), signal).catch(() => { /* Rows handle errors; cancellation stops the pool. */ });
   }
   function switchReading(): void {
     enabled = !enabled;
@@ -95,10 +114,13 @@ export function initialiseArchiveReading(root: HTMLElement): { refresh: () => vo
     refresh();
   }
   function retry(event: MouseEvent): void {
-    if (event.target instanceof Element && event.target.closest("[data-reading-retry]")) refresh();
+    if (!enabled || disposed || !(event.target instanceof Element) || !event.target.closest("[data-reading-retry]")) return;
+    const row = event.target.closest<HTMLElement>('[data-filter-item]');
+    if (row) void load(row, controller.signal);
   }
   toggle.addEventListener("click", switchReading);
   root.addEventListener("click", retry);
-  refresh();
-  return { refresh, dispose() { disposed = true; controller.abort(); toggle.removeEventListener("click", switchReading); root.removeEventListener("click", retry); } };
+  // Pagination chooses the initial rows before starting saved reading mode.
+  toggle.setAttribute('aria-checked', String(enabled));
+  return { refresh, dispose() { disposed = true; controller.abort(); cache.clear(); cacheWeight = 0; toggle.removeEventListener("click", switchReading); root.removeEventListener("click", retry); } };
 }

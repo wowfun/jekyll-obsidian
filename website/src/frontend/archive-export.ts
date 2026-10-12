@@ -1,7 +1,15 @@
-import { archiveState, type ArchiveCard, type ArchiveManifest } from "./archive-query";
+import { archiveState, type ArchiveManifest } from "./archive-query";
 import { archiveConcurrent, type ArchiveClient } from "./archive-client";
 import { dateRangeError, defaultExportDates, exportFilename, exportMarkdown, exportState, type ExportSnapshot } from "./archive-export-model";
 import { openWebsiteDialog } from "./dialogs";
+
+interface ExportJob {
+  snapshot: ExportSnapshot;
+  ordinals: number[];
+  bodies: Map<string, string>;
+  controller: AbortController;
+  status: "running" | "failed" | "complete";
+}
 
 export function initialiseArchiveExport(client: ArchiveClient): () => void {
   const opener = document.querySelector<HTMLButtonElement>("[data-archive-export-open]");
@@ -17,11 +25,14 @@ export function initialiseArchiveExport(client: ArchiveClient): () => void {
   const progress = dialog.querySelector<HTMLProgressElement>("[data-export-progress]")!;
   const labels = (name: string) => dialog.dataset[name] || "";
   let data: ArchiveManifest | undefined, filters = new URLSearchParams(), ordinals: number[] = [];
-  let session = new AbortController(), calculation = new AbortController(), task: AbortController | undefined;
-  let snapshot: ExportSnapshot | undefined, bodies = new Map<string, string>(), disposed = false;
+  let session = new AbortController(), calculation = new AbortController();
+  let job: ExportJob | undefined, retryAction: (() => void) | undefined, disposed = false;
   const message = (name: string, count: number) => labels(name).replace("{count}", String(count));
-  function releaseTask(): void { task?.abort(); task = undefined; fields.disabled = false; cancel.hidden = true; progress.hidden = true; }
-  function resetResults(): void { snapshot = undefined; bodies.clear(); retry.hidden = true; download.textContent = labels("download"); }
+  function setRetry(action?: () => void): void { retryAction = action; retry.hidden = !action; }
+  function resetResults(): void {
+    job?.controller.abort(); job = undefined; setRetry();
+    fields.disabled = false; cancel.hidden = true; progress.hidden = true;
+  }
   function renderFacets(): void {
     facets.replaceChildren();
     for (const [name, options] of Object.entries(data!.facets)) {
@@ -41,7 +52,7 @@ export function initialiseArchiveExport(client: ArchiveClient): () => void {
       group.append(choices); facets.append(group);
     }
   }
-  async function recount(): Promise<void> {
+  async function recount(debounce = false): Promise<void> {
     calculation.abort(); calculation = new AbortController();
     const signal = AbortSignal.any([session.signal, calculation.signal]);
     ordinals = []; download.disabled = true; resetResults();
@@ -49,16 +60,21 @@ export function initialiseArchiveExport(client: ArchiveClient): () => void {
     const error = dateRangeError(start.value, end.value, data.export_max_days);
     if (error) { status.textContent = labels(error).replace("{days}", String(data.export_max_days)); return; }
     status.textContent = labels("calculating");
+    if (debounce) await new Promise<void>(resolve => {
+      const finish = () => { clearTimeout(timer); signal.removeEventListener('abort', finish); resolve(); };
+      const timer = setTimeout(finish, 180); signal.addEventListener('abort', finish, { once: true });
+    });
+    if (signal.aborted) return;
     try {
       const result = await client.select(exportState(data, filters, start.value, end.value), "all", signal);
       if (signal.aborted || disposed) return;
       ordinals = result.ordinals;
       status.textContent = result.count ? message("matches", result.count) : labels("empty");
       download.disabled = result.count === 0;
-    } catch { if (!signal.aborted) { status.textContent = labels("unavailable"); retry.hidden = false; } }
+    } catch { if (!signal.aborted) { status.textContent = labels("unavailable"); setRetry(() => { void recount(); }); } }
   }
   async function open(): Promise<void> {
-    session.abort(); releaseTask(); calculation.abort(); session = new AbortController();
+    session.abort(); calculation.abort(); session = new AbortController();
     const signal = session.signal, search = location.search;
     data = undefined; ordinals = []; resetResults(); facets.replaceChildren(); start.value = end.value = "";
     download.disabled = true; fields.disabled = true; status.textContent = labels("calculating");
@@ -66,68 +82,78 @@ export function initialiseArchiveExport(client: ArchiveClient): () => void {
     try {
       const manifest = await client.manifest(signal); if (signal.aborted) return; data = manifest;
       const initial = archiveState(data, search); filters = new URLSearchParams(initial.parameters);
-      const result = await client.select(initial, "all", signal); if (signal.aborted) return;
-      [start.value, end.value] = defaultExportDates(data, search, result.ordinals);
+      [start.value, end.value] = defaultExportDates(data, search, []);
+      if (!start.value) {
+        const result = await client.select(initial, "first", signal); if (signal.aborted) return;
+        [start.value, end.value] = defaultExportDates(data, search, result.ordinals);
+      }
       for (const key of ["day", "month", "year", "page"]) filters.delete(key);
       renderFacets(); fields.disabled = false;
       dialog!.querySelector<HTMLElement>("[data-export-limit]")!.textContent = labels("limitHint").replace("{days}", String(data.export_max_days));
       await recount();
       if (!signal.aborted && !start.value && !end.value) status.textContent = labels("empty");
-    } catch { if (!signal.aborted) { status.textContent = labels("unavailable"); retry.hidden = false; } }
+    } catch { if (!signal.aborted) { status.textContent = labels("unavailable"); setRetry(() => { void open(); }); } }
   }
   async function save(): Promise<void> {
-    if (!data || !ordinals.length || task) return;
-    calculation.abort(); task = new AbortController();
-    const current = task, signal = AbortSignal.any([session.signal, current.signal]);
-    const selected = [...ordinals], selectedFilters = new URLSearchParams(filters), first = start.value, last = end.value;
-    download.disabled = true; fields.disabled = true; retry.hidden = true; cancel.hidden = false; progress.hidden = false;
-    progress.max = selected.length; progress.value = bodies.size;
-    const update = (completed: number) => { progress.value = completed; status.textContent = labels("progress").replace("{done}", String(completed)).replace("{count}", String(selected.length)); };
-    update(bodies.size);
+    if (!data || !ordinals.length || job?.status === "running") return;
+    calculation.abort();
+    const controller = new AbortController();
+    job ??= { snapshot: { site: labels("site"), locale: document.documentElement.lang, start: start.value, end: end.value, filters: new URLSearchParams(filters), cards: [] }, ordinals: [...ordinals], bodies: new Map(), controller, status: "running" };
+    const current = job; current.controller = controller; current.status = "running";
+    const signal = AbortSignal.any([session.signal, current.controller.signal]);
+    const { snapshot, bodies } = current;
+    download.disabled = true; fields.disabled = true; setRetry(); cancel.hidden = false; progress.hidden = false;
+    progress.max = current.ordinals.length;
+    const update = () => { progress.value = bodies.size; status.textContent = labels("progress").replace("{done}", String(bodies.size)).replace("{count}", String(current.ordinals.length)); };
+    update();
     try {
-      if (!snapshot) {
-        const cards: ArchiveCard[] = await client.cards(selected, signal); signal.throwIfAborted();
-        snapshot = { site: labels("site"), locale: document.documentElement.lang, start: first, end: last, filters: selectedFilters, cards };
+      if (!snapshot.cards.length) {
+        snapshot.cards = await client.cards(current.ordinals, signal); signal.throwIfAborted();
       }
-      let completed = bodies.size, failures = 0;
+      let failures = 0;
       await archiveConcurrent(snapshot.cards.filter(card => !bodies.has(card.id)), async card => {
-        try { const body = await client.markdown(card, signal); signal.throwIfAborted(); bodies.set(card.id, body); }
+        try { const body = await client.markdown(card, signal); signal.throwIfAborted(); bodies.set(card.id, body); update(); }
         catch (error) { if (signal.aborted) throw error; failures++; }
-        if (!signal.aborted) update(++completed);
       }, signal);
       signal.throwIfAborted();
-      if (failures) { status.textContent = message("failed", failures); retry.hidden = false; return; }
+      if (failures) { current.status = "failed"; status.textContent = message("failed", failures); setRetry(() => { void save(); }); return; }
       const markdown = exportMarkdown(snapshot, data, bodies, { dates: labels("dates"), source: labels("sources"), topic: labels("topics"), all: labels("all"), entries: labels("entries"), date: labels("date"), original: labels("original"), article: labels("article") });
       const url = URL.createObjectURL(new Blob([markdown], { type: "text/markdown;charset=utf-8" }));
       const link = document.createElement("a"); link.href = url; link.download = exportFilename(snapshot); document.body.append(link); link.click(); link.remove();
       setTimeout(() => URL.revokeObjectURL(url), 1000);
       status.textContent = message("complete", snapshot.cards.length);
-      resetResults();
-    } catch { if (!signal.aborted) { status.textContent = labels("unavailable"); retry.hidden = false; } }
-    finally { if (task === current) { task = undefined; fields.disabled = false; cancel.hidden = true; progress.hidden = true; download.disabled = !retry.hidden; } }
+      current.status = "complete";
+    } catch { if (!signal.aborted) { current.status = "failed"; status.textContent = labels("unavailable"); setRetry(() => { void save(); }); } }
+    finally {
+      if (job === current) {
+        fields.disabled = false; cancel.hidden = true; progress.hidden = true;
+        download.disabled = current.status !== "complete";
+        if (current.status === "complete") job = undefined;
+      }
+    }
   }
-  function change(): void {
-    if (task || !data) return;
+  function change(event?: Event): void {
+    if (job?.status === "running" || !data) return;
     filters = new URLSearchParams();
     for (const input of facets.querySelectorAll<HTMLInputElement>("input:checked")) filters.append(input.dataset.exportFacet!, input.value);
     for (const all of facets.querySelectorAll<HTMLButtonElement>("[data-export-all]")) all.setAttribute("aria-pressed", String(!filters.has(all.dataset.exportAll!)));
-    void recount();
+    void recount(event?.target === start || event?.target === end);
   }
   function selectAll(event: MouseEvent): void {
     if (!(event.target instanceof Element)) return;
-    const all = event.target.closest<HTMLElement>("[data-export-all]"); if (!all || task) return;
+    const all = event.target.closest<HTMLElement>("[data-export-all]"); if (!all || job?.status === "running") return;
     for (const input of facets.querySelectorAll<HTMLInputElement>("input")) if (input.dataset.exportFacet === all.dataset.exportAll) input.checked = false;
     change();
   }
-  function cancelTask(): void { releaseTask(); resetResults(); download.disabled = !ordinals.length; status.textContent = labels("cancelled"); }
-  function abortSession(): void { session.abort(); calculation.abort(); releaseTask(); resetResults(); }
+  function cancelTask(): void { resetResults(); download.disabled = !ordinals.length; status.textContent = labels("cancelled"); }
+  function abortSession(): void { session.abort(); calculation.abort(); resetResults(); }
   function close(): void { abortSession(); if (!disposed) opener!.focus(); }
   // The native close event is queued. Abort at the user's close action so a
   // resolved fetch cannot trigger a download before that event is delivered.
   function closeIntent(event: MouseEvent): void {
     if (event.target === dialog || (event.target instanceof Element && event.target.closest('[data-dialog-close]'))) abortSession();
   }
-  function retryTask(): void { if (ordinals.length) void save(); else if (data && !fields.disabled) void recount(); else void open(); }
+  function retryTask(): void { retryAction?.(); }
   const onOpen = () => { void open(); }, onSave = () => { void save(); };
   opener.hidden = false;
   opener.addEventListener("click", onOpen); dialog.addEventListener("close", close);

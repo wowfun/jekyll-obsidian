@@ -35,7 +35,8 @@ it('returns every match exactly once beyond a 50-card page, in archive order', (
   const total = 105, bitmap = new Uint8Array(Math.ceil(total / 8)).fill(255);
   const state = archiveState({ ...data, total }, '?source=hn&page=2');
   expect(matchArchive(total, 50, state.query, { 'source/hn': bitmap }, 'all').ordinals).toEqual(Array.from({ length: total }, (_, i) => i));
-  expect(matchArchive(total, 50, state.query, { 'source/hn': bitmap }, 'count')).toEqual({ count: 105, ordinals: [], page: 1, pages: 1 });
+  expect(matchArchive(total, 50, state.query, { 'source/hn': bitmap }, 'first')).toEqual({ count: 1, ordinals: [0], page: 1, pages: 1 });
+  expect(matchArchive(total, 50, state.query, {}, 'first').ordinals).toEqual([]);
   expect(matchArchive(total, 50, state.query, { 'source/hn': bitmap }).ordinals).toEqual(Array.from({ length: 50 }, (_, i) => i + 50));
 });
 

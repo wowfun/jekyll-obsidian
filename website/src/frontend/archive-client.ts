@@ -17,18 +17,52 @@ export async function archiveConcurrent<T>(values: readonly T[], operation: (val
   }));
 }
 
+interface SharedRequest { controller: AbortController; promise: Promise<unknown>; users: number; settled: boolean }
+
 // One client owns a generation, its worker and a four-request budget shared by
-// pagination and export. Callers own cancellation; only completed data is cached.
+// pagination, reading and export. Subscribers cancel independently; the last cancellation
+// aborts a shared request. Only complete, validated data enters the cache.
 export function createArchiveClient(source: string) {
   const manifestUrl = archiveUrl(source), lifetime = new AbortController();
   const worker = new Worker(requireSiteUrl("archive-worker"), { type: "module" });
   const cache = new Map<string, unknown>();
+  const requests = new Map<string, SharedRequest>();
+  const postings = new Map<string, Uint8Array>();
   let manifest: ArchiveManifest | undefined, queryId = 0, active = 0;
   const queue: { start: () => void; cancel: () => void }[] = [];
   const pending = new Map<number, { resolve: (result: ArchiveMatches) => void; reject: (error: unknown) => void }>();
   worker.onmessage = (event: MessageEvent<ArchiveMatches & { id: number }>) => pending.get(event.data.id)?.resolve(event.data);
   worker.onerror = () => { for (const job of pending.values()) job.reject(new Error("Archive worker failed")); };
   function combined(signal?: AbortSignal): AbortSignal { return signal ? AbortSignal.any([lifetime.signal, signal]) : lifetime.signal; }
+  function shared(key: string, signal: AbortSignal, operation: (signal: AbortSignal) => Promise<unknown>): Promise<unknown> {
+    signal.throwIfAborted();
+    let request = requests.get(key);
+    if (!request) {
+      const controller = new AbortController();
+      const entry: SharedRequest = { controller, users: 0, settled: false,
+        promise: operation(combined(controller.signal)).finally(() => {
+          entry.settled = true;
+          if (requests.get(key) === entry) requests.delete(key);
+        })
+      };
+      requests.set(key, entry); request = entry;
+    }
+    const entry = request; entry.users++;
+    return new Promise((resolve, reject) => {
+      let finished = false;
+      const leave = () => {
+        if (finished) return; finished = true;
+        signal.removeEventListener('abort', abort);
+        if (--entry.users === 0 && !entry.settled) {
+          if (requests.get(key) === entry) requests.delete(key);
+          entry.controller.abort();
+        }
+      };
+      const abort = () => { leave(); reject(signal.reason); };
+      signal.addEventListener('abort', abort, { once: true });
+      entry.promise.then(value => { if (!finished) { leave(); resolve(value); } }, error => { if (!finished) { leave(); reject(error); } });
+    });
+  }
   async function limited<T>(operation: () => Promise<T>, signal: AbortSignal): Promise<T> {
     signal.throwIfAborted();
     if (active < 4) active++;
@@ -47,24 +81,23 @@ export function createArchiveClient(source: string) {
     if (cache.has(filename)) { const value = cache.get(filename); cache.delete(filename); cache.set(filename, value); return value; }
     const url = new URL(filename, manifestUrl);
     if (url.origin !== manifestUrl.origin || !url.pathname.startsWith(manifestUrl.pathname.slice(0, manifestUrl.pathname.lastIndexOf("/") + 1))) throw new Error("Invalid archive resource path");
-    return limited(async () => {
+    return shared(filename, signal, requestSignal => limited(async () => {
       if (cache.has(filename)) return cache.get(filename);
-      const response = await fetch(url, { signal: AbortSignal.any([signal, AbortSignal.timeout(15000)]) });
+      const response = await fetch(url, { signal: AbortSignal.any([requestSignal, AbortSignal.timeout(15000)]) });
       if (!response.ok || new URL(response.url || url.href).origin !== manifestUrl.origin) throw new Error("Archive load failed");
       const value: unknown = await response.json();
-      signal.throwIfAborted();
-      if (filename !== "manifest.json") {
+      requestSignal.throwIfAborted();
+      if (filename === "manifest.json") return manifest = validateManifest(value);
+      else {
         if (object(value).generation !== manifest?.generation) throw new Error("Archive generation differs");
         cache.set(filename, value);
         while (cache.size > 20) cache.delete(cache.keys().next().value!);
       }
       return value;
-    }, signal);
+    }, requestSignal));
   }
-  async function getManifest(caller?: AbortSignal): Promise<ArchiveManifest> {
-    const signal = combined(caller); signal.throwIfAborted();
-    if (manifest) return manifest;
-    const data = object(await resource("manifest.json", signal));
+  function validateManifest(value: unknown): ArchiveManifest {
+    const data = object(value);
     if (data.version !== 1 || !Number.isSafeInteger(data.total) || Number(data.total) < 0 || !Number.isSafeInteger(data.page_size) || Number(data.page_size) < 1 || Number(data.page_size) > 100 || !Number.isSafeInteger(data.export_max_days) || Number(data.export_max_days) < 1 || typeof data.generation !== "string" || !/^[a-f0-9]{64}$/.test(data.generation) || !Array.isArray(data.chunks)) throw new Error("Invalid archive manifest");
     for (const key of ["facets", "prefixes", "labels", "aliases", "years", "months", "days"]) object(data[key]);
     for (const [name, prefix] of Object.entries(object(data.prefixes))) {
@@ -75,7 +108,11 @@ export function createArchiveClient(source: string) {
     for (const mapping of [data.years, data.months, data.days]) for (const range of Object.values(object(mapping))) {
       if (!Array.isArray(range) || range.length !== 2 || !range.every(Number.isSafeInteger) || range[0] < 0 || range[1] > Number(data.total) || range[0] > range[1]) throw new Error("Invalid chronology bounds");
     }
-    manifest = data as unknown as ArchiveManifest; return manifest;
+    return data as unknown as ArchiveManifest;
+  }
+  async function getManifest(caller?: AbortSignal): Promise<ArchiveManifest> {
+    const signal = combined(caller); signal.throwIfAborted();
+    return manifest || await resource("manifest.json", signal) as ArchiveManifest;
   }
   async function select(state: ReturnType<typeof archiveState>, mode: ArchiveQueryMode, caller?: AbortSignal): Promise<ArchiveMatches> {
     const signal = combined(caller), data = await getManifest(signal);
@@ -84,9 +121,14 @@ export function createArchiveClient(source: string) {
       const split = key.indexOf("/"), name = key.slice(0, split), id = key.slice(split + 1);
       const option = data.facets[name]?.find(entry => entry.id === id);
       if (!option) return;
-      const posting = object(await resource(option.posting, signal));
-      if (posting.total !== data.total || typeof posting.bitmap !== "string") throw new Error("Invalid posting");
-      bitmaps[key] = decodeBitmap(posting.bitmap, data.total);
+      if (!postings.has(key)) {
+        const posting = object(await resource(option.posting, signal));
+        if (posting.total !== data.total || typeof posting.bitmap !== "string") throw new Error("Invalid posting");
+        if (!postings.has(key)) postings.set(key, decodeBitmap(posting.bitmap, data.total));
+      }
+      const bitmap = postings.get(key)!; postings.delete(key); postings.set(key, bitmap);
+      while (postings.size > 20) postings.delete(postings.keys().next().value!);
+      bitmaps[key] = bitmap;
     }, signal);
     signal.throwIfAborted();
     const id = ++queryId;
@@ -122,6 +164,15 @@ export function createArchiveClient(source: string) {
       const body = await response.text(); signal.throwIfAborted(); return body;
     }, signal);
   }
-  return { manifest: getManifest, select, cards, markdown, dispose() { lifetime.abort(); worker.terminate(); cache.clear(); } };
+  async function article(value: string, caller: AbortSignal): Promise<{ html: string; url: string }> {
+    const signal = combined(caller), url = archiveUrl(value);
+    return limited(async () => {
+      const response = await fetch(url, { signal: AbortSignal.any([signal, AbortSignal.timeout(15000)]), headers: { Accept: "text/html" } });
+      const finalUrl = response.url || url.href;
+      if (!response.ok || archiveUrl(finalUrl).origin !== location.origin || !response.headers.get("content-type")?.includes("text/html")) throw new Error("Article load failed");
+      const html = await response.text(); signal.throwIfAborted(); return { html, url: finalUrl };
+    }, signal);
+  }
+  return { manifest: getManifest, select, cards, markdown, article, dispose() { lifetime.abort(); worker.terminate(); cache.clear(); postings.clear(); } };
 }
 export type ArchiveClient = ReturnType<typeof createArchiveClient>;

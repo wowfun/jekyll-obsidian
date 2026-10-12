@@ -18,9 +18,10 @@ export function initialisePagedArchive(root: HTMLElement): () => void {
   const prev = pagination.querySelector<HTMLButtonElement>("[data-archive-page=prev]")!;
   const next = pagination.querySelector<HTMLButtonElement>("[data-archive-page=next]")!;
   const controller = new AbortController();
-  const reading = initialiseArchiveReading(root);
+  const reading = initialiseArchiveReading(root, client);
   const cleanupExport = initialiseArchiveExport(client);
   let epoch = 0, alive = true;
+  let pendingSearch: string | undefined;
   let current: ArchiveMatches = { ordinals: [], count: 0, page: 1, pages: 1 };
   function render(cards: ArchiveCard[], data: ArchiveManifest): void {
     const fragment = document.createDocumentFragment();
@@ -50,6 +51,9 @@ export function initialisePagedArchive(root: HTMLElement): () => void {
     reading.refresh();
   }
   async function refresh(): Promise<void> {
+    const search = window.location.search;
+    if (pendingSearch === search) return;
+    pendingSearch = search;
     const turn = ++epoch; status.textContent = status.dataset.loading || "Loading…"; retry.hidden = true;
     root.setAttribute("aria-busy", "true"); prev.disabled = true; next.disabled = true;
     try {
@@ -79,8 +83,8 @@ export function initialisePagedArchive(root: HTMLElement): () => void {
       prev.disabled = result.page <= 1; next.disabled = result.page >= result.pages;
       empty.hidden = result.count !== 0; status.textContent = ""; root.removeAttribute("aria-busy");
     } catch {
-      if (alive && turn === epoch) { status.textContent = status.dataset.unavailable || "Entries could not be loaded."; retry.hidden = false; root.removeAttribute("aria-busy"); }
-    }
+      if (alive && turn === epoch) { status.textContent = status.dataset.unavailable || "Entries could not be loaded."; retry.hidden = false; root.removeAttribute("aria-busy"); reading.refresh(); }
+    } finally { if (turn === epoch) pendingSearch = undefined; }
   }
   function click(event: MouseEvent): void {
     if (!(event.target instanceof Element) || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
@@ -107,8 +111,9 @@ export function initialisePagedArchive(root: HTMLElement): () => void {
     void refresh();
   }
   const onPop = () => { void refresh(); };
-  document.addEventListener("click", click); window.addEventListener("popstate", onPop); window.addEventListener("pageshow", onPop);
+  const onShow = (event: PageTransitionEvent) => { if (event.persisted) void refresh(); };
+  document.addEventListener("click", click); window.addEventListener("popstate", onPop); window.addEventListener("pageshow", onShow);
   // SSR is immediately useful; hydration verifies the complete page projection.
   void refresh();
-  return () => { alive = false; controller.abort(); reading.dispose(); cleanupExport(); client.dispose(); document.removeEventListener("click", click); window.removeEventListener("popstate", onPop); window.removeEventListener("pageshow", onPop); };
+  return () => { alive = false; controller.abort(); reading.dispose(); cleanupExport(); client.dispose(); document.removeEventListener("click", click); window.removeEventListener("popstate", onPop); window.removeEventListener("pageshow", onShow); };
 }

@@ -112,6 +112,19 @@ class PagedArchiveTest < Minitest::Test
     assert result.diagnostics.any? { |diagnostic| diagnostic.code == "invalid_blog_config" }
   end
 
+  def test_monthly_timeline_order_is_consistent_between_paged_and_full_archives
+    entries = %w[2026-01-01 2026-03-01 2025-12-31].each_with_index.map do |date, index|
+      note("items/#{index}.md", "---\npublish: true\ncontent_type: post\ndate: #{date}\n---\n# Item #{index}")
+    end
+    full = compile(*entries)
+    paged = compile(*entries, blog: { "page_size" => 2 })
+    assert full.success?, full.diagnostics.map(&:message).join("\n")
+    assert paged.success?, paged.diagnostics.map(&:message).join("\n")
+    expected = page(full, "/blog/").data.dig("website", "theme_data", "timeline")
+    assert_equal %w[2026-01 2026-03], expected.first.fetch("months").map { |month| month.fetch("key") }
+    assert_equal expected, page(paged, "/blog/").data.dig("website", "theme_data", "timeline")
+  end
+
   def test_export_day_limit_is_a_positive_integer
     [0, -1, "7", 1.5].each do |limit|
       result = compile(note("index.md", "---\npublish: true\n---\n# Home"), blog: { "export_max_days" => limit })
@@ -149,11 +162,23 @@ class PagedArchiveLocalizedTest < Minitest::Test
 end
 
 class PagedArchiveScaleTest < Minitest::Test
+  def test_rejects_noncontiguous_dates_and_dated_cards_after_undated_cards
+    config = Struct.new(:blog, :site).new(
+      { "page_size" => 2, "export_max_days" => 7, "facets" => {} },
+      Struct.new(:tag_labels, :tag_aliases).new({}, {})
+    )
+    [["2026-01-03", "2026-01-01", "2026-01-03"], [nil, "2026-01-03"]].each do |dates|
+      cards = dates.each_with_index.map { |date, index| { "id" => index.to_s, "published_at" => date } }
+      error = assert_raises(ArgumentError) { JekyllObsidian::PagedArchive.build(cards, config) }
+      assert_includes error.message, "descending with undated cards last"
+    end
+  end
+
   def test_one_hundred_thousand_records_use_lazy_postings_and_small_card_chunks
     builder = Object.new
     def builder.href(route) = route
     config = Struct.new(:blog, :site, :url_builder).new(
-      { "page_size" => 50, "utc_offset" => "+08:00", "facets" => { "source" => "source/", "topic" => "topics/" } },
+      { "page_size" => 50, "export_max_days" => 7, "utc_offset" => "+08:00", "facets" => { "source" => "source/", "topic" => "topics/" } },
       Struct.new(:tag_labels, :tag_aliases).new({}, {}), builder
     )
     cards = Array.new(100_000) do |i|

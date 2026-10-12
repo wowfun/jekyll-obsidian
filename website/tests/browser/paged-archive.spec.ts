@@ -3,6 +3,27 @@ import { expect, test } from "@playwright/test";
 for (const locale of ["en", "zh-CN"]) {
   const root = "/__site__/minimal-archive/" + (locale === "en" ? "" : locale + "/");
 
+  test(`saved reading starts once on the selected page and reuses bodies in ${locale}`, async ({ page }) => {
+    await page.goto(root);
+    await expect(page.locator('[data-archive-page-status]')).toHaveText(/3.*1.*2/);
+    await page.locator('[data-archive-reading-toggle]').click();
+    await expect(page.locator('[data-reading-loaded]')).toHaveCount(2);
+    const articles: string[] = [], manifests: string[] = [];
+    page.on('request', request => {
+      if (/\/items\/[abc]\/$/.test(request.url())) articles.push(request.url());
+      if (request.url().endsWith('/manifest.json')) manifests.push(request.url());
+    });
+    await page.goto(root + '?page=2');
+    await expect(page.locator('[data-reading-loaded]')).toHaveCount(1);
+    expect(manifests).toHaveLength(1);
+    expect(articles.map(url => new URL(url).pathname)).toEqual([root + 'items/c/']);
+    await page.locator('[data-archive-page=prev]').click();
+    await expect(page.locator('[data-reading-loaded]')).toHaveCount(2);
+    await page.locator('[data-archive-page=next]').click();
+    await expect(page.locator('[data-reading-loaded]')).toHaveCount(1);
+    expect(articles).toHaveLength(3);
+  });
+
   test(`daily timeline resets pagination and combines with reading and facets in ${locale}`, async ({ page }, testInfo) => {
     await page.goto(root + '?page=2');
     const titles = page.locator('.blog-ledger__main strong');
