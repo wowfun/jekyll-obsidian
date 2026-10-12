@@ -391,7 +391,10 @@ Docs 导航沿用内容目录结构。`nav_order` 对同级文档排序，`nav_e
 `website.blog.page_size` 开启分页（1–100，默认完整归档）。
 `website.blog.facets` 将查询参数映射到标签前缀，例如
 `{source: "source/", topic: "topics/"}`。组内为 OR，组间及时间范围为 AND。
+查询参数 `page`、`year`、`month` 和 `day` 保留给分页与时间筛选使用。
 `website.blog.utc_offset: "+08:00"` 设置归档日期显示偏移。
+设置 `website.blog.timeline_granularity: day`，可在各年份下按倒序列出 `MM-DD` 日期、每日条数及 `?day=YYYY-MM-DD` 筛选链接，默认为 `month`。
+日期边界遵循 `utc_offset`；日期筛选可与来源、主题组合，切换日期会回到第一页，再次选择同一天则取消日期筛选。
 首屏由 HTML 输出，其他页按需加载带版本指纹的卡片分块和筛选位图。
 加载失败保留上次成功页面并提供重试；未知标签匹配空结果。
 每个条目显示 description；未设置时显示笔记预览。

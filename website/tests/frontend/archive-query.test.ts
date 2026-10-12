@@ -17,4 +17,15 @@ describe('paged archive queries', () => {
     const state = archiveState(manifest, '?topic=old&topic=new&topic=unknown&page=bad');
     expect(state.parameters.toString()).toBe('topic=new&topic=unknown');
   });
+  it('filters by a calendar day with facets, pagination and day precedence', () => {
+    const manifest = { total: 6, prefixes: { source: 'source/' }, aliases: {}, days: { '2026-01-01': [1, 5] }, months: { '2026-01': [0, 5] }, years: { '2026': [0, 6] } } as unknown as ArchiveManifest;
+    const state = archiveState(manifest, '?source=a&year=2026&month=2026-01&day=2026-01-01&page=2');
+    expect(state.parameters.toString()).toBe('source=a&day=2026-01-01&page=2');
+    expect(matchArchive(6, 1, state.query, { 'source/a': new Uint8Array([0b111101]) })).toEqual({ count: 3, pages: 3, page: 2, ordinals: [3] });
+    for (const day of ['2026-01-02', '2026-02-30', '__proto__']) {
+      expect(archiveState(manifest, '?day=' + day).query.range).toEqual([0, 0]);
+    }
+    expect(archiveState(manifest, '?month=2026-01').query.range).toEqual([0, 5]);
+    expect(archiveState(manifest, '?year=2026').query.range).toEqual([0, 6]);
+  });
 });

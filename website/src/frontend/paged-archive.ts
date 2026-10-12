@@ -72,13 +72,13 @@ export function initialisePagedArchive(root: HTMLElement): () => void {
     manifestPromise ??= load("manifest.json").then((value) => {
       const data = object(value);
       if (data.version !== 1 || !Number.isSafeInteger(data.total) || Number(data.total) < 0 || !Number.isSafeInteger(data.page_size) || Number(data.page_size) < 1 || Number(data.page_size) > 100 || typeof data.generation !== "string" || !/^[a-f0-9]{64}$/.test(data.generation) || !Array.isArray(data.chunks)) throw new Error("Invalid archive manifest");
-      for (const key of ["facets", "prefixes", "labels", "aliases", "years", "months"]) object(data[key]);
+      for (const key of ["facets", "prefixes", "labels", "aliases", "years", "months", "days"]) object(data[key]);
       for (const [name, prefix] of Object.entries(object(data.prefixes))) {
         if (!/^[a-z][a-z0-9_-]*$/.test(name) || typeof prefix !== "string" || !Array.isArray(object(data.facets)[name])) throw new Error("Invalid archive facet");
         for (const entry of object(data.facets)[name] as unknown[]) { const option = object(entry); if (typeof option.id !== "string" || typeof option.name !== "string" || typeof option.posting !== "string") throw new Error("Invalid archive option"); }
       }
       if (data.chunks.length !== Math.ceil(Number(data.total) / Number(data.page_size))) throw new Error("Invalid archive chunk count");
-      for (const mapping of [data.years, data.months]) for (const range of Object.values(object(mapping))) {
+      for (const mapping of [data.years, data.months, data.days]) for (const range of Object.values(object(mapping))) {
         if (!Array.isArray(range) || range.length !== 2 || !range.every(Number.isSafeInteger) || range[0] < 0 || range[1] > Number(data.total) || range[0] > range[1]) throw new Error("Invalid chronology bounds");
       }
       manifest = data as unknown as ArchiveManifest; return manifest;
@@ -157,6 +157,12 @@ export function initialisePagedArchive(root: HTMLElement): () => void {
         const name = control.dataset.archiveFacet!, id = control.dataset.archiveValue!;
         control.setAttribute("aria-pressed", String(id ? state.parameters.getAll(name).includes(id) : !state.parameters.getAll(name).length));
       }
+      for (const name of ["year", "month", "day"]) {
+        for (const control of document.querySelectorAll<HTMLElement>(`[data-timeline-nav] [data-${name}-filter-option]`)) {
+          if (state.parameters.get(name) === control.getAttribute(`data-filter-${name}`)) control.setAttribute("aria-current", "page");
+          else control.removeAttribute("aria-current");
+        }
+      }
       const pageText = pagination.dataset.pageLabel || "Page {page} of {pages}", resultText = pagination.dataset.resultLabel || "{count} entries";
       pagination.querySelector<HTMLElement>("[data-archive-page-status]")!.textContent = `${resultText.replace("{count}", String(result.count))} · ${pageText.replace("{page}", String(result.page)).replace("{pages}", String(result.pages))}`;
       prev.disabled = result.page <= 1; next.disabled = result.page >= result.pages;
@@ -167,7 +173,7 @@ export function initialisePagedArchive(root: HTMLElement): () => void {
   }
   function click(event: MouseEvent): void {
     if (!(event.target instanceof Element) || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
-    const control = event.target.closest<HTMLElement>("[data-archive-facet], [data-year-filter-option], [data-month-filter-option], [data-archive-page], [data-archive-clear], [data-archive-retry]");
+    const control = event.target.closest<HTMLElement>("[data-archive-facet], [data-year-filter-option], [data-month-filter-option], [data-day-filter-option], [data-archive-page], [data-archive-clear], [data-archive-retry]");
     if (!control || !root.contains(control) && !control.closest("[data-timeline-nav]")) return;
     event.preventDefault();
     if (control.hasAttribute("data-archive-retry")) { void refresh(); return; }
@@ -181,8 +187,8 @@ export function initialisePagedArchive(root: HTMLElement): () => void {
         id ? (values.has(id) ? values.delete(id) : values.add(id)) : values.clear(); nextUrl.searchParams.delete(name);
         [...values].sort().forEach((value) => nextUrl.searchParams.append(name, value));
       } else {
-        const name = control.hasAttribute("data-year-filter-option") ? "year" : "month", value = name === "year" ? control.dataset.filterYear! : control.dataset.filterMonth!;
-        nextUrl.searchParams.delete(name === "year" ? "month" : "year");
+        const name = control.hasAttribute("data-year-filter-option") ? "year" : control.hasAttribute("data-month-filter-option") ? "month" : "day", value = control.getAttribute(`data-filter-${name}`)!;
+        for (const other of ["year", "month", "day"]) if (other !== name) nextUrl.searchParams.delete(other);
         nextUrl.searchParams.get(name) === value ? nextUrl.searchParams.delete(name) : nextUrl.searchParams.set(name, value);
       }
     }

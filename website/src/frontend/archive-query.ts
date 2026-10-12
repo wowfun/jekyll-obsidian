@@ -3,7 +3,7 @@ export interface ArchiveManifest {
   version: number; generation: string; total: number; page_size: number;
   facets: Record<string, ArchiveOption[]>; prefixes: Record<string, string>;
   labels: Record<string, string>; aliases: Record<string, string>;
-  years: Record<string, [number, number]>; months: Record<string, [number, number]>; chunks: string[];
+  years: Record<string, [number, number]>; months: Record<string, [number, number]>; days: Record<string, [number, number]>; chunks: string[];
 }
 export interface ArchiveCard {
   id: string; title: string; url: string; summary?: string | null; source_url?: string | null;
@@ -54,8 +54,9 @@ export function archiveState(manifest: ArchiveManifest, search: string): { param
     for (const id of ids) { parameters.append(name, id); keys.push(`${name}/${id}`); }
   }
   let range: [number, number] = [0, manifest.total];
-  const month = input.get("month"), year = input.get("year");
-  if (month) { parameters.set("month", month); range = Object.hasOwn(manifest.months, month) ? manifest.months[month]! : [0, 0]; }
+  const day = input.get("day"), month = input.get("month"), year = input.get("year");
+  if (day) { parameters.set("day", day); range = Object.hasOwn(manifest.days, day) ? manifest.days[day]! : [0, 0]; }
+  else if (month) { parameters.set("month", month); range = Object.hasOwn(manifest.months, month) ? manifest.months[month]! : [0, 0]; }
   else if (year) { parameters.set("year", year); range = Object.hasOwn(manifest.years, year) ? manifest.years[year]! : [0, 0]; }
   const rawPage = input.get("page") || "1";
   const page = /^\d+$/.test(rawPage) && Number.isSafeInteger(Number(rawPage)) ? Math.max(1, Number(rawPage)) : 1;

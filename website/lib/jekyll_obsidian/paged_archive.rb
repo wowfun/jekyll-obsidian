@@ -63,8 +63,9 @@ module JekyllObsidian
       end
       months = {}
       years = {}
+      days = {}
       records.each_with_index do |record, ordinal|
-        [ [months, record["month"]], [years, record["year"]] ].each do |mapping, key|
+        [ [months, record["month"]], [years, record["year"]], [days, record["display_date"]] ].each do |mapping, key|
           next unless key
           mapping[key] ||= [ordinal, ordinal]
           mapping[key][1] = ordinal + 1
@@ -79,15 +80,16 @@ module JekyllObsidian
       manifest = {
         "version" => 1, "generation" => generation, "total" => records.length,
         "page_size" => size, "facets" => groups, "prefixes" => facets,
-        "labels" => labels, "aliases" => aliases, "years" => years, "months" => months,
+        "labels" => labels, "aliases" => aliases, "years" => years, "months" => months, "days" => days,
         "chunks" => chunks
       }
       emit.call("manifest.json", manifest)
       url = config.url_builder.href("#{root}/manifest.json")
       first = records.first(size).map { |record| card_labels(record, manifest) }
+      daily = config.blog["timeline_granularity"] == "day"
       timeline = years.reject { |year, _| year == "Undated" }.map do |year, range|
-        { "year" => year, "count" => range[1] - range[0], "months" => months.filter_map do |month, bounds|
-          { "key" => month, "label" => month[-2, 2], "count" => bounds[1] - bounds[0] } if month.start_with?(year)
+        { "year" => year, "count" => range[1] - range[0], (daily ? "days" : "months") => (daily ? days : months).filter_map do |key, bounds|
+          { "key" => key, "label" => key[5..], "count" => bounds[1] - bounds[0] } if key.start_with?(year)
         end }
       end
       {

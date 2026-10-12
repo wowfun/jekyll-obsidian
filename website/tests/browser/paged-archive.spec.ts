@@ -3,6 +3,53 @@ import { expect, test } from "@playwright/test";
 for (const locale of ["en", "zh-CN"]) {
   const root = "/__site__/minimal-archive/" + (locale === "en" ? "" : locale + "/");
 
+  test(`daily timeline resets pagination and combines with reading and facets in ${locale}`, async ({ page }, testInfo) => {
+    await page.goto(root + '?page=2');
+    const titles = page.locator('.blog-ledger__main strong');
+    await expect(titles).toHaveText(['Oldest']);
+    const mobile = testInfo.project.name === 'mobile-chromium';
+    const openTimeline = async () => { if (mobile) await page.locator('[data-dialog-open="context"]:visible').click(); };
+    const closeTimeline = async () => { if (mobile) await page.locator('[data-dialog="context"] [data-dialog-close]').click(); };
+    await openTimeline();
+    const days = page.locator('[data-day-filter-option]');
+    await expect(days.locator('span:first-child')).toHaveText(['10-10', '10-09', '12-31']);
+    await expect(days.locator('.archive-timeline__count')).toHaveText(['1', '1', '1']);
+    await expect(page.locator('[data-month-filter-option]')).toHaveCount(0);
+    const selected = page.locator('[data-day-filter-option][data-filter-day="2026-10-09"]');
+    await selected.click();
+    await expect(page).toHaveURL(root + '?day=2026-10-09');
+    await expect(selected).toHaveAttribute('aria-current', 'page');
+    await closeTimeline();
+    await expect(titles).toHaveText(['Middle']);
+    await expect(page.locator('[data-archive-page=next]')).toBeDisabled();
+    await page.locator('[data-archive-reading-toggle]').click();
+    await expect(page.locator('[data-reading-loaded]')).toHaveCount(1);
+    await expect(page.locator('.archive-reading__body')).toContainText('First paragraph of Middle.');
+    await page.reload();
+    await expect(titles).toHaveText(['Middle']);
+    await expect(page.locator('[data-reading-loaded]')).toHaveCount(1);
+    await page.locator('button[data-archive-facet=source][data-archive-value=hn]').click();
+    await expect(page.locator('[data-archive-empty]')).toBeVisible();
+    await expect(titles).toHaveCount(0);
+    await page.goBack();
+    await expect(titles).toHaveText(['Middle']);
+    await openTimeline();
+    await expect(selected).toHaveAttribute('aria-current', 'page');
+    await page.locator('[data-year-filter-option][data-filter-year="2026"]').click();
+    await expect(page).toHaveURL(root + '?year=2026');
+    await expect(selected).not.toHaveAttribute('aria-current', 'page');
+    await selected.click();
+    await expect(page).toHaveURL(root + '?day=2026-10-09');
+    await selected.click();
+    await expect(page).toHaveURL(root);
+    await closeTimeline();
+    await expect(titles).toHaveText(['Newest', 'Middle']);
+    await expect(page.locator('[data-reading-loaded]')).toHaveCount(2);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
+    await page.goto(root + '?day=2026-02-30');
+    await expect(page.locator('[data-archive-empty]')).toBeVisible();
+  });
+
   test(`paged archive filters, pagination, and history in ${locale}`, async ({ page }) => {
     await page.goto(root);
     const archive = page.locator("[data-paged-archive]");

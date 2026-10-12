@@ -5,7 +5,7 @@
     {% unless include.compact %}<header class="section-heading"><h2 id="dispatches-title">{{ ui.field_dispatches | default: 'Field dispatches' | escape }}</h2></header>{% endunless %}
     <ol>
       {% for post in include.posts %}
-        <li{% if include.filterable %} data-filter-item data-topic-anchors="{{ post.topic_anchors | join: ' ' | escape }}"{% if post.filter_month %} data-filter-month="{{ post.filter_month | escape }}"{% endif %}{% endif %}>
+        <li{% if include.filterable %} data-filter-item data-topic-anchors="{{ post.topic_anchors | join: ' ' | escape }}"{% if post.filter_month %} data-filter-month="{{ post.filter_month | escape }}"{% endif %}{% if post.filter_day %} data-filter-day="{{ post.filter_day | escape }}"{% endif %}{% endif %}>
           <div class="blog-ledger__meta"><time datetime="{{ post.published_at | escape }}">{% if post.display_date %}{{ post.display_date | escape }}{% else %}{{ post.published_at | date: "%Y-%m-%d" }}{% endif %}</time></div>
           <div class="blog-ledger__content">
             <a class="blog-ledger__main" href="{{ post.url | escape }}"><strong>{{ post.title | escape }}</strong>{% if post.summary and post.summary != '' %}<span class="blog-ledger__description">{{ post.summary | escape }}</span>{% endif %}</a>

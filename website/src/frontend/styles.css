@@ -1318,6 +1318,14 @@
     font-size: 0.62rem;
   }
 
+  .archive-timeline__year--days ul {
+    grid-template-columns: 1fr;
+  }
+
+  .archive-timeline__year--days li::before {
+    display: none;
+  }
+
   .archive-timeline__count {
     min-inline-size: 1.5rem;
     color: var(--graphite);

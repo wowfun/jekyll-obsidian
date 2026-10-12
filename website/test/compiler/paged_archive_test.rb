@@ -57,7 +57,7 @@ class PagedArchiveTest < Minitest::Test
   end
 
   def test_archive_facet_names_cannot_collide_with_query_controls
-    %w[page year month].each do |name|
+    %w[page year month day].each do |name|
       result = compile(
         note("index.md", "---\npublish: true\n---\n# Home"),
         home: { "layout" => "archive" }, blog: { "facets" => { name => "#{name}/" } }
@@ -72,6 +72,42 @@ class PagedArchiveTest < Minitest::Test
       result = compile(note("index.md", "---\npublish: true\nsource_url: #{url}\n---\n# Hello"))
       refute result.success?
     end
+  end
+
+  def test_daily_timeline_uses_local_calendar_dates_and_excludes_undated_posts
+    entries = ["2026-01-01T00:30:00Z", "2025-12-31T16:00:00Z", "2025-12-31T15:59:59Z"].each_with_index.map do |date, index|
+      note("items/#{index}.md", "---\npublish: true\ncontent_type: post\ndate: #{date}\n---\n# Item #{index}")
+    end
+    result = compile(*entries, note("items/undated.md", "---\npublish: true\ncontent_type: post\n---\n# Undated"),
+      environment: "development", home: { "layout" => "archive" }, blog: { "page_size" => 1, "utc_offset" => "+08:00", "timeline_granularity" => "day" })
+    assert result.success?, result.diagnostics.map(&:message).join("\n")
+    data = page(result, "/").data.dig("website", "theme_data")
+    assert_equal({ "2026-01-01" => [0, 2], "2025-12-31" => [2, 3] }, data.dig("archive", "days"))
+    assert_equal [
+      { "year" => "2026", "count" => 2, "days" => [{ "key" => "2026-01-01", "label" => "01-01", "count" => 2 }] },
+      { "year" => "2025", "count" => 1, "days" => [{ "key" => "2025-12-31", "label" => "12-31", "count" => 1 }] }
+    ], data.fetch("timeline")
+    assert_equal 4, data.dig("archive", "chunks").length
+  end
+
+  def test_full_archive_daily_timeline_and_cards_share_local_dates
+    result = compile(
+      note("items/a.md", "---\npublish: true\ncontent_type: post\ndate: 2025-12-31T17:00:00Z\n---\n# First"),
+      note("items/b.md", "---\npublish: true\ncontent_type: post\ndate: 2026-01-02T17:00:00Z\n---\n# Later"),
+      blog: { "utc_offset" => "+08:00", "timeline_granularity" => "day" }
+    )
+    assert result.success?, result.diagnostics.map(&:message).join("\n")
+    data = page(result, "/blog/").data.dig("website", "theme_data")
+    assert_nil data.fetch("archive")
+    assert_equal %w[2026-01-03 2026-01-01], data.fetch("timeline").first.fetch("days").map { |day| day.fetch("key") }
+    assert_equal ["2026"], data.fetch("archive_groups").map { |group| group.fetch("label") }
+    assert_equal %w[2026-01-03 2026-01-01], data.fetch("archive_groups").first.fetch("posts").map { |card| card.fetch("filter_day") }
+  end
+
+  def test_timeline_granularity_rejects_unsupported_values
+    result = compile(note("index.md", "---\npublish: true\n---\n# Home"), blog: { "timeline_granularity" => "hour" })
+    refute result.success?
+    assert result.diagnostics.any? { |diagnostic| diagnostic.code == "invalid_blog_config" }
   end
 end
 

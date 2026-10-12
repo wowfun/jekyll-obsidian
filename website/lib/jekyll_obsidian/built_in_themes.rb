@@ -275,19 +275,21 @@ module JekyllObsidian
         }
       end
 
-      def timeline_for(notes)
-        month_counts = Hash.new(0)
+      def timeline_for(notes, config)
+        daily = config.blog["timeline_granularity"] == "day"
+        counts = Hash.new(0)
         notes.each do |note|
-          month = month_key(yield(note))
-          month_counts[month] += 1 if month
+          date = archive_time(yield(note), config)
+          key = daily ? date&.slice(0, 10) : month_key(date)
+          counts[key] += 1 if key
         end
 
-        month_counts.keys.group_by { |month| month[0, 4] }.sort.reverse.map do |year, months|
+        counts.keys.group_by { |key| key[0, 4] }.sort.reverse.map do |year, keys|
           {
             "year" => year,
-            "count" => months.sum { |month| month_counts.fetch(month) },
-            "months" => months.sort.map do |month|
-              { "key" => month, "label" => month[5, 2], "count" => month_counts.fetch(month) }
+            "count" => keys.sum { |key| counts.fetch(key) },
+            (daily ? "days" : "months") => (daily ? keys.sort.reverse : keys.sort).map do |key|
+              { "key" => key, "label" => key[5..], "count" => counts.fetch(key) }
             end
           }
         end
@@ -296,6 +298,10 @@ module JekyllObsidian
       def month_key(value)
         match = value.to_s.match(/\A(\d{4})-(0[1-9]|1[0-2])/)
         match && "#{match[1]}-#{match[2]}"
+      end
+
+      def archive_time(value, config)
+        value && config.blog["utc_offset"] ? DateTime.iso8601(value).new_offset(config.blog.fetch("utc_offset")).iso8601 : value
       end
 
       def redirect_page(landing_note, config, home_route, home_url)
@@ -542,7 +548,7 @@ module JekyllObsidian
         paged = config.home["layout"] == "archive" || config.blog["page_size"]
         displayed = paged ? posts.select(&:published_at).reverse + posts.reject(&:published_at) : displayed_posts(posts)
         taxonomy = taxonomy_for(posts, config)
-        timeline = timeline_for(displayed, &:published_at)
+        timeline = timeline_for(displayed, config, &:published_at)
         documentation = config.navigation
         portfolio = documentation.portfolio
         portfolio_notes = portfolio ? portfolio.project_note_ids.map { |id| model.notes_by_id.fetch(id) } : []
@@ -699,8 +705,8 @@ module JekyllObsidian
       end
 
       def archive_groups(posts, config, taxonomy)
-        posts.group_by { |note| note.published_at ? note.published_at[0, 4] : "Undated" }.map do |label, grouped|
-          { "label" => label, "posts" => grouped.map { |note| note_card(note, config, taxonomy) } }
+        posts.map { |note| note_card(note, config, taxonomy) }.group_by { |card| card["published_at"]&.slice(0, 4) || "Undated" }.map do |label, cards|
+          { "label" => label, "posts" => cards }
         end
       end
 
@@ -818,10 +824,13 @@ module JekyllObsidian
       end
 
       def note_card(note, config, taxonomy)
+        date = archive_time(note.published_at, config)
         content_card(note, config).merge(
+          "published_at" => date,
           "topics" => blog_topic_links(note, taxonomy.fetch("anchors")),
           "topic_anchors" => topic_anchors_for(note, taxonomy, config),
-          "filter_month" => month_key(note.published_at)
+          "filter_month" => month_key(date),
+          "filter_day" => date&.slice(0, 10)
         )
       end
     end

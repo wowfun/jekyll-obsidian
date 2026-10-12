@@ -74,7 +74,7 @@ try {
   await writeFile(path.join(archiveHost, ".jekyll-obsidian-cache/github-markdown-browser.json"),
     JSON.stringify({ version: 1, documents: [] }));
   await writeFile(path.join(archiveHost, "host.yml"),
-    "title: Archive fixture\nwebsite:\n  source: vault\n  theme: minimal\n  contacts: []\n  home:\n    layout: archive\n  blog:\n    page_size: 2\n  i18n:\n    enabled: true\n    locales: [en, zh-CN]\n");
+    "title: Archive fixture\nwebsite:\n  source: vault\n  theme: minimal\n  contacts: []\n  home:\n    layout: archive\n  blog:\n    page_size: 2\n    utc_offset: '+08:00'\n    timeline_granularity: day\n  i18n:\n    enabled: true\n    locales: [en, zh-CN]\n");
   await writeFile(path.join(archiveHost, "vault/_locale.yml"), "name: English\n");
   await writeFile(path.join(archiveHost, "vault/_translations/zh-CN/_locale.yml"), "name: 简体中文\nmessages:\n  flat_reading: 平铺阅读\n");
   await writeFile(path.join(archiveHost, "vault/index.md"), "---\npublish: true\n---\n# Archive\n");
