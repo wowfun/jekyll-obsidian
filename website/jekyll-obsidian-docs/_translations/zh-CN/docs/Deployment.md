@@ -36,6 +36,15 @@ jekyll-obsidian build --url https://example.com --baseurl /project
 
 上传 `.jekyll-obsidian-cache/site/`。根路径站点使用 `--baseurl ""`。生产构建需要域名来源，也可以在站点配置中设置 `url` 和 `baseurl`；显式命令行参数优先。
 
+## Markdown 导出资源
+
+将生成的 `.md` 文件与 HTML、归档资源一起上传，并从同一来源提供。
+推荐使用 `text/markdown` 或 `text/plain`；也支持通用的
+`application/octet-stream` 和未设置 Content-Type 的响应。
+HTML/XML 响应及可识别的整页回退内容会被拒绝，包括返回 HTTP 200 的回退页。
+不要把缺失的 Markdown 请求重写到首页。任一正文失败都不会触发下载，
+重试会复用该次导出中已经成功载入的其他正文。
+
 ## 自定义域名
 
 在 GitHub Pages 中配置自定义域名和 DNS。工作流会从 Pages 元数据读取最终的域名和基础路径，无需在该工作流的站点配置中写死这些值。

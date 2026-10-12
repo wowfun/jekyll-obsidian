@@ -14,7 +14,7 @@ export interface ArchiveQuery { groups: string[][]; range: [number, number]; pag
 export type ArchiveQueryMode = "page" | "all" | "first";
 export interface ArchiveMatches { ordinals: number[]; count: number; page: number; pages: number }
 
-export function matchArchive(total: number, size: number, query: ArchiveQuery, bitmaps: Record<string, Uint8Array>, mode: ArchiveQueryMode = "page"): ArchiveMatches {
+export function matchArchive(total: number, size: number, query: ArchiveQuery, bitmaps: Record<string, Uint8Array>, mode: ArchiveQueryMode = "page", limit = Infinity): ArchiveMatches {
   const union = query.groups.map((keys) => {
     if (!keys.length) return null;
     const result = new Uint8Array(Math.ceil(total / 8));
@@ -30,7 +30,7 @@ export function matchArchive(total: number, size: number, query: ArchiveQuery, b
   const ordinals: number[] = [];
   for (let i = start; i < end; i++) if (matches(i)) {
     if (mode === "first") return { ordinals: [i], count: 1, page: 1, pages: 1 };
-    count++; if (mode === "all") ordinals.push(i);
+    count++; if (mode === "all" && ordinals.length < limit) ordinals.push(i);
   }
   if (mode !== "page") return { ordinals, count, page: 1, pages: 1 };
   const pages = Math.max(1, Math.ceil(count / size));

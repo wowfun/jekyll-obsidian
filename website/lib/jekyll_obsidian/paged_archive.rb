@@ -30,6 +30,9 @@ module JekyllObsidian
       end
     end
 
+    # Cards must be in descending display-date order with undated cards last.
+    # Within each day, preserve the presenter's stable ordering. Date ranges in
+    # the emitted index refer to contiguous ordinal blocks in this sequence.
     def build(cards, config)
       size = config.blog.fetch("page_size") || 50
       labels = config.site.tag_labels || {}
@@ -48,8 +51,8 @@ module JekyllObsidian
       generation = Digest::SHA256.hexdigest(JSON.generate([records, labels, aliases, config.blog]))
       root = "/assets/website/archive/#{generation}"
       files = []
-      emit = lambda do |name, data|
-        files << GeneratedFile.new(route: "#{root}/#{name}", content: "#{JSON.generate(data)}\n", media_type: "application/json")
+      emit = lambda do |name, data, localize_content: false|
+        files << GeneratedFile.new(route: "#{root}/#{name}", content: "#{JSON.generate(data)}\n", media_type: "application/json", localize_content: localize_content)
       end
       groups = facets.to_h do |name, prefix|
         members = Hash.new { |hash, key| hash[key] = [] }
@@ -87,7 +90,7 @@ module JekyllObsidian
       records.each_slice(size).with_index do |slice, index|
         filename = "cards-#{index}.json"
         chunks << filename
-        emit.call(filename, { "generation" => generation, "start" => index * size, "cards" => slice })
+        emit.call(filename, { "generation" => generation, "start" => index * size, "cards" => slice }, localize_content: true)
       end
       manifest = {
         "version" => 1, "generation" => generation, "total" => records.length,

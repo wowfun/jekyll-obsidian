@@ -17,6 +17,21 @@ async function download(page: Page, retry = false) {
 for (const locale of ['en', 'zh-CN']) {
   const root = '/__site__/minimal-export/' + (locale === 'en' ? '' : locale + '/');
 
+  test(`a failed archive worker can be retried before exporting in ${locale}`, async ({ page }) => {
+    let attempts = 0;
+    await page.route('**/archive-worker-*.js', async route => {
+      if (++attempts === 1) await route.abort(); else await route.continue();
+    });
+    await page.goto(root);
+    await expect(page.locator('[data-archive-retry]')).toBeVisible();
+    await page.locator('[data-archive-retry]').click();
+    await expect(page.locator('[data-archive-page-status]')).toHaveText(/60.*1.*30/);
+    expect(attempts).toBe(2);
+    await open(page, 59);
+    const file = await download(page);
+    expect(file.body).toContain('Complete body of bulk-00.');
+  });
+
   test(`export rejects an oversized selection before loading bodies in ${locale}`, async ({ page }) => {
     await page.route('**/manifest.json', async route => {
       const response = await route.fetch(), data = await response.json();
@@ -48,6 +63,9 @@ for (const locale of ['en', 'zh-CN']) {
     expect(downloadBox.y + downloadBox.height).toBeLessThanOrEqual(page.viewportSize()!.height);
     expect(await dialog.evaluate(el => el.scrollHeight <= el.clientHeight + 2)).toBe(true);
     await expect(start).toHaveValue('2026-10-04');
+    await expect(start).toBeFocused();
+    await expect(dialog.locator('[data-export-all=source]')).toHaveAccessibleName(locale === 'en' ? 'Sources: All' : '来源: 全部');
+    await expect(dialog.locator('[data-export-all=topic]')).toHaveAccessibleName(locale === 'en' ? 'Topics: All' : '主题: 全部');
     await expect(end).toHaveValue('2026-10-10');
     await expect(dialog.locator('input[data-export-facet=source][value=hn]')).toBeChecked();
     await expect(dialog.locator('input[data-export-facet=topic][value=agents]')).toBeChecked();
@@ -84,6 +102,10 @@ for (const locale of ['en', 'zh-CN']) {
   });
 
   test(`export downloads every full article beyond pagination in ${locale}`, async ({ page }) => {
+    await page.route('**/items/*.md', async route => {
+      const response = await route.fetch();
+      await route.fulfill({ response, headers: { ...response.headers(), 'content-type': 'application/octet-stream' } });
+    });
     await page.goto(root + '?page=2');
     await expect(page.locator('[data-archive-page-status]')).toHaveText(/60.*2.*30/);
     await page.locator('[data-archive-reading-toggle]').click();
@@ -142,6 +164,24 @@ for (const locale of ['en', 'zh-CN']) {
     expect(file.body).toContain('Complete body of bulk-00.');
     expect(requests.size).toBe(59);
     for (const [url, count] of requests) expect(count).toBe(url.endsWith('/bulk-00.md') ? 2 : 1);
+    expect(downloads).toBe(1);
+  });
+
+  test(`export rejects a generic MIME HTML fallback and recovers on retry in ${locale}`, async ({ page }) => {
+    let fail = true, downloads = 0;
+    page.on('download', () => downloads++);
+    await page.route('**/items/bulk-00.md', async route => {
+      if (fail) await route.fulfill({ status: 200, contentType: 'application/octet-stream', body: '<!doctype html><html><body>Missing</body></html>' });
+      else await route.continue();
+    });
+    await page.goto(root); await open(page, 59);
+    await panel(page).locator('[data-export-download]').click();
+    await expect(panel(page).locator('[data-export-retry]')).toBeVisible();
+    expect(downloads).toBe(0);
+    fail = false;
+    const file = await download(page, true);
+    expect(file.body).toContain('Complete body of bulk-00.');
+    expect(file.body).not.toContain('<!doctype html>');
     expect(downloads).toBe(1);
   });
 

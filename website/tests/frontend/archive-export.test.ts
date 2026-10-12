@@ -22,6 +22,7 @@ it('uses the selected day or newest matching day and ignores pagination for expo
   expect(defaultExportDates(data, '?source=hn', [2, 3])).toEqual(['2025-12-25', '2025-12-31']);
   expect(defaultExportDates(data, '', [4])).toEqual(['', '']);
   expect(defaultExportDates(data, '', [])).toEqual(['', '']);
+  expect(defaultExportDates(data, '?day=2026-01-02', [])).toEqual(['2026-01-02', '2026-01-02']);
   const filters = new URLSearchParams('source=hn&topic=tools&year=2025&page=2');
   const state = exportState(data, filters, '2025-12-31', '2026-01-02');
   expect(state.parameters.toString()).toBe('source=hn&topic=tools');
@@ -29,6 +30,14 @@ it('uses the selected day or newest matching day and ignores pagination for expo
   expect(state.query.range).toEqual([1, 4]);
   expect(exportState(data, filters, '2026-01-02', '2026-01-02').query.range).toEqual([0, 0]);
   expect(() => exportState(data, filters, '2025-12-01', '2026-01-03')).toThrow();
+});
+
+it.each([
+  ['../../CON <script>|Garden:*?', '../zh-CN', 'con-script-garden-zh-CN'],
+  ['../../<>:*?', '???', 'archive-en'],
+  ['中文 花园', 'zh-CN', '中文-花园-zh-CN']
+])('sanitizes download names for %s', (site, locale, prefix) => {
+  expect(exportFilename({ site, locale, start: '2026-01-01', end: '2026-01-07', filters: new URLSearchParams(), cards: [] })).toBe(`${prefix}-2026-01-01_2026-01-07.md`);
 });
 
 it('returns every match exactly once beyond a 50-card page, in archive order', () => {

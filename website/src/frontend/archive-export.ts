@@ -45,7 +45,8 @@ export function initialiseArchiveExport(client: ArchiveClient): () => void {
       const selected = filters.getAll(name);
       const entries = [...options, ...selected.filter(id => !options.some(option => option.id === id)).map(id => ({ id, name: id }))];
       const all = document.createElement("button"); all.type = "button"; all.textContent = labels("all");
-      all.className = "tag-chip"; all.dataset.exportAll = name; all.setAttribute("aria-pressed", String(selected.length === 0)); choices.append(all);
+      all.className = "tag-chip"; all.dataset.exportAll = name; all.setAttribute("aria-label", `${legend.textContent}: ${labels("all")}`);
+      all.setAttribute("aria-pressed", String(selected.length === 0)); choices.append(all);
       for (const option of entries) {
         const label = document.createElement("label"); label.className = "archive-export__choice";
         const input = document.createElement("input"); input.type = "checkbox"; input.dataset.exportFacet = name; input.value = option.id; input.checked = selected.includes(option.id);
@@ -68,7 +69,7 @@ export function initialiseArchiveExport(client: ArchiveClient): () => void {
     });
     if (signal.aborted) return;
     try {
-      const result = await client.select(exportState(data, filters, start.value, end.value), "all", signal);
+      const result = await client.select(exportState(data, filters, start.value, end.value), "all", signal, MAX_EXPORT_ENTRIES);
       if (signal.aborted || disposed) return;
       if (result.count > MAX_EXPORT_ENTRIES) { status.textContent = message("tooMany", result.count).replace("{limit}", String(MAX_EXPORT_ENTRIES)); return; }
       ordinals = result.ordinals;
@@ -82,6 +83,7 @@ export function initialiseArchiveExport(client: ArchiveClient): () => void {
     data = undefined; ordinals = []; resetResults(); facets.replaceChildren(); start.value = end.value = "";
     download.disabled = true; fields.disabled = true; status.textContent = labels("calculating");
     openWebsiteDialog("export");
+    const initialFocus = document.activeElement;
     try {
       const manifest = await client.manifest(signal); if (signal.aborted) return; data = manifest;
       const initial = archiveState(data, search); filters = new URLSearchParams(initial.parameters);
@@ -92,9 +94,9 @@ export function initialiseArchiveExport(client: ArchiveClient): () => void {
       }
       for (const key of ["day", "month", "year", "page"]) filters.delete(key);
       renderFacets(); fields.disabled = false;
+      if (document.activeElement === initialFocus) start.focus();
       dialog!.querySelector<HTMLElement>("[data-export-limit]")!.textContent = labels("limitHint").replace("{days}", String(data.export_max_days));
       await recount();
-      if (!signal.aborted && !start.value && !end.value) status.textContent = labels("empty");
     } catch { if (!signal.aborted) { status.textContent = labels("unavailable"); setRetry(() => { void open(); }); } }
   }
   async function save(): Promise<void> {

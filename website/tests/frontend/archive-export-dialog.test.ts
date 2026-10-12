@@ -11,7 +11,7 @@ const element = <T extends HTMLElement>(name: string) => document.querySelector<
 beforeEach(() => {
   history.replaceState(null, '', '/');
   document.body.innerHTML = `<button data-archive-export-open>Export</button><dialog data-dialog="export" data-site="Garden" data-progress="Preparing {done} of {count}" data-matches="{count} entries" data-complete="Downloaded {count}" data-failed="{count} failed" data-calculating="Calculating" data-required="Required" data-unavailable="Unavailable" data-too-many="Limit {count}" data-too-large="Too large" data-loading-cards="Loading entries">
-    <fieldset data-export-fields><input type="date" data-export-start><input type="date" data-export-end><p data-export-limit></p><div data-export-facets></div></fieldset>
+    <button data-dialog-close>Close</button><fieldset data-export-fields><input type="date" data-export-start><input type="date" data-export-end><p data-export-limit></p><div data-export-facets></div></fieldset>
     <p data-export-status></p><progress data-export-progress></progress><button data-export-download>Save</button><button data-export-retry>Retry</button><button data-export-cancel>Cancel</button></dialog>`;
   client = {
     manifest: vi.fn(async () => data),
@@ -31,12 +31,35 @@ async function open() {
 
 it('uses one bounded default-date probe and skips it for an explicit day', async () => {
   await open();
+  expect(document.activeElement).toBe(element('start'));
   expect(vi.mocked(client.select).mock.calls.map(call => call[1])).toEqual(['first', 'all']);
   vi.mocked(client.select).mockClear();
   history.replaceState(null, '', '/?day=2026-10-09');
   await open();
   expect(vi.mocked(client.select).mock.calls.map(call => call[1])).toEqual(['all']);
   expect(element<HTMLInputElement>('start').value).toBe('2026-10-09');
+});
+
+it('keeps the required-date message when no matching dated entries can initialize the range', async () => {
+  vi.mocked(client.select).mockResolvedValue({ ordinals: [], count: 0, page: 1, pages: 1 });
+  document.querySelector<HTMLButtonElement>('[data-archive-export-open]')!.click();
+  await vi.waitFor(() => expect(element<HTMLFieldSetElement>('fields').disabled).toBe(false));
+  expect(element('status').textContent).toBe('Required');
+  expect(element<HTMLButtonElement>('download').disabled).toBe(true);
+});
+
+it('does not steal focus moved during initialization and names each facet All button', async () => {
+  let finish!: (manifest: ArchiveManifest) => void;
+  vi.mocked(client.manifest).mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+  document.querySelector('dialog')!.dataset.all = 'All';
+  document.querySelector('dialog')!.dataset.sources = 'Sources';
+  document.querySelector('dialog')!.dataset.topics = 'Topics';
+  document.querySelector<HTMLButtonElement>('[data-archive-export-open]')!.click();
+  element('retry').hidden = false; element('retry').focus();
+  finish({ ...data, facets: { source: [], topic: [] }, prefixes: { source: 'source/', topic: 'topics/' } });
+  await vi.waitFor(() => expect(element<HTMLButtonElement>('download').disabled).toBe(false));
+  expect(document.activeElement).toBe(element('retry'));
+  expect([...document.querySelectorAll('[data-export-all]')].map(button => button.getAttribute('aria-label'))).toEqual(['Sources: All', 'Topics: All']);
 });
 
 it('invalidates immediately and coalesces consecutive valid date edits', async () => {

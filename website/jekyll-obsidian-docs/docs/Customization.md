@@ -361,6 +361,10 @@ Each export allows up to 5,000 entries and 64 MiB of decoded Markdown response b
 including in-flight bodies. Exceeding either limit stops the task with a message to
 narrow the selection; no partial file is downloaded. Failed transfers release their
 byte reservation before retry. Entry details show an indeterminate loading phase.
+The matching count remains exact even when it exceeds the limit; only the first
+5,000 matching ordinals are collected. The byte budget measures response data,
+not browser heap: decoded strings, retained bodies and the download Blob also
+consume memory. Close the panel to release the retained bodies.
 
 Locale manifests may provide `tag_labels` and flattened `tag_aliases` keyed by complete
 stable tags. Labels can differ across languages; IDs remain shared.

@@ -16,6 +16,10 @@ class PagedArchiveTest < Minitest::Test
     assert_equal 3, archive.fetch("chunks").length
     assert_equal 50, root.data.dig("website", "theme_data", "archive_groups").sum { |g| g.fetch("posts").length }
     prefix = archive.fetch("url").delete_prefix("/garden").delete_suffix("manifest.json")
+    files = result.generated_files.select { |file| file.route.start_with?(prefix) }
+    assert_equal false, files.find { |file| file.route.end_with?("manifest.json") }.localize_content
+    assert files.select { |file| file.route.include?("facet-") }.all? { |file| file.localize_content == false }
+    assert_equal true, files.find { |file| file.route.end_with?(archive.fetch("chunks").first) }.localize_content
     chunk = generated_json(result, prefix + archive.fetch("chunks").first)
     assert_equal "Item 100", chunk.fetch("cards").first.fetch("title")
     assert_equal "Summary", chunk.fetch("cards").first.fetch("summary")
@@ -136,6 +140,30 @@ class PagedArchiveTest < Minitest::Test
   end
 end
 
+class GeneratedFileLocalizationTest < Minitest::Test
+  def test_content_policy_comes_from_the_producer_independently_of_the_route
+    compiler = JekyllObsidian::LocalizedCompiler.allocate
+    compiler.instance_variable_set(:@default_locale, "en")
+    content = "{\"url\":\"/a/\",\"id\":\"/literal-id/\"}\n"
+    file = JekyllObsidian::GeneratedFile.new(route: "/assets/website/new-index.json", content: content, media_type: "application/json", localize_content: false)
+    compiler.define_singleton_method(:localize_data) { |*| raise "Producer marked this content complete" }
+    localized = compiler.send(:localize_generated_file, file, "zh-CN")
+    assert_equal "/assets/website/i18n/zh-CN/new-index.json", localized.route
+    assert_equal content, localized.content
+    assert_equal false, localized.localize_content
+    # Existing producers default to localization, including URL-bearing JSON.
+    ordinary = JekyllObsidian::GeneratedFile.new(route: file.route, content: content, media_type: file.media_type)
+    calls = []
+    compiler.define_singleton_method(:localize_data) do |value, locale|
+      calls << [value, locale]
+      value.merge("url" => "/zh-CN/a/")
+    end
+    localized = compiler.send(:localize_generated_file, ordinary, "zh-CN")
+    assert_equal [[JSON.parse(content), "zh-CN"]], calls
+    assert_equal "/zh-CN/a/", JSON.parse(localized.content).fetch("url")
+  end
+end
+
 class PagedArchiveLocalizedTest < Minitest::Test
   def test_localized_archive_asset_routes_and_shared_stable_facet_ids
     result = compile(
@@ -149,6 +177,7 @@ class PagedArchiveLocalizedTest < Minitest::Test
     assert result.success?, result.diagnostics.map(&:message).join("\n")
     archive = page(result, "/zh-CN/").data.dig("website", "theme_data", "archive")
     assert_includes archive.fetch("url"), "/garden/assets/website/i18n/zh-CN/archive/"
+    assert_equal false, result.generated_files.find { |file| file.route == archive.fetch("url").delete_prefix("/garden") }.localize_content
     manifest = generated_json(result, archive.fetch("url").delete_prefix("/garden"))
     assert_equal "agents", manifest.fetch("facets").fetch("topic").first.fetch("id")
     assert_equal "智能体", manifest.fetch("facets").fetch("topic").first.fetch("name")

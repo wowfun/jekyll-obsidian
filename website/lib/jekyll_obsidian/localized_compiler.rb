@@ -735,23 +735,21 @@ module JekyllObsidian
       return nil if locale != @default_locale && file.route == "/sitemap.xml"
 
       route = generated_route(file.route, locale)
-      content = case file.media_type
-      when "application/json"
-        # Per-locale compilation has already resolved labels. Only card chunks
-        # contain article URLs; manifests and bitmaps need no content rewrite.
-        if file.route.match?(%r{\A/assets/website/archive/[a-f0-9]{64}/(?:manifest|facet-[a-f0-9]{64})\.json\z})
-          file.content
-        else
-          "#{JSON.generate(localize_data(JSON.parse(file.content), locale))}\n"
-        end
-      when "text/html"
-        localize_html(file.content, locale)
-      when "application/atom+xml", "application/xml"
-        localize_xml(file.content, locale)
-      else
+      content = if file.localize_content == false
         file.content
+      else
+        case file.media_type
+        when "application/json"
+          "#{JSON.generate(localize_data(JSON.parse(file.content), locale))}\n"
+        when "text/html"
+          localize_html(file.content, locale)
+        when "application/atom+xml", "application/xml"
+          localize_xml(file.content, locale)
+        else
+          file.content
+        end
       end
-      GeneratedFile.new(route: route, content: content, media_type: file.media_type)
+      GeneratedFile.new(route: route, content: content, media_type: file.media_type, localize_content: file.localize_content)
     end
 
     def generated_route(route, locale)

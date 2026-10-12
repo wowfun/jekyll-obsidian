@@ -1,3 +1,6 @@
 name: English
 hreflang: en
 dir: ltr
+messages:
+  sources: Sources
+  topics: Topics

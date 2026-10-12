@@ -95,7 +95,9 @@ module JekyllObsidian
   Diagnostic = ImmutableRecord.define(:severity, :code, :message, :path, :span, :property)
   Relation = ImmutableRecord.define(:source_id, :target_id, :kind, :fragment, :source_span, :property)
   PageOutput = ImmutableRecord.define(:route, :content, :data)
-  GeneratedFile = ImmutableRecord.define(:route, :content, :media_type)
+  # Producers may set localize_content: false when their content is already
+  # locale-complete. The output route still receives its language prefix.
+  GeneratedFile = ImmutableRecord.define(:route, :content, :media_type, :localize_content)
   ProjectedFile = ImmutableRecord.define(:source_path, :route, :media_type, :size, :device, :inode, :mtime_ns)
   NoteOutput = ImmutableRecord.define(:id, :title, :route, :properties)
   ContentSecurityNeeds = ImmutableRecord.define(:media_sources, :frame_sources, :script_sources, :connect_sources)

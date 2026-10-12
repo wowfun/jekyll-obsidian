@@ -12,6 +12,12 @@ describe('paged archive queries', () => {
     const result = matchArchive(total, 50, { groups: [['topic/x']], range: [0, total], page: 1999 }, { 'topic/x': bitmap });
     expect(result.count).toBe(total); expect(result.ordinals).toHaveLength(50); expect(result.ordinals[0]).toBe(99900);
   });
+  it('caps collected export ordinals while preserving the exact matching count and order', () => {
+    const query = { groups: [['topic/x']], range: [0, 100_000] as [number, number], page: 1 };
+    const result = matchArchive(100_000, 50, query, { 'topic/x': new Uint8Array(12_500).fill(0b01010101) }, 'all', 5000);
+    expect(result.count).toBe(50_000);
+    expect(result.ordinals).toEqual(Array.from({ length: 5000 }, (_, i) => i * 2));
+  });
   it('normalizes duplicate aliases while preserving unknown IDs', () => {
     const manifest = { total: 4, page_size: 50, facets: { topic: [] }, prefixes: { topic: 'topics/' }, aliases: { 'topics/old': 'topics/new' }, years: {}, months: {} } as unknown as ArchiveManifest;
     const state = archiveState(manifest, '?topic=old&topic=new&topic=unknown&page=bad');

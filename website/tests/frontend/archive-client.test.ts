@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { createArchiveClient } from '../../src/frontend/archive-client';
-import type { ArchiveCard } from '../../src/frontend/archive-query';
+import { archiveState, type ArchiveCard } from '../../src/frontend/archive-query';
 import { ArchiveBodyBudget } from '../../src/frontend/archive-export-budget';
 
 let client: ReturnType<typeof createArchiveClient>;
@@ -9,7 +9,7 @@ beforeEach(() => {
   vi.stubGlobal('Worker', class { terminate() {} });
   client = createArchiveClient('/archive/manifest.json');
 });
-afterEach(() => { client.dispose(); vi.unstubAllGlobals(); });
+afterEach(() => { client.dispose(); vi.useRealTimers(); vi.unstubAllGlobals(); });
 const card = (i: number) => ({ markdown_url: `/article-${i}.md` }) as ArchiveCard;
 const manifest = { version: 1, generation: 'a'.repeat(64), total: 0, page_size: 50, export_max_days: 7, facets: {}, prefixes: {}, labels: {}, aliases: {}, years: {}, months: {}, days: {}, chunks: [] };
 
@@ -103,4 +103,79 @@ it('rejects an empty response that arrives after cancellation', async () => {
   controller.abort();
   finish(new Response(null, { status: 204, headers: { 'content-type': 'text/plain' } }));
   await expect(result).rejects.toThrow();
+});
+
+it('rejects all worker queries immediately and recreates the worker on retry without leaking timers', async () => {
+  vi.useFakeTimers();
+  const workers: Worker[] = [];
+  vi.stubGlobal('Worker', class {
+    postMessage = vi.fn(); terminate = vi.fn();
+    constructor() { workers.push(this as unknown as Worker); }
+  });
+  vi.stubGlobal('fetch', vi.fn(async () => Response.json(manifest)));
+  const state = archiveState(await client.manifest(), '');
+  const failed = Promise.allSettled([client.select(state, 'all'), client.select(state, 'page')]);
+  await vi.waitFor(() => expect(workers[0]?.postMessage).toHaveBeenCalledTimes(2));
+  workers[0]!.onerror!(new Event('error') as ErrorEvent);
+  expect((await failed).map(result => result.status)).toEqual(['rejected', 'rejected']);
+  expect(workers[0]!.terminate).toHaveBeenCalledTimes(1);
+  expect(vi.getTimerCount()).toBe(0);
+  const retry = client.select(state, 'all', undefined, 5000);
+  await vi.waitFor(() => expect(workers).toHaveLength(2));
+  const request = vi.mocked(workers[1]!.postMessage).mock.calls[0]![0];
+  expect(request.limit).toBe(5000);
+  workers[1]!.onmessage!(new MessageEvent('message', { data: { id: request.id, count: 0, ordinals: [], page: 1, pages: 1 } }));
+  expect((await retry).count).toBe(0);
+  expect(vi.getTimerCount()).toBe(0);
+});
+
+it.each(['application/octet-stream', null])('accepts generic Markdown hosting (%s) while rejecting disguised HTML/XML', async contentType => {
+  const fetch = vi.fn(async () => {
+    const response = new Response('# 正文\n\n<details>Valid Markdown HTML</details>');
+    if (contentType) response.headers.set('content-type', contentType); else response.headers.delete('content-type');
+    return response;
+  });
+  vi.stubGlobal('fetch', fetch);
+  expect(await client.markdown(card(0), new AbortController().signal)).toContain('<details>');
+  for (const body of [' \uFEFF<!doctype html><html>Error</html>', '<!-- fallback -->\n<html>Error</html>', '<?xml version="1.0"?><Error>Missing</Error>']) {
+    fetch.mockImplementationOnce(async () => new Response(body, { headers: { 'content-type': contentType || 'text/plain' } }));
+    await expect(client.markdown(card(0), new AbortController().signal)).rejects.toThrow('Markdown load failed');
+  }
+});
+
+it.each(['timeout', 'postMessage'])('discards a broken worker after %s and permits retry', async failure => {
+  vi.useFakeTimers();
+  const workers: Worker[] = [];
+  vi.stubGlobal('Worker', class {
+    terminate = vi.fn();
+    postMessage = vi.fn(() => { if (workers.length === 1 && failure === 'postMessage') throw new Error('Send failed'); });
+    constructor() { workers.push(this as unknown as Worker); }
+  });
+  vi.stubGlobal('fetch', vi.fn(async () => Response.json(manifest)));
+  const state = archiveState(await client.manifest(), '');
+  const result = client.select(state, 'all');
+  const rejected = expect(result).rejects.toThrow(failure === 'timeout' ? 'Archive query timed out' : 'Send failed');
+  await vi.waitFor(() => expect(workers).toHaveLength(1));
+  if (failure === 'timeout') await vi.advanceTimersByTimeAsync(15000);
+  await rejected;
+  expect(workers[0]!.terminate).toHaveBeenCalledTimes(1);
+  expect(vi.getTimerCount()).toBe(0);
+  const cancelled = new AbortController();
+  const retry = client.select(state, 'page', cancelled.signal);
+  const aborted = expect(retry).rejects.toThrow();
+  await vi.waitFor(() => expect(workers).toHaveLength(2));
+  cancelled.abort(); await aborted;
+  expect(vi.getTimerCount()).toBe(0);
+});
+
+it('checks article cancellation before validating or reading a late response', async () => {
+  let finish!: (response: Response) => void;
+  vi.stubGlobal('fetch', vi.fn(() => new Promise<Response>(resolve => { finish = resolve; })));
+  const controller = new AbortController(), reason = new Error('Cancelled by reader');
+  const result = client.article('/article/', controller.signal);
+  controller.abort(reason);
+  const response = new Response('Late error', { status: 503 });
+  const read = vi.spyOn(response, 'text'); finish(response);
+  await expect(result).rejects.toBe(reason);
+  expect(read).not.toHaveBeenCalled();
 });

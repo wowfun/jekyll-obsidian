@@ -18,6 +18,42 @@ function rows(count: number, offset = 0): void {
 }
 function response(text = "Full body"): Response { return new Response(`<div class="note-content"><p>${text}</p><p>Second paragraph</p></div>`, { headers: { 'content-type': 'text/html' } }); }
 
+it('evicts the least recently used body at 100 entries while preserving recently revisited bodies', async () => {
+  rows(100);
+  const fetch = vi.fn(async () => response()); vi.stubGlobal('fetch', fetch);
+  const reading = initialiseArchiveReading(document.querySelector('main')!, client); dispose = reading.dispose;
+  document.querySelector<HTMLButtonElement>('button')!.click();
+  await vi.waitFor(() => expect(document.querySelectorAll('[data-reading-loaded]')).toHaveLength(100));
+  async function visit(offset: number) {
+    rows(1, offset); reading.refresh();
+    await vi.waitFor(() => expect(document.querySelector('[data-reading-loaded]')).not.toBeNull());
+  }
+  await visit(0); expect(fetch).toHaveBeenCalledTimes(100);
+  await visit(100); expect(fetch).toHaveBeenCalledTimes(101);
+  await visit(0); expect(fetch).toHaveBeenCalledTimes(101);
+  await visit(1); expect(fetch).toHaveBeenCalledTimes(102);
+});
+
+it('evicts bodies by source weight even below the entry limit and still displays an oversized body', async () => {
+  rows(1);
+  // Padding outside the retained body tests the documented source-size proxy.
+  let padding = 1_200_000;
+  const fetch = vi.fn(async () => response('</p><!--' + 'x'.repeat(padding) + '--><p>Visible'));
+  vi.stubGlobal('fetch', fetch);
+  const reading = initialiseArchiveReading(document.querySelector('main')!, client); dispose = reading.dispose;
+  document.querySelector<HTMLButtonElement>('button')!.click();
+  async function loaded() { await vi.waitFor(() => expect(document.querySelector('[data-reading-loaded]')).not.toBeNull()); }
+  await loaded();
+  rows(1, 1); reading.refresh(); await loaded();
+  rows(1); reading.refresh(); await loaded();
+  expect(fetch).toHaveBeenCalledTimes(3);
+  padding = 2_200_000;
+  rows(1, 2); reading.refresh(); await loaded();
+  expect(document.querySelector('.archive-reading__body')!.textContent).toContain('Visible');
+  rows(1, 2); reading.refresh(); await loaded();
+  expect(fetch).toHaveBeenCalledTimes(5);
+});
+
 it('loads only rows approaching the viewport and disconnects stale observations', async () => {
   rows(50);
   const observers: { notify: (rows: Element[]) => void; disconnect: ReturnType<typeof vi.fn> }[] = [];

@@ -25,15 +25,30 @@ interface SharedRequest { controller: AbortController; promise: Promise<unknown>
 // aborts a shared request. Only complete, validated data enters the cache.
 export function createArchiveClient(source: string) {
   const manifestUrl = archiveUrl(source), lifetime = new AbortController();
-  const worker = new Worker(requireSiteUrl("archive-worker"), { type: "module" });
+  let worker: Worker | undefined;
   const cache = new Map<string, unknown>();
   const requests = new Map<string, SharedRequest>();
   const postings = new Map<string, Uint8Array>();
   let manifest: ArchiveManifest | undefined, queryId = 0, active = 0;
   const queue: { start: () => void; cancel: () => void }[] = [];
   const pending = new Map<number, { resolve: (result: ArchiveMatches) => void; reject: (error: unknown) => void }>();
-  worker.onmessage = (event: MessageEvent<ArchiveMatches & { id: number }>) => pending.get(event.data.id)?.resolve(event.data);
-  worker.onerror = () => { for (const job of pending.values()) job.reject(new Error("Archive worker failed")); };
+  function failWorker(failed: Worker, error: unknown): void {
+    if (worker !== failed) return;
+    worker = undefined; failed.terminate();
+    for (const job of pending.values()) job.reject(error);
+  }
+  function queryWorker(): Worker {
+    if (!worker) {
+      const next = new Worker(requireSiteUrl("archive-worker"), { type: "module" });
+      next.onmessage = (event: MessageEvent<ArchiveMatches & { id: number }>) => {
+        if (worker === next) pending.get(event.data.id)?.resolve(event.data);
+      };
+      next.onerror = () => failWorker(next, new Error("Archive worker failed"));
+      next.onmessageerror = () => failWorker(next, new Error("Invalid archive worker response"));
+      worker = next;
+    }
+    return worker;
+  }
   function combined(signal?: AbortSignal): AbortSignal { return signal ? AbortSignal.any([lifetime.signal, signal]) : lifetime.signal; }
   function shared(key: string, signal: AbortSignal, operation: (signal: AbortSignal) => Promise<unknown>): Promise<unknown> {
     signal.throwIfAborted();
@@ -115,7 +130,7 @@ export function createArchiveClient(source: string) {
     const signal = combined(caller); signal.throwIfAborted();
     return manifest || await resource("manifest.json", signal) as ArchiveManifest;
   }
-  async function select(state: ReturnType<typeof archiveState>, mode: ArchiveQueryMode, caller?: AbortSignal): Promise<ArchiveMatches> {
+  async function select(state: ReturnType<typeof archiveState>, mode: ArchiveQueryMode, caller?: AbortSignal, limit?: number): Promise<ArchiveMatches> {
     const signal = combined(caller), data = await getManifest(signal);
     const bitmaps: Record<string, Uint8Array> = Object.create(null) as Record<string, Uint8Array>;
     await archiveConcurrent(state.keys, async (key) => {
@@ -132,14 +147,15 @@ export function createArchiveClient(source: string) {
       bitmaps[key] = bitmap;
     }, signal);
     signal.throwIfAborted();
-    const id = ++queryId;
+    const id = ++queryId, currentWorker = queryWorker();
     return new Promise((resolve, reject) => {
       const finish = () => { clearTimeout(timeout); pending.delete(id); signal.removeEventListener("abort", abort); };
       const abort = () => { finish(); reject(signal.reason); };
-      const timeout = setTimeout(() => { finish(); reject(new Error("Archive query timed out")); }, 15000);
+      const timeout = setTimeout(() => failWorker(currentWorker, new Error("Archive query timed out")), 15000);
       pending.set(id, { resolve(value) { finish(); resolve(value); }, reject(error) { finish(); reject(error); } });
       signal.addEventListener("abort", abort, { once: true });
-      worker.postMessage({ id, total: data.total, size: data.page_size, query: state.query, bitmaps, mode });
+      try { currentWorker.postMessage({ id, total: data.total, size: data.page_size, query: state.query, bitmaps, mode, limit }); }
+      catch (error) { failWorker(currentWorker, error); }
     });
   }
   async function cards(ordinals: number[], caller?: AbortSignal): Promise<ArchiveCard[]> {
@@ -162,7 +178,8 @@ export function createArchiveClient(source: string) {
     return limited(async () => {
       const response = await fetch(url, { signal: AbortSignal.any([signal, AbortSignal.timeout(15000)]), headers: { Accept: "text/markdown, text/plain" } });
       signal.throwIfAborted();
-      if (!response.ok || new URL(response.url || url.href).origin !== location.origin || !/^text\/(markdown|plain)(?:;|$)/i.test(response.headers.get("content-type") || "")) throw new Error("Markdown load failed");
+      const contentType = response.headers.get("content-type")?.split(';')[0]?.trim().toLowerCase();
+      if (!response.ok || new URL(response.url || url.href).origin !== location.origin || (contentType && !['text/markdown', 'text/plain', 'application/octet-stream'].includes(contentType))) throw new Error("Markdown load failed");
       const reader = response.body?.getReader();
       if (!reader) return '';
       const decoder = new TextDecoder(), parts: string[] = []; let reserved = 0;
@@ -173,7 +190,13 @@ export function createArchiveClient(source: string) {
           budget.reserve(value.byteLength); reserved += value.byteLength;
           parts.push(decoder.decode(value, { stream: true }));
         }
-        parts.push(decoder.decode()); return parts.join('');
+        parts.push(decoder.decode());
+        const body = parts.join('');
+        // Generic static hosts may omit a MIME type. Reject document-shaped
+        // fallback pages while preserving normal Markdown with inline HTML.
+        const opening = body.replace(/^(?:\s|<!--[\s\S]*?-->)+/, '');
+        if (/^(?:<!doctype\s+html\b|<html\b|<head\b|<body\b|<\?xml\b|<Error\b)/i.test(opening)) throw new Error("Markdown load failed");
+        return body;
       } catch (error) { budget.release(reserved); throw error; }
       finally { await reader.cancel().catch(() => {}); reader.releaseLock(); }
     }, signal);
@@ -182,11 +205,12 @@ export function createArchiveClient(source: string) {
     const signal = combined(caller), url = archiveUrl(value);
     return limited(async () => {
       const response = await fetch(url, { signal: AbortSignal.any([signal, AbortSignal.timeout(15000)]), headers: { Accept: "text/html" } });
+      signal.throwIfAborted();
       const finalUrl = archiveUrl(response.url || url.href).href;
       if (!response.ok || !response.headers.get("content-type")?.includes("text/html")) throw new Error("Article load failed");
       const html = await response.text(); signal.throwIfAborted(); return { html, url: finalUrl };
     }, signal);
   }
-  return { manifest: getManifest, select, cards, markdown, article, dispose() { lifetime.abort(); worker.terminate(); cache.clear(); postings.clear(); } };
+  return { manifest: getManifest, select, cards, markdown, article, dispose() { lifetime.abort(); worker?.terminate(); worker = undefined; cache.clear(); postings.clear(); } };
 }
 export type ArchiveClient = ReturnType<typeof createArchiveClient>;

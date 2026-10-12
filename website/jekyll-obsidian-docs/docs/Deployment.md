@@ -42,6 +42,16 @@ jekyll-obsidian build --url https://example.com --baseurl /project
 
 Upload `.jekyll-obsidian-cache/site/`. Set `--baseurl ""` for an origin-root site. Production builds require an origin; `url` and `baseurl` can also be set in the site configuration. Explicit command-line values take precedence.
 
+## Markdown export resources
+
+Upload the generated `.md` files alongside HTML and archive assets. Serve them
+from the same origin with `text/markdown` or `text/plain`; generic
+`application/octet-stream` responses and responses without a Content-Type are
+also supported. HTML/XML responses and document-shaped fallback pages are
+rejected, including fallback pages returned with HTTP 200. Do not rewrite missing
+Markdown requests to the site's home page. A failed body prevents the download;
+retry reuses the other bodies already loaded for that export.
+
 ## Custom domains
 
 Configure the custom domain and DNS in GitHub Pages. The workflow reads the resulting origin and base path from Pages metadata. You do not need to hard-code them in the configuration for this workflow.
