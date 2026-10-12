@@ -337,6 +337,19 @@ The header's **Read in full** switch expands the current page's articles in plac
 following pagination and filters. The choice persists across reloads and languages.
 Bodies load only while enabled, with at most four requests at once; individual failures
 keep the entry and offer retry. Switching off restores the compact ledger.
+
+The paged archive's **Export** button combines all matching entries into one UTF-8
+Markdown file in the current language. Each opening copies the current source/topic
+selections into independent filters; changing them leaves the archive and URL intact.
+Both dates are required and inclusive, using `utc_offset` calendar boundaries.
+`website.blog.export_max_days` is a positive integer, default `7`. A selected day
+defaults to that day; otherwise the range ends on the latest matching entry and spans
+up to the configured limit. Undated entries are excluded; gaps between dates are allowed.
+The file contains the site, conditions, count, article metadata and complete published
+Markdown, including media links. It uses the archive's order across every page.
+Up to four resources load concurrently. Cancel or close stops the download; any failed
+body prevents an incomplete file and retry reuses successfully loaded bodies from that task.
+
 Locale manifests may provide `tag_labels` and flattened `tag_aliases` keyed by complete
 stable tags. Labels can differ across languages; IDs remain shared.
 

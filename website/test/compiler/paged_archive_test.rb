@@ -19,6 +19,8 @@ class PagedArchiveTest < Minitest::Test
     chunk = generated_json(result, prefix + archive.fetch("chunks").first)
     assert_equal "Item 100", chunk.fetch("cards").first.fetch("title")
     assert_equal "Summary", chunk.fetch("cards").first.fetch("summary")
+    assert_equal "/garden/items/100.md", chunk.fetch("cards").first.fetch("markdown_url")
+    assert_equal 7, archive.fetch("export_max_days")
     assert_equal "Summary", root.data.dig("website", "theme_data", "archive_groups").first.fetch("posts").first.fetch("summary")
     assert_equal "https://example.test/100", chunk.fetch("cards").first.fetch("source_url")
     assert_equal "Hacker News", archive.fetch("facets").fetch("source").first.fetch("name")
@@ -109,6 +111,16 @@ class PagedArchiveTest < Minitest::Test
     refute result.success?
     assert result.diagnostics.any? { |diagnostic| diagnostic.code == "invalid_blog_config" }
   end
+
+  def test_export_day_limit_is_a_positive_integer
+    [0, -1, "7", 1.5].each do |limit|
+      result = compile(note("index.md", "---\npublish: true\n---\n# Home"), blog: { "export_max_days" => limit })
+      refute result.success?
+      assert result.diagnostics.any? { |diagnostic| diagnostic.code == "invalid_blog_config" }
+    end
+    result = compile(note("index.md", "---\npublish: true\n---\n# Home"), home: { "layout" => "archive" }, blog: { "export_max_days" => 3 })
+    assert_equal 3, page(result, "/").data.dig("website", "theme_data", "archive", "export_max_days")
+  end
 end
 
 class PagedArchiveLocalizedTest < Minitest::Test
@@ -130,6 +142,8 @@ class PagedArchiveLocalizedTest < Minitest::Test
     prefix = archive.fetch("url").delete_prefix("/garden").delete_suffix("manifest.json")
     card = generated_json(result, prefix + manifest.fetch("chunks").first).fetch("cards").first
     assert_equal "/garden/zh-CN/items/a/", card.fetch("url")
+    assert_equal "/garden/zh-CN/items/a.md", card.fetch("markdown_url")
+    assert_equal 7, manifest.fetch("export_max_days")
     assert_equal "https://example.test/a", card.fetch("source_url")
   end
 end

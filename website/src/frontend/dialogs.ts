@@ -1,4 +1,4 @@
-export type WebsiteDialogName = "search" | "browse" | "context" | "graph-global" | "graph-local" | "media";
+export type WebsiteDialogName = "search" | "browse" | "context" | "graph-global" | "graph-local" | "media" | "export";
 
 const DIALOG_NAMES = new Set<WebsiteDialogName>([
   "search",
@@ -6,7 +6,8 @@ const DIALOG_NAMES = new Set<WebsiteDialogName>([
   "context",
   "graph-global",
   "graph-local",
-  "media"
+  "media",
+  "export"
 ]);
 
 const movablePlaceholders = new WeakMap<Element, Comment>();

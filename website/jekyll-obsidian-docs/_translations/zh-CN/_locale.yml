@@ -2,6 +2,33 @@ name: 简体中文
 hreflang: zh-Hans
 dir: ltr
 messages:
+  original: 原文
+  export: "导出"
+  export_title: "导出 Markdown"
+  export_close: "关闭导出"
+  export_description: "将符合条件的条目合并为一个 Markdown 文件。"
+  export_filters: "导出筛选"
+  export_start: "开始日期"
+  export_end: "结束日期"
+  export_download: "下载 Markdown"
+  export_cancel: "取消导出"
+  export_dates: "日期范围"
+  export_entries: "条目数"
+  export_date: "日期"
+  export_article: "站内文章"
+  export_required: "请选择开始和结束日期。"
+  export_invalid: "请输入有效日期。"
+  export_order: "结束日期不能早于开始日期。"
+  export_limit: "日期范围最多 {days} 天，包含起止两天。"
+  export_limit_hint: "最多 {days} 天，包含起止两天。"
+  export_calculating: "正在查找符合条件的条目…"
+  export_matches: "将导出 {count} 条内容"
+  export_empty: "没有符合条件的条目，请调整日期或筛选。"
+  export_unavailable: "导出准备失败，请重试。"
+  export_progress: "正在准备 {done} / {count} 条内容…"
+  export_failed: "有 {count} 条正文载入失败，重试后可下载完整文件。"
+  export_complete: "已下载 {count} 条内容。"
+  export_cancelled: "已取消导出。"
   flat_reading: 平铺阅读
   reading_loading: 正在载入正文…
   reading_unavailable: 正文载入失败。

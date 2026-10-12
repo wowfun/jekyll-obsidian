@@ -306,11 +306,12 @@ module JekyllObsidian
       })
       @feed_config = output_options("feed", @config.feed, { "max_entries" => nil })
       @home_config = output_options("home", @config.home, { "recent_posts_limit" => 6, "layout" => "recent" })
-      @blog_config = output_options("blog", @config.blog, { "page_size" => nil, "utc_offset" => nil, "timeline_granularity" => "month", "facets" => { "source" => "source/", "topic" => "topics/" } })
+      @blog_config = output_options("blog", @config.blog, { "page_size" => nil, "utc_offset" => nil, "timeline_granularity" => "month", "export_max_days" => 7, "facets" => { "source" => "source/", "topic" => "topics/" } })
       validate_output_option(@home_config, "home", "layout", "recent") { |value| %w[recent archive].include?(value) }
       validate_output_option(@blog_config, "blog", "page_size", nil) { |value| value.nil? || (value.is_a?(Integer) && value.between?(1, 100)) }
       validate_output_option(@blog_config, "blog", "utc_offset", nil) { |value| value.nil? || value.is_a?(String) && value.match?(/\A[+-](?:0\d|1[0-4]):[0-5]\d\z/) }
       validate_output_option(@blog_config, "blog", "timeline_granularity", "month") { |value| %w[month day].include?(value) }
+      validate_output_option(@blog_config, "blog", "export_max_days", 7) { |value| value.is_a?(Integer) && value.positive? }
       validate_output_option(@blog_config, "blog", "facets", { "source" => "source/", "topic" => "topics/" }) do |value|
         value.is_a?(Hash) && !value.empty? && value.all? { |key, prefix| key.is_a?(String) && key.match?(/\A[a-z][a-z0-9_-]*\z/) && !%w[page year month day].include?(key) && prefix.is_a?(String) && prefix.match?(/\A[a-z][a-z0-9_-]*\/\z/) } && value.values.uniq.length == value.length
       end

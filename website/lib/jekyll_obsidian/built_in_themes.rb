@@ -826,6 +826,7 @@ module JekyllObsidian
       def note_card(note, config, taxonomy)
         date = archive_time(note.published_at, config)
         content_card(note, config).merge(
+          "markdown_url" => config.url_builder.href(PublishedMarkdown.route(note.route)),
           "published_at" => date,
           "topics" => blog_topic_links(note, taxonomy.fetch("anchors")),
           "topic_anchors" => topic_anchors_for(note, taxonomy, config),

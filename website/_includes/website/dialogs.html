@@ -1,4 +1,5 @@
 {% assign ui = page.website.i18n.messages %}
+{% if page.website.theme_data.archive %}{% include website/archive-export.html %}{% endif %}
 {% if page.website.features.search %}
   <dialog class="website-dialog" data-dialog="search" aria-labelledby="search-dialog-title"{% if ui.search_loading %} data-search-loading="{{ ui.search_loading | escape }}"{% endif %}{% if ui.search_prompt %} data-search-prompt="{{ ui.search_prompt | escape }}"{% endif %}{% if ui.search_unavailable %} data-search-unavailable="{{ ui.search_unavailable | escape }}"{% endif %}{% if ui.search_no_results %} data-search-no-results="{{ ui.search_no_results | escape }}"{% endif %}{% if ui.search_result_one %} data-search-result-one="{{ ui.search_result_one | escape }}"{% endif %}{% if ui.search_result_many %} data-search-result-many="{{ ui.search_result_many | escape }}"{% endif %}>
     <div class="website-dialog__sheet">

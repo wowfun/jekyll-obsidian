@@ -1,18 +1,20 @@
 export interface ArchiveOption { id: string; name: string; count: number; posting: string }
 export interface ArchiveManifest {
-  version: number; generation: string; total: number; page_size: number;
+  version: number; generation: string; total: number; page_size: number; export_max_days: number;
   facets: Record<string, ArchiveOption[]>; prefixes: Record<string, string>;
   labels: Record<string, string>; aliases: Record<string, string>;
   years: Record<string, [number, number]>; months: Record<string, [number, number]>; days: Record<string, [number, number]>; chunks: string[];
 }
 export interface ArchiveCard {
-  id: string; title: string; url: string; summary?: string | null; source_url?: string | null;
+  id: string; title: string; url: string; markdown_url: string; summary?: string | null; source_url?: string | null;
   published_at: string | null; display_date: string | null; year: string; month: string | null;
   facets: Record<string, string[]>; date_basis?: string | null;
 }
 export interface ArchiveQuery { groups: string[][]; range: [number, number]; page: number }
+export type ArchiveQueryMode = "page" | "all" | "count";
+export interface ArchiveMatches { ordinals: number[]; count: number; page: number; pages: number }
 
-export function matchArchive(total: number, size: number, query: ArchiveQuery, bitmaps: Record<string, Uint8Array>): { ordinals: number[]; count: number; page: number; pages: number } {
+export function matchArchive(total: number, size: number, query: ArchiveQuery, bitmaps: Record<string, Uint8Array>, mode: ArchiveQueryMode = "page"): ArchiveMatches {
   const union = query.groups.map((keys) => {
     if (!keys.length) return null;
     const result = new Uint8Array(Math.ceil(total / 8));
@@ -25,10 +27,11 @@ export function matchArchive(total: number, size: number, query: ArchiveQuery, b
   let count = 0;
   const matches = (ordinal: number) => union.every((bitmap) => !bitmap || Boolean(bitmap[ordinal >> 3]! & (1 << (ordinal & 7))));
   const [start, end] = query.range;
-  for (let i = start; i < end; i++) if (matches(i)) count++;
+  const ordinals: number[] = [];
+  for (let i = start; i < end; i++) if (matches(i)) { count++; if (mode === "all") ordinals.push(i); }
+  if (mode !== "page") return { ordinals, count, page: 1, pages: 1 };
   const pages = Math.max(1, Math.ceil(count / size));
   const page = Math.min(pages, Math.max(1, query.page));
-  const ordinals: number[] = [];
   let seen = 0;
   for (let i = start; i < end && ordinals.length < size; i++) if (matches(i)) {
     if (seen++ >= (page - 1) * size) ordinals.push(i);
