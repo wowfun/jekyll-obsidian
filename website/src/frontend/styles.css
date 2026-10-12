@@ -2715,7 +2715,9 @@
 }
 
 @layer components {
-  .archive-export .website-dialog__sheet { display: flex; flex-direction: column; max-block-size: min(90dvh, 52rem); }
+  .archive-export .website-dialog__sheet { display: flex; flex-direction: column; max-block-size: inherit; }
+  .archive-export .website-dialog__sheet::before { align-self: center; flex-shrink: 0; }
+  .archive-export .website-dialog__header { flex: none; }
   .archive-export .website-dialog__body { min-block-size: 0; overflow-y: auto; }
   .archive-export__intro { margin: 0 0 1.25rem; color: var(--graphite); font-size: .9rem; }
   .archive-export__fields, .archive-export__facets fieldset { min-inline-size: 0; border: 0; padding: 0; margin: 0; }
@@ -2732,7 +2734,7 @@
   .archive-export__choice input:checked + span, .archive-export__choices [aria-pressed="true"] { border-color: var(--teal); color: var(--ink); background: color-mix(in srgb, var(--teal) 12%, transparent); }
   .archive-export__choice input:focus-visible + span { outline: 2px solid var(--teal); outline-offset: 2px; }
   .archive-export__fields:disabled { opacity: .6; }
-  .archive-export__footer { padding: 1rem 1.4rem; border-block-start: 1px solid var(--line); display: grid; gap: .75rem; }
+  .archive-export__footer { flex: none; padding: 1rem 1.4rem; border-block-start: 1px solid var(--line); display: grid; gap: .75rem; }
   .archive-export__footer p { margin: 0; font-size: .85rem; font-variant-numeric: tabular-nums; }
   .archive-export__footer progress { inline-size: 100%; accent-color: var(--teal); }
   .archive-export__actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: .6rem; }

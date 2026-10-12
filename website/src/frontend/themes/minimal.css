@@ -252,8 +252,8 @@
   @media (prefers-reduced-motion: reduce) { .archive-reading-switch__track::before { transition: none; } }
   @media (max-width: 600px) {
     .site-header__inner:has(.archive-reading-switch) { flex-wrap: wrap; }
-    .site-header__inner:has(.archive-reading-switch) .site-actions { flex-wrap: wrap; justify-content: flex-end; margin-inline-start: auto; }
-    .archive-reading-switch { padding-inline: .35rem; }
+    .site-header__inner:has(.archive-reading-switch) .site-actions { flex-wrap: wrap; justify-content: flex-end; margin-inline-start: auto; max-inline-size: 100%; }
+    .site-header__inner:has(.archive-reading-switch) .site-action { padding-inline: .35rem; }
   }
   .minimal-entry > .page-actions {
     position: absolute;

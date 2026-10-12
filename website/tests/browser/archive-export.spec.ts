@@ -20,10 +20,15 @@ for (const locale of ['en', 'zh-CN']) {
   test(`export snapshots independent filters and validates calendar ranges in ${locale}`, async ({ page }) => {
     await page.goto(root + '?source=hn&topic=agents&page=2');
     await expect(page.locator('[data-archive-page-status]')).toHaveText(/59.*2.*30/);
+    await expect(page.locator('.site-action--github')).toBeVisible();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
     const originalUrl = page.url(), originalTitles = await page.locator('.blog-ledger__main strong').allTextContents();
     await open(page, 58);
     const dialog = panel(page), start = dialog.locator('[data-export-start]'), end = dialog.locator('[data-export-end]');
     const button = dialog.locator('[data-export-download]'), status = dialog.locator('[data-export-status]');
+    const downloadBox = (await button.boundingBox())!;
+    expect(downloadBox.y + downloadBox.height).toBeLessThanOrEqual(page.viewportSize()!.height);
+    expect(await dialog.evaluate(el => el.scrollHeight <= el.clientHeight + 2)).toBe(true);
     await expect(start).toHaveValue('2026-10-04');
     await expect(end).toHaveValue('2026-10-10');
     await expect(dialog.locator('input[data-export-facet=source][value=hn]')).toBeChecked();

@@ -74,7 +74,7 @@ try {
   await writeFile(path.join(archiveHost, ".jekyll-obsidian-cache/github-markdown-browser.json"),
     JSON.stringify({ version: 1, documents: [] }));
   await writeFile(path.join(archiveHost, "host.yml"),
-    "title: Archive fixture\nwebsite:\n  source: vault\n  theme: minimal\n  contacts: []\n  home:\n    layout: archive\n  blog:\n    page_size: 2\n    utc_offset: '+08:00'\n    timeline_granularity: day\n  i18n:\n    enabled: true\n    locales: [en, zh-CN]\n");
+    "title: Archive fixture\nwebsite:\n  source: vault\n  theme: minimal\n  repository: example/archive\n  contacts: []\n  home:\n    layout: archive\n  blog:\n    page_size: 2\n    utc_offset: '+08:00'\n    timeline_granularity: day\n  i18n:\n    enabled: true\n    locales: [en, zh-CN]\n");
   await writeFile(path.join(archiveHost, "vault/_locale.yml"), "name: English\n");
   await copyFile(path.join(projectRoot, "jekyll-obsidian-docs/_translations/zh-CN/_locale.yml"), path.join(archiveHost, "vault/_translations/zh-CN/_locale.yml"));
   await writeFile(path.join(archiveHost, "vault/index.md"), "---\npublish: true\n---\n# Archive\n");
@@ -95,7 +95,7 @@ try {
   await mkdir(path.join(archiveHost, "vault/_translations/zh-CN/items"), { recursive: true });
   for (let i = 0; i < 57; i++) {
     const id = `bulk-${String(i).padStart(2, "0")}`;
-    const metadata = `---\npublish: true\ncontent_type: post\ntitle: Export ${id}\ndescription: Short description\ndate: 2026-10-09T${String(i % 16).padStart(2, "0")}:00:00Z\nsource_url: https://example.com/${id}\ntags: [source/hn, topics/agents]\n---\n`;
+    const metadata = `---\npublish: true\ncontent_type: post\ntitle: Export ${id}\ndescription: Short description\ndate: 2026-10-09T${String(i % 16).padStart(2, "0")}:00:00Z\nsource_url: https://example.com/${id}\ntags: [source/hn, topics/agents, topics/topic-${i % 20}]\n---\n`;
     const body = `## Article\n\nComplete body of ${id}.\n\n- A list item\n\n> Source quote\n\n\`\`\`md\n# Code heading\n---\n\`\`\`\n\n## HN discussion\n\nDiscussion of ${id}.\n\n[Comments](https://news.ycombinator.com/item?id=123)\n\n![Image](https://example.com/image.png)\n`;
     await writeFile(path.join(archiveHost, `vault/items/${id}.md`), metadata + body);
     await writeFile(path.join(archiveHost, `vault/_translations/zh-CN/items/${id}.md`), metadata + `中文完整正文 ${id}。\n\n` + body);
