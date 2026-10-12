@@ -95,3 +95,12 @@ it('bounds streamed body bytes across entries and releases failed reservations f
   expect(cancelled).toHaveBeenCalled();
   expect(await client.markdown(card(1), signal, budget)).toBe('def');
 });
+
+it('rejects an empty response that arrives after cancellation', async () => {
+  let finish!: (response: Response) => void;
+  vi.stubGlobal('fetch', vi.fn(() => new Promise<Response>(resolve => { finish = resolve; })));
+  const controller = new AbortController(), result = client.markdown(card(0), controller.signal);
+  controller.abort();
+  finish(new Response(null, { status: 204, headers: { 'content-type': 'text/plain' } }));
+  await expect(result).rejects.toThrow();
+});

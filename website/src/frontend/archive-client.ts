@@ -161,6 +161,7 @@ export function createArchiveClient(source: string) {
     const signal = combined(caller), url = archiveUrl(card.markdown_url);
     return limited(async () => {
       const response = await fetch(url, { signal: AbortSignal.any([signal, AbortSignal.timeout(15000)]), headers: { Accept: "text/markdown, text/plain" } });
+      signal.throwIfAborted();
       if (!response.ok || new URL(response.url || url.href).origin !== location.origin || !/^text\/(markdown|plain)(?:;|$)/i.test(response.headers.get("content-type") || "")) throw new Error("Markdown load failed");
       const reader = response.body?.getReader();
       if (!reader) return '';
