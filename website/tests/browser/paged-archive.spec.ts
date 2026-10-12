@@ -3,6 +3,23 @@ import { expect, test } from "@playwright/test";
 for (const locale of ["en", "zh-CN"]) {
   const root = "/__site__/minimal-archive/" + (locale === "en" ? "" : locale + "/");
 
+  test(`reading waits for offscreen rows and loads them after scrolling in ${locale}`, async ({ page }) => {
+    await page.goto(root);
+    await expect(page.locator('[data-archive-page-status]')).toHaveText(/3.*1.*2/);
+    // Model the height of long articles without depending on font metrics.
+    await page.addStyleTag({ content: '[data-filter-item] { min-height: 200vh; }' });
+    const requests: string[] = [];
+    page.on('request', request => { if (/\/items\/[ab]\/$/.test(request.url())) requests.push(request.url()); });
+    await page.locator('[data-archive-reading-toggle]').click();
+    const rows = page.locator('[data-filter-item]');
+    await expect(rows.first()).toHaveAttribute('data-reading-loaded', 'true');
+    await expect(rows.last()).not.toHaveAttribute('data-reading-loaded');
+    expect(requests).toEqual([new URL(root + 'items/a/', page.url()).href]);
+    await rows.last().scrollIntoViewIfNeeded();
+    await expect(rows.last()).toHaveAttribute('data-reading-loaded', 'true');
+    expect(requests).toHaveLength(2);
+  });
+
   test(`saved reading starts once on the selected page and reuses bodies in ${locale}`, async ({ page }) => {
     await page.goto(root);
     await expect(page.locator('[data-archive-page-status]')).toHaveText(/3.*1.*2/);

@@ -31,7 +31,7 @@ export function initialisePagedArchive(root: HTMLElement): () => void {
         year = card.year; const section = document.createElement("section"); section.dataset.filterGroup = "";
         section.append(textElement("h2", year)); const ledger = textElement("section", "", "blog-ledger"); ol = document.createElement("ol"); ledger.append(ol); section.append(ledger); fragment.append(section);
       }
-      const row = document.createElement("li"); row.dataset.filterItem = ""; row.dataset.itemId = card.id;
+      const row = document.createElement("li"); row.dataset.filterItem = "";
       const meta = textElement("div", "", "blog-ledger__meta"), time = textElement("time", card.display_date || ""); time.dateTime = card.published_at || ""; meta.append(time);
       const content = textElement("div", "", "blog-ledger__content"), title = textElement("a", "", "blog-ledger__main"); title.href = archiveUrl(card.url).href; title.append(textElement("strong", card.title)); content.append(title);
       if (card.summary) title.append(textElement("span", card.summary, "blog-ledger__description"));

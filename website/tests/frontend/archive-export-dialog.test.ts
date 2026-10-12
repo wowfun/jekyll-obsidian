@@ -2,6 +2,7 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { initialiseArchiveExport } from '../../src/frontend/archive-export';
 import type { ArchiveClient } from '../../src/frontend/archive-client';
 import type { ArchiveCard, ArchiveManifest } from '../../src/frontend/archive-query';
+import { ExportSizeError, MAX_EXPORT_ENTRIES } from '../../src/frontend/archive-export-budget';
 
 let dispose = () => {}, client: ArchiveClient;
 const data = { export_max_days: 7, total: 2, page_size: 1, prefixes: {}, facets: {}, aliases: {}, labels: {}, days: { '2026-10-09': [0, 2] }, months: {}, years: {} } as unknown as ArchiveManifest;
@@ -9,7 +10,7 @@ const cards = ['a', 'b'].map(id => ({ id, title: id, url: '/' + id + '/', markdo
 const element = <T extends HTMLElement>(name: string) => document.querySelector<T>(`[data-export-${name}]`)!;
 beforeEach(() => {
   history.replaceState(null, '', '/');
-  document.body.innerHTML = `<button data-archive-export-open>Export</button><dialog data-dialog="export" data-site="Garden" data-progress="Preparing {done} of {count}" data-matches="{count} entries" data-complete="Downloaded {count}" data-failed="{count} failed" data-calculating="Calculating" data-required="Required" data-unavailable="Unavailable">
+  document.body.innerHTML = `<button data-archive-export-open>Export</button><dialog data-dialog="export" data-site="Garden" data-progress="Preparing {done} of {count}" data-matches="{count} entries" data-complete="Downloaded {count}" data-failed="{count} failed" data-calculating="Calculating" data-required="Required" data-unavailable="Unavailable" data-too-many="Limit {count}" data-too-large="Too large" data-loading-cards="Loading entries">
     <fieldset data-export-fields><input type="date" data-export-start><input type="date" data-export-end><p data-export-limit></p><div data-export-facets></div></fieldset>
     <p data-export-status></p><progress data-export-progress></progress><button data-export-download>Save</button><button data-export-retry>Retry</button><button data-export-cancel>Cancel</button></dialog>`;
   client = {
@@ -68,4 +69,38 @@ it('counts only successful bodies and retries just the failed part of the frozen
   expect(vi.mocked(client.markdown).mock.calls.map(call => call[0].id)).toEqual(['a', 'b', 'a']);
   expect(client.cards).toHaveBeenCalledTimes(1);
   expect(URL.createObjectURL).toHaveBeenCalledTimes(1);
+});
+
+it('reuses the successful job for another download until the conditions change', async () => {
+  await open(); element('download').click();
+  await vi.waitFor(() => expect(URL.createObjectURL).toHaveBeenCalledTimes(1));
+  element('download').click();
+  await vi.waitFor(() => expect(URL.createObjectURL).toHaveBeenCalledTimes(2));
+  expect(client.markdown).toHaveBeenCalledTimes(2);
+  expect(client.cards).toHaveBeenCalledTimes(1);
+  element<HTMLInputElement>('start').value = '2026-10-09';
+  element('start').dispatchEvent(new Event('input', { bubbles: true }));
+  await vi.waitFor(() => expect(element<HTMLButtonElement>('download').disabled).toBe(false));
+  element('download').click();
+  await vi.waitFor(() => expect(URL.createObjectURL).toHaveBeenCalledTimes(3));
+  expect(client.markdown).toHaveBeenCalledTimes(4);
+});
+
+it('blocks excessive selections before loading cards', async () => {
+  vi.mocked(client.select).mockImplementation(async (_state, mode) => ({ ordinals: mode === 'first' ? [0] : Array.from({ length: MAX_EXPORT_ENTRIES + 1 }, (_, i) => i), count: mode === 'first' ? 1 : MAX_EXPORT_ENTRIES + 1, page: 1, pages: 1 }));
+  document.querySelector<HTMLButtonElement>('[data-archive-export-open]')!.click();
+  await vi.waitFor(() => expect(element('status').textContent).toBe('Limit ' + (MAX_EXPORT_ENTRIES + 1)));
+  expect(element<HTMLButtonElement>('download').disabled).toBe(true);
+  expect(client.cards).not.toHaveBeenCalled();
+});
+
+it('aborts the batch on a body size limit without a partial download or futile retry', async () => {
+  let signal!: AbortSignal;
+  vi.mocked(client.markdown).mockImplementation(async (_card, caller) => { signal = caller; throw new ExportSizeError(); });
+  await open(); element('download').click();
+  await vi.waitFor(() => expect(element('status').textContent).toBe('Too large'));
+  expect(signal.aborted).toBe(true);
+  expect(URL.createObjectURL).not.toHaveBeenCalled();
+  expect(element('retry').hidden).toBe(true);
+  expect(element<HTMLFieldSetElement>('fields').disabled).toBe(false);
 });

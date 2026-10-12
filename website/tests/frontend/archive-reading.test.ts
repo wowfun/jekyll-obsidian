@@ -6,6 +6,7 @@ let dispose = () => {};
 let client: ArchiveClient;
 beforeEach(() => {
   localStorage.clear();
+  vi.stubGlobal('IntersectionObserver', undefined);
   document.head.innerHTML = '<meta name="website:archive-worker" content="/worker.js">';
   vi.stubGlobal("Worker", class { terminate() {} });
   client = createArchiveClient("/archive/manifest.json");
@@ -16,6 +17,31 @@ function rows(count: number, offset = 0): void {
   document.querySelector('[data-filter-list]')!.innerHTML = Array.from({ length: count }, (_, i) => `<li data-filter-item><div class="blog-ledger__content"><a class="blog-ledger__main" href="/items/${i + offset}/">Item</a><span class="blog-ledger__description">Description</span></div></li>`).join('');
 }
 function response(text = "Full body"): Response { return new Response(`<div class="note-content"><p>${text}</p><p>Second paragraph</p></div>`, { headers: { 'content-type': 'text/html' } }); }
+
+it('loads only rows approaching the viewport and disconnects stale observations', async () => {
+  rows(50);
+  const observers: { notify: (rows: Element[]) => void; disconnect: ReturnType<typeof vi.fn> }[] = [];
+  vi.stubGlobal('IntersectionObserver', class {
+    disconnect = vi.fn(); observe = vi.fn(); unobserve = vi.fn();
+    constructor(callback: IntersectionObserverCallback) {
+      observers.push({ notify: rows => callback(rows.map(target => ({ target, isIntersecting: true })) as IntersectionObserverEntry[], this as unknown as IntersectionObserver), disconnect: this.disconnect });
+    }
+  });
+  const fetch = vi.fn(async () => response()); vi.stubGlobal('fetch', fetch);
+  const reading = initialiseArchiveReading(document.querySelector('main')!, client); dispose = reading.dispose;
+  const toggle = document.querySelector<HTMLButtonElement>('button')!; toggle.click();
+  expect(fetch).not.toHaveBeenCalled();
+  observers[0]!.notify([document.querySelector('[data-filter-item]')!]);
+  await vi.waitFor(() => expect(document.querySelectorAll('[data-reading-loaded]')).toHaveLength(1));
+  expect(fetch).toHaveBeenCalledTimes(1);
+  toggle.click(); expect(observers[0]!.disconnect).toHaveBeenCalled();
+  observers[0]!.notify([document.querySelectorAll('[data-filter-item]')[49]!]);
+  expect(fetch).toHaveBeenCalledTimes(1);
+  toggle.click();
+  observers[1]!.notify([document.querySelectorAll('[data-filter-item]')[49]!]);
+  await vi.waitFor(() => expect(document.querySelectorAll('[data-reading-loaded]')).toHaveLength(2));
+  expect(fetch).toHaveBeenCalledTimes(2);
+});
 
 it("keeps prose and links, resolves relative URLs and scopes fragments without executing source markup", () => {
   const host = document.createElement('div');

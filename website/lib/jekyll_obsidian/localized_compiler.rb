@@ -48,6 +48,9 @@ module JekyllObsidian
       "export_empty" => "No matching entries. Adjust the dates or filters.",
       "export_unavailable" => "Could not prepare the export. Retry to continue.",
       "export_progress" => "Preparing {done} of {count} entries…",
+      "export_loading_cards" => "Loading entry details…",
+      "export_too_many" => "{count} matching entries; export up to {limit} at a time. Narrow the dates or filters.",
+      "export_too_large" => "The export is too large. Narrow the dates or filters.",
       "export_failed" => "{count} entries could not be loaded. Retry to download the complete file.",
       "export_complete" => "Downloaded {count} entries.",
       "export_cancelled" => "Export cancelled.",
@@ -734,7 +737,13 @@ module JekyllObsidian
       route = generated_route(file.route, locale)
       content = case file.media_type
       when "application/json"
-        "#{JSON.generate(localize_data(JSON.parse(file.content), locale))}\n"
+        # Per-locale compilation has already resolved labels. Only card chunks
+        # contain article URLs; manifests and bitmaps need no content rewrite.
+        if file.route.match?(%r{\A/assets/website/archive/[a-f0-9]{64}/(?:manifest|facet-[a-f0-9]{64})\.json\z})
+          file.content
+        else
+          "#{JSON.generate(localize_data(JSON.parse(file.content), locale))}\n"
+        end
       when "text/html"
         localize_html(file.content, locale)
       when "application/atom+xml", "application/xml"

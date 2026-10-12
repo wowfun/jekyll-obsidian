@@ -1,5 +1,6 @@
 import { archiveState, decodeBitmap, type ArchiveCard, type ArchiveManifest, type ArchiveMatches, type ArchiveQueryMode } from "./archive-query";
 import { requireSiteUrl } from "./urls";
+import { ArchiveBodyBudget } from "./archive-export-budget";
 
 function object(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("Invalid archive data");
@@ -156,20 +157,32 @@ export function createArchiveClient(source: string) {
     }, signal);
     return ordinals.map(ordinal => { const card = chunks.get(Math.floor(ordinal / data.page_size))?.[ordinal % data.page_size]; if (!card) throw new Error("Missing archive card"); return card; });
   }
-  async function markdown(card: ArchiveCard, caller: AbortSignal): Promise<string> {
+  async function markdown(card: ArchiveCard, caller: AbortSignal, budget = new ArchiveBodyBudget()): Promise<string> {
     const signal = combined(caller), url = archiveUrl(card.markdown_url);
     return limited(async () => {
       const response = await fetch(url, { signal: AbortSignal.any([signal, AbortSignal.timeout(15000)]), headers: { Accept: "text/markdown, text/plain" } });
       if (!response.ok || new URL(response.url || url.href).origin !== location.origin || !/^text\/(markdown|plain)(?:;|$)/i.test(response.headers.get("content-type") || "")) throw new Error("Markdown load failed");
-      const body = await response.text(); signal.throwIfAborted(); return body;
+      const reader = response.body?.getReader();
+      if (!reader) return '';
+      const decoder = new TextDecoder(), parts: string[] = []; let reserved = 0;
+      try {
+        while (true) {
+          const { done, value } = await reader.read(); signal.throwIfAborted();
+          if (done) break;
+          budget.reserve(value.byteLength); reserved += value.byteLength;
+          parts.push(decoder.decode(value, { stream: true }));
+        }
+        parts.push(decoder.decode()); return parts.join('');
+      } catch (error) { budget.release(reserved); throw error; }
+      finally { await reader.cancel().catch(() => {}); reader.releaseLock(); }
     }, signal);
   }
   async function article(value: string, caller: AbortSignal): Promise<{ html: string; url: string }> {
     const signal = combined(caller), url = archiveUrl(value);
     return limited(async () => {
       const response = await fetch(url, { signal: AbortSignal.any([signal, AbortSignal.timeout(15000)]), headers: { Accept: "text/html" } });
-      const finalUrl = response.url || url.href;
-      if (!response.ok || archiveUrl(finalUrl).origin !== location.origin || !response.headers.get("content-type")?.includes("text/html")) throw new Error("Article load failed");
+      const finalUrl = archiveUrl(response.url || url.href).href;
+      if (!response.ok || !response.headers.get("content-type")?.includes("text/html")) throw new Error("Article load failed");
       const html = await response.text(); signal.throwIfAborted(); return { html, url: finalUrl };
     }, signal);
   }

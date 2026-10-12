@@ -335,7 +335,8 @@ and unknown IDs match zero entries. Loading failures retain the last successful 
 Each ledger entry shows its description (or the note preview when no description is set).
 The header's **Read in full** switch expands the current page's articles in place,
 following pagination and filters. The choice persists across reloads and languages.
-Bodies load only while enabled, with at most four requests at once; individual failures
+Bodies load only while enabled and approaching the viewport (within 400 pixels),
+with at most four requests at once; individual failures
 keep the entry and offer retry. Switching off restores the compact ledger.
 Reading, pagination and export share that request budget. A bounded cache keeps
 sanitized article bodies for return visits within the archive; retrying one article
@@ -354,6 +355,12 @@ Up to four resources load concurrently. Cancel or close stops the download; any 
 body prevents an incomplete file and retry reuses successfully loaded bodies from that task.
 Progress counts successfully loaded bodies. Date edits briefly wait for typing to stop
 before calculating matches; download is disabled immediately while conditions change.
+Successful bodies also serve repeated downloads until the conditions change or the
+panel closes. The file is assembled from Blob parts without a combined document string.
+Each export allows up to 5,000 entries and 64 MiB of decoded Markdown response bytes,
+including in-flight bodies. Exceeding either limit stops the task with a message to
+narrow the selection; no partial file is downloaded. Failed transfers release their
+byte reservation before retry. Entry details show an indeterminate loading phase.
 
 Locale manifests may provide `tag_labels` and flattened `tag_aliases` keyed by complete
 stable tags. Labels can differ across languages; IDs remain shared.

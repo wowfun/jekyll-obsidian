@@ -1,14 +1,16 @@
 import { archiveState, type ArchiveManifest } from "./archive-query";
 import { archiveConcurrent, type ArchiveClient } from "./archive-client";
-import { dateRangeError, defaultExportDates, exportFilename, exportMarkdown, exportState, type ExportSnapshot } from "./archive-export-model";
+import { dateRangeError, defaultExportDates, exportFilename, exportMarkdownParts, exportState, type ExportSnapshot } from "./archive-export-model";
+import { ArchiveBodyBudget, ExportSizeError, MAX_EXPORT_ENTRIES } from "./archive-export-budget";
 import { openWebsiteDialog } from "./dialogs";
 
 interface ExportJob {
   snapshot: ExportSnapshot;
   ordinals: number[];
   bodies: Map<string, string>;
+  budget: ArchiveBodyBudget;
   controller: AbortController;
-  status: "running" | "failed" | "complete";
+  status: "running" | "failed" | "complete" | "limited";
 }
 
 export function initialiseArchiveExport(client: ArchiveClient): () => void {
@@ -68,6 +70,7 @@ export function initialiseArchiveExport(client: ArchiveClient): () => void {
     try {
       const result = await client.select(exportState(data, filters, start.value, end.value), "all", signal);
       if (signal.aborted || disposed) return;
+      if (result.count > MAX_EXPORT_ENTRIES) { status.textContent = message("tooMany", result.count).replace("{limit}", String(MAX_EXPORT_ENTRIES)); return; }
       ordinals = result.ordinals;
       status.textContent = result.count ? message("matches", result.count) : labels("empty");
       download.disabled = result.count === 0;
@@ -98,7 +101,7 @@ export function initialiseArchiveExport(client: ArchiveClient): () => void {
     if (!data || !ordinals.length || job?.status === "running") return;
     calculation.abort();
     const controller = new AbortController();
-    job ??= { snapshot: { site: labels("site"), locale: document.documentElement.lang, start: start.value, end: end.value, filters: new URLSearchParams(filters), cards: [] }, ordinals: [...ordinals], bodies: new Map(), controller, status: "running" };
+    job ??= { snapshot: { site: labels("site"), locale: document.documentElement.lang, start: start.value, end: end.value, filters: new URLSearchParams(filters), cards: [] }, ordinals: [...ordinals], bodies: new Map(), budget: new ArchiveBodyBudget(), controller, status: "running" };
     const current = job; current.controller = controller; current.status = "running";
     const signal = AbortSignal.any([session.signal, current.controller.signal]);
     const { snapshot, bodies } = current;
@@ -108,27 +111,33 @@ export function initialiseArchiveExport(client: ArchiveClient): () => void {
     update();
     try {
       if (!snapshot.cards.length) {
+        progress.removeAttribute('value'); status.textContent = labels('loadingCards');
         snapshot.cards = await client.cards(current.ordinals, signal); signal.throwIfAborted();
+        update();
       }
       let failures = 0;
       await archiveConcurrent(snapshot.cards.filter(card => !bodies.has(card.id)), async card => {
-        try { const body = await client.markdown(card, signal); signal.throwIfAborted(); bodies.set(card.id, body); update(); }
-        catch (error) { if (signal.aborted) throw error; failures++; }
+        try { const body = await client.markdown(card, signal, current.budget); signal.throwIfAborted(); bodies.set(card.id, body); update(); }
+        catch (error) { if (signal.aborted || error instanceof ExportSizeError) throw error; failures++; }
       }, signal);
       signal.throwIfAborted();
       if (failures) { current.status = "failed"; status.textContent = message("failed", failures); setRetry(() => { void save(); }); return; }
-      const markdown = exportMarkdown(snapshot, data, bodies, { dates: labels("dates"), source: labels("sources"), topic: labels("topics"), all: labels("all"), entries: labels("entries"), date: labels("date"), original: labels("original"), article: labels("article") });
-      const url = URL.createObjectURL(new Blob([markdown], { type: "text/markdown;charset=utf-8" }));
+      const parts = exportMarkdownParts(snapshot, data, bodies, { dates: labels("dates"), source: labels("sources"), topic: labels("topics"), all: labels("all"), entries: labels("entries"), date: labels("date"), original: labels("original"), article: labels("article") });
+      const url = URL.createObjectURL(new Blob(parts, { type: "text/markdown;charset=utf-8" }));
       const link = document.createElement("a"); link.href = url; link.download = exportFilename(snapshot); document.body.append(link); link.click(); link.remove();
       setTimeout(() => URL.revokeObjectURL(url), 1000);
       status.textContent = message("complete", snapshot.cards.length);
       current.status = "complete";
-    } catch { if (!signal.aborted) { current.status = "failed"; status.textContent = labels("unavailable"); setRetry(() => { void save(); }); } }
+    } catch (error) {
+      if (error instanceof ExportSizeError && !signal.aborted) {
+        current.status = "limited"; current.controller.abort(); bodies.clear();
+        status.textContent = labels("tooLarge");
+      } else if (!signal.aborted) { current.status = "failed"; status.textContent = labels("unavailable"); setRetry(() => { void save(); }); }
+    }
     finally {
       if (job === current) {
         fields.disabled = false; cancel.hidden = true; progress.hidden = true;
         download.disabled = current.status !== "complete";
-        if (current.status === "complete") job = undefined;
       }
     }
   }

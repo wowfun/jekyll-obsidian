@@ -1,6 +1,6 @@
 import { expect, it } from 'vitest';
 import { archiveState, matchArchive, type ArchiveCard, type ArchiveManifest } from '../../src/frontend/archive-query';
-import { calendarDay, dateRangeError, defaultExportDates, exportFilename, exportMarkdown, exportState } from '../../src/frontend/archive-export-model';
+import { calendarDay, dateRangeError, defaultExportDates, exportFilename, exportMarkdownParts, exportState } from '../../src/frontend/archive-export-model';
 
 const data = { total: 5, export_max_days: 7, page_size: 2, prefixes: { source: 'source/', topic: 'topics/' }, facets: {}, labels: { 'source/hn': 'Hacker News', 'topics/tools': '工具' }, aliases: {}, years: { '2026': [0, 2], '2025': [2, 4] }, months: {}, days: { '2026-01-03': [0, 1], '2026-01-01': [1, 2], '2025-12-31': [2, 4] } } as unknown as ArchiveManifest;
 
@@ -45,11 +45,13 @@ it('preserves full Markdown and metadata in stable order, requiring every body',
   const cards = [card('a'), card('b')], body = '# 中文正文\n\n完整段落。\n\n## HN 热门讨论\n\n> 引用\n\n- 列表\n\n```md\n# Code heading\n---\n```\n\n![图片](https://example.test/a.png)\n';
   const snapshot = { site: 'Feedgarden', locale: 'zh-CN', start: '2025-12-28', end: '2026-01-03', filters: new URLSearchParams('source=hn'), cards };
   const labels = { dates: '日期范围', source: '来源', topic: '主题', all: '全部', entries: '条目数', date: '日期', original: '原文', article: '站内文章' };
-  const result = exportMarkdown(snapshot, data, new Map([['b', '# Second\n\nEnd.'], ['a', body]]), labels);
+  const parts = exportMarkdownParts(snapshot, data, new Map([['b', '# Second\n\nEnd.'], ['a', body]]), labels), result = parts.join('');
+  expect(parts).toContain(body.trimEnd());
   expect(result).toContain(body.trimEnd()); expect(result).toContain('来源: Hacker News'); expect(result).toContain('主题: 工具');
   expect(result).toContain('<https://source.test/a>'); expect(result).toContain('<https://example.test/feedgarden/zh-CN/a/>');
   expect(result.indexOf('# 中文正文')).toBeLessThan(result.indexOf('# Second'));
   expect(result).not.toContain('TRUNCATED'); expect(result).not.toContain('publish:');
   expect(exportFilename(snapshot)).toBe('feedgarden-zh-CN-2025-12-28_2026-01-03.md');
-  expect(() => exportMarkdown(snapshot, data, new Map([['a', body]]), labels)).toThrow('Incomplete export');
+  expect(() => exportMarkdownParts(snapshot, data, new Map([['a', body]]), labels)).toThrow('Incomplete export');
+  expect(exportMarkdownParts({ ...snapshot, site: '~~Garden~~' }, data, new Map([['a', body], ['b', body]]), labels)[0]).toContain('\\~\\~Garden\\~\\~');
 });

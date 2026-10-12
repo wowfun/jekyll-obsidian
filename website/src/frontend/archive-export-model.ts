@@ -33,24 +33,25 @@ export function exportState(data: ArchiveManifest, filters: URLSearchParams, sta
   state.query.range = ranges.length ? [Math.min(...ranges.map(range => range[0])), Math.max(...ranges.map(range => range[1]))] : [0, 0];
   return state;
 }
-function escape(value: string): string { return value.replace(/[\r\n]+/g, " ").replace(/[\\`*_[\]{}<>#!|]/g, "\\$&"); }
+function escape(value: string): string { return value.replace(/[\r\n]+/g, " ").replace(/[\\`*_[\]{}<>#!|~]/g, "\\$&"); }
 export interface ExportLabels { dates: string; source: string; topic: string; all: string; entries: string; date: string; original: string; article: string }
 export interface ExportSnapshot { site: string; locale: string; start: string; end: string; filters: URLSearchParams; cards: ArchiveCard[] }
-export function exportMarkdown(snapshot: ExportSnapshot, data: ArchiveManifest, bodies: Map<string, string>, labels: ExportLabels): string {
+export function exportMarkdownParts(snapshot: ExportSnapshot, data: ArchiveManifest, bodies: Map<string, string>, labels: ExportLabels): string[] {
   const facetName = (name: string) => name === "source" ? labels.source : name === "topic" ? labels.topic : name;
   const facetValues = (name: string, ids: string[]) => ids.map(id => escape(data.labels[data.prefixes[name]! + id] || id)).join(", ");
   const link = (value: string) => `<${archiveUrl(value, true).href.replace(/</g, "%3C").replace(/>/g, "%3E")}>`;
   const heading = ["# " + escape(snapshot.site), `${labels.dates}: ${snapshot.start} — ${snapshot.end}`,
     ...Object.keys(data.prefixes).map(name => `${facetName(name)}: ${facetValues(name, snapshot.filters.getAll(name)) || labels.all}`),
     `${labels.entries}: ${snapshot.cards.length}`].join("\n\n");
-  const articles = snapshot.cards.map(card => {
+  const parts = [heading];
+  for (const card of snapshot.cards) {
     const body = bodies.get(card.id); if (body === undefined) throw new Error("Incomplete export");
     const metadata = [`${labels.date}: ${card.display_date || ""}`,
       ...Object.entries(card.facets).map(([name, ids]) => `${facetName(name)}: ${facetValues(name, ids)}`),
       ...(card.source_url ? [`${labels.original}: ${link(card.source_url)}`] : []), `${labels.article}: ${link(card.url)}`].join("  \n");
-    return metadata + "\n\n" + body.replace(/\r\n?/g, "\n").trimEnd();
-  });
-  return [heading, ...articles].join("\n\n---\n\n") + "\n";
+    parts.push("\n\n---\n\n", metadata, "\n\n", body.replace(/\r\n?/g, "\n").trimEnd());
+  }
+  parts.push("\n"); return parts;
 }
 export function exportFilename(snapshot: ExportSnapshot): string {
   const site = snapshot.site.toLowerCase().replace(/[^\p{L}\p{N}_-]+/gu, "-").replace(/^-+|-+$/g, "") || "archive";

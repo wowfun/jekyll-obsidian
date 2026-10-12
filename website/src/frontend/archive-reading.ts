@@ -6,6 +6,7 @@ const BLOCKED = new Set("SCRIPT STYLE IFRAME OBJECT EMBED FORM INPUT BUTTON SELE
 // Parse in an inert template and copy only reading content, without executing
 // scripts, event handlers, or reusing IDs from another article.
 export function articleBody(html: string, url: string, prefix: string): DocumentFragment {
+  const base = new URL(url), documentUrl = base.origin + base.pathname + base.search;
   const template = document.createElement("template");
   template.innerHTML = html;
   const source = template.content.querySelector(".note-content");
@@ -28,11 +29,11 @@ export function articleBody(html: string, url: string, prefix: string): Document
       const value = node.getAttribute(attribute);
       if (value) {
         try {
-          const resolved = new URL(value, url);
+          const resolved = new URL(value, base);
           if (/^https?:$/.test(resolved.protocol) || attribute === "href" && resolved.protocol === "mailto:") {
             let fragment: string | undefined;
             try { fragment = ids.get(decodeURIComponent(resolved.hash.slice(1))); } catch { /* Keep the source link. */ }
-            target.setAttribute(attribute, fragment && resolved.origin + resolved.pathname + resolved.search === new URL(url).origin + new URL(url).pathname + new URL(url).search ? `#${fragment}` : resolved.href);
+            target.setAttribute(attribute, fragment && resolved.origin + resolved.pathname + resolved.search === documentUrl ? `#${fragment}` : resolved.href);
           }
         } catch { /* Invalid URLs remain plain text. */ }
       }
@@ -51,6 +52,7 @@ export function initialiseArchiveReading(root: HTMLElement, client: Pick<Archive
   const toggle = document.querySelector<HTMLButtonElement>("[data-archive-reading-toggle]");
   if (!toggle) return { refresh() {}, dispose() {} };
   let enabled = false, disposed = false, controller = new AbortController(), sequence = 0;
+  let observer: IntersectionObserver | undefined;
   const loading = new WeakMap<HTMLElement, AbortSignal>();
   const cache = new Map<string, { body: DocumentFragment; weight: number }>();
   let cacheWeight = 0;
@@ -100,13 +102,25 @@ export function initialiseArchiveReading(root: HTMLElement, client: Pick<Archive
     }
   }
   function refresh(): void {
+    observer?.disconnect(); observer = undefined;
     controller.abort(); controller = new AbortController();
     root.classList.toggle("archive-reading", enabled);
     toggle!.setAttribute("aria-checked", String(enabled));
     if (!enabled || disposed) return;
     const signal = controller.signal;
     const rows = Array.from(root.querySelectorAll<HTMLElement>("[data-filter-item]"));
-    void archiveConcurrent(rows, row => load(row, signal), signal).catch(() => { /* Rows handle errors; cancellation stops the pool. */ });
+    if (typeof IntersectionObserver === 'function') {
+      observer = new IntersectionObserver((entries, current) => {
+        if (signal.aborted) return;
+        for (const entry of entries) if (entry.isIntersecting) {
+          current.unobserve(entry.target);
+          void load(entry.target as HTMLElement, signal);
+        }
+      }, { rootMargin: '400px 0px' });
+      for (const row of rows) if (!row.dataset.readingLoaded) observer.observe(row);
+    } else {
+      void archiveConcurrent(rows, row => load(row, signal), signal).catch(() => { /* Rows handle errors; cancellation stops the pool. */ });
+    }
   }
   function switchReading(): void {
     enabled = !enabled;
@@ -122,5 +136,5 @@ export function initialiseArchiveReading(root: HTMLElement, client: Pick<Archive
   root.addEventListener("click", retry);
   // Pagination chooses the initial rows before starting saved reading mode.
   toggle.setAttribute('aria-checked', String(enabled));
-  return { refresh, dispose() { disposed = true; controller.abort(); cache.clear(); cacheWeight = 0; toggle.removeEventListener("click", switchReading); root.removeEventListener("click", retry); } };
+  return { refresh, dispose() { disposed = true; observer?.disconnect(); controller.abort(); cache.clear(); cacheWeight = 0; toggle.removeEventListener("click", switchReading); root.removeEventListener("click", retry); } };
 }

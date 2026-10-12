@@ -20,9 +20,12 @@ module JekyllObsidian
     end
 
     def facet_links(tags, config)
-      labels = config.site.tag_labels || {}
-      facet_values(tags, config).flat_map do |name, ids|
-        prefix = config.blog.fetch("facets").fetch(name)
+      label_facets(facet_values(tags, config), config.blog.fetch("facets"), config.site.tag_labels || {})
+    end
+
+    def label_facets(values, prefixes, labels)
+      values.flat_map do |name, ids|
+        prefix = prefixes.fetch(name)
         ids.map { |id| { "facet" => name, "id" => id, "name" => labels.fetch("#{prefix}#{id}", id) } }
       end
     end
@@ -107,10 +110,7 @@ module JekyllObsidian
     end
 
     def card_labels(card, manifest)
-      card.merge("archive_facets" => card.fetch("facets").flat_map do |name, ids|
-        prefix = manifest.fetch("prefixes").fetch(name)
-        ids.map { |id| { "facet" => name, "id" => id, "name" => manifest.fetch("labels").fetch("#{prefix}#{id}", id) } }
-      end)
+      card.merge("archive_facets" => label_facets(card.fetch("facets"), manifest.fetch("prefixes"), manifest.fetch("labels")))
     end
   end
 end

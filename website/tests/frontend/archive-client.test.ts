@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { createArchiveClient } from '../../src/frontend/archive-client';
 import type { ArchiveCard } from '../../src/frontend/archive-query';
+import { ArchiveBodyBudget } from '../../src/frontend/archive-export-budget';
 
 let client: ReturnType<typeof createArchiveClient>;
 beforeEach(() => {
@@ -77,4 +78,20 @@ it('rejects HTML fallback pages and cross-origin Markdown resources', async () =
   await expect(client.markdown(card(0), new AbortController().signal)).rejects.toThrow('Markdown load failed');
   await expect(client.markdown({ markdown_url: 'https://remote.invalid/a.md' } as ArchiveCard, new AbortController().signal)).rejects.toThrow('Invalid archive URL');
   expect(fetch).toHaveBeenCalledTimes(1);
+});
+
+it('bounds streamed body bytes across entries and releases failed reservations for retry', async () => {
+  const budget = new ArchiveBodyBudget(6), cancelled = vi.fn(); let chunk = 0;
+  vi.stubGlobal('fetch', vi.fn()
+    .mockResolvedValueOnce(new Response('abc', { headers: { 'content-type': 'text/plain' } }))
+    .mockResolvedValueOnce(new Response(new ReadableStream({
+      pull(controller) { if (chunk === 2) controller.close(); else controller.enqueue(new TextEncoder().encode(['de', 'fg'][chunk++])); },
+      cancel: cancelled
+    }, { highWaterMark: 0 }), { headers: { 'content-type': 'text/plain' } }))
+    .mockResolvedValueOnce(new Response('def', { headers: { 'content-type': 'text/plain' } })));
+  const signal = new AbortController().signal;
+  expect(await client.markdown(card(0), signal, budget)).toBe('abc');
+  await expect(client.markdown(card(1), signal, budget)).rejects.toThrow('size limit');
+  expect(cancelled).toHaveBeenCalled();
+  expect(await client.markdown(card(1), signal, budget)).toBe('def');
 });

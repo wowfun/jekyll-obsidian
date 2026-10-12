@@ -17,6 +17,24 @@ async function download(page: Page, retry = false) {
 for (const locale of ['en', 'zh-CN']) {
   const root = '/__site__/minimal-export/' + (locale === 'en' ? '' : locale + '/');
 
+  test(`export rejects an oversized selection before loading bodies in ${locale}`, async ({ page }) => {
+    await page.route('**/manifest.json', async route => {
+      const response = await route.fetch(), data = await response.json();
+      data.total = 5001;
+      data.chunks = Array(Math.ceil(data.total / data.page_size)).fill(data.chunks[0]);
+      data.days = { '2026-10-09': [0, data.total] };
+      data.months = { '2026-10': [0, data.total] }; data.years = { '2026': [0, data.total] };
+      await route.fulfill({ response, json: data });
+    });
+    const bodies: string[] = [];
+    page.on('request', request => { if (request.url().endsWith('.md')) bodies.push(request.url()); });
+    await page.goto(root);
+    await page.locator('[data-archive-export-open]').click();
+    await expect(panel(page).locator('[data-export-status]')).toHaveText(/5001.*5000/);
+    await expect(panel(page).locator('[data-export-download]')).toBeDisabled();
+    expect(bodies).toEqual([]);
+  });
+
   test(`export snapshots independent filters and validates calendar ranges in ${locale}`, async ({ page }) => {
     await page.goto(root + '?source=hn&topic=agents&page=2');
     await expect(page.locator('[data-archive-page-status]')).toHaveText(/59.*2.*30/);
