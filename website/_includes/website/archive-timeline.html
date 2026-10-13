@@ -1,7 +1,7 @@
-{% if include.timeline and include.timeline.size > 0 %}
+{% if include.timeline and include.timeline.size > 0 or page.website.theme_data.favorites %}
   {% assign ui = page.website.i18n.messages %}
   {% if page.website.theme == 'minimal' %}{% assign filter_url = page.website.routes.blog %}{% unless filter_url %}{% assign filter_url = '/blog/' | relative_url %}{% endunless %}{% else %}{% assign filter_url = page.website.routes.tags %}{% unless filter_url %}{% assign filter_url = '/tags/' | relative_url %}{% endunless %}{% endif %}
-  <nav class="archive-timeline" data-timeline-nav aria-labelledby="archive-timeline-title">
+  <nav class="archive-timeline" data-timeline-nav aria-labelledby="archive-timeline-title"{% if page.website.theme_data.favorites %} hidden{% endif %}>
     <h2 class="relation-section__title" id="archive-timeline-title">{{ ui.chronology | default: 'Chronology' | escape }}</h2>
     {% for group in include.timeline %}
       <section class="archive-timeline__year{% if group.days %} archive-timeline__year--days{% endif %}">

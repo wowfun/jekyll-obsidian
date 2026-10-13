@@ -55,7 +55,7 @@ module JekyllObsidian
     NOTE_EXTENSION = ".md"
     TRANSLATIONS_DIRECTORY = "_translations/"
     THEMES = BuiltInThemes::IDS
-    FEATURE_KEYS = %w[search tags feed graph relations previews outline].freeze
+    FEATURE_KEYS = %w[search tags feed graph relations previews outline favorites].freeze
     COMMENT_KEYS = %w[enabled repository repository_id category category_id].freeze
     ANALYTICS_PROVIDERS = %w[cloudflare google].freeze
     CONTACT_KEYS = %w[label url].freeze
@@ -77,7 +77,8 @@ module JekyllObsidian
     NAVIGATION_BUILTINS = {
       "home" => { "order" => 0, "visible" => true }.freeze,
       "blog" => { "order" => 10, "visible" => true }.freeze,
-      "docs" => { "order" => 20, "visible" => true }.freeze
+      "docs" => { "order" => 20, "visible" => true }.freeze,
+      "favorites" => { "order" => 15, "visible" => true }.freeze
     }.freeze
     PORTFOLIO_NAVIGATION_DEFAULTS = {
       "path" => "portfolio", "order" => 30, "visible" => true
@@ -93,11 +94,11 @@ module JekyllObsidian
     THEME_FEATURE_DEFAULTS = {
       "minimal" => {
         "search" => true, "tags" => true, "feed" => true,
-        "graph" => true, "relations" => true, "previews" => true, "outline" => true
+        "graph" => true, "relations" => true, "previews" => true, "outline" => true, "favorites" => false
       },
       "docs" => {
         "search" => true, "tags" => false, "feed" => false,
-        "graph" => true, "relations" => true, "previews" => true, "outline" => true
+        "graph" => true, "relations" => true, "previews" => true, "outline" => true, "favorites" => false
       },
     }.transform_values(&:freeze).freeze
     MutableNote = Struct.new(
@@ -221,7 +222,8 @@ module JekyllObsidian
         url_builder: @url_builder,
         theme: @theme,
         member_ids_by_tab_id: @request.tab_memberships,
-        home_archive: @home_config["layout"] == "archive"
+        home_archive: @home_config["layout"] == "archive",
+        favorites: @features.fetch("favorites")
       )
       @diagnostics.concat(navigation.diagnostics)
       theme_config = EffectiveThemeConfig.new(
@@ -306,11 +308,12 @@ module JekyllObsidian
       })
       @feed_config = output_options("feed", @config.feed, { "max_entries" => nil })
       @home_config = output_options("home", @config.home, { "recent_posts_limit" => 6, "layout" => "recent" })
-      @blog_config = output_options("blog", @config.blog, { "page_size" => nil, "utc_offset" => nil, "timeline_granularity" => "month", "export_max_days" => 7, "facets" => { "source" => "source/", "topic" => "topics/" } })
+      @blog_config = output_options("blog", @config.blog, { "page_size" => nil, "utc_offset" => nil, "timeline_granularity" => "month", "ledger_group_by" => "year", "export_max_days" => 7, "facets" => { "source" => "source/", "topic" => "topics/" } })
       validate_output_option(@home_config, "home", "layout", "recent") { |value| %w[recent archive].include?(value) }
       validate_output_option(@blog_config, "blog", "page_size", nil) { |value| value.nil? || (value.is_a?(Integer) && value.between?(1, 100)) }
       validate_output_option(@blog_config, "blog", "utc_offset", nil) { |value| value.nil? || value.is_a?(String) && value.match?(/\A[+-](?:0\d|1[0-4]):[0-5]\d\z/) }
       validate_output_option(@blog_config, "blog", "timeline_granularity", "month") { |value| %w[month day].include?(value) }
+      validate_output_option(@blog_config, "blog", "ledger_group_by", "year") { |value| %w[year day].include?(value) }
       validate_output_option(@blog_config, "blog", "export_max_days", 7) { |value| value.is_a?(Integer) && value.positive? }
       validate_output_option(@blog_config, "blog", "facets", { "source" => "source/", "topic" => "topics/" }) do |value|
         value.is_a?(Hash) && !value.empty? && value.all? { |key, prefix| key.is_a?(String) && key.match?(/\A[a-z][a-z0-9_-]*\z/) && !%w[page year month day].include?(key) && prefix.is_a?(String) && prefix.match?(/\A[a-z][a-z0-9_-]*\/\z/) } && value.values.uniq.length == value.length
@@ -390,6 +393,7 @@ module JekyllObsidian
         normalized[name] = value
       end
       @features = THEME_FEATURE_DEFAULTS.fetch(@theme).merge(normalized).sort.to_h.freeze
+      error("invalid_feature", "favorites is supported by the minimal theme") if @features.fetch("favorites") && @theme != "minimal"
     end
 
     def resolve_comments_config

@@ -6,9 +6,12 @@
     <ol>
       {% for post in include.posts %}
         <li{% if include.filterable %} data-filter-item data-topic-anchors="{{ post.topic_anchors | join: ' ' | escape }}"{% if post.filter_month %} data-filter-month="{{ post.filter_month | escape }}"{% endif %}{% if post.filter_day %} data-filter-day="{{ post.filter_day | escape }}"{% endif %}{% endif %}>
-          <div class="blog-ledger__meta"><time datetime="{{ post.published_at | escape }}">{% if post.display_date %}{{ post.display_date | escape }}{% else %}{{ post.published_at | date: "%Y-%m-%d" }}{% endif %}</time></div>
+          {% unless page.website.theme_data.ledger_group_by == 'day' %}<div class="blog-ledger__meta"><time datetime="{{ post.published_at | escape }}">{% if post.display_date %}{{ post.display_date | escape }}{% else %}{{ post.published_at | date: "%Y-%m-%d" }}{% endif %}</time></div>{% endunless %}
           <div class="blog-ledger__content">
+            {% if page.website.features.favorites %}<div class="blog-ledger__heading">{% endif %}
             <a class="blog-ledger__main" href="{{ post.url | escape }}"><strong>{{ post.title | escape }}</strong>{% if post.summary and post.summary != '' %}<span class="blog-ledger__description">{{ post.summary | escape }}</span>{% endif %}</a>
+            {% if post.favorite_card %}{% include website/favorite-button.html card=post.favorite_card %}{% elsif post.archive_facets %}{% include website/favorite-button.html card=post %}{% endif %}
+            {% if page.website.features.favorites %}</div>{% endif %}
             {% if post.archive_facets %}{% include website/archive-card-footer.html post=post %}{% endif %}
             {% unless post.archive_facets %}{% if post.topics and post.topics.size > 0 %}<ul class="blog-ledger__topics" aria-label="{{ ui.topics | default: 'Topics' | escape }}">{% for topic in post.topics %}<li><a href="{{ blog_url | escape }}?topic={{ topic.anchor | url_encode }}" data-topic-filter-option data-topic-anchor="{{ topic.anchor | escape }}">{{ topic.name | escape }}</a></li>{% endfor %}</ul>{% endif %}{% endunless %}
           </div>

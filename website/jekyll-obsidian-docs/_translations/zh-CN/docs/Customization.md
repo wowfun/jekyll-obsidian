@@ -427,3 +427,13 @@ Docs 导航沿用内容目录结构。`nav_order` 对同级文档排序，`nav_e
 用扁平化 `tag_aliases` 保留旧标签查询。语言切换保留筛选状态。
 
 `source_url`: an absolute HTTP(S) URL without credentials; shown as a clickable original source link.
+
+## 按日分组与本地收藏
+
+设置 `website.blog.ledger_group_by: day`，可按 `YYYY-MM-DD` 标题分组 ledger 条目，并移除每条左侧的日期栏。日期采用 `website.blog.utc_offset`，默认仍按 `year` 分组。静态首屏与分页使用相同规则。
+
+minimal 主题支持 `website.features.favorites: true`（默认为 `false`），在 ledger 条目和文章操作区增加收藏按钮，并在导航中增加 `/favorites/` 收藏页。`website.navigation.favorites` 支持 label、order、visible 设置；启用功能时该路由由主题保留。
+
+收藏保存在当前浏览器中，按站点 base URL 隔离，中英文页面共用收藏状态。清除浏览器存储会删除收藏；不同来源、浏览器和设备分别保存。快照包括标题、摘要、日期、来源、主题及链接，不保存文章正文。在站条目展示当前语言，下架条目保留已保存语言的快照和原文链接。网络失败时显示快照并提供重试，不误判下架；存储失败时保留原收藏并提示原因。
+
+收藏页按文章日期倒序、同日按文章 ID 排序，每页 50 条。来源、主题和时间线计数只包括收藏条目。平铺阅读按需加载仍在站的正文，下架条目保留摘要。导出入口位于普通索引页。独立文章 ID 索引只定位涉及的卡片分块，避免加载所有条目。

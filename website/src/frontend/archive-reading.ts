@@ -70,7 +70,7 @@ export function initialiseArchiveReading(root: HTMLElement, client: Pick<Archive
     return clone;
   }
   async function load(row: HTMLElement, signal: AbortSignal): Promise<void> {
-    const link = row.querySelector<HTMLAnchorElement>(".blog-ledger__main");
+    const link = row.querySelector<HTMLAnchorElement>("a.blog-ledger__main");
     const content = row.querySelector<HTMLElement>(".blog-ledger__content");
     if (!link || !content || row.dataset.readingLoaded || loading.get(row) === signal) return;
     loading.set(row, signal);

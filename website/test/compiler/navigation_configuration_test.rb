@@ -81,6 +81,7 @@ class NavigationConfigurationTest < Minitest::Test
         "home" => { "order" => 0, "visible" => true },
         "blog" => { "order" => 10, "visible" => true },
         "docs" => { "order" => 20, "visible" => true },
+      "favorites" => { "order" => 15, "visible" => true },
         "portfolio" => { "path" => "portfolio", "order" => 30, "visible" => true }
       },
       navigation

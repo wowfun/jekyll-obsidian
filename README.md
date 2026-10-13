@@ -128,7 +128,7 @@ Build for another host with `jekyll-obsidian build --url https://example.com --b
 
 Contributors can continue with the [Developer Guide](website/jekyll-obsidian-docs/docs/development/index.md).
 
-Native Windows contributors can use RubyInstaller Ruby+Devkit 4.0.6, Bundler 4.0.16 and Node 26. The Developer Guide includes PowerShell build and archive-test commands. Ruby tests that create file symlinks require Windows symlink privileges.
+Native Windows contributors can use RubyInstaller Ruby+Devkit 4.0.6, Bundler 4.0.16 and Node 26. The Developer Guide includes PowerShell build and archive-test commands. The full Ruby suite runs with `bundle exec rake test`. Directory-link tests use junctions when Windows symbolic-link privileges are unavailable; only file-link tests and filenames unsupported by Windows are skipped, with explicit reasons. Preview tests isolate and stop their own child process.
 
 ## License
 

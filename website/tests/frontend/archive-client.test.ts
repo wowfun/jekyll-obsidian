@@ -13,6 +13,21 @@ afterEach(() => { client.dispose(); vi.useRealTimers(); vi.unstubAllGlobals(); }
 const card = (i: number) => ({ markdown_url: `/article-${i}.md` }) as ArchiveCard;
 const manifest = { version: 1, generation: 'a'.repeat(64), total: 0, page_size: 50, export_max_days: 7, facets: {}, prefixes: {}, labels: {}, aliases: {}, years: {}, months: {}, days: {}, chunks: [] };
 
+it('looks up saved identities without fetching unrelated card chunks in a 100000-record archive', async () => {
+  const total = 100000, ids = Array.from({ length: total }, (_, i) => `item-${i}`);
+  const data = { ...manifest, total, identities: 'identities.json', chunks: Array.from({ length: total / 50 }, (_, i) => `cards-${i}.json`) };
+  const fetch = vi.fn(async (url: URL) => {
+    if (url.pathname.endsWith('manifest.json')) return Response.json(data);
+    if (url.pathname.endsWith('identities.json')) return Response.json({ generation: data.generation, ids });
+    expect(url.pathname).toBe('/archive/cards-1999.json');
+    return Response.json({ generation: data.generation, start: 99950, cards: ids.slice(99950).map(id => ({ id, title: id, url: '/item/', markdown_url: '/item.md', year: '2026', facets: {} })) });
+  });
+  vi.stubGlobal('fetch', fetch);
+  const selected = await client.lookup(['item-99999', 'removed']);
+  expect([...selected.keys()]).toEqual(['item-99999']); expect(fetch).toHaveBeenCalledTimes(3);
+  await client.lookup(['item-99999']); expect(fetch).toHaveBeenCalledTimes(3);
+});
+
 it('coalesces manifest subscribers without letting one cancellation abort another', async () => {
   let resolve!: (value: Response) => void, networkSignal!: AbortSignal;
   const fetch = vi.fn((_url, options) => { networkSignal = options.signal; return new Promise<Response>(done => { resolve = done; }); });

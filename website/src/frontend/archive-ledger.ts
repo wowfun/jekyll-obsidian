@@ -1,0 +1,49 @@
+import type { ArchiveCard, ArchiveManifest } from "./archive-query";
+import { archiveUrl } from "./archive-client";
+import { favoriteButton, favoritesUI, refreshFavoriteButtons } from "./favorite-controls";
+import { snapshotCard } from "./favorites-store";
+
+export function textElement<K extends keyof HTMLElementTagNameMap>(tag: K, value: string, className?: string): HTMLElementTagNameMap[K] {
+  const element = document.createElement(tag); element.textContent = value;
+  if (className) element.className = className;
+  return element;
+}
+export function renderArchiveLedger(root: HTMLElement, cards: ArchiveCard[], data: ArchiveManifest): void {
+  const fragment = document.createDocumentFragment(), daily = root.dataset.ledgerGroupBy === "day" || data.ledger_group_by === "day";
+  const favorites = Boolean(document.querySelector("[data-favorites-ui]"));
+  let label: string | undefined, ol: HTMLOListElement | undefined;
+  for (const card of cards) {
+    const group = (daily ? card.display_date : card.year) || favoritesUI().undated || "Undated";
+    if (group !== label) {
+      label = group; const section = document.createElement("section"); section.dataset.filterGroup = "";
+      section.append(textElement("h2", label)); const ledger = textElement("section", "", "blog-ledger"); ol = document.createElement("ol"); ledger.append(ol); section.append(ledger); fragment.append(section);
+    }
+    const row = document.createElement("li"); row.dataset.filterItem = "";
+    if (!daily) {
+      const meta = textElement("div", "", "blog-ledger__meta"), time = textElement("time", card.display_date || ""); time.dateTime = card.published_at || ""; meta.append(time); row.append(meta);
+    }
+    const content = textElement("div", "", "blog-ledger__content");
+    const title = card.unavailable ? textElement("div", "", "blog-ledger__main") : textElement("a", "", "blog-ledger__main");
+    if (title instanceof HTMLAnchorElement) title.href = archiveUrl(card.url).href;
+    title.append(textElement("strong", card.title));
+    if (card.snapshot_locale) title.lang = card.snapshot_locale;
+    if (card.summary) title.append(textElement("span", card.summary, "blog-ledger__description"));
+    if (favorites) {
+      const heading = textElement("div", "", "blog-ledger__heading"); heading.append(title, favoriteButton(snapshotCard(card, data))); content.append(heading);
+    } else content.append(title);
+    const footer = textElement("footer", "", "archive-card-footer"), tags = textElement("ul", "", "blog-ledger__topics");
+    for (const [name, ids] of Object.entries(card.facets)) for (const id of ids) {
+      const label = data.labels[data.prefixes[name]! + id] || card.favorite_labels?.[name + "/" + id] || id;
+      const link = textElement("a", label); link.dataset.archiveFacet = name; link.dataset.archiveValue = id;
+      link.href = `${window.location.pathname}?${new URLSearchParams([[name, id]])}`;
+      const li = document.createElement("li"); li.append(link); tags.append(li);
+    }
+    footer.append(tags);
+    if (card.source_url) { const original = textElement("a", card.source_url, "archive-source-url"); original.href = archiveUrl(card.source_url, true).href; original.rel = "noopener noreferrer"; footer.append(original); }
+    if (card.date_basis === "observed") footer.append(textElement("small", root.dataset.observedLabel || "First observed"));
+    if (card.unavailable) { row.dataset.favoriteUnavailable = ""; footer.append(textElement("small", favoritesUI().removed || "This article is no longer published. Your saved summary and original link are kept.")); }
+    content.append(footer); row.append(content); ol!.append(row);
+  }
+  root.querySelector<HTMLElement>("[data-filter-list]")!.replaceChildren(fragment);
+  refreshFavoriteButtons();
+}

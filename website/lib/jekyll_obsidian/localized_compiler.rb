@@ -25,6 +25,12 @@ module JekyllObsidian
     LOCALE_PATTERN = /\A[A-Za-z]{2,8}(?:-[A-Za-z0-9]{1,8})*\z/
     RESERVED_LOCALE_PREFIXES = %w[assets].freeze
     MESSAGE_DEFAULTS = {
+      "favorites" => "Favorites", "favorite_save" => "Save", "favorite_remove" => "Remove favorite",
+      "favorite_saved" => "Saved", "favorites_empty" => "No favorites yet. Save an entry to find it here.",
+      "favorite_storage_error" => "Could not save favorites. Allow browser storage or free some space, then retry.",
+      "favorite_removed_article" => "This article is no longer published. Your saved summary and original link are kept.",
+      "favorites_refresh_error" => "Could not refresh articles. Your saved summaries are shown. Retry to continue.",
+      "undated" => "Undated",
       "export" => "Export",
       "export_title" => "Export Markdown",
       "export_close" => "Close export",
@@ -700,6 +706,9 @@ module JekyllObsidian
       validate_localized_navigation!(website, locale)
       website["canonical_url"] = if kind == "redirect"
         absolute_for(website.fetch("redirect_url"))
+      elsif website.dig("theme_data", "favorites")
+        website["alternates"] = []
+        @url_builder.absolute_url(website.fetch("home_route"))
       elsif actual
         @url_builder.absolute_url(route)
       else
@@ -1006,6 +1015,10 @@ module JekyllObsidian
 
     def localize_page_copy!(data, kind, messages)
       if kind == "blog-index"
+        if data.dig("website", "theme_data", "favorites")
+          data["title"] = localized_builtin_label(data.fetch("website"), "favorites", messages)
+          return
+        end
         return if data.dig("website", "theme_data", "archive") && data.dig("website", "home_route") == data.dig("website", "route")
         data["title"] = localized_builtin_label(data.fetch("website"), "blog", messages)
         return
@@ -1030,11 +1043,12 @@ module JekyllObsidian
 
     def localize_navigation_labels!(website, messages)
       labels = if website.fetch("theme") == "minimal"
-        { "home" => "home", "blog" => "blog", "docs" => "docs", "portfolio" => "portfolio" }
+        { "home" => "home", "blog" => "blog", "docs" => "docs", "portfolio" => "portfolio", "favorites" => "favorites" }
       else
         { "home" => "overview", "docs" => "documentation" }
       end
       Array(website["navigation"]).each do |item|
+        next if item["id"] == "favorites" && !website.fetch("features").fetch("favorites")
         message_key = labels[item["id"]]
         next unless message_key
 

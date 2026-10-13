@@ -7,6 +7,7 @@ import { initialiseComments } from "./comments";
 import { initialiseArchiveFilters } from "./archive-filters";
 import { initialisePriorityNavigation } from "./priority-navigation";
 import { initialisePageActions } from "./page-actions";
+import { initialiseFavorites } from "./favorite-controls";
 import { initialiseCodeBlockCopy } from "./code-block-copy";
 import { initialiseTweets } from "./tweets";
 import { initialiseAnalytics } from "./analytics";
@@ -26,6 +27,7 @@ function initialisePageFeatures(): void {
   const cleanupComments = initialiseComments();
   const cleanupArchiveFilters = initialiseArchiveFilters();
   const cleanupPageActions = initialisePageActions();
+  const cleanupFavorites = initialiseFavorites();
   const cleanupCodeBlockCopy = initialiseCodeBlockCopy();
   const cleanupImageViewer = initialiseImageViewer();
   initialiseMediaViewerControls();
@@ -35,6 +37,7 @@ function initialisePageFeatures(): void {
     cleanupComments();
     cleanupArchiveFilters();
     cleanupPageActions();
+    cleanupFavorites();
     cleanupCodeBlockCopy();
     cleanupImageViewer();
     cleanupTweets();

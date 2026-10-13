@@ -109,6 +109,12 @@ module JekyllObsidian
           "routes" => { "home" => home_route },
           "theme" => config.theme,
           "features" => config.features.merge(note.feature_flags),
+          "favorites_scope" => config.url_builder.baseurl,
+          "favorite_labels" => config.site.tag_labels || {},
+          "favorite_prefixes" => config.blog.fetch("facets"),
+          "favorite_card" => config.features.fetch("favorites") && note.content_type == "post" ? PagedArchive.record(content_card(note, config).merge(
+            "published_at" => ArchiveChronology.local_time(note.published_at, config.blog["utc_offset"]),
+            "markdown_url" => config.url_builder.href(PublishedMarkdown.route(note.route))), config) : nil,
           "content_security" => content_security_data(note.content_security, config),
           "theme_data" => theme_data,
           "tag_links" => Array(note.properties["tags"]).filter_map do |tag|
@@ -159,6 +165,7 @@ module JekyllObsidian
               "kind" => kind,
               "theme" => config.theme,
               "features" => config.features,
+              "favorites_scope" => config.url_builder.baseurl,
               "content_security" => content_security_data(nil, config),
               "theme_data" => system_theme_data.merge(theme_data),
               "route" => route,
@@ -603,8 +610,8 @@ module JekyllObsidian
         attach_custom_tab_theme_data(theme_data, model, config)
         authored_root_route = model.notes.any? { |note| note.route == "/" }
         home = home_page(displayed, config, system_theme_data, taxonomy) if !root && !authored_root_route && displayed.any? && config.home["layout"] != "archive"
-        archive_data = paged && PagedArchive.build(displayed.map { |post| note_card(post, config, taxonomy) }, config)
-        if archive_data
+        archive_data = (paged || config.features.fetch("favorites")) && PagedArchive.build(displayed.map { |post| note_card(post, config, taxonomy) }, config)
+        if archive_data && paged
           groups = archive_data.fetch("archive_groups")
           timeline = archive_data.fetch("timeline")
         else
@@ -623,7 +630,8 @@ module JekyllObsidian
               "topic_summaries" => taxonomy.fetch("summaries"),
               "topic_filter_count" => displayed.length,
               "timeline" => timeline,
-              "archive" => archive_data && archive_data.fetch("archive")
+              "archive" => paged && archive_data && archive_data.fetch("archive"),
+              "ledger_group_by" => config.blog.fetch("ledger_group_by")
             },
             home_route: "/",
             home_url: config.url_builder.href("/")
@@ -641,7 +649,12 @@ module JekyllObsidian
             home_url: config.url_builder.href("/")
           )
         end
-        theme_pages = [home, blog, portfolio_page].compact
+        favorites_page = if config.features.fetch("favorites")
+          system_page(config, "/favorites/", navigation_label(config, "favorites", "Favorites"), "blog-index", system_theme_data,
+            { "archive" => archive_data.fetch("archive"), "archive_groups" => [], "timeline" => archive_data.fetch("timeline"),
+              "favorites" => true, "ledger_group_by" => "day" }, website_data: { "robots" => "noindex", "canonical_url" => config.url_builder.absolute_url("/") })
+        end
+        theme_pages = [home, blog, portfolio_page, favorites_page].compact
         root_route_claimed = authored_root_route || theme_pages.any? { |page| page.route == "/" }
         unless root || home || root_route_claimed
           destination = config.navigation.items.first
@@ -667,7 +680,7 @@ module JekyllObsidian
         ) do |note, output|
           if note.id == root&.id && config.home["layout"] == "archive"
             website = output.data.fetch("website").merge("kind" => "blog-index", "has_h1" => false,
-              "theme_data" => system_theme_data.merge(archive_data.reject { |key, _| key == "files" }))
+              "theme_data" => system_theme_data.merge(archive_data.reject { |key, _| key == "files" }).merge("ledger_group_by" => config.blog.fetch("ledger_group_by")))
             PageOutput.new(route: output.route, content: "", data: output.data.merge("website" => website))
           else
             note.id == root&.id ? authored_home_page(output) : output
@@ -692,9 +705,7 @@ module JekyllObsidian
       end
 
       def archive_groups(posts, config, taxonomy)
-        posts.map { |note| note_card(note, config, taxonomy) }.group_by { |card| card["published_at"]&.slice(0, 4) || "Undated" }.map do |label, cards|
-          { "label" => label, "posts" => cards }
-        end
+        PagedArchive.groups(posts.map { |note| note_card(note, config, taxonomy).merge("display_date" => ArchiveChronology.local_time(note.published_at, config.blog["utc_offset"])&.slice(0, 10), "year" => ArchiveChronology.local_time(note.published_at, config.blog["utc_offset"])&.slice(0, 4) || "Undated") }, config)
       end
 
       def home_theme_data(posts, config, taxonomy)
@@ -818,7 +829,8 @@ module JekyllObsidian
           "topics" => blog_topic_links(note, taxonomy.fetch("anchors")),
           "topic_anchors" => topic_anchors_for(note, taxonomy, config),
           "filter_month" => month_key(date),
-          "filter_day" => date&.slice(0, 10)
+          "filter_day" => date&.slice(0, 10),
+          "favorite_card" => config.features.fetch("favorites") ? PagedArchive.record(content_card(note, config).merge("published_at" => date, "markdown_url" => config.url_builder.href(PublishedMarkdown.route(note.route))), config) : nil
         )
       end
     end

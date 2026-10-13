@@ -30,6 +30,7 @@ export function createArchiveClient(source: string) {
   const requests = new Map<string, SharedRequest>();
   const postings = new Map<string, Uint8Array>();
   let manifest: ArchiveManifest | undefined, queryId = 0, active = 0;
+  let identities: Map<string, number> | undefined;
   const queue: { start: () => void; cancel: () => void }[] = [];
   const pending = new Map<number, { resolve: (result: ArchiveMatches) => void; reject: (error: unknown) => void }>();
   function failWorker(failed: Worker, error: unknown): void {
@@ -116,6 +117,8 @@ export function createArchiveClient(source: string) {
     const data = object(value);
     if (data.version !== 1 || !Number.isSafeInteger(data.total) || Number(data.total) < 0 || !Number.isSafeInteger(data.page_size) || Number(data.page_size) < 1 || Number(data.page_size) > 100 || !Number.isSafeInteger(data.export_max_days) || Number(data.export_max_days) < 1 || typeof data.generation !== "string" || !/^[a-f0-9]{64}$/.test(data.generation) || !Array.isArray(data.chunks)) throw new Error("Invalid archive manifest");
     for (const key of ["facets", "prefixes", "labels", "aliases", "years", "months", "days"]) object(data[key]);
+    if (data.identities !== undefined && typeof data.identities !== "string") throw new Error("Invalid archive identities path");
+    if (data.ledger_group_by !== undefined && data.ledger_group_by !== "year" && data.ledger_group_by !== "day") throw new Error("Invalid ledger grouping");
     for (const [name, prefix] of Object.entries(object(data.prefixes))) {
       if (!/^[a-z][a-z0-9_-]*$/.test(name) || typeof prefix !== "string" || !Array.isArray(object(data.facets)[name])) throw new Error("Invalid archive facet");
       for (const entry of object(data.facets)[name] as unknown[]) { const option = object(entry); if (typeof option.id !== "string" || typeof option.name !== "string" || typeof option.posting !== "string") throw new Error("Invalid archive option"); }
@@ -173,6 +176,21 @@ export function createArchiveClient(source: string) {
     }, signal);
     return ordinals.map(ordinal => { const card = chunks.get(Math.floor(ordinal / data.page_size))?.[ordinal % data.page_size]; if (!card) throw new Error("Missing archive card"); return card; });
   }
+  async function lookup(ids: string[], caller?: AbortSignal): Promise<Map<string, ArchiveCard>> {
+    const signal = combined(caller), data = await getManifest(signal);
+    if (!data.identities) throw new Error("Missing archive identities");
+    if (!identities) {
+      const value = object(await resource(data.identities, signal));
+      if (!Array.isArray(value.ids) || value.ids.length !== data.total || !value.ids.every(id => typeof id === "string")) throw new Error("Invalid archive identities");
+      const mapping = new Map((value.ids as string[]).map((id, ordinal) => [id, ordinal]));
+      if (mapping.size !== data.total) throw new Error("Duplicate archive identity");
+      identities = mapping;
+    }
+    const known = ids.filter(id => identities!.has(id)), ordinals = known.map(id => identities!.get(id)!);
+    const selected = await cards(ordinals, signal);
+    if (selected.some((card, index) => card.id !== known[index])) throw new Error("Archive identity differs from card");
+    return new Map(selected.map(card => [card.id, card]));
+  }
   async function markdown(card: ArchiveCard, caller: AbortSignal, budget = new ArchiveBodyBudget()): Promise<string> {
     const signal = combined(caller), url = archiveUrl(card.markdown_url);
     return limited(async () => {
@@ -211,6 +229,6 @@ export function createArchiveClient(source: string) {
       const html = await response.text(); signal.throwIfAborted(); return { html, url: finalUrl };
     }, signal);
   }
-  return { manifest: getManifest, select, cards, markdown, article, dispose() { lifetime.abort(); worker?.terminate(); worker = undefined; cache.clear(); postings.clear(); } };
+  return { manifest: getManifest, select, cards, lookup, markdown, article, dispose() { lifetime.abort(); worker?.terminate(); worker = undefined; cache.clear(); postings.clear(); identities = undefined; } };
 }
 export type ArchiveClient = ReturnType<typeof createArchiveClient>;

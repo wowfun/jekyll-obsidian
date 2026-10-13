@@ -1,55 +1,28 @@
-import { archiveState, type ArchiveCard, type ArchiveManifest, type ArchiveMatches } from "./archive-query";
-import { createArchiveClient, archiveUrl } from "./archive-client";
+import { archiveState, type ArchiveMatches } from "./archive-query";
+import { createArchiveClient } from "./archive-client";
 import { initialiseArchiveExport } from "./archive-export";
 import { initialiseArchiveReading } from "./archive-reading";
+import { renderArchiveLedger } from "./archive-ledger";
+import { loadFavoriteArchive, renderFavoriteFilters, selectFavorites } from "./favorite-archive";
+import { FAVORITES_CHANGE } from "./favorites-store";
+import { favoritesUI } from "./favorite-controls";
 
-function textElement<K extends keyof HTMLElementTagNameMap>(tag: K, value: string, className?: string): HTMLElementTagNameMap[K] {
-  const element = document.createElement(tag); element.textContent = value;
-  if (className) element.className = className;
-  return element;
-}
 export function initialisePagedArchive(root: HTMLElement): () => void {
   const client = createArchiveClient(root.dataset.archiveUrl!);
-  const list = root.querySelector<HTMLElement>("[data-filter-list]")!;
+  const favorites = root.hasAttribute("data-favorites-page");
   const status = root.querySelector<HTMLElement>("[data-archive-status]")!;
   const retry = root.querySelector<HTMLButtonElement>("[data-archive-retry]")!;
   const empty = root.querySelector<HTMLElement>("[data-archive-empty]")!;
+  const emptyContent = [...empty.childNodes].map(node => node.cloneNode(true));
   const pagination = root.querySelector<HTMLElement>("[data-archive-pagination]")!;
   const prev = pagination.querySelector<HTMLButtonElement>("[data-archive-page=prev]")!;
   const next = pagination.querySelector<HTMLButtonElement>("[data-archive-page=next]")!;
   const controller = new AbortController();
   const reading = initialiseArchiveReading(root, client);
-  const cleanupExport = initialiseArchiveExport(client);
+  const cleanupExport = favorites ? () => {} : initialiseArchiveExport(client);
   let epoch = 0, alive = true;
   let pendingSearch: string | undefined;
   let current: ArchiveMatches = { ordinals: [], count: 0, page: 1, pages: 1 };
-  function render(cards: ArchiveCard[], data: ArchiveManifest): void {
-    const fragment = document.createDocumentFragment();
-    let year: string | undefined, ol: HTMLOListElement | undefined;
-    for (const card of cards) {
-      if (card.year !== year) {
-        year = card.year; const section = document.createElement("section"); section.dataset.filterGroup = "";
-        section.append(textElement("h2", year)); const ledger = textElement("section", "", "blog-ledger"); ol = document.createElement("ol"); ledger.append(ol); section.append(ledger); fragment.append(section);
-      }
-      const row = document.createElement("li"); row.dataset.filterItem = "";
-      const meta = textElement("div", "", "blog-ledger__meta"), time = textElement("time", card.display_date || ""); time.dateTime = card.published_at || ""; meta.append(time);
-      const content = textElement("div", "", "blog-ledger__content"), title = textElement("a", "", "blog-ledger__main"); title.href = archiveUrl(card.url).href; title.append(textElement("strong", card.title)); content.append(title);
-      if (card.summary) title.append(textElement("span", card.summary, "blog-ledger__description"));
-      const footer = textElement("footer", "", "archive-card-footer"), tags = textElement("ul", "", "blog-ledger__topics");
-      for (const [name, ids] of Object.entries(card.facets)) for (const id of ids) {
-        const label = data.labels[data.prefixes[name]! + id] || id;
-        const link = textElement("a", label); link.dataset.archiveFacet = name; link.dataset.archiveValue = id;
-        link.href = `${window.location.pathname}?${new URLSearchParams([[name, id]])}`;
-        const li = document.createElement("li"); li.append(link); tags.append(li);
-      }
-      footer.append(tags);
-      if (card.source_url) { const original = textElement("a", card.source_url, "archive-source-url"); original.href = archiveUrl(card.source_url, true).href; original.rel = "noopener noreferrer"; footer.append(original); }
-      if (card.date_basis === "observed") footer.append(textElement("small", root.dataset.observedLabel || "First observed"));
-      content.append(footer); row.append(meta, content); ol!.append(row);
-    }
-    list.replaceChildren(fragment);
-    reading.refresh();
-  }
   async function refresh(): Promise<void> {
     const search = window.location.search;
     if (pendingSearch === search) return;
@@ -57,14 +30,17 @@ export function initialisePagedArchive(root: HTMLElement): () => void {
     const turn = ++epoch; status.textContent = status.dataset.loading || "Loading…"; retry.hidden = true;
     root.setAttribute("aria-busy", "true"); prev.disabled = true; next.disabled = true;
     try {
-      const data = await client.manifest(controller.signal);
+      const saved = favorites ? await loadFavoriteArchive(client, controller.signal) : undefined;
+      const data = saved?.manifest || await client.manifest(controller.signal);
       if (!alive || turn !== epoch) return;
       const state = archiveState(data, window.location.search);
-      const result = await client.select(state, "page", controller.signal);
+      const result = saved ? selectFavorites(saved.cards, data, state) : await client.select(state, "page", controller.signal);
       if (!alive || turn !== epoch) return;
-      const cards = await client.cards(result.ordinals, controller.signal);
+      const cards = saved ? result.ordinals.map(ordinal => saved.cards[ordinal]!) : await client.cards(result.ordinals, controller.signal);
       if (!alive || turn !== epoch) return;
-      render(cards, data);
+      if (saved) { empty.replaceChildren(...emptyContent.map(node => node.cloneNode(true))); renderFavoriteFilters(root, data); }
+      renderArchiveLedger(root, cards, data);
+      reading.refresh();
       current = result;
       result.page > 1 ? state.parameters.set("page", String(result.page)) : state.parameters.delete("page");
       const search = state.parameters.toString(); history.replaceState(null, "", window.location.pathname + (search ? `?${search}` : ""));
@@ -81,7 +57,7 @@ export function initialisePagedArchive(root: HTMLElement): () => void {
       const pageText = pagination.dataset.pageLabel || "Page {page} of {pages}", resultText = pagination.dataset.resultLabel || "{count} entries";
       pagination.querySelector<HTMLElement>("[data-archive-page-status]")!.textContent = `${resultText.replace("{count}", String(result.count))} · ${pageText.replace("{page}", String(result.page)).replace("{pages}", String(result.pages))}`;
       prev.disabled = result.page <= 1; next.disabled = result.page >= result.pages;
-      empty.hidden = result.count !== 0; status.textContent = ""; root.removeAttribute("aria-busy");
+      empty.hidden = result.count !== 0; status.textContent = saved?.refreshFailed ? favoritesUI().refreshError || "Could not refresh articles. Your saved summaries are shown. Retry to continue." : ""; retry.hidden = !saved?.refreshFailed; root.removeAttribute("aria-busy");
     } catch {
       if (alive && turn === epoch) { status.textContent = status.dataset.unavailable || "Entries could not be loaded."; retry.hidden = false; root.removeAttribute("aria-busy"); reading.refresh(); }
     } finally { if (turn === epoch) pendingSearch = undefined; }
@@ -110,10 +86,12 @@ export function initialisePagedArchive(root: HTMLElement): () => void {
     if (nextUrl.search !== window.location.search) history.pushState(null, "", nextUrl.pathname + nextUrl.search);
     void refresh();
   }
+  const onFavorites = () => { if (favorites) { pendingSearch = undefined; void refresh(); } };
   const onPop = () => { void refresh(); };
   const onShow = (event: PageTransitionEvent) => { if (event.persisted) void refresh(); };
+  window.addEventListener(FAVORITES_CHANGE, onFavorites);
   document.addEventListener("click", click); window.addEventListener("popstate", onPop); window.addEventListener("pageshow", onShow);
   // SSR is immediately useful; hydration verifies the complete page projection.
   void refresh();
-  return () => { alive = false; controller.abort(); reading.dispose(); cleanupExport(); client.dispose(); document.removeEventListener("click", click); window.removeEventListener("popstate", onPop); window.removeEventListener("pageshow", onShow); };
+  return () => { alive = false; controller.abort(); reading.dispose(); cleanupExport(); client.dispose(); window.removeEventListener(FAVORITES_CHANGE, onFavorites); document.removeEventListener("click", click); window.removeEventListener("popstate", onPop); window.removeEventListener("pageshow", onShow); };
 }

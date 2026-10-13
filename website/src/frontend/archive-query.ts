@@ -4,11 +4,13 @@ export interface ArchiveManifest {
   facets: Record<string, ArchiveOption[]>; prefixes: Record<string, string>;
   labels: Record<string, string>; aliases: Record<string, string>;
   years: Record<string, [number, number]>; months: Record<string, [number, number]>; days: Record<string, [number, number]>; chunks: string[];
+  identities?: string; ledger_group_by?: "year" | "day";
 }
 export interface ArchiveCard {
   id: string; title: string; url: string; markdown_url: string; summary?: string | null; source_url?: string | null;
   published_at: string | null; display_date: string | null; year: string; month: string | null;
   facets: Record<string, string[]>; date_basis?: string | null;
+  favorite_labels?: Record<string, string>; unavailable?: boolean; snapshot_locale?: string;
 }
 export interface ArchiveQuery { groups: string[][]; range: [number, number]; page: number }
 export type ArchiveQueryMode = "page" | "all" | "first";

@@ -1258,7 +1258,7 @@ class JekyllAdapterTest < Minitest::Test
   end
 
   def test_reader_rejects_public_symlink_that_resolves_into_private_vault_content
-    File.symlink(
+    create_test_symlink(
       File.join(@temporary_root, "vault", "private.md"),
       File.join(@site_root, "public-alias.html")
     )
@@ -1273,7 +1273,7 @@ class JekyllAdapterTest < Minitest::Test
   def test_reader_rejects_page_symlink_that_resolves_into_private_vault_content
     private_page = File.join(@temporary_root, "vault", "private-page.html")
     File.write(private_page, "---\ntitle: Private\n---\nPrivate page marker")
-    File.symlink(private_page, File.join(@site_root, "public-page.html"))
+    create_test_symlink(private_page, File.join(@site_root, "public-page.html"))
     site = build_site
 
     error = assert_raises(Jekyll::Errors::FatalException) { site.process }
@@ -1286,7 +1286,7 @@ class JekyllAdapterTest < Minitest::Test
     private_document = File.join(@temporary_root, "vault", "private-document.md")
     File.write(private_document, "---\npublish: false\n---\nPrivate document marker")
     FileUtils.mkdir_p(File.join(@site_root, "_docs"))
-    File.symlink(private_document, File.join(@site_root, "_docs", "public.md"))
+    create_test_symlink(private_document, File.join(@site_root, "_docs", "public.md"))
     site = build_site("collections" => { "docs" => { "output" => true } })
 
     error = assert_raises(Jekyll::Errors::FatalException) { site.process }
@@ -1296,7 +1296,7 @@ class JekyllAdapterTest < Minitest::Test
   end
 
   def test_reader_rejects_directory_symlink_chain_into_private_vault_content
-    File.symlink(File.join(@temporary_root, "vault"), File.join(@site_root, "public-copy"))
+    create_test_symlink(File.join(@temporary_root, "vault"), File.join(@site_root, "public-copy"))
     site = build_site
 
     error = assert_raises(Jekyll::Errors::FatalException) { site.process }
@@ -1314,7 +1314,7 @@ class JekyllAdapterTest < Minitest::Test
   end
 
   def test_vault_symlink_is_rejected
-    File.symlink(File.join(@temporary_root, "vault", "private.md"), File.join(@temporary_root, "vault", "alias.md"))
+    create_test_symlink(File.join(@temporary_root, "vault", "private.md"), File.join(@temporary_root, "vault", "alias.md"))
     error = assert_raises(Jekyll::Errors::FatalException) { build_site.process }
     assert_includes error.message, "symlink"
   end
@@ -1323,7 +1323,7 @@ class JekyllAdapterTest < Minitest::Test
     external = File.join(@temporary_root, "external-obsidian")
     FileUtils.mkdir_p(external)
     File.write(File.join(external, "workspace.json"), "secret")
-    File.symlink(external, File.join(@temporary_root, "vault", ".obsidian"))
+    create_test_symlink(external, File.join(@temporary_root, "vault", ".obsidian"))
 
     error = assert_raises(Jekyll::Errors::FatalException) { build_site.process }
     assert_includes error.message, "symlink"
@@ -1381,7 +1381,7 @@ class JekyllAdapterTest < Minitest::Test
     FileUtils.mkdir_p(external)
     canary = File.join(external, "canary.txt")
     File.write(canary, "preserve me")
-    File.symlink(external, destination)
+    create_test_symlink(external, destination)
 
     error = assert_raises(Jekyll::Errors::FatalException) { build_site.process }
     assert_includes error.message, "destination"
@@ -1394,7 +1394,7 @@ class JekyllAdapterTest < Minitest::Test
     canary = File.join(external, "canary.txt")
     File.write(canary, "preserve me")
     redirect = File.join(@site_root, "output-redirect")
-    File.symlink(external, redirect)
+    create_test_symlink(external, redirect)
 
     error = assert_raises(Jekyll::Errors::FatalException) do
       build_site("destination" => File.join(redirect, "site")).process
@@ -1410,7 +1410,7 @@ class JekyllAdapterTest < Minitest::Test
     canary = File.join(external, "canary.txt")
     File.write(canary, "preserve me")
     FileUtils.mkdir_p(File.join(destination, "assets"))
-    File.symlink(external, File.join(destination, "assets", "redirect"))
+    create_test_symlink(external, File.join(destination, "assets", "redirect"))
 
     site.process
     assert_equal "preserve me", File.read(canary)
@@ -1437,7 +1437,7 @@ class JekyllAdapterTest < Minitest::Test
   def test_jekyll_cache_symlink_is_rejected_before_core_writes_through_it
     external = File.join(@temporary_root, "external-cache")
     FileUtils.mkdir_p(external)
-    File.symlink(external, File.join(@site_root, ".jekyll-cache"))
+    create_test_symlink(external, File.join(@site_root, ".jekyll-cache"))
 
     error = assert_raises(Jekyll::Errors::FatalException) { build_site }
 
@@ -1450,7 +1450,7 @@ class JekyllAdapterTest < Minitest::Test
     cache_root = File.join(@site_root, ".jekyll-cache")
     FileUtils.mkdir_p(cache_root)
     external_target = File.join(@temporary_root, "outside-cache-gitignore")
-    File.symlink(external_target, File.join(cache_root, ".gitignore"))
+    create_test_symlink(external_target, File.join(cache_root, ".gitignore"))
 
     build_site.process
 
@@ -1519,7 +1519,7 @@ class JekyllAdapterTest < Minitest::Test
     external_root = File.realpath(Dir.mktmpdir("obsidian-assets-outside"))
     external_assets = File.join(external_root, "assets")
     FileUtils.mv(cache_root, external_assets)
-    File.symlink(external_assets, cache_root)
+    create_test_symlink(external_assets, cache_root)
     error = assert_raises(Jekyll::Errors::FatalException) { build_site.process }
 
     assert_includes error.message, "application assets"
@@ -1534,7 +1534,7 @@ class JekyllAdapterTest < Minitest::Test
     external_root = File.realpath(Dir.mktmpdir("obsidian-feature-assets-outside"))
     external_features = File.join(external_root, "features")
     FileUtils.mv(feature_root, external_features)
-    File.symlink(external_features, feature_root)
+    create_test_symlink(external_features, feature_root)
 
     error = assert_raises(Jekyll::Errors::FatalException) { build_site.process }
 
@@ -1592,7 +1592,7 @@ class JekyllAdapterTest < Minitest::Test
   def test_content_directory_symlinks_are_rejected_before_reader
     external = File.join(@temporary_root, "external-posts")
     FileUtils.mkdir_p(external)
-    File.symlink(external, File.join(@temporary_root, "vault", "blog"))
+    create_test_symlink(external, File.join(@temporary_root, "vault", "blog"))
 
     site = build_site
     error = assert_raises(Jekyll::Errors::FatalException) { site.process }
@@ -1777,7 +1777,7 @@ class JekyllAdapterTest < Minitest::Test
       layout.application_cache_root,
       "jekyll-obsidian-git-times.json.#{Process.pid}.tmp"
     )
-    File.symlink(canary, predictable_temporary)
+    create_test_symlink(canary, predictable_temporary)
 
     with_replaced_singleton_method(Open3, :capture3, capture) do
       first = JekyllObsidian::Adapter.send(:git_first_commit_time_map, layout)

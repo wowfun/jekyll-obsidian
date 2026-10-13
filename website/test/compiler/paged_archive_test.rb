@@ -154,6 +154,7 @@ class GeneratedFileLocalizationTest < Minitest::Test
     # Existing producers default to localization, including URL-bearing JSON.
     ordinary = JekyllObsidian::GeneratedFile.new(route: file.route, content: content, media_type: file.media_type)
     calls = []
+    compiler.singleton_class.remove_method(:localize_data)
     compiler.define_singleton_method(:localize_data) do |value, locale|
       calls << [value, locale]
       value.merge("url" => "/zh-CN/a/")
@@ -192,9 +193,9 @@ end
 
 class PagedArchiveScaleTest < Minitest::Test
   def test_rejects_noncontiguous_dates_and_dated_cards_after_undated_cards
-    config = Struct.new(:blog, :site).new(
+    config = Struct.new(:blog, :site, :features).new(
       { "page_size" => 2, "export_max_days" => 7, "facets" => {} },
-      Struct.new(:tag_labels, :tag_aliases).new({}, {})
+      Struct.new(:tag_labels, :tag_aliases).new({}, {}), { "favorites" => false }
     )
     [["2026-01-03", "2026-01-01", "2026-01-03"], [nil, "2026-01-03"]].each do |dates|
       cards = dates.each_with_index.map { |date, index| { "id" => index.to_s, "published_at" => date } }
@@ -206,9 +207,9 @@ class PagedArchiveScaleTest < Minitest::Test
   def test_one_hundred_thousand_records_use_lazy_postings_and_small_card_chunks
     builder = Object.new
     def builder.href(route) = route
-    config = Struct.new(:blog, :site, :url_builder).new(
-      { "page_size" => 50, "export_max_days" => 7, "utc_offset" => "+08:00", "facets" => { "source" => "source/", "topic" => "topics/" } },
-      Struct.new(:tag_labels, :tag_aliases).new({}, {}), builder
+    config = Struct.new(:blog, :site, :url_builder, :features).new(
+      { "page_size" => 50, "export_max_days" => 7, "ledger_group_by" => "day", "utc_offset" => "+08:00", "facets" => { "source" => "source/", "topic" => "topics/" } },
+      Struct.new(:tag_labels, :tag_aliases).new({}, {}), builder, { "favorites" => true }
     )
     cards = Array.new(100_000) do |i|
       { "id" => i.to_s, "title" => "Record #{i}", "url" => "/items/#{i}/", "published_at" => "2026-10-09T00:00:00Z", "tags" => ["source/hn", "topics/agents"] }
@@ -220,5 +221,8 @@ class PagedArchiveScaleTest < Minitest::Test
     assert_equal 50, result.fetch("archive_groups").first.fetch("posts").length
     posting = JSON.parse(result.fetch("files").find { |file| file.route.end_with?(manifest.fetch("facets").fetch("source").first.fetch("posting")) }.content)
     assert_equal 12_500, Base64.strict_decode64(posting.fetch("bitmap")).bytesize
+    identities = JSON.parse(result.fetch("files").find { |file| file.route.end_with?("identities.json") }.content)
+    assert_equal 100_000, identities.fetch("ids").length
+    assert_operator JSON.generate(identities).bytesize, :<, 1_000_000
   end
 end

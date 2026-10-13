@@ -109,7 +109,7 @@ Find.find(site_dir) do |path|
 
   localized_artifact = relative.match?(%r{\Aassets/website/i18n/[A-Za-z]{2,8}(?:-[A-Za-z0-9]{1,8})*/(?:catalog|graph|search)\.v1\.json\z}) ||
     relative.match?(%r{\A[A-Za-z]{2,8}(?:-[A-Za-z0-9]{1,8})*/feed\.xml\z})
-  archive_artifact = relative.match?(%r{\Aassets/website/(?:i18n/[A-Za-z]{2,8}(?:-[A-Za-z0-9]{1,8})*/)?archive/[a-f0-9]{64}/(?:manifest|cards-\d+|facet-[a-f0-9]{64})\.json\z})
+  archive_artifact = relative.match?(%r{\Aassets/website/(?:i18n/[A-Za-z]{2,8}(?:-[A-Za-z0-9]{1,8})*/)?archive/[a-f0-9]{64}/(?:manifest|identities|cards-\d+|facet-[a-f0-9]{64})\.json\z})
   allowed = archive_artifact || EXACT_FILES.include?(relative) || raw_html_files.include?(relative) || localized_artifact || relative.end_with?("/index.html") ||
     generated_markdown_resource?(site_dir, relative) || ALLOWED_EXTENSIONS.include?(File.extname(relative).downcase)
   fail_audit("output is not on the extension allowlist: #{relative}") unless allowed

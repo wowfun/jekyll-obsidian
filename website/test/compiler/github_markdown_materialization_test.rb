@@ -294,7 +294,7 @@ class GitHubMarkdownMaterializationTest < Minitest::Test
     external = File.join(@temporary_root, "external")
     namespace = File.join(@cache_root, "github-markdown")
     File.rename(namespace, external)
-    File.symlink(external, namespace)
+    create_test_symlink(external, namespace)
     transport = JekyllObsidian::GitHubMarkdown::MemoryTransport.new(
       commits: { ["acme/widget", "main"] => COMMIT },
       files: {}
@@ -310,6 +310,22 @@ class GitHubMarkdownMaterializationTest < Minitest::Test
 
     assert_includes error.message, "non-symlink directory"
     assert_empty transport.fetch_calls
+  end
+
+  def test_rejects_a_cache_entry_replaced_between_lstat_and_open
+    cache = JekyllObsidian::GitHubMarkdown::Cache.new(@cache_root)
+    arguments = { repository: "acme/widget", commit: COMMIT, path: "README.md" }
+    cache.write(**arguments, markdown: "# Original\n")
+    target = Dir.glob(File.join(@cache_root, "github-markdown", "**", "*.md")).fetch(0)
+    cache.define_singleton_method(:open_entry) do |path, flags, &block|
+      if path == target
+        File.rename(path, "#{path}.previous")
+        File.write(path, "# Replaced\n")
+      end
+      super(path, flags, &block)
+    end
+    error = assert_raises(JekyllObsidian::GitHubMarkdown::CacheError) { cache.read(**arguments) }
+    assert_includes error.message, "changed while opening"
   end
 
   def test_concurrent_writers_publish_one_identical_regular_cache_entry

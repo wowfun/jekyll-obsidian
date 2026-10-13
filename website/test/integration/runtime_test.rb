@@ -122,7 +122,7 @@ class RuntimeTest < Minitest::Test
     external = File.join(@root, "external")
     FileUtils.mkdir_p(external)
     File.write(File.join(external, "keep"), "keep")
-    File.symlink(external, @runtime.cache_root)
+    create_test_symlink(external, @runtime.cache_root)
     assert_raises(JekyllObsidian::WorkspaceLayout::Invalid) { build }
     assert_raises(JekyllObsidian::WorkspaceLayout::Invalid) { @runtime.clean }
     assert_equal "keep", File.read(File.join(external, "keep"))
@@ -143,6 +143,25 @@ class RuntimeTest < Minitest::Test
     assert_raises(ArgumentError) { JekyllObsidian::Initializer.run(root: @root, source: "new-docs") }
     assert_equal before, tree_digest(@root)
     refute File.exist?(File.join(@root, "new-docs"))
+  end
+
+  def test_init_accepts_crlf_without_rewriting_existing_files
+    %w[.github/jekyll-obsidian.yml .github/workflows/pages.yml].each do |relative|
+      path = File.join(@root, relative)
+      File.binwrite(path, File.binread(path).gsub("\r\n", "\n").gsub("\n", "\r\n"))
+    end
+    before = tree_digest(@root)
+    assert_empty JekyllObsidian::Initializer.run(root: @root, source: "website/docs")
+    assert_equal before, tree_digest(@root)
+  end
+
+  def test_init_is_idempotent_with_a_unicode_source
+    Dir.mktmpdir("jekyll-obsidian-unicode") do |root|
+      JekyllObsidian::Initializer.run(root: root, source: "站点/文章")
+      before = tree_digest(root)
+      assert_empty JekyllObsidian::Initializer.run(root: root, source: "站点/文章")
+      assert_equal before, tree_digest(root)
+    end
   end
 
   def test_initializing_existing_notes_does_not_create_a_welcome_page

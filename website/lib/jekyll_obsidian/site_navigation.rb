@@ -33,7 +33,7 @@ module JekyllObsidian
 
     module_function
 
-    def build(model:, settings:, content:, url_builder:, theme:, member_ids_by_tab_id: nil, home_archive: false)
+    def build(model:, settings:, content:, url_builder:, theme:, member_ids_by_tab_id: nil, home_archive: false, favorites: false)
       Builder.new(
         model: model,
         settings: settings,
@@ -41,12 +41,13 @@ module JekyllObsidian
         url_builder: url_builder,
         theme: theme,
         member_ids_by_tab_id: member_ids_by_tab_id,
-        home_archive: home_archive
+        home_archive: home_archive,
+        favorites: favorites
       ).build
     end
 
     class Builder
-      def initialize(model:, settings:, content:, url_builder:, theme:, member_ids_by_tab_id:, home_archive:)
+      def initialize(model:, settings:, content:, url_builder:, theme:, member_ids_by_tab_id:, home_archive:, favorites:)
         @model = model
         @settings = settings
         @content = content
@@ -54,6 +55,7 @@ module JekyllObsidian
         @theme = theme
         @member_ids_by_tab_id = member_ids_by_tab_id
         @home_archive = home_archive
+        @favorites = favorites
         @diagnostics = []
       end
 
@@ -130,6 +132,8 @@ module JekyllObsidian
             routes: [portfolio.route]
           )
         end
+        add_builtin(items, "favorites", "Favorites", @url_builder.href("/favorites/"), @favorites,
+          note_ids: [], routes: ["/favorites/"])
         add_custom_tab_items(items, custom_tabs)
         items
       end
@@ -296,7 +300,7 @@ module JekyllObsidian
             navigation_error("invalid_tab_id", "tab.id is required on a custom tab root", note.id)
             next
           end
-          if %w[home blog docs portfolio].include?(id)
+          if %w[home blog docs portfolio].include?(id) || (id == "favorites" && @favorites)
             navigation_error("reserved_tab_id", "tab.id conflicts with a built-in navigation id", note.id)
             next
           end

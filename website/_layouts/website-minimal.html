@@ -14,7 +14,7 @@
     {% assign has_mobile_context = false %}
     {% if page.website.kind == 'home' %}
       {% if page.website.theme_data.topic_summaries.size > 0 or page.website.has_context %}{% assign has_mobile_context = true %}{% endif %}
-    {% elsif page.website.kind == 'blog-index' and page.website.theme_data.timeline.size > 0 %}
+    {% elsif page.website.kind == 'blog-index' and page.website.theme_data.timeline.size > 0 or page.website.theme_data.favorites %}
       {% assign has_mobile_context = true %}
     {% elsif page.website.kind == 'note' and page.website.has_context %}
       {% assign has_mobile_context = true %}
@@ -22,8 +22,9 @@
 
     <a class="skip-link" href="#main-content">{{ ui.skip_to_content | default: 'Skip to content' | escape }}</a>
     {% include website/header.html theme='minimal' %}
+    {% include website/favorites-ui.html %}
 
-    <main class="minimal-shell{% if page.website.archive_item %} minimal-shell--archive-item{% endif %}{% unless page.website.kind == 'note' %} minimal-shell--system{% endunless %}{% if is_authored_home %} minimal-shell--authored-home{% endif %}{% if is_docs_page %} minimal-shell--docs{% endif %}{% if page.website.kind == 'blog-index' %} minimal-shell--blog{% endif %}" id="main-content"{% if page.website.kind == 'blog-index' %} data-filter-page{% if page.website.theme_data.archive %} data-paged-archive data-archive-url="{{ page.website.theme_data.archive.url | escape }}" data-observed-label="{{ ui.first_observed | default: 'First observed' | escape }}"{% endif %}{% endif %}>
+    <main class="minimal-shell{% if page.website.archive_item %} minimal-shell--archive-item{% endif %}{% unless page.website.kind == 'note' %} minimal-shell--system{% endunless %}{% if is_authored_home %} minimal-shell--authored-home{% endif %}{% if is_docs_page %} minimal-shell--docs{% endif %}{% if page.website.kind == 'blog-index' %} minimal-shell--blog{% endif %}" id="main-content" data-ledger-group-by="{{ page.website.theme_data.ledger_group_by | default: 'year' | escape }}"{% if page.website.theme_data.favorites %} data-favorites-page data-sources-label="{{ ui.sources | escape }}" data-topics-label="{{ ui.topics | escape }}" data-all-label="{{ ui.all | escape }}"{% endif %}{% if page.website.kind == 'blog-index' %} data-filter-page{% if page.website.theme_data.archive %} data-paged-archive data-archive-url="{{ page.website.theme_data.archive.url | escape }}" data-observed-label="{{ ui.first_observed | default: 'First observed' | escape }}"{% endif %}{% endif %}>
       {% if is_docs_page %}
         <aside class="minimal-docs-sidebar">
           <nav class="docs-tree" aria-label="{{ ui.documentation | default: 'Documentation' | escape }}" data-docs-navigation>
@@ -77,7 +78,7 @@
           {% if page.website.theme_data.topic_summaries.size > 0 %}{% include website/context-tags.html location='rail' summaries=page.website.theme_data.topic_summaries %}{% endif %}
           {% if page.website.has_context %}{% include website/context.html location='rail' %}{% endif %}
         </aside>
-      {% elsif page.website.kind == 'blog-index' and page.website.theme_data.timeline.size > 0 %}
+      {% elsif page.website.kind == 'blog-index' and page.website.theme_data.timeline.size > 0 or page.website.theme_data.favorites %}
         <aside class="minimal-context archive-context" data-page-context data-dialog-movable="context" data-auto-hide-scrollbar aria-label="{{ ui.chronology | default: 'Chronology' | escape }}">{% include website/archive-timeline.html timeline=page.website.theme_data.timeline %}</aside>
       {% elsif page.website.kind == 'note' and page.website.has_context %}
         <aside class="minimal-context" data-page-context data-context-panel data-dialog-movable="context" aria-label="{{ ui.page_context | default: 'Page context' | escape }}">{% include website/context.html location='rail' %}</aside>

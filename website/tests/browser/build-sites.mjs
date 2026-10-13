@@ -74,7 +74,7 @@ try {
   await writeFile(path.join(archiveHost, ".jekyll-obsidian-cache/github-markdown-browser.json"),
     JSON.stringify({ version: 1, documents: [] }));
   await writeFile(path.join(archiveHost, "host.yml"),
-    "title: Archive fixture\nwebsite:\n  source: vault\n  theme: minimal\n  repository: example/archive\n  contacts: []\n  home:\n    layout: archive\n  blog:\n    page_size: 2\n    utc_offset: '+08:00'\n    timeline_granularity: day\n  i18n:\n    enabled: true\n    locales: [en, zh-CN]\n");
+    "title: Archive fixture\nwebsite:\n  source: vault\n  theme: minimal\n  repository: example/archive\n  contacts: []\n  home:\n    layout: archive\n  blog:\n    page_size: 2\n    utc_offset: '+08:00'\n    timeline_granularity: day\n    ledger_group_by: day\n  features:\n    favorites: true\n  i18n:\n    enabled: true\n    locales: [en, zh-CN]\n");
   await writeFile(path.join(archiveHost, "vault/_locale.yml"), "name: English\n");
   await copyFile(path.join(projectRoot, "jekyll-obsidian-docs/_translations/zh-CN/_locale.yml"), path.join(archiveHost, "vault/_translations/zh-CN/_locale.yml"));
   await writeFile(path.join(archiveHost, "vault/index.md"), "---\npublish: true\n---\n# Archive\n");
@@ -84,7 +84,7 @@ try {
     ["c", "Oldest", "2025-12-31", "hn", "agents"]
   ]) {
     await writeFile(path.join(archiveHost, `vault/items/${id}.md`),
-      `---\npublish: true\ncontent_type: post\ntitle: ${title}\ndescription: Description of ${title}\ndate: ${date}\ntags: [source/${source}, topics/${topic}]\n---\nFirst paragraph of ${title}.\n\nSecond paragraph with a [link](https://example.com/${id}).\n`);
+      `---\npublish: true\ncontent_type: post\ntitle: ${title}\ndescription: Description of ${title}\nsource_url: https://example.com/${id}\ndate: ${date}\ntags: [source/${source}, topics/${topic}]\n---\nFirst paragraph of ${title}.\n\nSecond paragraph with a [link](https://example.com/${id}).\n`);
   }
   build(archiveHost, "minimal", "minimal-archive", path.join(archiveHost, "host.yml"));
   const destination = path.join(workspaceRoot, ".jekyll-obsidian-cache/site-browser-minimal-archive");

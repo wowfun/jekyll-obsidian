@@ -2,5 +2,14 @@ name: English
 hreflang: en
 dir: ltr
 messages:
+  favorites: "Favorites"
+  favorite_save: "Save"
+  favorite_remove: "Remove favorite"
+  favorite_saved: "Saved"
+  favorites_empty: "No favorites yet. Save an entry to find it here."
+  favorite_storage_error: "Could not save favorites. Allow browser storage or free some space, then retry."
+  favorite_removed_article: "This article is no longer published. Your saved summary and original link are kept."
+  favorites_refresh_error: "Could not refresh articles. Your saved summaries are shown. Retry to continue."
+  undated: "Undated"
   sources: Sources
   topics: Topics

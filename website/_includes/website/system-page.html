@@ -23,7 +23,11 @@
 {% when 'blog-index' %}
   {% if page.website.theme_data.archive %}
     <h1 class="archive-title">{{ page.title | escape }}</h1>
-    {% include website/archive-facets.html %}
+    {% if page.website.theme_data.favorites %}
+      <div data-favorites-facets></div>
+      <p class="filter-empty" data-archive-empty hidden>{{ ui.no_matching_entries | escape }} <button type="button" data-archive-clear>{{ ui.clear_filters | escape }}</button></p>
+      <noscript><p>{{ ui.favorites_empty | escape }}</p></noscript>
+    {% else %}{% include website/archive-facets.html %}{% endif %}
   {% else %}
     <h1 class="visually-hidden">{{ page.title | default: ui.blog | default: 'Blog' | escape }}</h1>
     {% include website/tag-filter.html summaries=page.website.theme_data.topic_summaries total=page.website.theme_data.topic_filter_count %}

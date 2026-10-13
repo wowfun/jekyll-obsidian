@@ -41,14 +41,14 @@ bundle install
 npm ci
 npm run build
 bundle exec ruby scripts/package.rb --skip-assets
-bundle exec ruby -Itest -Ilib test/compiler/paged_archive_test.rb
+bundle exec rake test
 npm run test:prepared
 npm run build:browser-sites
 npx playwright install chromium
 npx playwright test paged-archive.spec.ts
 ```
 
-Gems use the shared Ruby installation. The lockfile includes `x64-mingw-ucrt`; npm dependencies stay under `website/node_modules`. The Ruby tests that create file symlinks need Windows symlink privileges (for example, an administrator terminal); a permission error there does not test the rejection behavior.
+Gems use the shared Ruby installation. The lockfile includes `x64-mingw-ucrt`; npm dependencies stay under `website/node_modules`. Directory-link tests use junctions when symbolic-link privileges are unavailable. File-link tests require Windows Developer Mode or symbolic-link privileges and otherwise skip with a reason; Windows cannot create the control-character filenames covered by the POSIX audit test. Audit tests invoke Ruby directly, and preview tests terminate only their isolated child process.
 
 ## Run the tests
 

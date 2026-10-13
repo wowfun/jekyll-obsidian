@@ -1,6 +1,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="light dark">
+{% if page.website.features.favorites %}<meta name="website:favorites-scope" content="{{ page.website.favorites_scope | escape }}">{% endif %}
 {% if page.website.comments.load %}
   <meta http-equiv="Content-Security-Policy" data-page-csp content="default-src 'self'; base-uri 'self'; form-action 'self'; script-src 'self'{% for source in page.website.content_security.script_sources %} {{ source | escape }}{% endfor %} https://giscus.app; style-src 'self' 'unsafe-inline' https://giscus.app; img-src 'self' https:; media-src 'self'{% for source in page.website.content_security.media_sources %} {{ source | escape }}{% endfor %}; object-src 'self'; font-src 'self'; connect-src 'self'{% for source in page.website.content_security.connect_sources %} {{ source | escape }}{% endfor %}; frame-src 'self'{% for source in page.website.content_security.frame_sources %} {{ source | escape }}{% endfor %} https://giscus.app">
 {% else %}

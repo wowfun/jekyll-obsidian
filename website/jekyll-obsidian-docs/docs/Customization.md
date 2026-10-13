@@ -446,3 +446,13 @@ Docs navigation follows vault directories. `nav_order` sorts sibling documents a
 See [[docs/development/architecture|Architecture]] before changing compiler or adapter seams.
 
 `source_url`: an absolute HTTP(S) URL without credentials; shown as a clickable original source link.
+
+## Daily ledger and local favorites
+
+Set `website.blog.ledger_group_by: day` to group ledger entries under `YYYY-MM-DD` headings and omit the per-entry date column. Dates use `website.blog.utc_offset`; the default grouping is `year`. Static rendering and pagination use the same grouping.
+
+The minimal theme supports `website.features.favorites: true` (default `false`). It adds Save buttons to ledger entries and post actions, and a Favorites navigation tab at `/favorites/`. `website.navigation.favorites` accepts label, order and visible overrides. The route is reserved while the feature is enabled.
+
+Favorites are stored in the current browser, isolated by site base URL, and shared across language versions. Clearing browser storage removes them; separate origins, browsers and devices have separate collections. The collection retains title, summary, dates, facets and links, but not article bodies. Currently published entries use the selected language; removed entries keep their saved-language snapshot and original link. Network failures show saved summaries with Retry and do not mark articles as removed. Storage failures leave the previous collection intact and show an error.
+
+The Favorites page sorts by article day descending, then article ID, with 50 entries per page. Source/topic facets and chronology count only favorites. Read in full loads available articles lazily; removed snapshots remain summaries. Export remains available on the ordinary archive. Identity lookup uses a separate small index and requests only card chunks containing saved IDs.

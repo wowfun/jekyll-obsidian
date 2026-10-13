@@ -38,17 +38,8 @@ module JekyllObsidian
       labels = config.site.tag_labels || {}
       aliases = config.site.tag_aliases || {}
       facets = config.blog.fetch("facets")
-      records = cards.map do |card|
-        # The presenter supplies dates already normalized to the display offset.
-        date = card["published_at"]
-        values = facet_values(card["tags"], config)
-        card.slice("id", "title", "url", "markdown_url", "summary", "source_url", "date_basis").merge(
-          "published_at" => date, "display_date" => date&.slice(0, 10),
-          "year" => date&.slice(0, 4) || "Undated", "month" => date&.slice(0, 7),
-          "facets" => values
-        )
-      end
-      generation = Digest::SHA256.hexdigest(JSON.generate([records, labels, aliases, config.blog]))
+      records = cards.map { |card| record(card, config) }
+      generation = Digest::SHA256.hexdigest(JSON.generate([records, labels, aliases, config.blog, config.features.fetch("favorites")]))
       root = "/assets/website/archive/#{generation}"
       files = []
       emit = lambda do |name, data, localize_content: false|
@@ -97,8 +88,12 @@ module JekyllObsidian
         "page_size" => size, "facets" => groups, "prefixes" => facets,
         "export_max_days" => config.blog.fetch("export_max_days"),
         "labels" => labels, "aliases" => aliases, "years" => years, "months" => months, "days" => days,
-        "chunks" => chunks
+        "chunks" => chunks, "ledger_group_by" => config.blog.fetch("ledger_group_by")
       }
+      if config.features.fetch("favorites")
+        manifest["identities"] = "identities.json"
+        emit.call("identities.json", { "generation" => generation, "ids" => records.map { |card| card.fetch("id") } })
+      end
       emit.call("manifest.json", manifest)
       url = config.url_builder.href("#{root}/manifest.json")
       first = records.first(size).map { |record| card_labels(record, manifest) }
@@ -107,9 +102,23 @@ module JekyllObsidian
       timeline = ArchiveChronology.timeline(counts, daily: daily)
       {
         "archive" => manifest.merge("url" => url),
-        "archive_groups" => first.group_by { |card| card.fetch("year") }.map { |year, posts| { "label" => year, "posts" => posts } },
+        "archive_groups" => groups(first, config),
         "timeline" => timeline, "files" => files
       }
+    end
+
+    def record(card, config)
+      date = card["published_at"]
+      card.slice("id", "title", "url", "markdown_url", "summary", "source_url", "date_basis").merge(
+        "published_at" => date, "display_date" => date&.slice(0, 10),
+        "year" => date&.slice(0, 4) || "Undated", "month" => date&.slice(0, 7),
+        "facets" => facet_values(card["tags"], config)
+      )
+    end
+
+    def groups(cards, config)
+      key = config.blog.fetch("ledger_group_by") == "day" ? "display_date" : "year"
+      cards.group_by { |card| card[key] || "Undated" }.map { |label, posts| { "label" => label, "posts" => posts } }
     end
 
     def card_labels(card, manifest)

@@ -1,0 +1,4 @@
+{% if page.website.features.favorites %}
+  <div data-favorites-ui data-save="{{ ui.favorite_save | default: 'Save' | escape }}" data-remove="{{ ui.favorite_remove | default: 'Remove favorite' | escape }}" data-saved="{{ ui.favorite_saved | default: 'Saved' | escape }}" data-empty="{{ ui.favorites_empty | default: 'No favorites yet. Save an entry to find it here.' | escape }}" data-error="{{ ui.favorite_storage_error | escape }}" data-removed="{{ ui.favorite_removed_article | escape }}" data-refresh-error="{{ ui.favorites_refresh_error | escape }}" data-undated="{{ ui.undated | default: 'Undated' | escape }}" data-labels="{{ page.website.favorite_labels | jsonify | escape }}" data-prefixes="{{ page.website.favorite_prefixes | jsonify | escape }}"></div>
+  <p class="favorite-status" role="status" aria-live="polite" data-favorite-status></p>
+{% endif %}

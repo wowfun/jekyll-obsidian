@@ -127,7 +127,7 @@ jekyll-obsidian dev
 
 贡献者可以继续阅读[开发者指南](website/jekyll-obsidian-docs/docs/development/index.md)。
 
-Windows 原生开发可使用 RubyInstaller Ruby+Devkit 4.0.6、Bundler 4.0.16 和 Node 26。开发者指南提供了 PowerShell 构建与归档测试命令。创建文件符号链接的 Ruby 测试需要相应的 Windows 权限。
+Windows 原生开发可使用 RubyInstaller Ruby+Devkit 4.0.6、Bundler 4.0.16 和 Node 26。开发者指南提供了 PowerShell 构建与归档测试命令。完整 Ruby 测试可通过 `bundle exec rake test` 运行。Windows 缺少符号链接权限时，目录链接测试使用 junction；只有文件符号链接及 Windows 不支持的文件名用例会跳过，并说明原因。预览测试会隔离并只终止自己的子进程。
 
 ## 许可证
 

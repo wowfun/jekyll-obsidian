@@ -2,6 +2,15 @@ name: 简体中文
 hreflang: zh-Hans
 dir: ltr
 messages:
+  favorites: "收藏"
+  favorite_save: "收藏"
+  favorite_remove: "取消收藏"
+  favorite_saved: "已收藏"
+  favorites_empty: "还没有收藏。在条目或文章页点击收藏，即可在这里查看。"
+  favorite_storage_error: "无法保存收藏。请允许浏览器本地存储或释放空间后重试。"
+  favorite_removed_article: "此文章已下架，已保留收藏摘要和原文链接。"
+  favorites_refresh_error: "无法更新文章信息，暂时显示收藏快照。请重试。"
+  undated: "未注明日期"
   original: 原文
   sources: 来源
   topics: 主题
