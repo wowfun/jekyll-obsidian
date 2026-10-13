@@ -374,7 +374,8 @@ class SiteUrlVerifierTest < Minitest::Test
       File.write(path, markup)
       _stdout, stderr, status = Open3.capture3(Gem.ruby, script, site, "https://example.test", "")
       assert status.success?, stderr
-      [markup.sub('sandbox="allow-scripts allow-same-origin"', ''),
+      [markup.sub('sandbox="allow-scripts"', ''),
+       markup.sub('sandbox="allow-scripts"', 'sandbox="allow-scripts allow-same-origin"'),
        markup.sub('class="website-external-pdf__fallback"', ''),
        markup.sub('a.mp3', 'a.mp4'),
        markup.sub('a.pdf#page=3', 'a.html#page=3')].each do |invalid|

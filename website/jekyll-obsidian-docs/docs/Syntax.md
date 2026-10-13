@@ -99,6 +99,8 @@ External HTTPS media uses the same Markdown image syntax. GIFs and other support
 
 Supported files follow [Obsidian's accepted formats](https://obsidian.md/help/file-formats): images (`avif`, `bmp`, `gif`, `jpeg`, `jpg`, `png`, `svg`, `webp`, plus `apng`), audio (`3gp`, `flac`, `m4a`, `mp3`, `ogg`, `wav`), video (`mkv`, `mov`, `mp4`, `ogv`, `webm`), and PDF. Codec support depends on the browser. Remote files are recognized by the URL path's extension, including uppercase extensions and URLs with query parameters; arXiv `/pdf/` URLs also work without an extension. PDF fragments accept a positive `page` and a `height` between 64 and 4096. Ordinary Markdown links stay links. The compiler does not fetch remote notes, render Canvas or Bases data, or expand shortened provider URLs.
 
+Remote PDF frames keep an opaque origin, so even an HTML response or redirect cannot access the parent page. Some browsers, including Chromium's native PDF viewer, block viewing a PDF inside a sandbox; use the visible link to open the document in that case. The link retains `page` and signed query parameters, and omits the embed-only `height` option.
+
 Use an explicit iframe only when the page cannot be represented by one of those media forms:
 
 ```html

@@ -32,7 +32,7 @@ for (const theme of ["minimal", "docs"]) for (const locale of ["en", "zh-CN"]) {
     await expect(page.locator("video.website-external-video")).toBeVisible();
     await expect(page.locator("iframe[data-website-external-pdf]")).toHaveAttribute("src", "https://papers.example/paper.pdf#page=3");
     await expect(page.locator("iframe[data-website-external-pdf]")).toHaveAttribute("height", "560");
-    await expect(page.locator(".website-external-pdf__fallback")).toHaveAttribute("href", "https://papers.example/paper.pdf");
+    await expect(page.locator(".website-external-pdf__fallback")).toHaveAttribute("href", "https://papers.example/paper.pdf#page=3");
     await expect(page.locator("iframe[data-website-external-player]")).toHaveAttribute("src", "https://www.youtube-nocookie.com/embed/NnTvZWp5Q7o");
     if (testInfo.project.name.startsWith("mobile")) await page.setViewportSize({ width: 320, height: 780 });
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);

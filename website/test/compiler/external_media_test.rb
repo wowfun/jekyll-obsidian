@@ -32,7 +32,7 @@ class ExternalMediaTest < Minitest::Test
     assert_equal "Paper", frame["title"]
     assert_equal "lazy", frame["loading"]
     assert_equal JekyllObsidian::ExternalMedia::PDF_SANDBOX, frame["sandbox"]
-    assert_equal "https://cdn.example/paper.PDF?token=signed", document.at_css("a.website-external-pdf__fallback")["href"]
+    assert_equal "https://cdn.example/paper.PDF?token=signed#page=3", document.at_css("a.website-external-pdf__fallback")["href"]
     assert_equal ["https://cdn.example"], output.data.dig("website", "content_security", "frame_sources")
     assert_empty output.data.dig("website", "content_security", "media_sources")
   end

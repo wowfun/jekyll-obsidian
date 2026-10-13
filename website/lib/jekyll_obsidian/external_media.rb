@@ -52,7 +52,11 @@ module JekyllObsidian
     X_HANDLE = /\A[A-Za-z0-9_]{1,15}\z/
     X_STATUS_ID = /\A[1-9]\d*\z/
     IFRAME_SANDBOX = "allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox allow-presentation"
-    PDF_SANDBOX = "allow-scripts allow-same-origin"
+    # A .pdf URL may redirect or return HTML. Keep an opaque origin even for
+    # same-origin responses; combining scripts and same-origin lets them reach
+    # the parent. Browsers that block their PDF viewer in a sandbox use the
+    # always-visible fallback link instead.
+    PDF_SANDBOX = "allow-scripts"
 
     module_function
 
@@ -94,12 +98,11 @@ module JekyllObsidian
       if file_kind == :pdf
         page, height = pdf_options(uri.fragment)
         uri.fragment = nil
-        fallback = uri.to_s
         uri.fragment = "page=#{page}" if page
         return Descriptor.new(
           kind: :pdf,
           source_url: uri.to_s,
-          fallback_url: fallback,
+          fallback_url: uri.to_s,
           origin: origin(uri),
           media_type: "application/pdf",
           iframe_sandbox: PDF_SANDBOX,

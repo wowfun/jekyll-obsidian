@@ -91,6 +91,8 @@ flowchart LR
 
 支持的文件参照 [Obsidian 文件格式](https://obsidian.md/help/file-formats)：图片（`avif`、`bmp`、`gif`、`jpeg`、`jpg`、`png`、`svg`、`webp`，另支持 `apng`）、音频（`3gp`、`flac`、`m4a`、`mp3`、`ogg`、`wav`）、视频（`mkv`、`mov`、`mp4`、`ogv`、`webm`）和 PDF。能否播放取决于浏览器支持的编码。远程文件通过 URL 路径中的扩展名识别，兼容大写扩展名和查询参数；arXiv 的 `/pdf/` URL 无需扩展名。PDF fragment 仅接受正整数 `page` 和 64 至 4096 的 `height`。普通 Markdown 链接仍显示为链接。编译器不抓取远程笔记、不渲染 Canvas 或 Bases 数据，也不展开平台短链接。
 
+远程 PDF frame 使用不透明来源，返回 HTML 或跳转也不能访问父页面。部分浏览器（包括 Chromium 原生 PDF 查看器）会禁止在沙箱中显示 PDF，此时可通过可见链接打开文档。链接保留 `page` 和签名查询参数，并移除仅用于嵌入布局的 `height`。
+
 只有无法通过上述媒体形式表达的页面才应使用显式 iframe：
 
 ```html
