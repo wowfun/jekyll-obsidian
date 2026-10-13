@@ -27,6 +27,7 @@ for (const locale of ["en", "zh-CN"]) {
     await expect(other.locator("[data-favorite-toggle]")).toHaveAttribute("aria-pressed", "true");
     await other.reload(); await ready(other); await expect(other.locator(".blog-ledger__main strong")).toHaveText(["Newest"]);
     await other.locator("[data-favorite-toggle]").click(); await expect(other.locator("[data-filter-item]")).toHaveCount(0);
+    await expect(other.locator("[data-timeline-nav]")).not.toBeVisible();
     await expect(page.locator("[data-favorite-toggle]")).toHaveAttribute("aria-pressed", "false");
     await page.locator("[data-favorite-toggle]").click(); await expect(other.locator("[data-filter-item]")).toHaveCount(1);
     await other.locator('button[data-archive-facet="source"][data-archive-value="hn"]').click(); await ready(other);

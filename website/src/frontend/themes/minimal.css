@@ -1035,7 +1035,7 @@
   .blog-ledger__heading .blog-ledger__main { flex: 1; min-inline-size: 0; }
   .favorite-button { display: inline-flex; align-items: center; gap: .35rem; flex: none; min-block-size: 2rem; padding: .3rem .5rem; color: var(--graphite); background: transparent; border: 1px solid transparent; border-radius: .25rem; font: inherit; font-size: .75rem; cursor: pointer; }
   .favorite-button svg { inline-size: 1rem; block-size: 1rem; fill: none; stroke: currentColor; stroke-width: 1.4; }
-  .favorite-button[hidden] { display: none; }
+  .favorite-button[hidden], .archive-timeline[hidden], .mobile-toolbar [hidden] { display: none; }
   .favorite-button[aria-pressed="true"] { color: var(--teal); }
   .favorite-button[aria-pressed="true"] svg { fill: currentColor; }
   .favorite-button:hover { border-color: currentColor; }
