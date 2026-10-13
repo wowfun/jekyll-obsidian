@@ -28,6 +28,31 @@ it('looks up saved identities without fetching unrelated card chunks in a 100000
   await client.lookup(['item-99999']); expect(fetch).toHaveBeenCalledTimes(3);
 });
 
+it('revalidates a newly deployed manifest and discards the old identity and card caches', async () => {
+  const old = { ...manifest, total: 1, identities: 'identities.json', chunks: ['cards-0.json'] };
+  const next = { ...old, generation: 'b'.repeat(64) };
+  vi.stubGlobal('fetch', vi.fn(async (url: URL) => {
+    const fresh = url.pathname.startsWith('/new/'), data = fresh ? next : old, id = fresh ? 'new' : 'old';
+    if (url.pathname.endsWith('manifest.json')) return Response.json(data);
+    if (url.pathname.endsWith('identities.json')) return Response.json({ generation: data.generation, ids: [id] });
+    return Response.json({ generation: data.generation, start: 0, cards: [{ id, title: id, url: '/item/', markdown_url: '/item.md', year: '2026', facets: {} }] });
+  }));
+  expect([...await client.lookup(['old'])].map(([id]) => id)).toEqual(['old']);
+  await client.revalidate('/new/manifest.json');
+  expect([...await client.lookup(['old', 'new'])].map(([id]) => id)).toEqual(['new']);
+});
+
+it('rejects a late old manifest when a new deployment is already selected', async () => {
+  let finish!: (response: Response) => void;
+  vi.stubGlobal('fetch', vi.fn((url: URL) => url.pathname.startsWith('/new/')
+    ? Promise.resolve(Response.json({ ...manifest, generation: 'b'.repeat(64) }))
+    : new Promise<Response>(resolve => { finish = resolve; })));
+  const old = Promise.allSettled([client.manifest()]);
+  await client.revalidate('/new/manifest.json'); finish(Response.json(manifest));
+  expect((await old)[0]!.status).toBe('rejected');
+  expect((await client.manifest()).generation).toBe('b'.repeat(64));
+});
+
 it('coalesces manifest subscribers without letting one cancellation abort another', async () => {
   let resolve!: (value: Response) => void, networkSignal!: AbortSignal;
   const fetch = vi.fn((_url, options) => { networkSignal = options.signal; return new Promise<Response>(done => { resolve = done; }); });

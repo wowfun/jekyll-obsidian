@@ -20,6 +20,9 @@ export function renderArchivePagination(root: HTMLElement, page: number, pages: 
     numbers.append(link);
   }
   const form = root.querySelector<HTMLFormElement>("[data-archive-page-jump]")!, input = form.querySelector<HTMLInputElement>("input")!;
-  input.value = String(page); input.max = String(pages); input.disabled = count === 0; input.setCustomValidity("");
+  if (document.activeElement !== input || root.dataset.currentPage !== String(page)) input.value = String(page);
+  root.dataset.currentPage = String(page);
+  input.max = String(pages); input.disabled = count === 0;
+  if (document.activeElement !== input) input.setCustomValidity("");
   form.hidden = pages <= 1;
 }

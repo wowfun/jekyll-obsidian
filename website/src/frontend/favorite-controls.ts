@@ -1,12 +1,31 @@
 import type { ArchiveCard } from "./archive-query";
-import { FAVORITES_CHANGE, favoritesKey, readFavorites, toggleFavorite } from "./favorites-store";
+import { FAVORITES_CHANGE, favoriteCard, favoritesDamaged, FavoritesStorageError, favoritesKey, readFavorites, toggleFavorite } from "./favorites-store";
+
+const buttonCards = new WeakMap<HTMLButtonElement, { raw: string; card: ArchiveCard }>();
+const pendingButtons = new WeakSet<HTMLButtonElement>();
+function buttonCard(button: HTMLButtonElement): ArchiveCard {
+  const raw = button.dataset.favoriteCard || "", cached = buttonCards.get(button);
+  if (cached?.raw === raw) return cached.card;
+  const card = favoriteCard(JSON.parse(raw));
+  if (card.id !== button.dataset.favoriteId) throw new Error("Invalid favorite button");
+  buttonCards.set(button, { raw, card }); return card;
+}
 
 export function favoritesUI(): DOMStringMap {
   return document.querySelector<HTMLElement>("[data-favorites-ui]")?.dataset || {};
 }
-export function showFavoriteError(): void {
+export function showFavoriteError(error?: unknown): void {
   const status = document.querySelector<HTMLElement>("[data-favorite-status]");
-  if (status) status.textContent = favoritesUI().error || "Could not save favorites. Allow browser storage or free some space, then retry.";
+  const ui = favoritesUI();
+  const reason = error instanceof FavoritesStorageError ? error.code : error instanceof Error ? error.name : "";
+  const messages: Record<string, string> = {
+    damaged: ui.damaged || "Some saved data is damaged. Healthy favorites are shown; original data is backed up before repair.",
+    unreadable: ui.unreadable || "Could not read favorites. The stored data is damaged; original data has been kept.",
+    unsupported: ui.unsupported || "Could not save favorites. Use a current browser over HTTPS or localhost.",
+    QuotaExceededError: ui.quota || "Could not save favorites. Browser storage is full; free some space and retry.",
+    SecurityError: ui.blocked || "Could not save favorites. Allow browser storage and retry."
+  };
+  if (status) status.textContent = messages[reason] || ui.error || "Could not save favorites. Allow browser storage or free some space, then retry.";
 }
 export function favoriteButton(card: ArchiveCard): HTMLButtonElement {
   const button = document.createElement("button"); button.type = "button"; button.className = "favorite-button";
@@ -19,34 +38,42 @@ export function refreshFavoriteButtons(): void {
   if (!document.querySelector("[data-favorites-ui]")) return;
   let selected: Set<string>;
   try { selected = new Set(readFavorites().keys()); }
-  catch {
-    showFavoriteError();
-    for (const button of document.querySelectorAll<HTMLButtonElement>("[data-favorite-toggle]")) button.hidden = false;
+  catch (error) {
+    showFavoriteError(error);
+    for (const button of document.querySelectorAll<HTMLButtonElement>("[data-favorite-toggle]")) { button.hidden = false; button.disabled = pendingButtons.has(button); }
     return;
   }
   const ui = favoritesUI();
   for (const button of document.querySelectorAll<HTMLButtonElement>("[data-favorite-toggle]")) {
-    const active = selected.has(button.dataset.favoriteId!), card = JSON.parse(button.dataset.favoriteCard!) as ArchiveCard;
-    button.hidden = false; button.setAttribute("aria-pressed", String(active));
-    button.setAttribute("aria-label", `${active ? ui.remove || "Remove favorite" : ui.save || "Save"}: ${card.title}`);
-    button.querySelector<HTMLElement>("[data-favorite-label]")!.textContent = active ? ui.saved || "Saved" : ui.save || "Save";
+    try {
+      const active = selected.has(button.dataset.favoriteId!), card = buttonCard(button);
+      button.disabled = pendingButtons.has(button);
+      button.hidden = false; button.setAttribute("aria-pressed", String(active));
+      button.setAttribute("aria-label", `${active ? ui.remove || "Remove favorite" : ui.save || "Save"}: ${card.title}`);
+      const label = button.querySelector<HTMLElement>("[data-favorite-label]");
+      if (label) label.textContent = active ? ui.saved || "Saved" : ui.save || "Save";
+    } catch (error) { button.hidden = false; button.disabled = true; showFavoriteError(error); }
   }
+  if (favoritesDamaged() && !document.querySelector("[data-favorite-status]")?.textContent) showFavoriteError(new FavoritesStorageError("damaged"));
 }
 export function initialiseFavorites(): () => void {
   if (!document.querySelector("[data-favorites-ui]")) return () => {};
-  const click = (event: MouseEvent) => {
+  let taxonomy: { labels: Record<string, string>; prefixes: Record<string, string> } | undefined;
+  const click = async (event: MouseEvent) => {
     const button = event.target instanceof Element ? event.target.closest<HTMLButtonElement>("[data-favorite-toggle]") : null;
-    if (!button) return;
+    if (!button || button.disabled) return;
+    pendingButtons.add(button); button.disabled = true;
     try {
-      const card = JSON.parse(button.dataset.favoriteCard!) as ArchiveCard;
-      if (!card.favorite_labels) {
-        const labels = JSON.parse(favoritesUI().labels || "null") as Record<string, string> | null;
-        const prefixes = JSON.parse(favoritesUI().prefixes || "null") as Record<string, string> | null;
-        card.favorite_labels = Object.fromEntries(Object.entries(card.facets).flatMap(([name, ids]) => ids.map(id => [name + "/" + id, labels?.[(prefixes?.[name] || name + "/") + id] || id])));
+      const card = { ...buttonCard(button) };
+      if (!Object.keys(card.favorite_labels || {}).length) {
+        const ui = favoritesUI();
+        taxonomy ||= { labels: JSON.parse(ui.labels || "null") || {}, prefixes: JSON.parse(ui.prefixes || "null") || {} };
+        card.favorite_labels = Object.fromEntries(Object.entries(card.facets).flatMap(([name, ids]) => ids.map(id => [name + "/" + id, taxonomy!.labels[(taxonomy!.prefixes[name] || name + "/") + id] || id])));
       }
-      toggleFavorite(card);
+      await toggleFavorite(card, document.documentElement.lang || "en", button.getAttribute("aria-pressed") !== "true");
       const status = document.querySelector<HTMLElement>("[data-favorite-status]"); if (status) status.textContent = "";
-    } catch { showFavoriteError(); }
+    } catch (error) { showFavoriteError(error); }
+    finally { pendingButtons.delete(button); refreshFavoriteButtons(); }
   };
   const storage = (event: StorageEvent) => {
     if (event.key === null || event.key === favoritesKey()) window.dispatchEvent(new Event(FAVORITES_CHANGE));

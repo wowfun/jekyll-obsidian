@@ -27,3 +27,12 @@ it("renders real links retaining every selected filter and marks the current pag
   expect(root.querySelector<HTMLFormElement>("form")!.hidden).toBe(true);
   expect(root.querySelector<HTMLInputElement>("input")!.disabled).toBe(true);
 });
+
+it("preserves an unfinished page number during a collection refresh", () => {
+  const root = document.querySelector<HTMLElement>("nav")!;
+  renderArchivePagination(root, 4, 30, 1500);
+  const input = root.querySelector<HTMLInputElement>("input")!;
+  input.focus(); input.value = "12";
+  renderArchivePagination(root, 4, 30, 1499);
+  expect(input.value).toBe("12");
+});

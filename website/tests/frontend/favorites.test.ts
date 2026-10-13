@@ -1,46 +1,57 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import type { ArchiveCard } from "../../src/frontend/archive-query";
 import { archiveState } from "../../src/frontend/archive-query";
-import { favoriteCard, favoritesKey, readFavorites, toggleFavorite } from "../../src/frontend/favorites-store";
-import { favoriteButton, initialiseFavorites } from "../../src/frontend/favorite-controls";
+import { favoriteCard, favoritesKey, readFavorites, toggleFavorite, updateFavoriteSnapshots } from "../../src/frontend/favorites-store";
+import { favoriteButton, initialiseFavorites, refreshFavoriteButtons } from "../../src/frontend/favorite-controls";
 import { favoriteManifest, loadFavoriteArchive, selectFavorites } from "../../src/frontend/favorite-archive";
 
 const card = (id: string, date = "2026-10-10", source = "hn"): ArchiveCard => ({ id, title: "Title " + id, url: "/garden/items/" + id + "/", markdown_url: "/garden/items/" + id + ".md", published_at: date + "T12:00:00+08:00", display_date: date, year: date.slice(0, 4), month: date.slice(0, 7), facets: { source: [source], topic: ["agents"] }, source_url: "https://example.test/" + id, summary: "Summary " + id });
 let dispose = () => {};
 beforeEach(() => {
+  const entries = new Map<string, string>();
+  vi.stubGlobal("localStorage", {
+    get length() { return entries.size; }, clear() { entries.clear(); },
+    key(index: number) { return [...entries.keys()][index] ?? null; },
+    getItem(key: string) { return entries.get(key) ?? null; },
+    setItem(key: string, value: string) { entries.set(key, value); }, removeItem(key: string) { entries.delete(key); }
+  });
+  let queue = Promise.resolve();
+  vi.stubGlobal("navigator", { locks: { request(_name: string, operation: () => unknown) {
+    const next = queue.then(operation); queue = next.then(() => {}, () => {}); return next;
+  } } });
   localStorage.clear(); document.documentElement.lang = "en";
   document.head.innerHTML = '<meta name="website:favorites-scope" content="/garden">';
   document.body.innerHTML = '<div data-favorites-ui data-save="Save" data-remove="Remove favorite" data-saved="Saved"></div><p data-favorite-status></p>';
 });
 afterEach(() => { dispose(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
-it("shares identity across languages, preserves snapshots, and isolates sites", () => {
-  toggleFavorite(card("a")); document.documentElement.lang = "zh-CN";
+it("shares identity across languages, preserves snapshots, and isolates sites", async () => {
+  await toggleFavorite(card("a")); document.documentElement.lang = "zh-CN";
   expect(readFavorites().has("a")).toBe(true);
   expect(readFavorites().get("a")!.snapshots.en!.summary).toBe("Summary a");
   document.querySelector<HTMLMetaElement>('meta[name="website:favorites-scope"]')!.content = "/other";
   expect(readFavorites().size).toBe(0);
   document.querySelector<HTMLMetaElement>('meta[name="website:favorites-scope"]')!.content = "/garden";
-  toggleFavorite(card("a")); expect(readFavorites().size).toBe(0);
+  await toggleFavorite(card("a")); expect(readFavorites().size).toBe(0);
 });
 
-it("updates state only after storage succeeds and refreshes on other-tab events", () => {
+it("updates state only after storage succeeds and refreshes on other-tab events", async () => {
   const button = favoriteButton(card("a")); document.body.append(button); dispose = initialiseFavorites();
   const set = vi.spyOn(localStorage, "setItem").mockImplementation(() => { throw new Error("QuotaExceededError"); });
-  button.click(); expect(button.getAttribute("aria-pressed")).toBe("false"); expect(document.querySelector('[data-favorite-status]')!.textContent).toContain("Could not save");
-  set.mockRestore(); button.click(); expect(button.getAttribute("aria-pressed")).toBe("true");
+  button.click(); await vi.waitFor(() => expect(button.disabled).toBe(false)); expect(button.getAttribute("aria-pressed")).toBe("false"); expect(document.querySelector('[data-favorite-status]')!.textContent).toContain("Could not save");
+  set.mockRestore(); button.click(); await vi.waitFor(() => expect(button.disabled).toBe(false)); expect(button.getAttribute("aria-pressed")).toBe("true");
   localStorage.removeItem(favoritesKey()); window.dispatchEvent(new StorageEvent("storage", { key: favoritesKey() }));
   expect(button.getAttribute("aria-pressed")).toBe("false");
 });
 
-it("rejects unsafe links and preserves malformed stored bytes", () => {
+it("rejects unsafe links and preserves malformed stored bytes", async () => {
   expect(() => favoriteCard({ ...card("a"), source_url: "javascript:alert(1)" })).toThrow();
-  localStorage.setItem(favoritesKey(), "broken"); expect(() => toggleFavorite(card("a"))).toThrow();
+  localStorage.setItem(favoritesKey(), "broken"); await expect(toggleFavorite(card("a"))).rejects.toThrow();
   expect(localStorage.getItem(favoritesKey())).toBe("broken");
 });
 
-it("preserves the displayed saved state when storage reads become unavailable", () => {
-  const button = favoriteButton(card("a")); document.body.append(button); dispose = initialiseFavorites(); button.click();
+it("preserves the displayed saved state when storage reads become unavailable", async () => {
+  const button = favoriteButton(card("a")); document.body.append(button); dispose = initialiseFavorites(); button.click(); await vi.waitFor(() => expect(button.disabled).toBe(false));
   expect(button.getAttribute("aria-pressed")).toBe("true");
   vi.stubGlobal("localStorage", { getItem() { throw new Error("SecurityError"); } });
   window.dispatchEvent(new Event("pageshow"));
@@ -49,7 +60,7 @@ it("preserves the displayed saved state when storage reads become unavailable", 
 });
 
 it("uses current language, keeps removed snapshots, and distinguishes network failure", async () => {
-  toggleFavorite(card("a")); toggleFavorite(card("gone", "2025-12-31"));
+  await toggleFavorite(card("a")); await toggleFavorite(card("gone", "2025-12-31"));
   const fresh = { ...card("a"), title: "中文标题", url: "/garden/zh-CN/items/a/" };
   document.documentElement.lang = "zh-CN";
   const base = favoriteManifest([card("a")]);
@@ -72,4 +83,90 @@ it("paginates 101 favorites, combines facets and dates, and clamps page after re
   expect(selectFavorites(cards, data, archiveState(data, "?source=missing"))).toMatchObject({ count: 0 });
   const reduced = cards.slice(0, 50), reducedData = favoriteManifest(reduced);
   expect(selectFavorites(reduced, reducedData, archiveState(reducedData, "?page=3"))).toMatchObject({ count: 50, page: 1, pages: 1 });
+});
+
+it("keeps concurrent writes from different tabs instead of overwriting the collection", async () => {
+  const set = localStorage.setItem.bind(localStorage);
+  let second: unknown;
+  vi.spyOn(localStorage, "setItem").mockImplementationOnce((key, raw) => {
+    second = toggleFavorite(card("b"));
+    set(key, raw);
+  });
+  await toggleFavorite(card("a")); await second;
+  expect([...readFavorites().keys()].sort()).toEqual(["a", "b"]);
+});
+
+it("shows healthy entries alongside corruption and backs up the original bytes before repair", async () => {
+  await toggleFavorite(card("a"));
+  const data = JSON.parse(localStorage.getItem(favoritesKey())!);
+  data.entries.push({ id: "bad", saved_at: "invalid", snapshots: {} });
+  const raw = JSON.stringify(data); localStorage.setItem(favoritesKey(), raw);
+  expect([...readFavorites().keys()]).toEqual(["a"]);
+  expect(localStorage.getItem(favoritesKey())).toBe(raw);
+  await toggleFavorite(card("b"));
+  expect([...readFavorites().keys()].sort()).toEqual(["a", "b"]);
+  expect(Array.from({ length: localStorage.length }, (_, i) => localStorage.key(i)!).some(key => key.startsWith(favoritesKey() + ":recovery:") && localStorage.getItem(key) === raw)).toBe(true);
+});
+
+it("rejects non-existent calendar days, not only malformed date strings", () => {
+  expect(() => favoriteCard({ ...card("a"), display_date: "2026-02-30" })).toThrow();
+  expect(() => favoriteCard({ ...card("a"), display_date: "2026-99-99" })).toThrow();
+  expect(favoriteCard(card("leap", "2024-02-29")).display_date).toBe("2024-02-29");
+});
+
+it("isolates a malformed button without aborting healthy controls", () => {
+  const bad = favoriteButton(card("bad")), good = favoriteButton(card("good"));
+  bad.dataset.favoriteCard = "{"; bad.hidden = true; good.hidden = true; document.body.append(bad, good);
+  expect(() => refreshFavoriteButtons()).not.toThrow();
+  expect(bad.disabled).toBe(true); expect(good.hidden).toBe(false);
+});
+
+it("does not restore a favorite removed while snapshot refresh is waiting for its lock", async () => {
+  await toggleFavorite(card("a"));
+  const removal = toggleFavorite(card("a"));
+  const refresh = updateFavoriteSnapshots([{ ...card("a"), title: "Refreshed" }]);
+  await Promise.all([removal, refresh]);
+  expect(readFavorites().size).toBe(0);
+});
+
+it("reports unsupported locking without modifying storage or showing a successful save", async () => {
+  vi.stubGlobal("navigator", {});
+  const button = favoriteButton(card("a")); document.body.append(button); dispose = initialiseFavorites();
+  button.click(); await vi.waitFor(() => expect(button.disabled).toBe(false));
+  expect(localStorage.getItem(favoritesKey())).toBe(null);
+  expect(button.getAttribute("aria-pressed")).toBe("false");
+  expect(document.querySelector('[data-favorite-status]')!.textContent).toContain("HTTPS or localhost");
+});
+
+it("preserves damaged bytes if the recovery backup cannot be saved", async () => {
+  await toggleFavorite(card("a"));
+  const data = JSON.parse(localStorage.getItem(favoritesKey())!); data.entries.push(null);
+  const raw = JSON.stringify(data); localStorage.setItem(favoritesKey(), raw);
+  vi.spyOn(localStorage, "setItem").mockImplementation(() => { throw new DOMException("full", "QuotaExceededError"); });
+  await expect(toggleFavorite(card("b"))).rejects.toThrow();
+  expect(localStorage.getItem(favoritesKey())).toBe(raw);
+});
+
+it("keeps an offline custom facet named constructor without inheriting Object properties", () => {
+  const saved = { ...card("custom"), facets: { constructor: ["books"] }, favorite_labels: { "constructor/books": "Books" } };
+  const data = favoriteManifest([saved]);
+  expect(data.prefixes.constructor).toBe("constructor/");
+  expect(data.facets.constructor).toEqual([{ id: "books", name: "Books", count: 1, posting: "" }]);
+});
+
+it("resolves saved custom facets even when the current configuration no longer defines them", async () => {
+  await toggleFavorite({ ...card("custom"), facets: { constructor: ["books"] } });
+  const base = favoriteManifest([]); base.aliases = { "constructor/books": "constructor/novels" };
+  const loaded = await loadFavoriteArchive({ manifest: async () => base, lookup: async () => new Map() }, new AbortController().signal);
+  expect(loaded.cards[0]!.facets.constructor).toEqual(["novels"]);
+});
+
+it("keeps the storage failure reason visible when a damaged collection cannot be repaired", async () => {
+  await toggleFavorite(card("a"));
+  const data = JSON.parse(localStorage.getItem(favoritesKey())!); data.entries.push(null);
+  localStorage.setItem(favoritesKey(), JSON.stringify(data));
+  const button = favoriteButton(card("b")); document.body.append(button); dispose = initialiseFavorites();
+  vi.spyOn(localStorage, "setItem").mockImplementation(() => { throw new DOMException("full", "QuotaExceededError"); });
+  button.click(); await vi.waitFor(() => expect(button.disabled).toBe(false));
+  expect(document.querySelector('[data-favorite-status]')!.textContent).toContain("storage is full");
 });

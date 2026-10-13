@@ -4,7 +4,7 @@ import { initialiseArchiveExport } from "./archive-export";
 import { initialiseArchiveReading } from "./archive-reading";
 import { renderArchiveLedger } from "./archive-ledger";
 import { loadFavoriteArchive, renderFavoriteFilters, selectFavorites } from "./favorite-archive";
-import { FAVORITES_CHANGE } from "./favorites-store";
+import { FAVORITES_CHANGE, favoritesRevision } from "./favorites-store";
 import { favoritesUI } from "./favorite-controls";
 import { renderArchivePagination } from "./archive-pagination";
 
@@ -23,17 +23,30 @@ export function initialisePagedArchive(root: HTMLElement): () => void {
   const cleanupExport = favorites ? () => {} : initialiseArchiveExport(client);
   let epoch = 0, alive = true;
   let pendingSearch: string | undefined;
+  let savedArchive: Awaited<ReturnType<typeof loadFavoriteArchive>> | undefined, savedRevision: string | null | undefined;
   let current: ArchiveMatches = { ordinals: [], count: 0, page: 1, pages: 1 };
-  async function refresh(): Promise<void> {
+  async function refresh(revalidate = false): Promise<void> {
     const search = window.location.search;
     if (pendingSearch === search) return;
     pendingSearch = search;
     const turn = ++epoch; status.textContent = status.dataset.loading || "Loading…"; retry.hidden = true;
     root.setAttribute("aria-busy", "true"); prev.disabled = true; next.disabled = true;
     try {
-      const saved = favorites ? await loadFavoriteArchive(client, controller.signal) : undefined;
+      if (revalidate) {
+        savedArchive = undefined;
+        // Generation paths are immutable. Rediscover the current path from the
+        // page after a deployment instead of retrying an obsolete hashed URL.
+        const page = await client.article(location.pathname, controller.signal, true);
+        const document = new DOMParser().parseFromString(page.html, "text/html");
+        const source = document.querySelector<HTMLElement>("[data-paged-archive]")?.dataset.archiveUrl;
+        if (!source) throw new Error("Missing current archive");
+        await client.revalidate(source, controller.signal);
+      }
+      let saved: Awaited<ReturnType<typeof loadFavoriteArchive>> | undefined;
+      if (favorites) saved = savedArchive && savedRevision === favoritesRevision() ? savedArchive : await loadFavoriteArchive(client, controller.signal);
       const data = saved?.manifest || await client.manifest(controller.signal);
       if (!alive || turn !== epoch) return;
+      if (saved) { savedArchive = saved; savedRevision = favoritesRevision(); }
       const state = archiveState(data, window.location.search);
       const result = saved ? selectFavorites(saved.cards, data, state) : await client.select(state, "page", controller.signal);
       if (!alive || turn !== epoch) return;
@@ -66,7 +79,8 @@ export function initialisePagedArchive(root: HTMLElement): () => void {
     const control = event.target.closest<HTMLElement>("[data-archive-facet], [data-year-filter-option], [data-month-filter-option], [data-day-filter-option], [data-archive-page], [data-archive-clear], [data-archive-retry]");
     if (!control || !root.contains(control) && !control.closest("[data-timeline-nav]")) return;
     event.preventDefault();
-    if (control.hasAttribute("data-archive-retry")) { void refresh(); return; }
+    if (control.hasAttribute("data-archive-retry")) { void refresh(true); return; }
+    if (root.hasAttribute("aria-busy") && control.hasAttribute("data-archive-page")) return;
     const nextUrl = new URL(window.location.href);
     if (control.hasAttribute("data-archive-clear")) nextUrl.search = "";
     else if (control.dataset.archivePage) {
@@ -107,9 +121,9 @@ export function initialisePagedArchive(root: HTMLElement): () => void {
     if (url.search !== location.search) history.pushState(null, "", url.pathname + url.search);
     void refresh();
   }
-  const onFavorites = () => { if (favorites) { pendingSearch = undefined; void refresh(); } };
+  const onFavorites = () => { if (favorites) { savedArchive = undefined; pendingSearch = undefined; void refresh(); } };
   const onPop = () => { void refresh(); };
-  const onShow = (event: PageTransitionEvent) => { if (event.persisted) void refresh(); };
+  const onShow = (event: PageTransitionEvent) => { if (event.persisted) { pendingSearch = undefined; void refresh(true); } };
   window.addEventListener(FAVORITES_CHANGE, onFavorites);
   jump.addEventListener("submit", submit); jumpInput.addEventListener("input", onInput); jumpInput.addEventListener("invalid", onInvalid);
   document.addEventListener("click", click); window.addEventListener("popstate", onPop); window.addEventListener("pageshow", onShow);
