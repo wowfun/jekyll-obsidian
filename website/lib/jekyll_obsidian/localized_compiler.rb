@@ -78,6 +78,8 @@ module JekyllObsidian
       "reading_unavailable" => "Article could not be loaded.",
       "archive_unavailable" => "Selected entries could not be loaded. Retry or clear the filters.",
       "archive_results" => "{count} entries", "page_label" => "Page {page} of {pages}",
+      "pagination" => "Pagination", "page_number" => "Page {page}", "page_input" => "Page number",
+      "page_go" => "Go", "page_jump_error" => "Enter a whole number from 1 to {pages}.",
       "first_observed" => "First observed", "original" => "Original",
       "contact" => "Contact",
       "graph" => "Graph",

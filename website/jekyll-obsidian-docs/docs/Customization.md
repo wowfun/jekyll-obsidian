@@ -329,7 +329,9 @@ Set `website.blog.timeline_granularity: day` to list dates as `MM-DD` under each
 newest first, with daily counts and `?day=YYYY-MM-DD` filters. The default is `month`.
 Day boundaries follow `utc_offset`; day selection combines with source/topic filters
 and resets pagination. Selecting the same date again clears it.
-The first page is rendered in HTML. Remaining pages use generation-scoped card chunks
+The first page is rendered in HTML. Pagination offers up to five nearby page links and a numeric jump field; both keep the current filters. Header actions in Minimal and Docs use icons, localized accessible names and hover hints; the language menu retains full language names, and active reading and color-scheme states remain visible.
+
+Remaining pages use generation-scoped card chunks
 and lazy bitmaps. Counts are global, selections survive language switching,
 and unknown IDs match zero entries. Loading failures retain the last successful page.
 Each ledger entry shows its description (or the note preview when no description is set).

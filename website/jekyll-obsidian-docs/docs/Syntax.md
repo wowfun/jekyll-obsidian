@@ -83,16 +83,21 @@ An image embed can include its width or width and height:
 
 Local audio, video, and PDF files use native browser controls. In v1, `.3gp` is audio and `.webm` is video. PDF embeds accept page and height options. Canvas and Bases files become download cards because v1 does not execute their data models.
 
-External HTTPS media uses the same Markdown image syntax. GIFs and other supported images keep image semantics and optional Obsidian dimensions. Direct video files use native controls. YouTube, Bilibili, and Vimeo links become privacy-conscious, lazy player frames, while X or Twitter status links become lazy Tweet embeds with a normal link as their fallback.
+External HTTPS media uses the same Markdown image syntax. GIFs and other supported images keep image semantics and optional Obsidian dimensions. Direct audio and video files use native controls. PDFs use a lazy frame with a visible link for browsers or servers that cannot display the document. YouTube, Bilibili, and Vimeo links become privacy-conscious, lazy player frames, while X or Twitter status links become lazy Tweet embeds with a normal link as their fallback.
 
 ```md
 ![Animation|320x180](https://media.example/loop.gif)
 ![Product tour](https://cdn.example/tour.mp4)
+![Interview](https://cdn.example/interview.mp3)
+![Paper](https://cdn.example/paper.pdf#page=3&height=560)
+![arXiv paper](https://arxiv.org/pdf/2609.12345)
 ![Conference talk](https://www.youtube.com/watch?v=NnTvZWp5Q7o&t=1m30s)
 ![](https://www.bilibili.com/video/BV1E7411e7hC?p=2)
 ![](https://vimeo.com/212731897)
 ![](https://x.com/obsdmd/status/1580548874246443010)
 ```
+
+Supported files follow [Obsidian's accepted formats](https://obsidian.md/help/file-formats): images (`avif`, `bmp`, `gif`, `jpeg`, `jpg`, `png`, `svg`, `webp`, plus `apng`), audio (`3gp`, `flac`, `m4a`, `mp3`, `ogg`, `wav`), video (`mkv`, `mov`, `mp4`, `ogv`, `webm`), and PDF. Codec support depends on the browser. Remote files are recognized by the URL path's extension, including uppercase extensions and URLs with query parameters; arXiv `/pdf/` URLs also work without an extension. PDF fragments accept a positive `page` and a `height` between 64 and 4096. Ordinary Markdown links stay links. The compiler does not fetch remote notes, render Canvas or Bases data, or expand shortened provider URLs.
 
 Use an explicit iframe only when the page cannot be represented by one of those media forms:
 

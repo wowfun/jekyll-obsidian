@@ -74,6 +74,11 @@ messages:
   context: 上下文
   previous: 上一页
   next: 下一页
+  pagination: 分页导航
+  page_number: 第 {page} 页
+  page_input: 页码
+  page_go: 跳转
+  page_jump_error: 请输入 1 到 {pages} 之间的整数。
   manual: 手册
   dispatch: 通讯
   note: 笔记

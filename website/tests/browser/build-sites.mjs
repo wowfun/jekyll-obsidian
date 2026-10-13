@@ -66,6 +66,23 @@ try {
   await rm(propertiesHost, { force: true, recursive: true });
 }
 
+const mediaHost = await mkdtemp(path.join(tmpdir(), "jekyll-obsidian-media-"));
+try {
+  await mkdir(path.join(mediaHost, "vault/_translations/zh-CN"), { recursive: true });
+  await mkdir(path.join(mediaHost, ".jekyll-obsidian-cache"));
+  await writeFile(path.join(mediaHost, ".jekyll-obsidian-cache/github-markdown-browser.json"), JSON.stringify({ version: 1, documents: [] }));
+  await writeFile(path.join(mediaHost, "host.yml"), "title: Media fixture with a long site name\nwebsite:\n  source: vault\n  repository: example/media\n  contacts: []\n  features:\n    search: true\n  i18n:\n    enabled: true\n    locales: [en, zh-CN]\n");
+  await writeFile(path.join(mediaHost, "vault/_locale.yml"), "name: English\n");
+  await copyFile(path.join(projectRoot, "jekyll-obsidian-docs/_translations/zh-CN/_locale.yml"), path.join(mediaHost, "vault/_translations/zh-CN/_locale.yml"));
+  const body = "![Figure](https://media.example/figure.svg)\n\n![Interview](https://media.example/interview.wav)\n\n![Demo](https://media.example/demo.mp4)\n\n![Paper](https://papers.example/paper.pdf#page=3&height=560)\n\n![Video](https://youtu.be/NnTvZWp5Q7o)\n";
+  for (const [prefix, title] of [["", "Media"], ["_translations/zh-CN/", "媒体"]]) {
+    await writeFile(path.join(mediaHost, `vault/${prefix}index.md`), `---\npublish: true\n---\n# ${title}\n` + body);
+  }
+  await buildFixtureSites(mediaHost, "media", path.join(mediaHost, "host.yml"));
+} finally {
+  await rm(mediaHost, { force: true, recursive: true });
+}
+
 const archiveHost = await mkdtemp(path.join(tmpdir(), "jekyll-obsidian-archive-"));
 try {
   await mkdir(path.join(archiveHost, "vault/items"), { recursive: true });

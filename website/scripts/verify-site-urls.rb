@@ -333,6 +333,8 @@ class SiteUrlVerifier
           verify_player_frame(node, value, source)
         elsif node["data-website-external-frame"] == "web"
           verify_web_frame(node, value, source)
+        elsif node.key?("data-website-external-pdf")
+          verify_pdf_frame(node, value, source)
         else
           add_error("#{source}: external iframe is missing a compiler-owned marker: #{value.inspect}")
         end
@@ -390,6 +392,25 @@ class SiteUrlVerifier
     end
   end
 
+  def verify_pdf_frame(node, value, source)
+    descriptor = JekyllObsidian::ExternalMedia.resolve(value)
+    valid = descriptor&.kind == :pdf && descriptor.source_url == value &&
+      node["class"].to_s.split.include?("website-external-pdf__viewport") &&
+      !node["title"].to_s.strip.empty? && node["loading"] == "lazy" &&
+      node["referrerpolicy"] == "strict-origin-when-cross-origin" &&
+      node["sandbox"] == JekyllObsidian::ExternalMedia::PDF_SANDBOX &&
+      JekyllObsidian::ExternalMedia.dimension(node["height"]) &&
+      node.attribute_nodes.none? { |attribute| attribute.name.match?(/\Aon/i) } &&
+      %w[srcdoc style allow].none? { |name| node.key?(name) }
+    add_error("#{source}: external PDF iframe is not canonical: #{value.inspect}") unless valid
+    wrapper = node.ancestors("figure").find { |candidate| candidate["class"].to_s.split.include?("website-external-pdf") }
+    fallback = wrapper&.at_css("a.website-external-pdf__fallback")
+    unless fallback && fallback["href"] == descriptor&.fallback_url && fallback["target"] == "_blank" &&
+        fallback["rel"].to_s.split.sort == %w[noopener noreferrer]
+      add_error("#{source}: external PDF iframe is missing its fallback link")
+    end
+  end
+
   def verify_tweets(document, source)
     document.css("[data-website-tweet]").each do |node|
       identifier = node["data-website-tweet"].to_s
@@ -417,8 +438,9 @@ class SiteUrlVerifier
       end
 
       descriptor = JekyllObsidian::ExternalMedia.resolve(value)
-      unless descriptor&.kind == :direct_video && node.name != "audio" && node.ancestors("audio").empty?
-        add_error("#{source}: external media source is not a supported direct video: #{value.inspect}")
+      kind = node.name == "audio" || !node.ancestors("audio").empty? ? :direct_audio : :direct_video
+      unless descriptor&.kind == kind
+        add_error("#{source}: external media source has an unsupported file type: #{value.inspect}")
       end
     rescue URI::InvalidURIError, JekyllObsidian::ExternalMedia::Invalid
       add_error("#{source}: invalid external media source #{value.inspect}")

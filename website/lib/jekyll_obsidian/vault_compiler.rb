@@ -1613,7 +1613,11 @@ module JekyllObsidian
       when :image
         image_node(node.document, occurrence, descriptor.source_url)
       when :direct_video
-        external_video_node(node.document, descriptor, occurrence.display)
+        external_av_node(node.document, descriptor, occurrence.display, "video")
+      when :direct_audio
+        external_av_node(node.document, descriptor, occurrence.display, "audio")
+      when :pdf
+        external_pdf_node(node.document, descriptor, occurrence.display)
       when :player
         external_player_node(node.document, descriptor, occurrence.display)
       when :web_frame
@@ -2651,16 +2655,39 @@ module JekyllObsidian
       node
     end
 
-    def external_video_node(document, descriptor, label)
-      node = media_node(document, "video", descriptor.source_url, descriptor.media_type)
-      node["class"] = "website-external-video"
+    def external_av_node(document, descriptor, label, kind)
+      node = media_node(document, kind, descriptor.source_url, descriptor.media_type)
+      node["class"] = "website-external-#{kind}"
       node["aria-label"] = label.to_s.strip unless label.to_s.strip.empty?
       fallback = Nokogiri::XML::Node.new("a", document)
       fallback["href"] = descriptor.fallback_url
       fallback["rel"] = "noopener noreferrer"
-      fallback.content = label.to_s.strip.empty? ? "Open video" : label.to_s.strip
+      fallback.content = label.to_s.strip.empty? ? "Open #{kind}" : label.to_s.strip
       node.add_child(fallback)
       node
+    end
+
+    def external_pdf_node(document, descriptor, label)
+      wrapper = Nokogiri::XML::Node.new("figure", document)
+      wrapper["class"] = "website-external-pdf"
+      frame = Nokogiri::XML::Node.new("iframe", document)
+      frame["class"] = "website-external-pdf__viewport"
+      frame["data-website-external-pdf"] = ""
+      frame["sandbox"] = descriptor.iframe_sandbox
+      frame["src"] = descriptor.source_url
+      frame["title"] = label.to_s.strip.empty? ? "PDF document" : label.to_s.strip
+      frame["height"] = descriptor.height.to_s
+      frame["loading"] = "lazy"
+      frame["referrerpolicy"] = "strict-origin-when-cross-origin"
+      wrapper.add_child(frame)
+      fallback = Nokogiri::XML::Node.new("a", document)
+      fallback["class"] = "website-external-pdf__fallback"
+      fallback["href"] = descriptor.fallback_url
+      fallback["target"] = "_blank"
+      fallback["rel"] = "noopener noreferrer"
+      fallback.content = label.to_s.strip.empty? ? "Open PDF" : label.to_s.strip
+      wrapper.add_child(fallback)
+      wrapper
     end
 
     def external_player_node(document, descriptor, label)

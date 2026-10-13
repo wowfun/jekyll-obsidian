@@ -52,6 +52,7 @@ module JekyllObsidian
     X_HANDLE = /\A[A-Za-z0-9_]{1,15}\z/
     X_STATUS_ID = /\A[1-9]\d*\z/
     IFRAME_SANDBOX = "allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox allow-presentation"
+    PDF_SANDBOX = "allow-scripts allow-same-origin"
 
     module_function
 
@@ -77,14 +78,32 @@ module JekyllObsidian
         return vimeo(uri) if VIMEO_HOSTS.include?(host)
       end
 
-      if MediaPolicy.kind(uri.path.to_s) == :video
+      file_kind = MediaPolicy.kind(uri.path.to_s)
+      file_kind = :pdf if %w[arxiv.org www.arxiv.org].include?(host) && uri.path.match?(%r{\A/pdf/(?:\d{4}\.\d{4,5}|[a-z-]+(?:\.[A-Z]{2})?/\d{7})(?:v[1-9]\d*)?(?:\.pdf)?\z})
+      if %i[audio video].include?(file_kind)
         validate_https!(uri)
         return Descriptor.new(
-          kind: :direct_video,
+          kind: file_kind == :audio ? :direct_audio : :direct_video,
           source_url: uri.to_s,
           fallback_url: uri.to_s,
           origin: origin(uri),
           media_type: MediaPolicy.media_type(uri.path)
+        )
+      end
+
+      if file_kind == :pdf
+        page, height = pdf_options(uri.fragment)
+        uri.fragment = nil
+        fallback = uri.to_s
+        uri.fragment = "page=#{page}" if page
+        return Descriptor.new(
+          kind: :pdf,
+          source_url: uri.to_s,
+          fallback_url: fallback,
+          origin: origin(uri),
+          media_type: "application/pdf",
+          iframe_sandbox: PDF_SANDBOX,
+          height: height || 640
         )
       end
 
@@ -329,6 +348,23 @@ module JekyllObsidian
 
       number = text.to_i
       number if number.between?(64, 4096)
+    end
+
+    def pdf_options(fragment)
+      return [nil, nil] if fragment.nil? || fragment.empty?
+
+      pairs = URI.decode_www_form(fragment)
+      unless pairs.all? { |key, value| %w[page height].include?(key) && value.match?(POSITIVE_INTEGER) } &&
+          pairs.map(&:first).uniq.length == pairs.length
+        raise Invalid, "PDF fragment accepts one positive page and height only"
+      end
+      options = pairs.to_h
+      height = dimension(options["height"])
+      raise Invalid, "PDF height must be between 64 and 4096" if options["height"] && !height
+
+      [options["page"]&.to_i, height]
+    rescue ArgumentError => exception
+      raise Invalid, exception.message
     end
 
     def safe_title(value)

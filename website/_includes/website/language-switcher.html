@@ -1,9 +1,8 @@
 {% if page.website.i18n.localizations and page.website.i18n.localizations.size > 1 %}
   {% assign ui = page.website.i18n.messages %}
   <details class="language-switcher" data-language-switcher>
-    <summary class="site-action" aria-label="{{ ui.language | default: 'Language' | escape }}: {{ page.website.i18n.name | escape }}">
-      <span>{{ page.website.i18n.name | escape }}</span>
-      <span aria-hidden="true">⌄</span>
+    <summary class="site-action" aria-label="{{ ui.language | default: 'Language' | escape }}: {{ page.website.i18n.name | escape }}" title="{{ ui.language | default: 'Language' | escape }}: {{ page.website.i18n.name | escape }}">
+      {% include website/action-icon.html name='language' %}
     </summary>
     <nav class="language-switcher__panel" aria-label="{{ ui.language | default: 'Language' | escape }}">
       <ul>

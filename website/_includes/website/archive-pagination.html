@@ -1,7 +1,14 @@
-<nav class="archive-pagination" aria-label="{{ ui.page_label | default: 'Page' | escape }}" data-archive-pagination data-page-label="{{ ui.page_label | escape }}" data-result-label="{{ ui.archive_results | escape }}">
-  <button type="button" data-archive-page="prev" disabled>{{ ui.previous | default: 'Previous' | escape }}</button>
-  <span data-archive-page-status></span>
-  <button type="button" data-archive-page="next"{% if page.website.theme_data.archive.total <= page.website.theme_data.archive.page_size %} disabled{% endif %}>{{ ui.next | default: 'Next' | escape }}</button>
+<nav class="archive-pagination" aria-label="{{ ui.pagination | default: 'Pagination' | escape }}" data-archive-pagination data-page-label="{{ ui.page_label | escape }}" data-result-label="{{ ui.archive_results | escape }}" data-number-label="{{ ui.page_number | escape }}" data-jump-error="{{ ui.page_jump_error | escape }}">
+  <span data-archive-page-status aria-live="polite" aria-atomic="true"></span>
+  <div class="archive-pagination__navigation">
+    <button type="button" data-archive-page="prev" aria-label="{{ ui.previous | default: 'Previous' | escape }}" title="{{ ui.previous | default: 'Previous' | escape }}" disabled>{% include website/action-icon.html name='previous' class='archive-pagination__arrow' %}<span>{{ ui.previous | default: 'Previous' | escape }}</span></button>
+    <div class="archive-pagination__numbers" data-archive-page-numbers></div>
+    <button type="button" data-archive-page="next" aria-label="{{ ui.next | default: 'Next' | escape }}" title="{{ ui.next | default: 'Next' | escape }}"{% if page.website.theme_data.archive.total <= page.website.theme_data.archive.page_size %} disabled{% endif %}>{% include website/action-icon.html name='next' class='archive-pagination__arrow' %}<span>{{ ui.next | default: 'Next' | escape }}</span></button>
+  </div>
+  <form class="archive-pagination__jump" data-archive-page-jump hidden>
+    <label><span class="visually-hidden">{{ ui.page_input | default: 'Page number' | escape }}</span><input type="number" inputmode="numeric" min="1" step="1" required disabled></label>
+    <button type="submit">{{ ui.page_go | default: 'Go' | escape }}</button>
+  </form>
 </nav>
 <p role="status" aria-live="polite" data-archive-status data-loading="{{ ui.archive_loading | default: 'Loading selected entries…' | escape }}" data-unavailable="{{ ui.archive_unavailable | default: 'Selected entries could not be loaded. Retry or clear the filters.' | escape }}"></p>
 <button type="button" data-archive-retry hidden>{{ ui.retry | default: 'Retry' | escape }}</button>

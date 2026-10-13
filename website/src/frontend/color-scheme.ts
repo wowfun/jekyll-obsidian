@@ -29,6 +29,7 @@ export function applyColorScheme(
       ? button.dataset.schemeUseDark || "Use dark color scheme"
       : button.dataset.schemeUseLight || "Use light color scheme");
     button.setAttribute("aria-pressed", String(scheme === "dark"));
+    button.title = button.getAttribute("aria-label") || "";
     const label = button.querySelector<HTMLElement>("[data-color-scheme-label]");
     if (label) label.textContent = next === "dark"
       ? button.dataset.schemeDark || "Dark"

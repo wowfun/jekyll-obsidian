@@ -6,6 +6,7 @@ import { renderArchiveLedger } from "./archive-ledger";
 import { loadFavoriteArchive, renderFavoriteFilters, selectFavorites } from "./favorite-archive";
 import { FAVORITES_CHANGE } from "./favorites-store";
 import { favoritesUI } from "./favorite-controls";
+import { renderArchivePagination } from "./archive-pagination";
 
 export function initialisePagedArchive(root: HTMLElement): () => void {
   const client = createArchiveClient(root.dataset.archiveUrl!);
@@ -54,9 +55,7 @@ export function initialisePagedArchive(root: HTMLElement): () => void {
           else control.removeAttribute("aria-current");
         }
       }
-      const pageText = pagination.dataset.pageLabel || "Page {page} of {pages}", resultText = pagination.dataset.resultLabel || "{count} entries";
-      pagination.querySelector<HTMLElement>("[data-archive-page-status]")!.textContent = `${resultText.replace("{count}", String(result.count))} · ${pageText.replace("{page}", String(result.page)).replace("{pages}", String(result.pages))}`;
-      prev.disabled = result.page <= 1; next.disabled = result.page >= result.pages;
+      renderArchivePagination(pagination, result.page, result.pages, result.count);
       empty.hidden = result.count !== 0; status.textContent = saved?.refreshFailed ? favoritesUI().refreshError || "Could not refresh articles. Your saved summaries are shown. Retry to continue." : ""; retry.hidden = !saved?.refreshFailed; root.removeAttribute("aria-busy");
     } catch {
       if (alive && turn === epoch) { status.textContent = status.dataset.unavailable || "Entries could not be loaded."; retry.hidden = false; root.removeAttribute("aria-busy"); reading.refresh(); }
@@ -70,7 +69,12 @@ export function initialisePagedArchive(root: HTMLElement): () => void {
     if (control.hasAttribute("data-archive-retry")) { void refresh(); return; }
     const nextUrl = new URL(window.location.href);
     if (control.hasAttribute("data-archive-clear")) nextUrl.search = "";
-    else if (control.dataset.archivePage) nextUrl.searchParams.set("page", String(Math.max(1, current.page + (control.dataset.archivePage === "next" ? 1 : -1))));
+    else if (control.dataset.archivePage) {
+      const target = control.dataset.archivePage;
+      const page = target === "next" ? current.page + 1 : target === "prev" ? current.page - 1 : Number(target);
+      if (!Number.isSafeInteger(page)) return;
+      nextUrl.searchParams.set("page", String(Math.max(1, Math.min(current.pages, page))));
+    }
     else {
       nextUrl.searchParams.delete("page");
       if (control.dataset.archiveFacet) {
@@ -86,12 +90,30 @@ export function initialisePagedArchive(root: HTMLElement): () => void {
     if (nextUrl.search !== window.location.search) history.pushState(null, "", nextUrl.pathname + nextUrl.search);
     void refresh();
   }
+  const jump = pagination.querySelector<HTMLFormElement>("[data-archive-page-jump]")!;
+  const jumpInput = jump.querySelector<HTMLInputElement>("input")!;
+  const onInput = () => { jumpInput.setCustomValidity(""); };
+  const onInvalid = () => { jumpInput.setCustomValidity((pagination.dataset.jumpError || "Enter a whole number from 1 to {pages}.").replace("{pages}", String(current.pages))); };
+  function submit(event: SubmitEvent): void {
+    event.preventDefault();
+    if (root.hasAttribute("aria-busy")) return;
+    const page = Number(jumpInput.value);
+    if (!Number.isSafeInteger(page) || page < 1 || page > current.pages || !jumpInput.value) {
+      onInvalid();
+      jumpInput.reportValidity(); return;
+    }
+    const url = new URL(location.href);
+    page === 1 ? url.searchParams.delete("page") : url.searchParams.set("page", String(page));
+    if (url.search !== location.search) history.pushState(null, "", url.pathname + url.search);
+    void refresh();
+  }
   const onFavorites = () => { if (favorites) { pendingSearch = undefined; void refresh(); } };
   const onPop = () => { void refresh(); };
   const onShow = (event: PageTransitionEvent) => { if (event.persisted) void refresh(); };
   window.addEventListener(FAVORITES_CHANGE, onFavorites);
+  jump.addEventListener("submit", submit); jumpInput.addEventListener("input", onInput); jumpInput.addEventListener("invalid", onInvalid);
   document.addEventListener("click", click); window.addEventListener("popstate", onPop); window.addEventListener("pageshow", onShow);
   // SSR is immediately useful; hydration verifies the complete page projection.
   void refresh();
-  return () => { alive = false; controller.abort(); reading.dispose(); cleanupExport(); client.dispose(); window.removeEventListener(FAVORITES_CHANGE, onFavorites); document.removeEventListener("click", click); window.removeEventListener("popstate", onPop); window.removeEventListener("pageshow", onShow); };
+  return () => { alive = false; controller.abort(); reading.dispose(); cleanupExport(); client.dispose(); jump.removeEventListener("submit", submit); jumpInput.removeEventListener("input", onInput); jumpInput.removeEventListener("invalid", onInvalid); window.removeEventListener(FAVORITES_CHANGE, onFavorites); document.removeEventListener("click", click); window.removeEventListener("popstate", onPop); window.removeEventListener("pageshow", onShow); };
 }

@@ -2,6 +2,8 @@
 
 [English](README.md) | 简体中文
 
+两个主题的顶栏操作均使用带无障碍名称和悬停提示的紧凑图标。笔记可嵌入受支持的本地文件和 HTTPS 媒体，包括原生音视频、PDF、YouTube、Bilibili、Vimeo 和 X；格式及示例见[语法指南](website/jekyll-obsidian-docs/_translations/zh-CN/docs/Syntax.md)。分页归档显示最多五个邻近页码，并支持输入页码直接跳转。
+
 `jekyll-obsidian` 可以将 Markdown 文件夹（包括 Obsidian 知识库）发布为博客或文档站。继续在编辑器中写作并推送，GitHub Actions 就会构建和发布。仓库只需添加配置文件和工作流，发布实现通过 `jekyll-obsidian-site` Ruby gem 安装。
 
 在线预览：[sinputer.top/jekyll-obsidian](https://sinputer.top/jekyll-obsidian/)

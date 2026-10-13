@@ -3,6 +3,72 @@
 require "test_helper"
 
 class ExternalMediaTest < Minitest::Test
+  def test_direct_audio_formats_use_native_controls_and_exact_csp
+    %w[3gp flac m4a mp3 ogg wav].each do |extension|
+      url = "https://cdn.example/interview.#{extension.upcase}?token=signed"
+      result = compile(note("index.md", "---\npublish: true\n---\n![Interview](#{url})\n"))
+      assert result.success?, result.diagnostics.map(&:message).join("\n")
+      output = page(result, "/")
+      audio = Nokogiri::HTML5.fragment(output.content).at_css("audio.website-external-audio")
+      assert_equal "controls", audio["controls"]
+      assert_equal "metadata", audio["preload"]
+      assert_equal "Interview", audio["aria-label"]
+      assert_equal url, audio.at_css("source")["src"]
+      assert_equal JekyllObsidian::MediaPolicy.media_type("a.#{extension}"), audio.at_css("source")["type"]
+      assert_equal ["https://cdn.example"], output.data.dig("website", "content_security", "media_sources")
+      assert_equal url, audio.at_css("a")["href"]
+    end
+  end
+
+  def test_remote_pdf_keeps_signed_query_and_normalizes_page_and_height
+    url = "https://cdn.example/paper.PDF?token=signed#height=560&page=3"
+    result = compile(note("index.md", "---\npublish: true\n---\n![Paper](#{url})\n"))
+    assert result.success?, result.diagnostics.map(&:message).join("\n")
+    output = page(result, "/")
+    document = Nokogiri::HTML5.fragment(output.content)
+    frame = document.at_css("iframe[data-website-external-pdf]")
+    assert_equal "https://cdn.example/paper.PDF?token=signed#page=3", frame["src"]
+    assert_equal "560", frame["height"]
+    assert_equal "Paper", frame["title"]
+    assert_equal "lazy", frame["loading"]
+    assert_equal JekyllObsidian::ExternalMedia::PDF_SANDBOX, frame["sandbox"]
+    assert_equal "https://cdn.example/paper.PDF?token=signed", document.at_css("a.website-external-pdf__fallback")["href"]
+    assert_equal ["https://cdn.example"], output.data.dig("website", "content_security", "frame_sources")
+    assert_empty output.data.dig("website", "content_security", "media_sources")
+  end
+
+  def test_arxiv_pdf_urls_work_without_an_extension_but_abstract_urls_stay_links
+    %w[2609.12345 2609.1234v2 hep-th/9901001 math.GT/0309136v1].each do |identifier|
+      descriptor = JekyllObsidian::ExternalMedia.resolve("https://arxiv.org/pdf/#{identifier}")
+      assert_equal :pdf, descriptor.kind
+      assert_equal 640, descriptor.height
+    end
+    result = compile(note("index.md", "---\npublish: true\n---\n[Abstract](https://arxiv.org/abs/2609.12345)\n"))
+    assert result.success?
+    refute_includes page(result, "/").content, "<iframe"
+  end
+
+  def test_invalid_remote_pdf_options_and_audio_fragments_fail_predictably
+    %w[page=0 page=-1 page=1&page=2 height=63 height=4097 toolbar=0 page=1&unknown=x].each do |fragment|
+      result = compile(note("index.md", "---\npublish: true\n---\n![](https://cdn.example/paper.pdf##{fragment})\n"))
+      refute result.success?, fragment
+      assert result.diagnostics.any? { |item| item.code == "invalid_external_media" }, fragment
+    end
+    result = compile(note("index.md", "---\npublish: true\n---\n![](https://cdn.example/interview.mp3#t=3)\n"))
+    refute result.success?
+    assert result.diagnostics.any? { |item| item.code == "invalid_external_media" }
+  end
+
+  def test_transclusion_carries_audio_and_pdf_origins_to_the_host
+    result = compile(
+      note("index.md", "---\npublish: true\n---\n![[media]]\n"),
+      note("media.md", "---\npublish: true\n---\n![Audio](https://cdn.example/a.ogg)\n\n![PDF](https://papers.example/a.pdf)\n")
+    )
+    assert result.success?, result.diagnostics.map(&:message).join("\n")
+    assert_equal ["https://cdn.example"], page(result, "/").data.dig("website", "content_security", "media_sources")
+    assert_equal ["https://papers.example"], page(result, "/").data.dig("website", "content_security", "frame_sources")
+  end
+
   def test_external_images_keep_image_semantics_and_obsidian_dimensions
     result = compile(note("index.md", <<~MARKDOWN))
       ---

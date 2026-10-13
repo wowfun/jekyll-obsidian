@@ -14,6 +14,7 @@ Choose one built-in theme for each build:
 Both themes enable search, wiki-link reading previews, the page outline, note relations, and an interactive local graph by default. A note participating in a link or embed relation with another public note keeps its local graph at the top of the right-hand context rail; isolated and self-link-only notes omit it. Its two controls open the complete public graph or an expanded view of the current note's neighbourhood. The complete graph still contains every public note, and `/graph/` is not a generated route.
 
 Switching themes does not change note URLs.
+Both themes use compact header icons with accessible names and hover hints. Supported local files and HTTPS media embed in notes, including native audio/video, PDFs, YouTube, Bilibili, Vimeo and X. See [Syntax](website/jekyll-obsidian-docs/docs/Syntax.md) for formats and examples. Paged archives show up to five nearby page links and accept a page number for direct navigation.
 The default build and deployment theme is `minimal`. Both themes can publish locale overlays from `_translations/<locale>/` and attach GitHub Discussions comments to posts. When the corresponding mapping is present and omits `enabled`, localization defaults on only for `docs`, while comments default on only for `minimal`.
 
 See [Localization](website/jekyll-obsidian-docs/docs/Localization.md) for locale manifests, which content controls site structure, fallback pages, and SEO behavior.
