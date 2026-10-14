@@ -1,0 +1,34 @@
+import { test, expect } from '@playwright/test';
+for (const locale of ['en','zh-CN']) test(`an export selection is refreshed before downloading after deployment changes in ${locale}`, async ({page})=>{
+  await page.goto('/__site__/minimal-export/'+(locale==='en'?'':'zh-CN/'));
+  await expect(page.locator('[data-paged-archive]')).not.toHaveAttribute('aria-busy','true');
+  const manifestUrl=(await page.locator('[data-paged-archive]').getAttribute('data-archive-url'))!;
+  const original=await (await page.request.get(manifestUrl)).json(),cards=[];
+  for(const file of original.chunks) cards.push(...(await (await page.request.get(new URL(file,new URL(manifestUrl,page.url())).href)).json()).cards);
+  await page.locator('[data-archive-export-open]').click();
+  const panel=page.locator('[data-dialog="export"]');
+  await expect(panel.locator('[data-export-download]')).toBeEnabled();
+  const start=await panel.locator('[data-export-start]').inputValue(),end=await panel.locator('[data-export-end]').inputValue();
+  const selected=cards.filter(card=>card.display_date>=start&&card.display_date<=end).length;
+  await expect(panel.locator('[data-export-status]')).toContainText(String(selected));
+  const generation='d'.repeat(64),updated=cards.map((card,index)=>index===cards.length-2?{...card,title:'Outside selected date',display_date:'2025-12-31',published_at:'2025-12-31T12:00:00+08:00',year:'2025',month:'2025-12'}:{...card,title:'Updated '+card.title});
+  const calendar:Record<string,Record<string,[number,number]>>={years:{},months:{},days:{}};
+  updated.forEach((card,index)=>{for(const [name,key] of [['years',card.year],['months',card.month],['days',card.display_date]]){calendar[name!]![key!]||=[index,index];calendar[name!]![key!]![1]=index+1;}});
+  const data={...original,...calendar,generation};
+  await page.route('**/export-generation/**',route=>{
+    const url=route.request().url(),index=Number(url.match(/cards-(\d+)\.json/)?.[1]);
+    return route.fulfill({json:url.endsWith('manifest.json')?data:{generation,start:index*data.page_size,cards:updated.slice(index*data.page_size,(index+1)*data.page_size)}});
+  });
+  await page.route('**/archive/current.json',route=>route.fulfill({json:{version:1,url:'/export-generation/manifest.json'}}));
+  await page.evaluate(()=>window.dispatchEvent(new PageTransitionEvent('pageshow',{persisted:true})));
+  await expect(page.locator('.blog-ledger__main strong').first()).toContainText('Updated ');
+  let downloads=0; page.on('download',()=>downloads++);
+  await panel.locator('[data-export-download]').click();
+  await expect(panel.locator('[data-export-status]')).toHaveText(new RegExp(`\\b${selected-1}\\b`));
+  await expect(panel.locator('[data-export-status]')).toContainText(locale==='en'?'The site changed':'站点已更新');
+  await page.screenshot({path:test.info().outputPath('updated-selection.png')});
+  expect(downloads).toBe(0);
+  await expect(panel.locator('[data-export-download]')).toBeEnabled();
+  const downloaded=page.waitForEvent('download'); await panel.locator('[data-export-download]').click();
+  await downloaded; expect(downloads).toBe(1);
+});

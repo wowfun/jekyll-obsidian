@@ -55,6 +55,16 @@ export function initialiseArchiveExport(client: ArchiveClient): () => void {
       group.append(choices); facets.append(group);
     }
   }
+  async function ensureGeneration(signal: AbortSignal): Promise<boolean> {
+    const current = await client.manifest(signal); signal.throwIfAborted();
+    if (current.generation === data?.generation) return true;
+    // Ordinals and cached bodies belong to the panel's original deployment.
+    // Reopen with current metadata so the reader reviews the new selection
+    // before a second click can download it.
+    await open();
+    if (!disposed && dialog!.open) status.textContent = `${labels("updated")} ${status.textContent}`;
+    return false;
+  }
   async function recount(debounce = false): Promise<void> {
     calculation.abort(); calculation = new AbortController();
     const signal = AbortSignal.any([session.signal, calculation.signal]);
@@ -69,6 +79,7 @@ export function initialiseArchiveExport(client: ArchiveClient): () => void {
     });
     if (signal.aborted) return;
     try {
+      if (!await ensureGeneration(signal)) return;
       const result = await client.select(exportState(data, filters, start.value, end.value), "all", signal, MAX_EXPORT_ENTRIES);
       if (signal.aborted || disposed) return;
       if (result.count > MAX_EXPORT_ENTRIES) { status.textContent = message("tooMany", result.count).replace("{limit}", String(MAX_EXPORT_ENTRIES)); return; }
@@ -112,6 +123,7 @@ export function initialiseArchiveExport(client: ArchiveClient): () => void {
     const update = () => { progress.value = bodies.size; status.textContent = labels("progress").replace("{done}", String(bodies.size)).replace("{count}", String(current.ordinals.length)); };
     update();
     try {
+      if (!await ensureGeneration(signal)) return;
       if (!snapshot.cards.length) {
         progress.removeAttribute('value'); status.textContent = labels('loadingCards');
         snapshot.cards = await client.cards(current.ordinals, signal); signal.throwIfAborted();

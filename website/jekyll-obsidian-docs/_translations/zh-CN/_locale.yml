@@ -48,6 +48,7 @@ messages:
   export_failed: "有 {count} 条正文载入失败，重试后可下载完整文件。"
   export_complete: "已下载 {count} 条内容。"
   export_cancelled: "已取消导出。"
+  export_updated: "站点已更新，请核对新的筛选结果后再下载。"
   flat_reading: 平铺阅读
   reading_loading: 正在载入正文…
   reading_unavailable: 正文载入失败。

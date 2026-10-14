@@ -6,7 +6,7 @@ export const FAVORITES_CHANGE = "website:favorites-change";
 export const FAVORITES_RECOVERY_CHANGE = "website:favorites-recovery-change";
 export interface Favorite { id: string; saved_at: string; snapshots: Record<string, ArchiveCard> }
 export interface FavoriteCollection { entries: ReadonlyMap<string, Favorite>; revision: string | null }
-let cached: { key: string; raw: string | null; entries: Map<string, Favorite>; damaged: boolean } | undefined;
+let cached: { key: string; raw: string | null; entries: ReadonlyMap<string, Favorite>; damaged: boolean } | undefined;
 export class FavoritesStorageError extends Error {
   constructor(public code: "damaged" | "unreadable" | "unsupported" | "recovery_required") { super(code); }
 }
@@ -37,10 +37,33 @@ export function favoriteCard(value: unknown): ArchiveCard {
 }
 export function readFavoriteCollection(): FavoriteCollection {
   const key = favoritesKey(), raw = localStorage.getItem(key);
-  if (cached?.key !== key || cached.raw !== raw) cached = { key, raw, ...decodeFavorites(raw) };
+  if (cached?.key !== key || cached.raw !== raw) {
+    const decoded = decodeFavorites(raw);
+    cached = { key, raw, entries: immutableFavorites(decoded.entries), damaged: decoded.damaged };
+  }
   return { entries: cached.entries, revision: raw };
 }
 export function readFavorites(): Map<string, Favorite> { return new Map(readFavoriteCollection().entries); }
+function immutableFavorites(entries: Map<string, Favorite>): ReadonlyMap<string, Favorite> {
+  for (const entry of entries.values()) {
+    if (Object.isFrozen(entry)) continue;
+    for (const card of Object.values(entry.snapshots)) {
+      for (const ids of Object.values(card.facets)) Object.freeze(ids);
+      Object.freeze(card.facets); Object.freeze(card.favorite_labels); Object.freeze(card);
+    }
+    Object.freeze(entry.snapshots); Object.freeze(entry);
+  }
+  // Freezing a Map does not disable set/delete/clear. Expose only its read API,
+  // including the map supplied to forEach, while preserving snapshot identities.
+  const view: ReadonlyMap<string, Favorite> = {
+    get size() { return entries.size; },
+    get: entries.get.bind(entries), has: entries.has.bind(entries),
+    keys: entries.keys.bind(entries), values: entries.values.bind(entries),
+    entries: entries.entries.bind(entries), [Symbol.iterator]: entries[Symbol.iterator].bind(entries),
+    forEach(callback, thisArg) { entries.forEach((entry, key) => callback.call(thisArg, entry, key, view)); }
+  };
+  return Object.freeze(view);
+}
 function decodeFavorites(raw: string | null): { entries: Map<string, Favorite>; damaged: boolean } {
   const result = new Map<string, Favorite>();
   if (!raw) return { entries: result, damaged: false };
@@ -82,7 +105,7 @@ function persist(entries: Map<string, Favorite>): void {
     }
   }
   localStorage.setItem(key, raw);
-  cached = { key, raw, entries, damaged: false };
+  cached = { key, raw, entries: immutableFavorites(entries), damaged: false };
 }
 export function favoriteRecoveryCopies(): { key: string; raw: string }[] {
   return favoriteRecoveryKeys().sort().flatMap(key => {
@@ -133,7 +156,7 @@ async function writeFavorites(operation: (entries: Map<string, Favorite>) => boo
     persist(entries);
     // Return the state actually read/written under this lock, rather than a
     // later revision that may belong to another tab's yet-unrendered changes.
-    return { entries, revision: cached!.raw };
+    return { entries: cached!.entries, revision: cached!.raw };
   });
 }
 export function snapshotCard(card: ArchiveCard, manifest?: Pick<ArchiveCollection, "labels" | "prefixes">): ArchiveCard {

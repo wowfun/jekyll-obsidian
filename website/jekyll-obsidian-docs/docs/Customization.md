@@ -355,6 +355,8 @@ The file contains the site, conditions, count, article metadata and complete pub
 Markdown, including media links. It uses the archive's order across every page.
 Up to four resources load concurrently. Cancel or close stops the download; any failed
 body prevents an incomplete file and retry reuses successfully loaded bodies from that task.
+If the site changes while the panel is open, its selection refreshes before downloading.
+Review the updated conditions and count, then click **Download Markdown** again.
 Progress counts successfully loaded bodies. Date edits briefly wait for typing to stop
 before calculating matches; download is disabled immediately while conditions change.
 Successful bodies also serve repeated downloads until the conditions change or the

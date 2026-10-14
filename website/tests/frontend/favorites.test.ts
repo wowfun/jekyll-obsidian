@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import type { ArchiveCard } from "../../src/frontend/archive-query";
 import { archiveState } from "../../src/frontend/archive-query";
-import { favoriteCard, favoriteRecoveryCopies, clearFavoriteRecovery, restoreFavoriteRecovery, favoritesKey, readFavorites, toggleFavorite, updateFavoriteSnapshots } from "../../src/frontend/favorites-store";
+import { favoriteCard, favoriteRecoveryCopies, clearFavoriteRecovery, restoreFavoriteRecovery, favoritesKey, readFavorites, readFavoriteCollection, toggleFavorite, updateFavoriteSnapshots } from "../../src/frontend/favorites-store";
 import { favoriteButton, initialiseFavorites, refreshFavoriteButtons } from "../../src/frontend/favorite-controls";
 import { favoriteManifest, loadFavoriteArchive, reconcileFavoriteArchive, selectFavorites } from "../../src/frontend/favorite-archive";
 
@@ -291,4 +291,44 @@ it("does not rewrite the collection for an already-applied explicit save or remo
   const write = vi.spyOn(localStorage, "setItem");
   await toggleFavorite(card("a"), "en", true); await toggleFavorite(card("missing"), "en", false);
   expect(write).not.toHaveBeenCalled();
+});
+
+it("keeps cached snapshots immutable without cloning them on every read", async () => {
+  await toggleFavorite({ ...card("a"), favorite_labels: { "source/hn": "HN" } });
+  const collection = readFavoriteCollection(), entry = collection.entries.get("a")!, snapshot = entry.snapshots.en!;
+  expect(Reflect.set(snapshot, "title", "Corrupted title")).toBe(false);
+  expect(Reflect.set(snapshot.facets.topic!, "0", "corrupted-topic")).toBe(false);
+  expect(Reflect.set(snapshot.favorite_labels!, "source/hn", "Corrupted label")).toBe(false);
+  expect(Reflect.set(entry.snapshots, "en", card("bad"))).toBe(false);
+  expect(Reflect.set(entry, "saved_at", "bad")).toBe(false);
+  expect(readFavoriteCollection().entries.get("a")!.snapshots.en).toBe(snapshot);
+  expect(readFavorites().get("a")!.snapshots.en!.title).toBe("Title a");
+});
+
+it("does not expose mutation methods or a mutable map through forEach", async () => {
+  await toggleFavorite(card("a"));
+  const collection = await updateFavoriteSnapshots([{ ...card("a"), title: "Updated a" }]);
+  expect(() => (collection.entries as Map<string, unknown>).clear()).toThrow();
+  collection.entries.forEach((_entry, _key, map) => expect(map).toBe(collection.entries));
+  expect(readFavoriteCollection().entries.size).toBe(1);
+  const copy = readFavorites(); copy.clear(); expect(readFavoriteCollection().entries.size).toBe(1);
+});
+
+it("refreshes the current locale while preserving a concurrent save in another locale", async () => {
+  await toggleFavorite(card("a"));
+  let release!: () => void; const gate = new Promise<void>(resolve => { release = resolve; });
+  const client = { manifest: async () => favoriteManifest([card("a")]), lookup: vi.fn(async () => { await gate; return new Map([["a", { ...card("a"), title: "Current English" }]]); }) };
+  const pending = loadFavoriteArchive(client, new AbortController().signal);
+  await vi.waitFor(() => expect(client.lookup).toHaveBeenCalled());
+  await toggleFavorite({ ...card("a"), title: "新的中文标题" }, "zh-CN", true); release();
+  expect((await pending).cards[0]!.title).toBe("Current English");
+  const snapshots = readFavorites().get("a")!.snapshots;
+  expect(snapshots.en!.title).toBe("Current English"); expect(snapshots["zh-CN"]!.title).toBe("新的中文标题");
+});
+
+it("reparses a changed SSR button snapshot and updates its label", () => {
+  const button = favoriteButton(card("a")); document.body.append(button);
+  button.dataset.favoriteCard = JSON.stringify(card("a")); refreshFavoriteButtons();
+  button.dataset.favoriteCard = JSON.stringify({ ...card("a"), title: "Changed title" }); refreshFavoriteButtons();
+  expect(button.getAttribute("aria-label")).toBe("Save: Changed title");
 });

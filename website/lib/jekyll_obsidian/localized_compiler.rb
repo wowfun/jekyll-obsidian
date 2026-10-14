@@ -77,6 +77,7 @@ module JekyllObsidian
       "export_failed" => "{count} entries could not be loaded. Retry to download the complete file.",
       "export_complete" => "Downloaded {count} entries.",
       "export_cancelled" => "Export cancelled.",
+      "export_updated" => "The site changed. Review the updated selection before downloading.",
       "language" => "Language",
       "translation_missing" => "This page is not translated yet. The default-language version is shown.",
       "skip_to_content" => "Skip to content",

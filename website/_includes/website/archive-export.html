@@ -31,7 +31,8 @@
   data-too-large="{{ ui.export_too_large | default: 'The export is too large. Narrow the dates or filters.' | escape }}"
   data-failed="{{ ui.export_failed | default: export_failed_default | escape }}"
   data-complete="{{ ui.export_complete | default: export_complete_default | escape }}"
-  data-cancelled="{{ ui.export_cancelled | default: 'Export cancelled.' | escape }}">
+  data-cancelled="{{ ui.export_cancelled | default: 'Export cancelled.' | escape }}"
+  data-updated="{{ ui.export_updated | default: 'The site changed. Review the updated selection before downloading.' | escape }}">
   <div class="website-dialog__sheet">
     <header class="website-dialog__header">
       <h2 class="website-dialog__title" id="archive-export-title">{{ ui.export_title | default: 'Export Markdown' | escape }}</h2>
