@@ -83,6 +83,8 @@ An image embed can include its width or width and height:
 
 Local audio, video, and PDF files use native browser controls. In v1, `.3gp` is audio and `.webm` is video. PDF embeds accept page and height options. Canvas and Bases files become download cards because v1 does not execute their data models.
 
+Local and remote PDF fragments accept only `page` and `height`. Unsupported options such as `zoom=100` fail the build (`invalid_pdf_options` for local files, `invalid_external_media` for remote URLs); remove them before building.
+
 External HTTPS media uses the same Markdown image syntax. GIFs and other supported images keep image semantics and optional Obsidian dimensions. Direct audio and video files use native controls. PDFs start as compact links with an optional preview action in browsers with a native PDF viewer. YouTube, Bilibili, and Vimeo links become privacy-conscious, lazy player frames, while X or Twitter status links become lazy Tweet embeds with a normal link as their fallback.
 
 ```md

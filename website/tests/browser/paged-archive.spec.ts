@@ -3,6 +3,27 @@ import { expect, test } from "@playwright/test";
 for (const locale of ["en", "zh-CN"]) {
   const root = "/__site__/minimal-archive/" + (locale === "en" ? "" : locale + "/");
 
+  test(`archive remains navigable after deployment discovery fails in ${locale}`, async ({ page }) => {
+    await page.goto(root);
+    const archive = page.locator('[data-paged-archive]'), titles = archive.locator('.blog-ledger__main strong');
+    await expect(archive).not.toHaveAttribute('aria-busy');
+    await page.route('**/archive/current.json', route => route.abort());
+    await page.evaluate(() => window.dispatchEvent(new PageTransitionEvent('pageshow', { persisted: true })));
+    await expect(archive).not.toHaveAttribute('aria-busy');
+    await expect(page.locator('[data-archive-status]')).toContainText(locale === 'en' ? 'Previously loaded' : '已加载');
+    await expect(page.locator('[data-archive-page=next]')).toBeEnabled();
+    await page.locator('[data-archive-page=next]').click();
+    await expect(titles).toHaveText(['Oldest']);
+    await page.locator('button[data-archive-facet=source][data-archive-value=hn]').click();
+    await expect(titles).toHaveText(['Newest', 'Oldest']);
+    await page.goBack();
+    await expect(titles).toHaveText(['Oldest']);
+    await page.unroute('**/archive/current.json');
+    await page.locator('[data-archive-retry]').click();
+    await expect(page.locator('[data-archive-status]')).toBeEmpty();
+    await expect(page.locator('[data-archive-retry]')).toBeHidden();
+  });
+
   test(`reading waits for offscreen rows and loads them after scrolling in ${locale}`, async ({ page }) => {
     await page.goto(root);
     await expect(page.locator('[data-archive-page-status]')).toHaveText(/3.*1.*2/);
@@ -11,6 +32,9 @@ for (const locale of ["en", "zh-CN"]) {
     const requests: string[] = [];
     page.on('request', request => { if (/\/items\/[ab]\/$/.test(request.url())) requests.push(request.url()); });
     await page.locator('[data-archive-reading-toggle]').click();
+    const readingSwitch = page.locator('[data-archive-reading-toggle]');
+    await expect(readingSwitch).toHaveAttribute('title', locale === 'en' ? 'Read in full: on' : '平铺阅读：已开启');
+    await expect(readingSwitch.locator('.site-action__reading-check')).toBeVisible();
     const rows = page.locator('[data-filter-item]');
     await expect(rows.first()).toHaveAttribute('data-reading-loaded', 'true');
     await expect(rows.last()).not.toHaveAttribute('data-reading-loaded');
@@ -18,6 +42,20 @@ for (const locale of ["en", "zh-CN"]) {
     await rows.last().scrollIntoViewIfNeeded();
     await expect(rows.last()).toHaveAttribute('data-reading-loaded', 'true');
     expect(requests).toHaveLength(2);
+  });
+
+  test(`reading switch exposes both states without relying on color in ${locale}`, async ({ page }) => {
+    await page.goto(root);
+    const toggle = page.locator('[data-archive-reading-toggle]');
+    await expect(toggle).toBeVisible();
+    await expect(toggle).toHaveAttribute('title', locale === 'en' ? 'Read in full: off' : '平铺阅读：已关闭');
+    await expect(toggle.locator('.site-action__reading-check')).toBeHidden();
+    await toggle.press('Space');
+    await expect(toggle).toHaveAttribute('aria-checked', 'true');
+    await expect(toggle.locator('.site-action__reading-check')).toBeVisible();
+    await toggle.press('Space');
+    await expect(toggle).toHaveAttribute('aria-checked', 'false');
+    await expect(toggle.locator('.site-action__reading-check')).toBeHidden();
   });
 
   test(`saved reading starts once on the selected page and reuses bodies in ${locale}`, async ({ page }) => {

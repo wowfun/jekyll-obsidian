@@ -353,6 +353,9 @@
     border-color: var(--teal);
   }
 
+  .site-action__reading-check { display: none; }
+  [aria-checked="true"] .site-action__reading-check { display: block; }
+
   .site-action__sun { display: none; }
   [data-color-scheme="dark"] .site-action__sun { display: block; }
   [data-color-scheme="dark"] .site-action__moon { display: none; }

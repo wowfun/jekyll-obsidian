@@ -5,6 +5,15 @@ require "test_helper"
 class LocalizedCompilerTest < Minitest::Test
   I18N = { "locales" => %w[en zh-CN] }.freeze
 
+  def test_incomplete_pdf_markup_reports_a_content_diagnostic
+    result = compile(note("index.md", "---\npublish: true\n---\n# Home\n\n<div data-website-pdf-source=\"https://example.test/paper.pdf\">Custom content</div>"), *manifests, i18n: I18N.merge("enabled" => true))
+    refute result.success?
+    diagnostic = result.diagnostics.find { |item| item.code == "invalid_external_media" }
+    refute_nil diagnostic
+    assert_includes diagnostic.message, "preview button"
+    refute result.diagnostics.any? { |item| item.code == "i18n_internal_error" }
+  end
+
   def manifests(zh_messages = "")
     [
       locale_manifest("_locale.yml", "name: English\n"),

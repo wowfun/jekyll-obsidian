@@ -1,5 +1,16 @@
 import { test, expect } from "@playwright/test";
 
+test.describe('favorites without JavaScript', () => {
+  test.use({ javaScriptEnabled: false });
+  for (const locale of ['en', 'zh-CN']) test(`explains browser storage access without claiming it is empty in ${locale}`, async ({ page }) => {
+    await page.goto('/__site__/minimal-archive/' + (locale === 'en' ? '' : locale + '/') + 'favorites/');
+    const notice = page.locator('noscript p');
+    await expect(notice).toBeVisible();
+    await expect(notice).toHaveText(locale === 'en' ? 'Enable JavaScript to show favorites saved in this browser.' : '请启用 JavaScript，以查看保存在此浏览器中的收藏。');
+    await expect(notice).not.toContainText(locale === 'en' ? 'No favorites yet' : '还没有收藏');
+  });
+});
+
 const base = "/__site__/minimal-archive/";
 const ready = async (page: import("@playwright/test").Page) => {
   await expect(page.locator("[data-paged-archive]")).not.toHaveAttribute("aria-busy", "true");

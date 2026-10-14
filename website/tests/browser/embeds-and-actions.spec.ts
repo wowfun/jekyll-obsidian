@@ -12,7 +12,7 @@ for (const theme of ["minimal", "docs"]) for (const locale of ["en", "zh-CN"]) {
     await page.goto(`/__site__/${theme}-media/${locale === "en" ? "" : "zh-CN/"}`);
     const actions = page.locator(".site-actions"), search = actions.locator("[data-search-open]"), scheme = actions.locator("[data-color-scheme-toggle]");
     await expect(search.locator("svg")).toHaveCount(1);
-    await expect(search).toHaveAttribute("title", locale === "en" ? "Search" : "搜索");
+    await expect(search).toHaveAttribute("title", (locale === "en" ? "Search" : "搜索") + " (Ctrl/⌘ K)");
     await expect(search.locator("kbd")).toHaveCount(0);
     await expect(actions.locator(".language-switcher summary svg")).toHaveCount(1);
     for (const control of await actions.locator("button, summary, a.site-action").all()) {

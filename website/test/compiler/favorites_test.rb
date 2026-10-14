@@ -72,6 +72,23 @@ class FavoritesTest < Minitest::Test
     assert result.generated_files.any? { |file| file.route.end_with?("identities.json") }
   end
 
+  def test_lookup_only_favorites_keep_chronology_separate_from_pinned_display
+    result = compile(
+      note("items/new.md", "---\npublish: true\ncontent_type: post\ndate: 2026-01-02\n---\n# New"),
+      note("items/old.md", "---\npublish: true\ncontent_type: post\ndate: 2025-12-31\npinned: true\n---\n# Old"),
+      note("items/undated.md", "---\npublish: true\ncontent_type: post\npinned: true\n---\n# Undated"),
+      environment: "development", features: { "favorites" => true })
+    assert result.success?, result.diagnostics.map(&:message).join("\n")
+    archive = page(result, "/favorites/").data.dig("website", "theme_data", "archive")
+    assert_equal({ "2026" => [0, 1], "2025" => [1, 2], "Undated" => [2, 3] }, archive.fetch("years"))
+    assert_equal({ "2026-01-02" => [0, 1], "2025-12-31" => [1, 2] }, archive.fetch("days"))
+    chunk = result.generated_files.find { |file| file.route.end_with?("cards-0.json") }
+    assert_equal %w[New Old Undated], JSON.parse(chunk.content).fetch("cards").map { |card| card.fetch("title") }
+    displayed = page(result, "/").data.dig("website", "theme_data", "recent_posts")
+    assert_equal %w[Old Undated New], displayed.map { |card| card.fetch("title") }
+    assert_equal page(result, "/items/old/").data.dig("website", "favorite_card"), displayed.first.fetch("favorite_card")
+  end
+
   def test_paged_cards_omit_unused_favorite_snapshots_when_the_feature_is_disabled
     result = compile(*articles, blog: { "page_size" => 2 })
     assert result.success?

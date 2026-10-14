@@ -316,15 +316,19 @@ class GitHubMarkdownMaterializationTest < Minitest::Test
     cache = JekyllObsidian::GitHubMarkdown::Cache.new(@cache_root)
     arguments = { repository: "acme/widget", commit: COMMIT, path: "README.md" }
     cache.write(**arguments, markdown: "# Original\n")
-    target = Dir.glob(File.join(@cache_root, "github-markdown", "**", "*.md")).fetch(0)
+    # Cache paths are canonical; macOS temporary roots can use /var aliases.
+    target = File.realpath(Dir.glob(File.join(@cache_root, "github-markdown", "**", "*.md")).fetch(0))
+    replaced = false
     cache.define_singleton_method(:open_entry) do |path, flags, &block|
       if path == target
+        replaced = true
         File.rename(path, "#{path}.previous")
         File.write(path, "# Replaced\n")
       end
       super(path, flags, &block)
     end
     error = assert_raises(JekyllObsidian::GitHubMarkdown::CacheError) { cache.read(**arguments) }
+    assert replaced, "replacement fixture must reach the cache's canonical path"
     assert_includes error.message, "changed while opening"
   end
 

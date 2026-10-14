@@ -27,6 +27,10 @@ module JekyllObsidian
     MESSAGE_DEFAULTS = {
       "favorites" => "Favorites", "favorite_save" => "Save", "favorite_remove" => "Remove favorite",
       "favorite_saved" => "Saved", "favorites_empty" => "No favorites yet. Save an entry to find it here.",
+      "favorites_requires_js" => "Enable JavaScript to show favorites saved in this browser.",
+      "archive_refresh_error" => "Could not check for updates. Previously loaded entries remain available. Retry to check again.",
+      "flat_reading_enabled" => "Read in full: on",
+      "flat_reading_disabled" => "Read in full: off",
       "favorite_recovery_required" => "A recovery copy is already saved. Download and clear it before repairing more data.",
       "favorite_recovery_title" => "Recovery copies",
       "favorite_recovery_description" => "Download the original data before clearing it. Restoring adds available favorites without replacing current ones.",
@@ -842,8 +846,13 @@ module JekyllObsidian
         replace_generated_text(node, messages.fetch("missing_fragment").sub("{label}", match[:label]), locale) if match
       end
       fragment.css("[data-website-pdf-source]").each do |node|
+        button = node.at_css("button[data-pdf-preview]")
+        unless button
+          error("invalid_external_media", "PDF preview markup requires a preview button: #{node['data-website-pdf-source']}")
+          next
+        end
         %w[preview close loading error].each { |name| node["data-pdf-#{name}"] = messages.fetch("pdf_#{name}") }
-        node.at_css("button[data-pdf-preview]").content = messages.fetch("pdf_preview")
+        button.content = messages.fetch("pdf_preview")
       end
       fragment.css("object[type='application/pdf'] > a").each do |node|
         replace_generated_text(node, messages.fetch("download_pdf"), locale) if node.text == MESSAGE_DEFAULTS.fetch("download_pdf")

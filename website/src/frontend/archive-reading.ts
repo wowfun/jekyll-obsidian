@@ -58,6 +58,10 @@ export function initialiseArchiveReading(root: HTMLElement, client: Pick<Archive
   let cacheWeight = 0;
   try { enabled = localStorage.getItem("website-archive-reading") === "true"; } catch { /* Storage is optional. */ }
   toggle.hidden = false;
+  function updateToggle(): void {
+    toggle!.setAttribute("aria-checked", String(enabled));
+    toggle!.title = enabled ? toggle!.dataset.enabled || "Read in full: on" : toggle!.dataset.disabled || "Read in full: off";
+  }
   function cloneBody(body: DocumentFragment): DocumentFragment {
     const clone = body.cloneNode(true) as DocumentFragment, ids = new Map<string, string>();
     const prefix = `archive-article-${++sequence}`;
@@ -105,7 +109,7 @@ export function initialiseArchiveReading(root: HTMLElement, client: Pick<Archive
     observer?.disconnect(); observer = undefined;
     controller.abort(); controller = new AbortController();
     root.classList.toggle("archive-reading", enabled);
-    toggle!.setAttribute("aria-checked", String(enabled));
+    updateToggle();
     if (!enabled || disposed) return;
     const signal = controller.signal;
     const rows = Array.from(root.querySelectorAll<HTMLElement>("[data-filter-item]"));
@@ -135,6 +139,6 @@ export function initialiseArchiveReading(root: HTMLElement, client: Pick<Archive
   toggle.addEventListener("click", switchReading);
   root.addEventListener("click", retry);
   // Pagination chooses the initial rows before starting saved reading mode.
-  toggle.setAttribute('aria-checked', String(enabled));
+  updateToggle();
   return { refresh, dispose() { disposed = true; observer?.disconnect(); controller.abort(); cache.clear(); cacheWeight = 0; toggle.removeEventListener("click", switchReading); root.removeEventListener("click", retry); } };
 }

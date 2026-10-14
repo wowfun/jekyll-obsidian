@@ -26,7 +26,7 @@
     {% if page.website.theme_data.favorites %}
       <div data-favorites-facets></div>
       <p class="filter-empty" data-archive-empty hidden>{{ ui.no_matching_entries | escape }} <button type="button" data-archive-clear>{{ ui.clear_filters | escape }}</button></p>
-      <noscript><p>{{ ui.favorites_empty | escape }}</p></noscript>
+      <noscript><p>{{ ui.favorites_requires_js | escape }}</p></noscript>
     {% else %}{% include website/archive-facets.html %}{% endif %}
   {% else %}
     <h1 class="visually-hidden">{{ page.title | default: ui.blog | default: 'Blog' | escape }}</h1>

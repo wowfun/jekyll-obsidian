@@ -463,4 +463,8 @@ Saving requires Web Locks in a current browser on HTTPS or localhost. Writes fro
 
 The Favorites page sorts by article day descending, then article ID, with 50 entries per page. Source/topic facets and chronology count only favorites. Read in full loads available articles lazily; removed snapshots remain summaries. Export remains available on the ordinary archive. Identity lookup uses a separate small index and requests only card chunks containing saved IDs.
 
+Enabling favorites also generates a manifest, identity index, deployment descriptor and card chunks for each language, even without archive pagination. Facet bitmap files are generated only for paged archives. The lookup index uses chronological order independently of pinned posts on the home page. Without JavaScript, the Favorites page explains how to enable access to browser storage.
+
+If checking the current deployment fails on return to an ordinary archive, its last loaded generation remains available for filtering and pagination, with a Retry notice. Favorites continue to use saved snapshots until deployment verification succeeds. The reading switch shows a check mark when enabled and reports its state in the hover hint; the search hint includes Ctrl/⌘ K.
+
 Filtering and pagination reuse the loaded collection and requested facet bitmaps. Retry and browser restoration rediscover the current generation from the page, rather than retrying an old deployment's archive path. Refreshing the same page preserves an unfinished page-number input. Facet links retain the selected filters when opened in another tab.

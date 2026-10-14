@@ -46,11 +46,10 @@ export function initialisePagedArchive(root: HTMLElement): () => void {
           .catch(() => { controller.signal.throwIfAborted(); })
           .finally(() => { discovery = undefined; });
       }
-      // A tab save or filter change must use the same verified generation.
-      // Failed discovery keeps snapshots authoritative until an explicit retry.
+      // Failed discovery keeps favorites snapshots authoritative. The ordinary
+      // archive can still query its last successfully loaded generation.
       await discovery;
       if (!alive || turn !== epoch) return;
-      if (!deploymentVerified && !favorites) throw new Error("Current deployment could not be verified");
       let saved: Awaited<ReturnType<typeof loadFavoriteArchive>> | undefined;
       if (favorites) saved = await refreshFavoriteArchive(deploymentVerified ? client : snapshotsOnly, controller.signal, savedArchive);
       const data = saved?.manifest || await client.manifest(controller.signal);
@@ -78,7 +77,10 @@ export function initialisePagedArchive(root: HTMLElement): () => void {
         }
       }
       renderArchivePagination(pagination, result.page, result.pages, result.count);
-      empty.hidden = result.count !== 0; status.textContent = saved?.refreshFailed ? favoritesUI().refreshError || "Could not refresh articles. Your saved summaries are shown. Retry to continue." : ""; retry.hidden = !saved?.refreshFailed; root.removeAttribute("aria-busy");
+      const refreshFailed = saved ? saved.refreshFailed : !deploymentVerified;
+      empty.hidden = result.count !== 0;
+      status.textContent = refreshFailed ? saved ? favoritesUI().refreshError || "Could not refresh articles. Your saved summaries are shown. Retry to continue." : status.dataset.refreshError || "Could not check for updates. Previously loaded entries remain available. Retry to check again." : "";
+      retry.hidden = !refreshFailed; root.removeAttribute("aria-busy");
     } catch {
       if (alive && turn === epoch) { status.textContent = status.dataset.unavailable || "Entries could not be loaded."; retry.hidden = false; root.removeAttribute("aria-busy"); reading.refresh(); }
     } finally { if (turn === epoch) pendingSearch = undefined; }

@@ -77,6 +77,8 @@ flowchart LR
 
 外部 HTTPS 媒体继续使用普通 Markdown 图片语法。GIF 与其他受支持图片会保留图片语义，也支持可选的 Obsidian 尺寸。直接音频和视频文件使用原生控件。PDF 默认显示为紧凑链接；支持原生 PDF 查看器的浏览器提供预览按钮。YouTube、Bilibili 和 Vimeo 链接会变成重视隐私的延迟载入播放器；X 或 Twitter 状态链接会变成延迟载入的 Tweet 嵌入，并保留普通链接作为降级入口。
 
+本地和远程 PDF fragment 仅接受 `page` 与 `height`。`zoom=100` 等不支持的参数会导致构建失败（本地文件为 `invalid_pdf_options`，远程 URL 为 `invalid_external_media`），请在构建前移除。
+
 ```md
 ![Animation|320x180](https://media.example/loop.gif)
 ![Product tour](https://cdn.example/tour.mp4)
