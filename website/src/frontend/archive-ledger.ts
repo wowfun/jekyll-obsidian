@@ -1,7 +1,7 @@
 import type { ArchiveCard, ArchiveManifest } from "./archive-query";
 import { archiveUrl } from "./archive-client";
 import { favoriteButton, favoritesUI, refreshFavoriteButtons } from "./favorite-controls";
-import { snapshotCard } from "./favorites-store";
+import { facetLabel, favoriteLabels } from "./archive-facets";
 
 export function textElement<K extends keyof HTMLElementTagNameMap>(tag: K, value: string, className?: string): HTMLElementTagNameMap[K] {
   const element = document.createElement(tag); element.textContent = value;
@@ -29,11 +29,11 @@ export function renderArchiveLedger(root: HTMLElement, cards: ArchiveCard[], dat
     if (card.snapshot_locale) title.lang = card.snapshot_locale;
     if (card.summary) title.append(textElement("span", card.summary, "blog-ledger__description"));
     if (favorites) {
-      const heading = textElement("div", "", "blog-ledger__heading"); heading.append(title, favoriteButton(snapshotCard(card, data))); content.append(heading);
+      const heading = textElement("div", "", "blog-ledger__heading"); heading.append(title, favoriteButton({ ...card, favorite_labels: favoriteLabels(card, data) })); content.append(heading);
     } else content.append(title);
     const footer = textElement("footer", "", "archive-card-footer"), tags = textElement("ul", "", "blog-ledger__topics");
     for (const [name, ids] of Object.entries(card.facets)) for (const id of ids) {
-      const label = data.labels[data.prefixes[name]! + id] || card.favorite_labels?.[name + "/" + id] || id;
+      const label = facetLabel(card, name, id, data);
       const link = textElement("a", label); link.dataset.archiveFacet = name; link.dataset.archiveValue = id;
       const url = new URL(window.location.href), values = new Set(url.searchParams.getAll(name));
       values.has(id) ? values.delete(id) : values.add(id);

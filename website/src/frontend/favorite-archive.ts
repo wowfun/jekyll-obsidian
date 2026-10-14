@@ -1,8 +1,9 @@
 import { archiveState, matchArchive, type ArchiveCard, type ArchiveManifest, type ArchiveMatches } from "./archive-query";
 import type { ArchiveClient } from "./archive-client";
-import { readFavorites, snapshotCard, updateFavoriteSnapshots } from "./favorites-store";
+import { readFavorites, snapshotCard, updateFavoriteSnapshots, type Favorite } from "./favorites-store";
 import { favoritesUI, showFavoriteError } from "./favorite-controls";
 import { textElement } from "./archive-ledger";
+import { facetLabel, facetPrefix } from "./archive-facets";
 
 export function favoriteManifest(cards: ArchiveCard[], base?: ArchiveManifest): ArchiveManifest {
   const facets: ArchiveManifest["facets"] = Object.create(null);
@@ -12,9 +13,10 @@ export function favoriteManifest(cards: ArchiveCard[], base?: ArchiveManifest): 
   for (const name of Object.keys(base?.prefixes || { source: "source/", topic: "topics/" })) facets[name] = [];
   cards.forEach((card, ordinal) => {
     for (const [name, ids] of Object.entries(card.facets)) {
-      prefixes[name] ||= name + "/"; facets[name] ||= [];
+      if (!Object.hasOwn(prefixes, name)) prefixes[name] = facetPrefix(prefixes, name);
+      facets[name] ||= [];
       for (const id of ids) {
-        const key = prefixes[name]! + id; labels[key] ||= card.favorite_labels?.[name + "/" + id] || id;
+        const key = prefixes[name]! + id; labels[key] ||= facetLabel(card, name, id, base);
         let options = optionsByName.get(name);
         if (!options) { options = new Map(); optionsByName.set(name, options); }
         let option = options.get(id);
@@ -28,15 +30,27 @@ export function favoriteManifest(cards: ArchiveCard[], base?: ArchiveManifest): 
   return { version: 1, generation: base?.generation || "0".repeat(64), total: cards.length, page_size: 50, export_max_days: base?.export_max_days || 7,
     facets, prefixes, labels, aliases: base?.aliases || {}, years, months, days, chunks: [], ledger_group_by: "day" };
 }
-export async function loadFavoriteArchive(client: Pick<ArchiveClient, "manifest" | "lookup">, signal: AbortSignal): Promise<{ cards: ArchiveCard[]; manifest: ArchiveManifest; refreshFailed: boolean }> {
+export interface FavoriteArchive { cards: ArchiveCard[]; manifest: ArchiveManifest; refreshFailed: boolean; sourceManifest: ArchiveManifest | undefined; snapshots: Map<string, ArchiveCard> }
+function selectedSnapshot(entry: Favorite, locale: string): ArchiveCard {
+  const language = Object.hasOwn(entry.snapshots, locale) ? locale : Object.keys(entry.snapshots)[0]!;
+  return { ...entry.snapshots[language]!, snapshot_locale: language };
+}
+function normalizeCards(cards: ArchiveCard[], base?: ArchiveManifest): ArchiveCard[] {
+  if (base && Object.keys(base.aliases).length) cards = cards.map(card => ({ ...card, facets: Object.fromEntries(Object.entries(card.facets).map(([name, ids]) => [name, [...new Set(ids.map(id => {
+    const prefix = Object.hasOwn(base.prefixes, name) ? base.prefixes[name]! : name + "/", alias = base.aliases[prefix + id];
+    return alias?.startsWith(prefix) ? alias.slice(prefix.length) : id;
+  }))]])) }));
+  return cards.sort((a, b) => (a.display_date || "") > (b.display_date || "") ? -1 : (a.display_date || "") < (b.display_date || "") ? 1 : a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
+}
+function snapshotReferences(locale: string): Map<string, ArchiveCard> {
+  return new Map([...readFavorites()].map(([id, entry]) => [id, entry.snapshots[locale] || entry.snapshots[Object.keys(entry.snapshots)[0]!]!]));
+}
+export async function loadFavoriteArchive(client: Pick<ArchiveClient, "manifest" | "lookup">, signal: AbortSignal): Promise<FavoriteArchive> {
   const locale = document.documentElement.lang || "en";
   let entries: ReturnType<typeof readFavorites>;
   try { entries = readFavorites(); } catch (error) { showFavoriteError(error); throw error; }
   const savedEntries = [...entries.values()];
-  let cards: ArchiveCard[] = savedEntries.map(entry => {
-    const language = Object.hasOwn(entry.snapshots, locale) ? locale : Object.keys(entry.snapshots)[0]!;
-    return { ...entry.snapshots[language]!, snapshot_locale: language };
-  });
+  let cards = savedEntries.map(entry => selectedSnapshot(entry, locale));
   let base: ArchiveManifest | undefined, refreshFailed = false;
   try {
     base = await client.manifest(signal);
@@ -46,12 +60,31 @@ export async function loadFavoriteArchive(client: Pick<ArchiveClient, "manifest"
     try { await updateFavoriteSnapshots(cards.filter(card => !card.unavailable), locale); } catch (error) { showFavoriteError(error); }
   } catch (error) { signal.throwIfAborted(); refreshFailed = true; }
   // A failed request does not prove that an article has been removed.
-  if (base && Object.keys(base.aliases).length) cards = cards.map(card => ({ ...card, facets: Object.fromEntries(Object.entries(card.facets).map(([name, ids]) => [name, [...new Set(ids.map(id => {
-    const prefix = Object.hasOwn(base.prefixes, name) ? base.prefixes[name]! : name + "/", alias = base.aliases[prefix + id];
-    return alias?.startsWith(prefix) ? alias.slice(prefix.length) : id;
-  }))]])) }));
-  cards.sort((a, b) => (a.display_date || "") > (b.display_date || "") ? -1 : (a.display_date || "") < (b.display_date || "") ? 1 : a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
-  return { cards, manifest: favoriteManifest(cards, base), refreshFailed };
+  cards = normalizeCards(cards, base);
+  return { cards, manifest: favoriteManifest(cards, base), refreshFailed, sourceManifest: base, snapshots: snapshotReferences(locale) };
+}
+export async function reconcileFavoriteArchive(previous: FavoriteArchive, client: Pick<ArchiveClient, "lookup">, signal: AbortSignal): Promise<FavoriteArchive> {
+  const locale = document.documentElement.lang || "en", entries = readFavorites(), references = snapshotReferences(locale);
+  const old = new Map(previous.cards.map(card => [card.id, card])), missing: string[] = [];
+  let cards = [...entries.values()].map(entry => {
+    const prior = old.get(entry.id);
+    if (prior && references.get(entry.id) === previous.snapshots.get(entry.id)) return prior;
+    if (!Object.hasOwn(entry.snapshots, locale) && !prior) missing.push(entry.id);
+    const selected = !Object.hasOwn(entry.snapshots, locale) && prior?.snapshot_locale === locale ? prior : selectedSnapshot(entry, locale);
+    return { ...selected, unavailable: Boolean(prior?.unavailable) };
+  });
+  let refreshFailed = previous.refreshFailed && cards.length > 0;
+  if (missing.length) {
+    try {
+      const current = await client.lookup(missing, signal); signal.throwIfAborted();
+      const fresh = [...current.values()].map(card => snapshotCard(card, previous.sourceManifest));
+      const byId = new Map(fresh.map(card => [card.id, card]));
+      cards = cards.map(card => byId.has(card.id) ? { ...byId.get(card.id)!, snapshot_locale: locale } : card);
+      try { await updateFavoriteSnapshots(fresh, locale); } catch (error) { showFavoriteError(error); }
+    } catch { signal.throwIfAborted(); refreshFailed = true; }
+  }
+  cards = normalizeCards(cards, previous.sourceManifest);
+  return { cards, manifest: favoriteManifest(cards, previous.sourceManifest), refreshFailed, sourceManifest: previous.sourceManifest, snapshots: snapshotReferences(locale) };
 }
 const collectionBitmaps = new WeakMap<ArchiveCard[], Map<string, Uint8Array>>();
 export function selectFavorites(cards: ArchiveCard[], manifest: ArchiveManifest, state: ReturnType<typeof archiveState>): ArchiveMatches {

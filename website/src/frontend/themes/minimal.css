@@ -1002,7 +1002,6 @@
   .archive-pagination__navigation, .archive-pagination__numbers, .archive-pagination__jump { display: flex; align-items: center; gap: .3rem; }
   .archive-pagination__navigation { gap: .6rem; }
   .archive-pagination__arrow { display: none; }
-  .archive-pagination [hidden] { display: none; }
   .archive-pagination__numbers a { display: grid; place-items: center; min-inline-size: 2.2rem; min-block-size: 2.2rem; padding: .3rem; border: 1px solid var(--line); border-radius: .3rem; text-decoration: none; font-variant-numeric: tabular-nums; }
   .archive-pagination__numbers a[aria-current="page"] { background: var(--ink); border-color: var(--ink); color: var(--surface); font-weight: 700; }
   .archive-pagination__jump input { inline-size: 4rem; min-block-size: 2.2rem; padding: .3rem .45rem; border: 1px solid var(--line); border-radius: .3rem; background: var(--surface); color: var(--ink); font: inherit; font-variant-numeric: tabular-nums; }
@@ -1044,7 +1043,6 @@
   .blog-ledger__heading .blog-ledger__main { flex: 1; min-inline-size: 0; }
   .favorite-button { display: inline-flex; align-items: center; gap: .35rem; flex: none; min-block-size: 2rem; padding: .3rem .5rem; color: var(--graphite); background: transparent; border: 1px solid transparent; border-radius: .25rem; font: inherit; font-size: .75rem; cursor: pointer; }
   .favorite-button svg { inline-size: 1rem; block-size: 1rem; fill: none; stroke: currentColor; stroke-width: 1.4; }
-  .favorite-button[hidden], .archive-timeline[hidden], .mobile-toolbar [hidden] { display: none; }
   .favorite-button[aria-pressed="true"] { color: var(--teal); }
   .favorite-button[aria-pressed="true"] svg { fill: currentColor; }
   .favorite-button:hover { border-color: currentColor; }

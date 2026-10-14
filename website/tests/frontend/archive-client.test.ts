@@ -13,6 +13,12 @@ afterEach(() => { client.dispose(); vi.useRealTimers(); vi.unstubAllGlobals(); }
 const card = (i: number) => ({ markdown_url: `/article-${i}.md` }) as ArchiveCard;
 const manifest = { version: 1, generation: 'a'.repeat(64), total: 0, page_size: 50, export_max_days: 7, facets: {}, prefixes: {}, labels: {}, aliases: {}, years: {}, months: {}, days: {}, chunks: [] };
 
+it('uses normal HTTP caching for a manifest pinned by the current page', async () => {
+  const fetch = vi.fn(async (_url: URL, _options: RequestInit) => Response.json(manifest)); vi.stubGlobal('fetch', fetch);
+  await client.manifest();
+  expect(fetch.mock.calls[0]![1]).toMatchObject({ cache: 'default' });
+});
+
 it('looks up saved identities without fetching unrelated card chunks in a 100000-record archive', async () => {
   const total = 100000, ids = Array.from({ length: total }, (_, i) => `item-${i}`);
   const data = { ...manifest, total, identities: 'identities.json', chunks: Array.from({ length: total / 50 }, (_, i) => `cards-${i}.json`) };

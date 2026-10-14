@@ -1,11 +1,13 @@
 import type { ArchiveCard, ArchiveManifest } from "./archive-query";
 import { archiveUrl } from "./archive-client";
+import { favoriteLabels } from "./archive-facets";
 
 export const FAVORITES_CHANGE = "website:favorites-change";
+export const FAVORITES_RECOVERY_CHANGE = "website:favorites-recovery-change";
 export interface Favorite { id: string; saved_at: string; snapshots: Record<string, ArchiveCard> }
 let cached: { key: string; raw: string | null; entries: Map<string, Favorite>; damaged: boolean } | undefined;
 export class FavoritesStorageError extends Error {
-  constructor(public code: "damaged" | "unreadable" | "unsupported") { super(code); }
+  constructor(public code: "damaged" | "unreadable" | "unsupported" | "recovery_required") { super(code); }
 }
 export function favoritesKey(): string {
   const scope = document.querySelector<HTMLMetaElement>('meta[name="website:favorites-scope"]')?.content;
@@ -35,8 +37,13 @@ export function favoriteCard(value: unknown): ArchiveCard {
 export function readFavorites(): Map<string, Favorite> {
   const key = favoritesKey(), raw = localStorage.getItem(key);
   if (cached?.key === key && cached.raw === raw) return new Map(cached.entries);
+  const decoded = decodeFavorites(raw);
+  cached = { key, raw, ...decoded };
+  return new Map(decoded.entries);
+}
+function decodeFavorites(raw: string | null): { entries: Map<string, Favorite>; damaged: boolean } {
   const result = new Map<string, Favorite>();
-  if (!raw) { cached = { key, raw, entries: result, damaged: false }; return result; }
+  if (!raw) return { entries: result, damaged: false };
   let data: { version: number; entries: unknown[] };
   try { data = JSON.parse(raw); if (data?.version !== 1 || !Array.isArray(data.entries)) throw new Error(); }
   catch { throw new FavoritesStorageError("unreadable"); }
@@ -57,8 +64,7 @@ export function readFavorites(): Map<string, Favorite> {
       result.set(entry.id, { id: entry.id, saved_at: entry.saved_at, snapshots });
     } catch { damaged = true; }
   }
-  cached = { key, raw, entries: result, damaged };
-  return result;
+  return { entries: result, damaged };
 }
 export function favoritesRevision(): string | null { return localStorage.getItem(favoritesKey()); }
 export function favoritesDamaged(): boolean { return cached?.key === favoritesKey() && cached.damaged || false; }
@@ -66,9 +72,50 @@ function persist(entries: Map<string, Favorite>): void {
   const key = favoritesKey(), raw = JSON.stringify({ version: 1, entries: [...entries.values()] });
   // Keep the exact damaged payload before replacing it. If either write fails,
   // the original collection remains intact and no success event is emitted.
-  if (cached?.key === key && cached.damaged && cached.raw) localStorage.setItem(`${key}:recovery:${crypto.randomUUID()}`, cached.raw);
+  if (cached?.key === key && cached.damaged && cached.raw) {
+    const copies = favoriteRecoveryCopies();
+    if (copies.some(copy => copy.raw !== cached!.raw)) throw new FavoritesStorageError("recovery_required");
+    if (!copies.length) {
+      localStorage.setItem(`${key}:recovery:current`, cached.raw);
+      window.dispatchEvent(new Event(FAVORITES_RECOVERY_CHANGE));
+    }
+  }
   localStorage.setItem(key, raw);
   cached = { key, raw, entries, damaged: false };
+}
+export function favoriteRecoveryCopies(): { key: string; raw: string }[] {
+  const prefix = favoritesKey() + ":recovery:", copies: { key: string; raw: string }[] = [];
+  for (let index = 0; index < localStorage.length; index++) {
+    const key = localStorage.key(index);
+    if (key?.startsWith(prefix)) { const raw = localStorage.getItem(key); if (raw !== null) copies.push({ key, raw }); }
+  }
+  return copies.sort((a, b) => a.key.localeCompare(b.key));
+}
+export async function clearFavoriteRecovery(): Promise<void> {
+  if (!navigator.locks) throw new FavoritesStorageError("unsupported");
+  await navigator.locks.request(favoritesKey(), () => {
+    for (const copy of favoriteRecoveryCopies()) localStorage.removeItem(copy.key);
+  });
+  window.dispatchEvent(new Event(FAVORITES_RECOVERY_CHANGE));
+}
+export async function restoreFavoriteRecovery(): Promise<void> {
+  await writeFavorites(entries => {
+    let changed = false;
+    for (const copy of favoriteRecoveryCopies()) {
+      let recovered: Map<string, Favorite>;
+      try { recovered = decodeFavorites(copy.raw).entries; } catch { continue; }
+      for (const [id, saved] of recovered) {
+        const current = entries.get(id);
+        if (!current) { entries.set(id, saved); changed = true; }
+        else {
+          const missing = Object.fromEntries(Object.entries(saved.snapshots).filter(([locale]) => !Object.hasOwn(current.snapshots, locale)));
+          if (Object.keys(missing).length) { entries.set(id, { ...current, snapshots: { ...missing, ...current.snapshots } }); changed = true; }
+        }
+      }
+    }
+    return changed;
+  });
+  window.dispatchEvent(new Event(FAVORITES_CHANGE));
 }
 async function writeFavorites(operation: (entries: Map<string, Favorite>) => boolean): Promise<void> {
   if (!navigator.locks) throw new FavoritesStorageError("unsupported");
@@ -79,7 +126,7 @@ async function writeFavorites(operation: (entries: Map<string, Favorite>) => boo
 }
 export function snapshotCard(card: ArchiveCard, manifest?: ArchiveManifest): ArchiveCard {
   const snapshot = favoriteCard(card);
-  if (manifest) snapshot.favorite_labels = Object.fromEntries(Object.entries(card.facets).flatMap(([name, ids]) => ids.map(id => [name + "/" + id, manifest.labels[(Object.hasOwn(manifest.prefixes, name) ? manifest.prefixes[name]! : name + "/") + id] || id])));
+  snapshot.favorite_labels = favoriteLabels(card, manifest);
   return snapshot;
 }
 export async function toggleFavorite(card: ArchiveCard, locale = document.documentElement.lang || "en", selected = !readFavorites().has(card.id)): Promise<void> {

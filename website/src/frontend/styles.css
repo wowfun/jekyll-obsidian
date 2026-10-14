@@ -1,6 +1,8 @@
 @layer reset, tokens, base, composition, content, components, utilities;
 
 @layer reset {
+  [hidden]:not([hidden="until-found"]) { display: none !important; }
+
   *,
   *::before,
   *::after {
@@ -338,7 +340,6 @@
     padding: 0;
   }
 
-  .site-actions [hidden] { display: none; }
 
   .site-action__icon {
     inline-size: 1.15rem;
@@ -896,6 +897,8 @@
   }
 
   .note-content .website-external-pdf__viewport { min-block-size: 0; }
+  .favorites-recovery { margin-block: 0.5rem 1rem; font-size: 0.85rem; }
+  .favorites-recovery__actions { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-block-start: 0.5rem; }
 
   .note-content .website-tweet {
     max-inline-size: 34rem;
@@ -1360,10 +1363,6 @@
     text-align: end;
   }
 
-  [data-filter-item][hidden],
-  [data-filter-group][hidden] {
-    display: none;
-  }
 
   .website-index-list {
     margin-block-start: 2.5rem;
@@ -1931,9 +1930,6 @@
     margin: 0.75rem 0.1rem 0;
   }
 
-  .search-navigation[hidden] {
-    display: none;
-  }
 
   .search-navigation__list {
     display: flex;

@@ -1,9 +1,9 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import type { ArchiveCard } from "../../src/frontend/archive-query";
 import { archiveState } from "../../src/frontend/archive-query";
-import { favoriteCard, favoritesKey, readFavorites, toggleFavorite, updateFavoriteSnapshots } from "../../src/frontend/favorites-store";
+import { favoriteCard, favoriteRecoveryCopies, clearFavoriteRecovery, restoreFavoriteRecovery, favoritesKey, readFavorites, toggleFavorite, updateFavoriteSnapshots } from "../../src/frontend/favorites-store";
 import { favoriteButton, initialiseFavorites, refreshFavoriteButtons } from "../../src/frontend/favorite-controls";
-import { favoriteManifest, loadFavoriteArchive, selectFavorites } from "../../src/frontend/favorite-archive";
+import { favoriteManifest, loadFavoriteArchive, reconcileFavoriteArchive, selectFavorites } from "../../src/frontend/favorite-archive";
 
 const card = (id: string, date = "2026-10-10", source = "hn"): ArchiveCard => ({ id, title: "Title " + id, url: "/garden/items/" + id + "/", markdown_url: "/garden/items/" + id + ".md", published_at: date + "T12:00:00+08:00", display_date: date, year: date.slice(0, 4), month: date.slice(0, 7), facets: { source: [source], topic: ["agents"] }, source_url: "https://example.test/" + id, summary: "Summary " + id });
 let dispose = () => {};
@@ -169,4 +169,41 @@ it("keeps the storage failure reason visible when a damaged collection cannot be
   vi.spyOn(localStorage, "setItem").mockImplementation(() => { throw new DOMException("full", "QuotaExceededError"); });
   button.click(); await vi.waitFor(() => expect(button.disabled).toBe(false));
   expect(document.querySelector('[data-favorite-status]')!.textContent).toContain("storage is full");
+});
+
+it("bounds recovery copies and preserves both damaged payloads until the earlier copy is cleared", async () => {
+  await toggleFavorite(card("a"));
+  const damage = () => { const data = JSON.parse(localStorage.getItem(favoritesKey())!); data.entries.push(null); const raw = JSON.stringify(data); localStorage.setItem(favoritesKey(), raw); return raw; };
+  const first = damage(); await toggleFavorite(card("b"));
+  const second = damage();
+  await expect(toggleFavorite(card("c"))).rejects.toMatchObject({ code: "recovery_required" });
+  const keys = Array.from({ length: localStorage.length }, (_, i) => localStorage.key(i)!).filter(key => key.startsWith(favoritesKey() + ":recovery:"));
+  expect(keys).toHaveLength(1); expect(localStorage.getItem(keys[0]!)).toBe(first);
+  expect(localStorage.getItem(favoritesKey())).toBe(second);
+});
+
+it("restores healthy entries without overwriting newer snapshots, and clears only this site's recovery copies", async () => {
+  await toggleFavorite(card("a"));
+  const raw = localStorage.getItem(favoritesKey())!;
+  localStorage.setItem(favoritesKey() + ":recovery:legacy", raw);
+  localStorage.setItem("website:favorites:v1:/other:recovery:current", raw);
+  await toggleFavorite(card("a")); await toggleFavorite(card("b"));
+  await restoreFavoriteRecovery(); expect([...readFavorites().keys()].sort()).toEqual(["a", "b"]);
+  expect(favoriteRecoveryCopies()[0]!.raw).toBe(raw);
+  await clearFavoriteRecovery(); expect(favoriteRecoveryCopies()).toHaveLength(0);
+  expect(localStorage.getItem("website:favorites:v1:/other:recovery:current")).toBe(raw);
+  expect(readFavorites().size).toBe(2);
+});
+
+it("reconciles removals locally and looks up only new IDs without a current-language snapshot", async () => {
+  await toggleFavorite(card("a")); await toggleFavorite(card("b"));
+  const client = { manifest: async () => favoriteManifest([card("a"), card("b")]), lookup: vi.fn(async (ids: string[]) => new Map(ids.map(id => [id, card(id)]))) };
+  const loaded = await loadFavoriteArchive(client, new AbortController().signal); client.lookup.mockClear();
+  await toggleFavorite(card("a"));
+  const removed = await reconcileFavoriteArchive(loaded, client, new AbortController().signal);
+  expect(removed.cards.map(card => card.id)).toEqual(["b"]); expect(client.lookup).not.toHaveBeenCalled();
+  await toggleFavorite(card("c"), "zh-CN");
+  const added = await reconcileFavoriteArchive(removed, client, new AbortController().signal);
+  expect(client.lookup).toHaveBeenCalledExactlyOnceWith(["c"], expect.any(AbortSignal));
+  expect(added.cards.map(card => card.id)).toEqual(["b", "c"]);
 });

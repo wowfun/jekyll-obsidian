@@ -18,3 +18,11 @@ messages:
   undated: "Undated"
   sources: Sources
   topics: Topics
+  favorite_recovery_required: "A recovery copy is already saved. Download and clear it before repairing more data."
+  favorite_recovery_title: "Recovery copies"
+  favorite_recovery_description: "Download the original data before clearing it. Restoring adds available favorites without replacing current ones."
+  favorite_recovery_download: "Download original data"
+  favorite_recovery_restore: "Restore available favorites"
+  favorite_recovery_clear: "Clear recovery copies"
+  favorite_recovery_restored: "Available favorites restored. Original recovery copies are kept."
+  favorite_recovery_cleared: "Recovery copies cleared. Current favorites are kept."

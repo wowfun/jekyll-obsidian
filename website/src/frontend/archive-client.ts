@@ -95,14 +95,14 @@ export function createArchiveClient(source: string) {
     try { signal.throwIfAborted(); return await operation(); }
     finally { const next = queue.shift(); if (next) next.start(); else active--; }
   }
-  async function resource(filename: string, signal: AbortSignal): Promise<unknown> {
+  async function resource(filename: string, signal: AbortSignal, revalidate = false): Promise<unknown> {
     signal.throwIfAborted();
     if (cache.has(filename)) { const value = cache.get(filename); cache.delete(filename); cache.set(filename, value); return value; }
     const url = new URL(filename, manifestUrl);
     if (url.origin !== manifestUrl.origin || !url.pathname.startsWith(manifestUrl.pathname.slice(0, manifestUrl.pathname.lastIndexOf("/") + 1))) throw new Error("Invalid archive resource path");
     return shared(url.href, signal, requestSignal => limited(async () => {
       if (cache.has(filename)) return cache.get(filename);
-      const response = await fetch(url, { signal: AbortSignal.any([requestSignal, AbortSignal.timeout(15000)]), cache: filename === "manifest.json" ? "no-cache" : "default" });
+      const response = await fetch(url, { signal: AbortSignal.any([requestSignal, AbortSignal.timeout(15000)]), cache: revalidate ? "no-cache" : "default" });
       if (!response.ok || new URL(response.url || url.href).origin !== manifestUrl.origin) throw new Error("Archive load failed");
       const value: unknown = await response.json();
       requestSignal.throwIfAborted();
@@ -147,7 +147,7 @@ export function createArchiveClient(source: string) {
       manifestUrl = next; manifest = undefined; cache.clear(); postings.clear(); identities = undefined;
     }
     const signal = combined(caller);
-    return await resource("manifest.json", signal) as ArchiveManifest;
+    return await resource("manifest.json", signal, true) as ArchiveManifest;
   }
   async function select(state: ReturnType<typeof archiveState>, mode: ArchiveQueryMode, caller?: AbortSignal, limit?: number): Promise<ArchiveMatches> {
     const signal = combined(caller), data = await getManifest(signal);

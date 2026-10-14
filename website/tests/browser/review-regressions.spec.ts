@@ -61,6 +61,22 @@ test("favorite filtering reuses loaded cards and keeps an unfinished page input"
   await expect(input).toHaveValue("12");
 });
 
+test("removing a favorite does not reload evicted card chunks or report a network failure", async ({ page }) => {
+  const base = "/__site__/minimal-export/";
+  await page.goto(base); await ready(page);
+  const url = await page.locator("[data-paged-archive]").getAttribute("data-archive-url");
+  const manifest = await (await page.request.get(url!)).json(), cards = [];
+  for (const file of manifest.chunks) cards.push(...(await (await page.request.get(new URL(file, new URL(url!, page.url())).href)).json()).cards);
+  await page.evaluate(cards => localStorage.setItem("website:favorites:v1:/__site__/minimal-export", JSON.stringify({ version: 1, entries: cards.map((card: { id: string }) => ({ id: card.id, saved_at: "2026-10-13T00:00:00Z", snapshots: { en: card } })) })), cards);
+  await page.goto(base + "favorites/"); await ready(page);
+  let requests = 0;
+  await page.route("**/cards-*.json", route => { requests++; return route.abort(); });
+  await page.locator('[data-filter-item] [data-favorite-toggle]').first().click();
+  await expect(page.locator('[data-archive-page-status]')).toContainText(String(cards.length - 1));
+  await ready(page);
+  expect(requests).toBe(0); await expect(page.locator('[data-archive-status]')).toBeEmpty();
+});
+
 test("restored pages discover the new deployment instead of using obsolete identity paths", async ({ page }) => {
   await page.goto(root); await ready(page);
   const save = page.locator("[data-filter-item] [data-favorite-toggle]").first();
@@ -82,4 +98,24 @@ test("restored pages discover the new deployment instead of using obsolete ident
   });
   await page.evaluate(() => window.dispatchEvent(new PageTransitionEvent("pageshow", { persisted: true })));
   await expect(page.locator(".blog-ledger__main strong")).toHaveText("Updated after deployment"); await ready(page);
+});
+
+test("recovery copies can be downloaded, restored without overwriting, and explicitly cleared", async ({ page }) => {
+  await page.goto(root); await ready(page);
+  const save = page.locator("[data-filter-item] [data-favorite-toggle]").first();
+  await save.click(); await expect(save).toHaveAttribute("aria-pressed", "true");
+  const raw = await page.evaluate(() => {
+    const key = "website:favorites:v1:/__site__/minimal-archive", raw = localStorage.getItem(key)!;
+    localStorage.setItem(key + ":recovery:old", raw); return raw;
+  });
+  await save.click(); await expect(save).toHaveAttribute("aria-pressed", "false");
+  await page.goto(root + "favorites/"); await ready(page);
+  const recovery = page.locator("[data-favorites-recovery]"); await recovery.locator("summary").click();
+  const download = page.waitForEvent("download"); await recovery.locator('[data-favorite-recovery="download"]').click();
+  const file = await download; expect(file.suggestedFilename()).toBe("favorites-recovery.json");
+  const stream = await file.createReadStream(); const chunks = []; for await (const chunk of stream!) chunks.push(chunk);
+  expect(JSON.parse(Buffer.concat(chunks).toString()).copies[0].raw).toBe(raw);
+  await recovery.locator('[data-favorite-recovery="restore"]').click(); await expect(page.locator("[data-filter-item]")).toHaveCount(1);
+  await recovery.locator('[data-favorite-recovery="clear"]').click(); await expect(recovery).toBeHidden();
+  await expect(page.locator("[data-filter-item]")).toHaveCount(1);
 });

@@ -122,7 +122,8 @@ module JekyllObsidian
     end
 
     def card_labels(card, manifest)
-      card.merge("archive_facets" => label_facets(card.fetch("facets"), manifest.fetch("prefixes"), manifest.fetch("labels")))
+      facets = label_facets(card.fetch("facets"), manifest.fetch("prefixes"), manifest.fetch("labels"))
+      card.merge("archive_facets" => facets, "favorite_labels" => facets.to_h { |facet| ["#{facet.fetch("facet")}/#{facet.fetch("id")}", facet.fetch("name")] })
     end
   end
 end

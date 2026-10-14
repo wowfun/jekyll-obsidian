@@ -1,5 +1,5 @@
 import type { ArchiveCard } from "./archive-query";
-import { FAVORITES_CHANGE, favoriteCard, favoritesDamaged, FavoritesStorageError, favoritesKey, readFavorites, toggleFavorite } from "./favorites-store";
+import { FAVORITES_CHANGE, FAVORITES_RECOVERY_CHANGE, favoriteCard, favoriteRecoveryCopies, clearFavoriteRecovery, restoreFavoriteRecovery, favoritesDamaged, FavoritesStorageError, favoritesKey, readFavorites, toggleFavorite } from "./favorites-store";
 
 const buttonCards = new WeakMap<HTMLButtonElement, { raw: string; card: ArchiveCard }>();
 const pendingButtons = new WeakSet<HTMLButtonElement>();
@@ -21,6 +21,7 @@ export function showFavoriteError(error?: unknown): void {
   const messages: Record<string, string> = {
     damaged: ui.damaged || "Some saved data is damaged. Healthy favorites are shown; original data is backed up before repair.",
     unreadable: ui.unreadable || "Could not read favorites. The stored data is damaged; original data has been kept.",
+    recovery_required: ui.recoveryRequired || "A recovery copy is already saved. Download and clear it before repairing more data.",
     unsupported: ui.unsupported || "Could not save favorites. Use a current browser over HTTPS or localhost.",
     QuotaExceededError: ui.quota || "Could not save favorites. Browser storage is full; free some space and retry.",
     SecurityError: ui.blocked || "Could not save favorites. Allow browser storage and retry."
@@ -58,28 +59,48 @@ export function refreshFavoriteButtons(): void {
 }
 export function initialiseFavorites(): () => void {
   if (!document.querySelector("[data-favorites-ui]")) return () => {};
-  let taxonomy: { labels: Record<string, string>; prefixes: Record<string, string> } | undefined;
+  const recovery = document.querySelector<HTMLElement>("[data-favorites-recovery]");
+  const refreshRecovery = () => {
+    if (!recovery) return;
+    try { recovery.hidden = !favoriteRecoveryCopies().length; } catch (error) { showFavoriteError(error); }
+  };
+  const onChange = () => {
+    if (!document.querySelector("[data-favorites-page]")) refreshFavoriteButtons();
+    refreshRecovery();
+  };
   const click = async (event: MouseEvent) => {
+    const action = event.target instanceof Element ? event.target.closest<HTMLButtonElement>("[data-favorite-recovery]") : null;
+    if (action && !action.disabled) {
+      action.disabled = true;
+      try {
+        if (action.dataset.favoriteRecovery === "download") {
+          const url = URL.createObjectURL(new Blob([JSON.stringify({ version: 1, scope: favoritesKey(), copies: favoriteRecoveryCopies() }, null, 2)], { type: "application/json" }));
+          const link = document.createElement("a"); link.href = url; link.download = "favorites-recovery.json"; link.click();
+          setTimeout(() => URL.revokeObjectURL(url), 1000);
+        } else if (action.dataset.favoriteRecovery === "restore") await restoreFavoriteRecovery();
+        else await clearFavoriteRecovery();
+        const status = document.querySelector<HTMLElement>("[data-favorite-status]");
+        if (status && action.dataset.favoriteRecovery !== "download") status.textContent = action.dataset.favoriteRecovery === "restore" ? favoritesUI().recoveryRestored || "Available favorites restored. Original recovery copies are kept." : favoritesUI().recoveryCleared || "Recovery copies cleared. Current favorites are kept.";
+      } catch (error) { showFavoriteError(error); }
+      finally { action.disabled = false; refreshRecovery(); }
+      return;
+    }
     const button = event.target instanceof Element ? event.target.closest<HTMLButtonElement>("[data-favorite-toggle]") : null;
     if (!button || button.disabled) return;
     pendingButtons.add(button); button.disabled = true;
     try {
-      const card = { ...buttonCard(button) };
-      if (!Object.keys(card.favorite_labels || {}).length) {
-        const ui = favoritesUI();
-        taxonomy ||= { labels: JSON.parse(ui.labels || "null") || {}, prefixes: JSON.parse(ui.prefixes || "null") || {} };
-        card.favorite_labels = Object.fromEntries(Object.entries(card.facets).flatMap(([name, ids]) => ids.map(id => [name + "/" + id, taxonomy!.labels[(taxonomy!.prefixes[name] || name + "/") + id] || id])));
-      }
+      const card = buttonCard(button);
       await toggleFavorite(card, document.documentElement.lang || "en", button.getAttribute("aria-pressed") !== "true");
       const status = document.querySelector<HTMLElement>("[data-favorite-status]"); if (status) status.textContent = "";
     } catch (error) { showFavoriteError(error); }
-    finally { pendingButtons.delete(button); refreshFavoriteButtons(); }
+    finally { pendingButtons.delete(button); button.disabled = false; }
   };
   const storage = (event: StorageEvent) => {
     if (event.key === null || event.key === favoritesKey()) window.dispatchEvent(new Event(FAVORITES_CHANGE));
+    if (event.key === null || event.key?.startsWith(favoritesKey() + ":recovery:")) refreshRecovery();
   };
-  refreshFavoriteButtons();
-  document.addEventListener("click", click); window.addEventListener(FAVORITES_CHANGE, refreshFavoriteButtons);
-  window.addEventListener("storage", storage); window.addEventListener("pageshow", refreshFavoriteButtons);
-  return () => { document.removeEventListener("click", click); window.removeEventListener(FAVORITES_CHANGE, refreshFavoriteButtons); window.removeEventListener("storage", storage); window.removeEventListener("pageshow", refreshFavoriteButtons); };
+  refreshFavoriteButtons(); refreshRecovery();
+  document.addEventListener("click", click); window.addEventListener(FAVORITES_CHANGE, onChange); window.addEventListener(FAVORITES_RECOVERY_CHANGE, refreshRecovery);
+  window.addEventListener("storage", storage); window.addEventListener("pageshow", onChange);
+  return () => { document.removeEventListener("click", click); window.removeEventListener(FAVORITES_CHANGE, onChange); window.removeEventListener(FAVORITES_RECOVERY_CHANGE, refreshRecovery); window.removeEventListener("storage", storage); window.removeEventListener("pageshow", onChange); };
 }

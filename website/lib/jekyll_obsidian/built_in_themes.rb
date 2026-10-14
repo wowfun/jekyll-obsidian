@@ -75,6 +75,12 @@ module JekyllObsidian
         )
       end
 
+      def favorite_card(note, config, date: ArchiveChronology.local_time(note.published_at, config.blog["utc_offset"]))
+        record = PagedArchive.record(content_card(note, config).merge(
+          "published_at" => date, "markdown_url" => config.url_builder.href(PublishedMarkdown.route(note.route))), config)
+        PagedArchive.card_labels(record, "prefixes" => config.blog.fetch("facets"), "labels" => config.site.tag_labels || {}).except("archive_facets")
+      end
+
       def note_page(note, config, theme_data, topic_anchors, topic_summaries, local_graph, home_route, home_url)
         properties = note.properties
         comments = page_comments(note, config)
@@ -110,11 +116,7 @@ module JekyllObsidian
           "theme" => config.theme,
           "features" => config.features.merge(note.feature_flags),
           "favorites_scope" => config.url_builder.baseurl,
-          "favorite_labels" => config.site.tag_labels || {},
-          "favorite_prefixes" => config.blog.fetch("facets"),
-          "favorite_card" => config.features.fetch("favorites") && note.content_type == "post" ? PagedArchive.record(content_card(note, config).merge(
-            "published_at" => ArchiveChronology.local_time(note.published_at, config.blog["utc_offset"]),
-            "markdown_url" => config.url_builder.href(PublishedMarkdown.route(note.route))), config) : nil,
+          "favorite_card" => config.features.fetch("favorites") && note.content_type == "post" ? favorite_card(note, config) : nil,
           "content_security" => content_security_data(note.content_security, config),
           "theme_data" => theme_data,
           "tag_links" => Array(note.properties["tags"]).filter_map do |tag|
@@ -705,7 +707,12 @@ module JekyllObsidian
       end
 
       def archive_groups(posts, config, taxonomy)
-        PagedArchive.groups(posts.map { |note| note_card(note, config, taxonomy).merge("display_date" => ArchiveChronology.local_time(note.published_at, config.blog["utc_offset"])&.slice(0, 10), "year" => ArchiveChronology.local_time(note.published_at, config.blog["utc_offset"])&.slice(0, 4) || "Undated") }, config)
+        cards = posts.map do |note|
+          card = note_card(note, config, taxonomy)
+          date = card["published_at"]
+          card.merge("display_date" => date&.slice(0, 10), "year" => date&.slice(0, 4) || "Undated")
+        end
+        PagedArchive.groups(cards, config)
       end
 
       def home_theme_data(posts, config, taxonomy)
@@ -830,7 +837,7 @@ module JekyllObsidian
           "topic_anchors" => topic_anchors_for(note, taxonomy, config),
           "filter_month" => month_key(date),
           "filter_day" => date&.slice(0, 10),
-          "favorite_card" => config.features.fetch("favorites") ? PagedArchive.record(content_card(note, config).merge("published_at" => date, "markdown_url" => config.url_builder.href(PublishedMarkdown.route(note.route))), config) : nil
+          "favorite_card" => config.features.fetch("favorites") ? favorite_card(note, config, date: date) : nil
         )
       end
     end

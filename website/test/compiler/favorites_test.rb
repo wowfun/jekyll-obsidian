@@ -29,6 +29,9 @@ class FavoritesTest < Minitest::Test
     assert_equal en.fetch("favorite_card").fetch("id"), zh.fetch("favorite_card").fetch("id")
     assert_equal "/garden/zh-CN/items/0/", zh.fetch("favorite_card").fetch("url")
     assert_equal "2026-01-01", en.fetch("favorite_card").fetch("display_date")
+    assert_equal({ "source/hn" => "hn", "topic/agents" => "agents" }, en.fetch("favorite_card").fetch("favorite_labels"))
+    refute en.key?("favorite_labels")
+    refute en.key?("favorite_prefixes")
     assert result.generated_files.any? { |file| file.route.end_with?("identities.json") }
   end
 
