@@ -12,6 +12,20 @@ describe('paged archive queries', () => {
     const result = matchArchive(total, 50, { groups: [['topic/x']], range: [0, total], page: 1999 }, { 'topic/x': bitmap });
     expect(result.count).toBe(total); expect(result.ordinals).toHaveLength(50); expect(result.ordinals[0]).toBe(99900);
   });
+  it('matches a direct filter oracle for sparse ranges and clamped partial pages without mutating postings', () => {
+    const total=33, values={'source/a':new Uint8Array([85,170,17,255,1]),'source/b':new Uint8Array([34,68,170,1,0]),'topic/x':new Uint8Array([255,0,85,170,1])};
+    const before=structuredClone(values);
+    for(const groups of [[],[['source/a']],[['source/a','source/b'],['topic/x']],[['missing']],[['source/a','missing']]]) {
+      for(const range of [[0,total],[3,19],[17,total],[0,0]] as [number,number][]) {
+        const expected=Array.from({length:range[1]-range[0]},(_,i)=>range[0]+i).filter(ordinal=>groups.every(keys=>keys.some(key=>Boolean(values[key as keyof typeof values]?.[ordinal>>3]! & (1<<(ordinal&7))))));
+        for(const size of [1,3,5]) for(const requested of [1,2,999]) {
+          const pages=Math.max(1,Math.ceil(expected.length/size)),page=Math.min(pages,requested);
+          expect(matchArchive(total,size,{groups,range,page:requested},values)).toEqual({count:expected.length,pages,page,ordinals:expected.slice((page-1)*size,page*size)});
+        }
+      }
+    }
+    expect(values).toEqual(before);
+  });
   it('caps collected export ordinals while preserving the exact matching count and order', () => {
     const query = { groups: [['topic/x']], range: [0, 100_000] as [number, number], page: 1 };
     const result = matchArchive(100_000, 50, query, { 'topic/x': new Uint8Array(12_500).fill(0b01010101) }, 'all', 5000);

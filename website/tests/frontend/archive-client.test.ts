@@ -2,6 +2,7 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { createArchiveClient } from '../../src/frontend/archive-client';
 import { archiveState, type ArchiveCard } from '../../src/frontend/archive-query';
 import { ArchiveBodyBudget } from '../../src/frontend/archive-export-budget';
+import type { ArchiveWorkerRequest } from '../../src/frontend/archive-worker';
 
 let client: ReturnType<typeof createArchiveClient>;
 beforeEach(() => {
@@ -168,6 +169,8 @@ it('rejects all worker queries immediately and recreates the worker on retry wit
   expect(vi.getTimerCount()).toBe(0);
   const retry = client.select(state, 'all', undefined, 5000);
   await vi.waitFor(() => expect(workers).toHaveLength(2));
+  workers[0]!.onerror!(new Event('error') as ErrorEvent);
+  expect(workers[1]!.terminate).not.toHaveBeenCalled();
   const request = vi.mocked(workers[1]!.postMessage).mock.calls[0]![0];
   expect(request.limit).toBe(5000);
   workers[1]!.onmessage!(new MessageEvent('message', { data: { id: request.id, count: 0, ordinals: [], page: 1, pages: 1 } }));
@@ -247,4 +250,42 @@ it('reuses an unchanged immutable manifest after checking the deployment descrip
   vi.stubGlobal('fetch', fetch); await client.manifest();
   await client.revalidateCurrent('/archive/current.json');
   expect(fetch).toHaveBeenCalledTimes(2);
+});
+
+it('sends a loaded posting to its worker once, then sends only query metadata', async () => {
+  const messages: ArchiveWorkerRequest[] = [], workers:Worker[]=[];
+  vi.stubGlobal('Worker', class {
+    onmessage?: (event: MessageEvent) => void;
+    constructor() { workers.push(this as unknown as Worker); }
+    terminate() {}
+    postMessage(request: ArchiveWorkerRequest) { messages.push(structuredClone(request)); queueMicrotask(() => this.onmessage?.(new MessageEvent('message', {data:{id:request.id,count:8,page:1,pages:1,ordinals:[0,1,2,3,4,5,6,7]}}))); }
+  });
+  const total=100_000, bitmap=btoa(String.fromCharCode(...new Uint8Array(total/8).fill(255)));
+  let data = { ...manifest, total, chunks:Array.from({length:total/50},(_,i)=>'cards-'+i+'.json'), prefixes:{topic:'topics/'}, facets:{topic:[{id:'a',name:'A',count:total,posting:'facet-a.json'}]} };
+  vi.stubGlobal('fetch', vi.fn(async (url:URL) => Response.json(url.pathname.endsWith('manifest.json') ? data : {generation:data.generation,total,bitmap})));
+  const state=archiveState(await client.manifest(), '?topic=a');
+  await client.select(state,'page'); await client.select(state,'all');
+  expect(Object.keys(messages[0]!.bitmaps)).toEqual(['topic/a']);
+  expect(messages[0]!.bitmaps['topic/a']!.byteLength).toBe(12_500);
+  expect(Object.keys(messages[1]!.bitmaps)).toEqual([]);
+  expect(messages[1]!.query.groups).toEqual([['topic/a']]);
+  workers[0]!.onerror!(new Event('error') as ErrorEvent);
+  await client.select(state,'page'); expect(Object.keys(messages[2]!.bitmaps)).toEqual(['topic/a']);
+  data={...data,generation:'b'.repeat(64)}; await client.revalidate('/next/manifest.json');
+  await client.select(archiveState(await client.manifest(), '?topic=a'),'page');
+  expect(messages[3]!.generation).toBe(data.generation); expect(Object.keys(messages[3]!.bitmaps)).toEqual(['topic/a']);
+});
+
+it('preserves the discovery caller while cancelling obsolete article requests', async () => {
+  const controller=new AbortController(); let articleSignal!:AbortSignal;
+  vi.stubGlobal('fetch', vi.fn(async (url:URL, options:RequestInit) => {
+    if(url.pathname.endsWith('current.json')) return Response.json({version:1,url:'/next/manifest.json'});
+    if(url.pathname.endsWith('manifest.json')) return Response.json({...manifest,generation:url.pathname.startsWith('/next/')?'b'.repeat(64):manifest.generation});
+    articleSignal=options.signal!;
+    return new Promise<Response>((_resolve,reject)=>articleSignal.addEventListener('abort',()=>reject(articleSignal.reason),{once:true}));
+  }));
+  await client.manifest(); const old=Promise.allSettled([client.article('/article/',controller.signal)]);
+  expect((await client.revalidateCurrent('/archive/current.json',controller.signal)).generation).toBe('b'.repeat(64));
+  expect(controller.signal.aborted).toBe(false); expect(articleSignal.aborted).toBe(true);
+  expect((await old)[0]!.status).toBe('rejected');
 });

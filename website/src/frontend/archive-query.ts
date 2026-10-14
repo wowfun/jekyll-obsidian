@@ -20,6 +20,7 @@ export interface ArchiveCard {
 export interface ArchiveQuery { groups: string[][]; range: [number, number]; page: number }
 export type ArchiveQueryMode = "page" | "all" | "first";
 export interface ArchiveMatches { ordinals: number[]; count: number; page: number; pages: number }
+export const ARCHIVE_POSTING_CACHE_LIMIT = 20;
 
 export function archivePageNumber(value: string): number | undefined {
   const page = /^\d+$/.test(value) ? Number(value) : NaN;
@@ -33,29 +34,36 @@ export function canonicalFacetId(id: string, prefix: string, aliases: Record<str
 export function matchArchive(total: number, size: number, query: ArchiveQuery, bitmaps: Record<string, Uint8Array>, mode: ArchiveQueryMode = "page", limit = Infinity): ArchiveMatches {
   const union = query.groups.map((keys) => {
     if (!keys.length) return null;
-    const result = new Uint8Array(Math.ceil(total / 8));
+    let result: Uint8Array | undefined, shared = true;
     for (const key of keys) {
       const bitmap = Object.hasOwn(bitmaps, key) ? bitmaps[key] : undefined;
-      if (bitmap) for (let i = 0; i < result.length; i++) result[i] = result[i]! | bitmap[i]!;
+      if (!bitmap) continue;
+      if (!result) result = bitmap;
+      else {
+        if (shared) { result = result.slice(); shared = false; }
+        for (let i = 0; i < result.length; i++) result[i] = result[i]! | bitmap[i]!;
+      }
     }
-    return result;
+    return result || new Uint8Array(0);
   });
   let count = 0;
   const matches = (ordinal: number) => union.every((bitmap) => !bitmap || Boolean(bitmap[ordinal >> 3]! & (1 << (ordinal & 7))));
   const [start, end] = query.range;
   const ordinals: number[] = [];
+  const requestedPage = Math.max(1, query.page), offset = (requestedPage - 1) * size;
+  const lastPage = mode === "page" && requestedPage > 1 ? new Array<number>(size) : undefined;
   for (let i = start; i < end; i++) if (matches(i)) {
     if (mode === "first") return { ordinals: [i], count: 1, page: 1, pages: 1 };
-    count++; if (mode === "all" && ordinals.length < limit) ordinals.push(i);
+    if ((mode === "all" && ordinals.length < limit) || (mode === "page" && count >= offset && ordinals.length < size)) ordinals.push(i);
+    if (lastPage) lastPage[count % size] = i;
+    count++;
   }
   if (mode !== "page") return { ordinals, count, page: 1, pages: 1 };
   const pages = Math.max(1, Math.ceil(count / size));
-  const page = Math.min(pages, Math.max(1, query.page));
-  let seen = 0;
-  for (let i = start; i < end && ordinals.length < size; i++) if (matches(i)) {
-    if (seen++ >= (page - 1) * size) ordinals.push(i);
-  }
-  return { ordinals, count, page, pages };
+  const page = Math.min(pages, requestedPage);
+  // Exact counts and the requested window come from the same scan. A bounded
+  // ring keeps the final page available when an excessive page must be clamped.
+  return { ordinals: requestedPage > pages ? lastPage!.slice(0, count - (pages - 1) * size) : ordinals, count, page, pages };
 }
 
 export function decodeBitmap(encoded: string, total: number): Uint8Array {

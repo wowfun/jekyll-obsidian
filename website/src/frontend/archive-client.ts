@@ -1,6 +1,7 @@
-import { archiveState, decodeBitmap, type ArchiveCard, type ArchiveManifest, type ArchiveMatches, type ArchiveQueryMode } from "./archive-query";
+import { ARCHIVE_POSTING_CACHE_LIMIT, archiveState, decodeBitmap, type ArchiveCard, type ArchiveManifest, type ArchiveMatches, type ArchiveQueryMode } from "./archive-query";
 import { requireSiteUrl } from "./urls";
 import { ArchiveBodyBudget } from "./archive-export-budget";
+import type { ArchiveWorkerRequest } from "./archive-worker";
 
 function object(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("Invalid archive data");
@@ -31,17 +32,20 @@ export function createArchiveClient(source: string) {
   const cache = new Map<string, unknown>();
   const requests = new Map<string, SharedRequest>();
   const postings = new Map<string, Uint8Array>();
+  const workerPostings = new Map<string, Uint8Array>();
+  let workerGeneration: string | undefined;
   let manifest: ArchiveManifest | undefined, queryId = 0, active = 0;
   let identities: Map<string, number> | undefined;
   const queue: { start: () => void; cancel: () => void }[] = [];
   const pending = new Map<number, { resolve: (result: ArchiveMatches) => void; reject: (error: unknown) => void }>();
   function failWorker(failed: Worker, error: unknown): void {
     if (worker !== failed) return;
-    worker = undefined; failed.terminate();
+    worker = undefined; failed.terminate(); workerPostings.clear(); workerGeneration = undefined;
     for (const job of pending.values()) job.reject(error);
   }
   function queryWorker(): Worker {
     if (!worker) {
+      workerPostings.clear(); workerGeneration = undefined;
       const next = new Worker(requireSiteUrl("archive-worker"), { type: "module" });
       next.onmessage = (event: MessageEvent<ArchiveMatches & { id: number }>) => {
         if (worker === next) pending.get(event.data.id)?.resolve(event.data);
@@ -180,7 +184,7 @@ export function createArchiveClient(source: string) {
         if (!postings.has(key)) postings.set(key, decodeBitmap(posting.bitmap, data.total));
       }
       const bitmap = postings.get(key)!; postings.delete(key); postings.set(key, bitmap);
-      while (postings.size > 20) postings.delete(postings.keys().next().value!);
+      while (postings.size > ARCHIVE_POSTING_CACHE_LIMIT) postings.delete(postings.keys().next().value!);
       bitmaps[key] = bitmap;
     }, signal);
     signal.throwIfAborted();
@@ -191,7 +195,19 @@ export function createArchiveClient(source: string) {
       const timeout = setTimeout(() => failWorker(currentWorker, new Error("Archive query timed out")), 15000);
       pending.set(id, { resolve(value) { finish(); resolve(value); }, reject(error) { finish(); reject(error); } });
       signal.addEventListener("abort", abort, { once: true });
-      try { currentWorker.postMessage({ id, total: data.total, size: data.page_size, query: state.query, bitmaps, mode, limit }); }
+      try {
+        if (workerGeneration !== data.generation) { workerPostings.clear(); workerGeneration = data.generation; }
+        const updates = Object.fromEntries(Object.entries(bitmaps).filter(([key, bitmap]) => workerPostings.get(key) !== bitmap));
+        const request: ArchiveWorkerRequest = { id, generation: data.generation, total: data.total, size: data.page_size, query: state.query, bitmaps: updates, mode, limit };
+        currentWorker.postMessage(request);
+        // Messages to one worker are ordered. Mirror its bounded posting cache
+        // only after a successful send; recreation starts with no known entries.
+        for (const key of state.query.groups.flat()) {
+          const bitmap = bitmaps[key];
+          if (bitmap) { workerPostings.delete(key); workerPostings.set(key, bitmap); }
+        }
+        while (workerPostings.size > ARCHIVE_POSTING_CACHE_LIMIT) workerPostings.delete(workerPostings.keys().next().value!);
+      }
       catch (error) { failWorker(currentWorker, error); }
     });
   }
@@ -263,6 +279,6 @@ export function createArchiveClient(source: string) {
       const html = await response.text(); signal.throwIfAborted(); return { html, url: finalUrl };
     }, signal);
   }
-  return { manifest: getManifest, revalidate, revalidateCurrent, select, cards, lookup, markdown, article, dispose() { lifetime.abort(); worker?.terminate(); worker = undefined; cache.clear(); postings.clear(); identities = undefined; } };
+  return { manifest: getManifest, revalidate, revalidateCurrent, select, cards, lookup, markdown, article, dispose() { lifetime.abort(); worker?.terminate(); worker = undefined; cache.clear(); postings.clear(); workerPostings.clear(); workerGeneration = undefined; identities = undefined; } };
 }
 export type ArchiveClient = ReturnType<typeof createArchiveClient>;
