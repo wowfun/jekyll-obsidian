@@ -35,3 +35,8 @@ describe('paged archive queries', () => {
     expect(archiveState(manifest, '?year=2026').query.range).toEqual([0, 6]);
   });
 });
+
+it('does not inherit an alias for a custom facet tag named constructor', () => {
+  const data = { total: 1, page_size: 50, facets: { category: [] }, prefixes: { category: 'c' }, aliases: {}, years: {}, months: {}, days: {} } as unknown as ArchiveManifest;
+  expect(archiveState(data, '?category=onstructor').parameters.toString()).toBe('category=onstructor');
+});

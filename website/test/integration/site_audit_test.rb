@@ -18,14 +18,23 @@ class SiteAuditTest < Minitest::Test
     end
   end
 
-  def test_accepts_only_generation_scoped_archive_artifact_names
+  def test_accepts_only_current_descriptor_and_generation_scoped_archive_artifact_names
     Dir.mktmpdir("garden-archive-audit") do |site|
       File.write(File.join(site, "index.html"), "<!doctype html><title>Garden</title>")
       directory = File.join(site, "assets", "website", "i18n", "zh-CN", "archive", "a" * 64)
       FileUtils.mkdir_p(directory)
       %w[manifest.json identities.json cards-0.json].each { |name| File.write(File.join(directory, name), "{}") }
+      File.write(File.join(File.dirname(directory), "current.json"), "{}")
+      primary = File.join(site, "assets", "website", "archive")
+      FileUtils.mkdir_p(primary)
+      File.write(File.join(primary, "current.json"), "{}")
       _stdout, stderr, status = audit(site)
       assert status.success?, stderr
+      File.write(File.join(primary, "credentials.json"), "{}")
+      _stdout, stderr, status = audit(site)
+      refute status.success?
+      assert_includes stderr, "extension allowlist"
+      File.delete(File.join(primary, "credentials.json"))
       File.write(File.join(directory, "credentials.json"), "{}")
       _stdout, stderr, status = audit(site)
       refute status.success?

@@ -1,5 +1,5 @@
 import type { ArchiveCard } from "./archive-query";
-import { FAVORITES_CHANGE, FAVORITES_RECOVERY_CHANGE, favoriteCard, favoriteRecoveryCopies, clearFavoriteRecovery, restoreFavoriteRecovery, favoritesDamaged, FavoritesStorageError, favoritesKey, readFavorites, toggleFavorite } from "./favorites-store";
+import { FAVORITES_CHANGE, FAVORITES_RECOVERY_CHANGE, favoriteCard, favoriteRecoveryCopies, hasFavoriteRecovery, clearFavoriteRecovery, restoreFavoriteRecovery, favoritesDamaged, FavoritesStorageError, favoritesKey, readFavoriteCollection, toggleFavorite } from "./favorites-store";
 
 const buttonCards = new WeakMap<HTMLButtonElement, { raw: string; card: ArchiveCard }>();
 const pendingButtons = new WeakSet<HTMLButtonElement>();
@@ -31,14 +31,17 @@ export function showFavoriteError(error?: unknown): void {
 export function favoriteButton(card: ArchiveCard): HTMLButtonElement {
   const button = document.createElement("button"); button.type = "button"; button.className = "favorite-button";
   button.setAttribute("aria-pressed", "false");
-  button.dataset.favoriteToggle = ""; button.dataset.favoriteId = card.id; button.dataset.favoriteCard = JSON.stringify(card);
+  button.dataset.favoriteToggle = ""; button.dataset.favoriteId = card.id;
+  // Browser-rendered cards already crossed the archive/storage boundary. SSR
+  // buttons still parse and validate their serialized snapshot on first use.
+  buttonCards.set(button, { raw: "", card });
   button.innerHTML = '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5 3h10v14l-5-3-5 3z"></path></svg><span data-favorite-label></span>';
   return button;
 }
-export function refreshFavoriteButtons(): void {
+export function refreshFavoriteButtons(selection?: ReadonlySet<string>): void {
   if (!document.querySelector("[data-favorites-ui]")) return;
-  let selected: Set<string>;
-  try { selected = new Set(readFavorites().keys()); }
+  let selected: ReadonlySet<string>;
+  try { selected = selection || new Set(readFavoriteCollection().entries.keys()); }
   catch (error) {
     showFavoriteError(error);
     for (const button of document.querySelectorAll<HTMLButtonElement>("[data-favorite-toggle]")) { button.hidden = false; button.disabled = pendingButtons.has(button); }
@@ -62,7 +65,7 @@ export function initialiseFavorites(): () => void {
   const recovery = document.querySelector<HTMLElement>("[data-favorites-recovery]");
   const refreshRecovery = () => {
     if (!recovery) return;
-    try { recovery.hidden = !favoriteRecoveryCopies().length; } catch (error) { showFavoriteError(error); }
+    try { recovery.hidden = !hasFavoriteRecovery(); } catch (error) { showFavoriteError(error); }
   };
   const onChange = () => {
     if (!document.querySelector("[data-favorites-page]")) refreshFavoriteButtons();

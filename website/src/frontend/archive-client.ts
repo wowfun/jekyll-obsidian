@@ -127,7 +127,7 @@ export function createArchiveClient(source: string) {
     if (data.ledger_group_by !== undefined && data.ledger_group_by !== "year" && data.ledger_group_by !== "day") throw new Error("Invalid ledger grouping");
     for (const [name, prefix] of Object.entries(object(data.prefixes))) {
       if (!/^[a-z][a-z0-9_-]*$/.test(name) || typeof prefix !== "string" || !Array.isArray(object(data.facets)[name])) throw new Error("Invalid archive facet");
-      for (const entry of object(data.facets)[name] as unknown[]) { const option = object(entry); if (typeof option.id !== "string" || typeof option.name !== "string" || typeof option.posting !== "string") throw new Error("Invalid archive option"); }
+      for (const entry of object(data.facets)[name] as unknown[]) { const option = object(entry); if (typeof option.id !== "string" || typeof option.name !== "string" || (option.posting !== undefined && typeof option.posting !== "string")) throw new Error("Invalid archive option"); }
     }
     if (data.chunks.length !== Math.ceil(Number(data.total) / Number(data.page_size))) throw new Error("Invalid archive chunk count");
     for (const mapping of [data.years, data.months, data.days]) for (const range of Object.values(object(mapping))) {
@@ -149,6 +149,23 @@ export function createArchiveClient(source: string) {
     const signal = combined(caller);
     return await resource("manifest.json", signal, true) as ArchiveManifest;
   }
+  async function revalidateCurrent(source: string, caller?: AbortSignal): Promise<ArchiveManifest> {
+    const signal = combined(caller), url = archiveUrl(source);
+    const target = await shared("current:" + url.href, signal, requestSignal => limited(async () => {
+      const response = await fetch(url, { signal: AbortSignal.any([requestSignal, AbortSignal.timeout(15000)]), cache: "no-cache", headers: { Accept: "application/json" } });
+      if (!response.ok || archiveUrl(response.url || url.href).origin !== url.origin) throw new Error("Current archive could not be loaded");
+      const descriptor = object(await response.json()); requestSignal.throwIfAborted();
+      if (descriptor.version !== 1 || typeof descriptor.url !== "string") throw new Error("Invalid current archive descriptor");
+      const next = archiveUrl(descriptor.url);
+      if (!next.pathname.endsWith("/manifest.json")) throw new Error("Invalid current archive manifest path");
+      return next.href;
+    }, requestSignal));
+    // Preserve the caller's lifetime; switching generations aborts the signal
+    // used for discovery along with all other requests of the old generation.
+    signal.throwIfAborted();
+    if (manifest && target === manifestUrl.href) return manifest;
+    return revalidate(target as string, caller);
+  }
   async function select(state: ReturnType<typeof archiveState>, mode: ArchiveQueryMode, caller?: AbortSignal, limit?: number): Promise<ArchiveMatches> {
     const signal = combined(caller), data = await getManifest(signal);
     const bitmaps: Record<string, Uint8Array> = Object.create(null) as Record<string, Uint8Array>;
@@ -156,6 +173,7 @@ export function createArchiveClient(source: string) {
       const split = key.indexOf("/"), name = key.slice(0, split), id = key.slice(split + 1);
       const option = data.facets[name]?.find(entry => entry.id === id);
       if (!option) return;
+      if (!option.posting) throw new Error("Archive does not provide remote filter postings");
       if (!postings.has(key)) {
         const posting = object(await resource(option.posting, signal));
         if (posting.total !== data.total || typeof posting.bitmap !== "string") throw new Error("Invalid posting");
@@ -245,6 +263,6 @@ export function createArchiveClient(source: string) {
       const html = await response.text(); signal.throwIfAborted(); return { html, url: finalUrl };
     }, signal);
   }
-  return { manifest: getManifest, revalidate, select, cards, lookup, markdown, article, dispose() { lifetime.abort(); worker?.terminate(); worker = undefined; cache.clear(); postings.clear(); identities = undefined; } };
+  return { manifest: getManifest, revalidate, revalidateCurrent, select, cards, lookup, markdown, article, dispose() { lifetime.abort(); worker?.terminate(); worker = undefined; cache.clear(); postings.clear(); identities = undefined; } };
 }
 export type ArchiveClient = ReturnType<typeof createArchiveClient>;

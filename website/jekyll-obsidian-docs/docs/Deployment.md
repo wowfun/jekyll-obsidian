@@ -28,6 +28,10 @@ Before upload, the audit checks output paths, file types, site size, URLs, and a
 
 The Action accepts `url` and `baseurl`, and returns `site-path`, the absolute output directory. The example workflow passes Pages metadata to these inputs and uploads that directory.
 
+## Archive deployment metadata
+
+Paged archives and favorites emit a small `assets/website/archive/current.json` descriptor, with a language-specific copy under `assets/website/i18n/<locale>/archive/`. Browser history restores and Retry read this descriptor to discover the current generation without downloading the page again. Publish it with the matching archive files. If you customize cache headers, allow the descriptor to revalidate; only generation paths are immutable.
+
 ## Find the deployed site
 
 The deployment job and **Settings > Pages** show the published URL. A project repository normally uses `https://<owner>.github.io/<repository>/`; an `<owner>.github.io` repository uses the origin root.

@@ -33,13 +33,13 @@ module JekyllObsidian
     # Cards must be in descending display-date order with undated cards last.
     # Within each day, preserve the presenter's stable ordering. Date ranges in
     # the emitted index refer to contiguous ordinal blocks in this sequence.
-    def build(cards, config)
+    def build(cards, config, postings: true)
       size = config.blog.fetch("page_size") || 50
       labels = config.site.tag_labels || {}
       aliases = config.site.tag_aliases || {}
       facets = config.blog.fetch("facets")
       records = cards.map { |card| record(card, config) }
-      generation = Digest::SHA256.hexdigest(JSON.generate([records, labels, aliases, config.blog, config.features.fetch("favorites")]))
+      generation = Digest::SHA256.hexdigest(JSON.generate([records, labels, aliases, config.blog, config.features.fetch("favorites"), postings]))
       root = "/assets/website/archive/#{generation}"
       files = []
       emit = lambda do |name, data, localize_content: false|
@@ -50,10 +50,14 @@ module JekyllObsidian
         records.each_with_index { |record, ordinal| record.fetch("facets").fetch(name).each { |id| members[id] << ordinal } }
         options = members.map do |id, ordinals|
           filename = "facet-#{Digest::SHA256.hexdigest(JSON.generate([name, id]))}.json"
-          bytes = Array.new((records.length + 7) / 8, 0)
-          ordinals.each { |ordinal| bytes[ordinal / 8] |= 1 << (ordinal % 8) }
-          emit.call(filename, { "generation" => generation, "total" => records.length, "bitmap" => Base64.strict_encode64(bytes.pack("C*")) })
-          { "id" => id, "name" => labels.fetch("#{prefix}#{id}", id), "count" => ordinals.length, "posting" => filename }
+          option = { "id" => id, "name" => labels.fetch("#{prefix}#{id}", id), "count" => ordinals.length }
+          if postings
+            bytes = Array.new((records.length + 7) / 8, 0)
+            ordinals.each { |ordinal| bytes[ordinal / 8] |= 1 << (ordinal % 8) }
+            emit.call(filename, { "generation" => generation, "total" => records.length, "bitmap" => Base64.strict_encode64(bytes.pack("C*")) })
+            option["posting"] = filename
+          end
+          option
         end.sort_by { |option| [-option.fetch("count"), option.fetch("id")] }
         [name, options]
       end
@@ -96,12 +100,20 @@ module JekyllObsidian
       end
       emit.call("manifest.json", manifest)
       url = config.url_builder.href("#{root}/manifest.json")
-      first = records.first(size).map { |record| card_labels(record, manifest) }
+      current_url = config.url_builder.href("/assets/website/archive/current.json")
+      files << GeneratedFile.new(route: "/assets/website/archive/current.json", content: "#{JSON.generate("version" => 1, "url" => url)}\n", media_type: "application/json", localize_content: true)
+      first = records.first(size).each_with_index.map do |record, index|
+        labeled = card_labels(record, manifest)
+        if config.features.fetch("favorites")
+          labeled["favorite_card"] = cards[index]["favorite_card"] || record.merge("favorite_labels" => favorite_labels(record.fetch("facets"), facets, labels))
+        end
+        labeled
+      end
       daily = config.blog["timeline_granularity"] == "day"
       counts = (daily ? days : months).transform_values { |bounds| bounds[1] - bounds[0] }
       timeline = ArchiveChronology.timeline(counts, daily: daily)
       {
-        "archive" => manifest.merge("url" => url),
+        "archive" => manifest.merge("url" => url, "current_url" => current_url),
         "archive_groups" => groups(first, config),
         "timeline" => timeline, "files" => files
       }
@@ -110,10 +122,19 @@ module JekyllObsidian
     def record(card, config)
       date = card["published_at"]
       card.slice("id", "title", "url", "markdown_url", "summary", "source_url", "date_basis").merge(
-        "published_at" => date, "display_date" => date&.slice(0, 10),
-        "year" => date&.slice(0, 4) || "Undated", "month" => date&.slice(0, 7),
-        "facets" => facet_values(card["tags"], config)
-      )
+        "published_at" => date, "facets" => facet_values(card["tags"], config)
+      ).merge(calendar_fields(date))
+    end
+
+    def calendar_fields(date)
+      { "display_date" => date&.slice(0, 10), "year" => date&.slice(0, 4) || "Undated", "month" => date&.slice(0, 7) }
+    end
+
+    def favorite_labels(values, prefixes, labels)
+      values.each_with_object({}) do |(name, ids), result|
+        prefix = prefixes.fetch(name)
+        ids.each { |id| result["#{name}/#{id}"] = labels.fetch("#{prefix}#{id}", id) }
+      end
     end
 
     def groups(cards, config)
@@ -123,7 +144,7 @@ module JekyllObsidian
 
     def card_labels(card, manifest)
       facets = label_facets(card.fetch("facets"), manifest.fetch("prefixes"), manifest.fetch("labels"))
-      card.merge("archive_facets" => facets, "favorite_labels" => facets.to_h { |facet| ["#{facet.fetch("facet")}/#{facet.fetch("id")}", facet.fetch("name")] })
+      card.merge("archive_facets" => facets)
     end
   end
 end

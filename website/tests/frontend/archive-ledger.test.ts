@@ -14,3 +14,11 @@ it("facet links toggle their value while preserving other filters for new-tab na
   expect(document.querySelector<HTMLAnchorElement>('[data-archive-facet="source"]')!.getAttribute("href")).toBe("/garden/?topic=agents&day=2026-10-10");
   expect(document.querySelector<HTMLAnchorElement>('[data-archive-facet="topic"]')!.getAttribute("href")).toBe("/garden/?source=hn&day=2026-10-10&topic=agents&topic=systems");
 });
+
+it("uses current manifest grouping after a deployment and updates the CSS grouping attribute", () => {
+  const root = document.querySelector<HTMLElement>("main")!; root.dataset.ledgerGroupBy = "day";
+  renderArchiveLedger(root, [card], { ...favoriteManifest([card]), ledger_group_by: "year" });
+  expect(root.dataset.ledgerGroupBy).toBe("year");
+  expect(root.querySelector("h2")!.textContent).toBe("2026");
+  expect(root.querySelectorAll(".blog-ledger__meta")).toHaveLength(1);
+});

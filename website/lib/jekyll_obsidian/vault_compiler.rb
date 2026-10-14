@@ -393,7 +393,7 @@ module JekyllObsidian
         normalized[name] = value
       end
       @features = THEME_FEATURE_DEFAULTS.fetch(@theme).merge(normalized).sort.to_h.freeze
-      error("invalid_feature", "favorites is supported by the minimal theme") if @features.fetch("favorites") && @theme != "minimal"
+      error("invalid_feature", "favorites requires the minimal theme") if @features.fetch("favorites") && @theme != "minimal"
     end
 
     def resolve_comments_config

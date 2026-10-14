@@ -1,10 +1,10 @@
-import { archiveState, type ArchiveMatches, type ArchiveManifest } from "./archive-query";
+import { archivePageNumber, archiveState, type ArchiveMatches, type ArchiveCollection } from "./archive-query";
 import { createArchiveClient } from "./archive-client";
 import { initialiseArchiveExport } from "./archive-export";
 import { initialiseArchiveReading } from "./archive-reading";
 import { renderArchiveLedger } from "./archive-ledger";
-import { loadFavoriteArchive, reconcileFavoriteArchive, renderFavoriteFilters, selectFavorites } from "./favorite-archive";
-import { FAVORITES_CHANGE, favoritesRevision } from "./favorites-store";
+import { loadFavoriteArchive, refreshFavoriteArchive, renderFavoriteFilters, selectFavorites } from "./favorite-archive";
+import { FAVORITES_CHANGE } from "./favorites-store";
 import { favoritesUI } from "./favorite-controls";
 import { renderArchivePagination } from "./archive-pagination";
 
@@ -23,8 +23,11 @@ export function initialisePagedArchive(root: HTMLElement): () => void {
   const cleanupExport = favorites ? () => {} : initialiseArchiveExport(client);
   let epoch = 0, alive = true;
   let pendingSearch: string | undefined;
-  let savedArchive: Awaited<ReturnType<typeof loadFavoriteArchive>> | undefined, savedRevision: string | null | undefined;
-  let renderedFavoriteManifest: ArchiveManifest | undefined;
+  let savedArchive: Awaited<ReturnType<typeof loadFavoriteArchive>> | undefined;
+  let renderedFavoriteManifest: ArchiveCollection | undefined;
+  let deploymentVerified = true, discovery: Promise<void> | undefined;
+  const unavailable = async (): Promise<never> => { throw new Error("Current deployment could not be verified"); };
+  const snapshotsOnly = { manifest: unavailable, lookup: unavailable };
   let current: ArchiveMatches = { ordinals: [], count: 0, page: 1, pages: 1 };
   async function refresh(revalidate = false): Promise<void> {
     const search = window.location.search;
@@ -33,28 +36,33 @@ export function initialisePagedArchive(root: HTMLElement): () => void {
     const turn = ++epoch; status.textContent = status.dataset.loading || "Loading…"; retry.hidden = true;
     root.setAttribute("aria-busy", "true"); prev.disabled = true; next.disabled = true;
     try {
-      if (revalidate) {
+      if (revalidate && !discovery) {
         savedArchive = undefined;
-        // Generation paths are immutable. Rediscover the current path from the
-        // page after a deployment instead of retrying an obsolete hashed URL.
-        const page = await client.article(location.pathname, controller.signal, true);
-        const markup = new DOMParser().parseFromString(page.html, "text/html");
-        const source = markup.querySelector<HTMLElement>("[data-paged-archive]")?.dataset.archiveUrl;
-        if (!source) throw new Error("Missing current archive");
-        await client.revalidate(source, controller.signal);
+        deploymentVerified = false;
+        // This small descriptor changes on deployment even when an older
+        // immutable manifest is still available in the browser or CDN cache.
+        discovery = client.revalidateCurrent(root.dataset.archiveCurrentUrl!, controller.signal)
+          .then(() => { deploymentVerified = true; })
+          .catch(() => { controller.signal.throwIfAborted(); })
+          .finally(() => { discovery = undefined; });
       }
+      // A tab save or filter change must use the same verified generation.
+      // Failed discovery keeps snapshots authoritative until an explicit retry.
+      await discovery;
+      if (!alive || turn !== epoch) return;
+      if (!deploymentVerified && !favorites) throw new Error("Current deployment could not be verified");
       let saved: Awaited<ReturnType<typeof loadFavoriteArchive>> | undefined;
-      if (favorites) saved = savedArchive ? savedRevision === favoritesRevision() ? savedArchive : await reconcileFavoriteArchive(savedArchive, client, controller.signal) : await loadFavoriteArchive(client, controller.signal);
+      if (favorites) saved = await refreshFavoriteArchive(deploymentVerified ? client : snapshotsOnly, controller.signal, savedArchive);
       const data = saved?.manifest || await client.manifest(controller.signal);
       if (!alive || turn !== epoch) return;
-      if (saved) { savedArchive = saved; savedRevision = favoritesRevision(); }
+      if (saved) savedArchive = saved;
       const state = archiveState(data, window.location.search);
       const result = saved ? selectFavorites(saved.cards, data, state) : await client.select(state, "page", controller.signal);
       if (!alive || turn !== epoch) return;
       const cards = saved ? result.ordinals.map(ordinal => saved.cards[ordinal]!) : await client.cards(result.ordinals, controller.signal);
       if (!alive || turn !== epoch) return;
       if (saved && renderedFavoriteManifest !== data) { empty.replaceChildren(...emptyContent.map(node => node.cloneNode(true))); renderFavoriteFilters(root, data); renderedFavoriteManifest = data; }
-      renderArchiveLedger(root, cards, data);
+      renderArchiveLedger(root, cards, data, saved ? new Set(saved.snapshots.keys()) : undefined);
       reading.refresh();
       current = result;
       result.page > 1 ? state.parameters.set("page", String(result.page)) : state.parameters.delete("page");
@@ -112,8 +120,8 @@ export function initialisePagedArchive(root: HTMLElement): () => void {
   function submit(event: SubmitEvent): void {
     event.preventDefault();
     if (root.hasAttribute("aria-busy")) return;
-    const page = Number(jumpInput.value);
-    if (!Number.isSafeInteger(page) || page < 1 || page > current.pages || !jumpInput.value) {
+    const page = archivePageNumber(jumpInput.value);
+    if (page === undefined || page > current.pages) {
       onInvalid();
       jumpInput.reportValidity(); return;
     }

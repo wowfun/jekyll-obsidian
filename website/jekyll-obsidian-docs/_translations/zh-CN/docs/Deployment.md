@@ -22,6 +22,10 @@ description: 使用随附的 GitHub Pages 工作流检查并部署任意内置�
 
 Action 接受 `url` 和 `baseurl`，通过 `site-path` 返回输出目录的绝对路径。示例工作流将 Pages 元数据传给这些输入，并上传返回的目录。
 
+## 归档部署信息
+
+分页归档与收藏会生成轻量的 `assets/website/archive/current.json` 描述文件，各语言的副本位于 `assets/website/i18n/<locale>/archive/`。浏览器返回页面或点击重试时，会读取它来发现当前索引版本，无需再次下载整页 HTML。请将它与对应归档文件一起发布。自定义缓存响应头时，应允许此文件重新验证；只有带版本哈希的路径适合永久缓存。
+
 ## 查找已部署站点
 
 部署作业和 **Settings > Pages** 会显示站点地址。普通项目仓库通常使用 `https://<owner>.github.io/<repository>/`，名为 `<owner>.github.io` 的仓库使用根路径。

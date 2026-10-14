@@ -225,3 +225,26 @@ it('checks article cancellation before validating or reading a late response', a
   await expect(result).rejects.toBe(reason);
   expect(read).not.toHaveBeenCalled();
 });
+
+it('discovers the current deployment from a small descriptor even when the pinned manifest remains valid', async () => {
+  const next = { ...manifest, generation: 'b'.repeat(64) };
+  const fetch = vi.fn(async (url: URL, options: RequestInit) => {
+    if (url.pathname.endsWith('current.json')) { expect(options.cache).toBe('no-cache'); return Response.json({ version: 1, url: '/next/manifest.json' }); }
+    return Response.json(url.pathname.startsWith('/next/') ? next : manifest);
+  });
+  vi.stubGlobal('fetch', fetch); await client.manifest();
+  expect((await client.revalidateCurrent('/archive/current.json')).generation).toBe(next.generation);
+  expect(fetch.mock.calls.map(([url]) => url.pathname)).toEqual(['/archive/manifest.json', '/archive/current.json', '/next/manifest.json']);
+});
+
+it('rejects a current-deployment descriptor pointing outside the site', async () => {
+  vi.stubGlobal('fetch', vi.fn(async () => Response.json({ version: 1, url: 'https://other.example/manifest.json' })));
+  await expect(client.revalidateCurrent('/archive/current.json')).rejects.toThrow();
+});
+
+it('reuses an unchanged immutable manifest after checking the deployment descriptor', async () => {
+  const fetch = vi.fn(async (url: URL) => Response.json(url.pathname.endsWith('current.json') ? { version: 1, url: '/archive/manifest.json' } : manifest));
+  vi.stubGlobal('fetch', fetch); await client.manifest();
+  await client.revalidateCurrent('/archive/current.json');
+  expect(fetch).toHaveBeenCalledTimes(2);
+});

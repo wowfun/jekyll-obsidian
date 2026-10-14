@@ -75,10 +75,14 @@ module JekyllObsidian
         )
       end
 
-      def favorite_card(note, config, date: ArchiveChronology.local_time(note.published_at, config.blog["utc_offset"]))
-        record = PagedArchive.record(content_card(note, config).merge(
-          "published_at" => date, "markdown_url" => config.url_builder.href(PublishedMarkdown.route(note.route))), config)
-        PagedArchive.card_labels(record, "prefixes" => config.blog.fetch("facets"), "labels" => config.site.tag_labels || {}).except("archive_facets")
+      def favorite_card(note, config, date: nil)
+        # Shared by the article, ledger and other post cards during one render.
+        @favorite_cards[note.id] ||= begin
+          record = PagedArchive.record(content_card(note, config).merge(
+            "published_at" => date || ArchiveChronology.local_time(note.published_at, config.blog["utc_offset"]),
+            "markdown_url" => config.url_builder.href(PublishedMarkdown.route(note.route))), config)
+          record.merge("favorite_labels" => PagedArchive.favorite_labels(record.fetch("facets"), config.blog.fetch("facets"), config.site.tag_labels || {}))
+        end
       end
 
       def note_page(note, config, theme_data, topic_anchors, topic_summaries, local_graph, home_route, home_url)
@@ -539,6 +543,7 @@ module JekyllObsidian
 
     class Minimal < Presenter
       def render(model:, config:)
+        @favorite_cards = {}
         posts = ordered_posts(model)
         paged = config.home["layout"] == "archive" || config.blog["page_size"]
         displayed = paged ? posts.select(&:published_at).reverse + posts.reject(&:published_at) : displayed_posts(posts)
@@ -612,7 +617,7 @@ module JekyllObsidian
         attach_custom_tab_theme_data(theme_data, model, config)
         authored_root_route = model.notes.any? { |note| note.route == "/" }
         home = home_page(displayed, config, system_theme_data, taxonomy) if !root && !authored_root_route && displayed.any? && config.home["layout"] != "archive"
-        archive_data = (paged || config.features.fetch("favorites")) && PagedArchive.build(displayed.map { |post| note_card(post, config, taxonomy) }, config)
+        archive_data = (paged || config.features.fetch("favorites")) && PagedArchive.build(displayed.map { |post| note_card(post, config, taxonomy) }, config, postings: !!paged)
         if archive_data && paged
           groups = archive_data.fetch("archive_groups")
           timeline = archive_data.fetch("timeline")
@@ -709,8 +714,7 @@ module JekyllObsidian
       def archive_groups(posts, config, taxonomy)
         cards = posts.map do |note|
           card = note_card(note, config, taxonomy)
-          date = card["published_at"]
-          card.merge("display_date" => date&.slice(0, 10), "year" => date&.slice(0, 4) || "Undated")
+          card.merge(PagedArchive.calendar_fields(card["published_at"]))
         end
         PagedArchive.groups(cards, config)
       end
@@ -844,6 +848,7 @@ module JekyllObsidian
 
     class Docs < Presenter
       def render(model:, config:)
+        @favorite_cards = {}
         taxonomy = taxonomy_for(model.notes, config)
         navigation = config.navigation
         docs_home_url = navigation.docs_home_url

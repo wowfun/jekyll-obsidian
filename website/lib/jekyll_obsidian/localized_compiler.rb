@@ -18,7 +18,7 @@ module JekyllObsidian
     ].freeze
     STRUCTURAL_PROPERTIES = (FrontMatter::SUPPORTED - TRANSLATABLE_PROPERTIES - %w[publish tab]).freeze
     URL_PROPERTIES = %w[
-      absolute_url canonical_url discussion_url docs_home_url
+      absolute_url canonical_url current_url discussion_url docs_home_url
       home_url href image markdown_url redirect_url route url
     ].freeze
     SOURCE_LINK_PROPERTIES = %w[edit history imported issue repository source].freeze
@@ -693,11 +693,6 @@ module JekyllObsidian
       website["alternates"] = alternates
       website["robots"] = "noindex" unless actual
       website["resources"] = resource_urls(locale)
-      archive = website.dig("theme_data", "archive")
-      if archive
-        archive_route = archive.fetch("url").delete_prefix(@config.baseurl.to_s)
-        archive["url"] = @url_builder.href(generated_route(archive_route, locale))
-      end
       website["home_route"] = prefixed_route(website.fetch("home_route", "/"), locale)
       localize_navigation_labels!(website, locale_data.fetch("messages"))
       preserve_default_navigation_order!(website, default_navigation_order)
@@ -723,10 +718,10 @@ module JekyllObsidian
         end
       end
       validate_localized_navigation!(website, locale)
+      website["alternates"] = [] if website.dig("theme_data", "favorites")
       website["canonical_url"] = if kind == "redirect"
         absolute_for(website.fetch("redirect_url"))
       elsif website.dig("theme_data", "favorites")
-        website["alternates"] = []
         @url_builder.absolute_url(website.fetch("home_route"))
       elsif actual
         @url_builder.absolute_url(route)
@@ -895,7 +890,9 @@ module JekyllObsidian
       relative = "/" if relative.empty?
       return value if @shared_html_routes.include?(relative)
 
-      localized = if relative.start_with?("/assets/vault/", "/assets/website/")
+      localized = if relative.start_with?("/assets/website/archive/")
+        generated_route(relative, locale)
+      elsif relative.start_with?("/assets/vault/", "/assets/website/")
         relative
       else
         prefixed_route(relative, locale)

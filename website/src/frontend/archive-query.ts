@@ -1,10 +1,15 @@
-export interface ArchiveOption { id: string; name: string; count: number; posting: string }
-export interface ArchiveManifest {
-  version: number; generation: string; total: number; page_size: number; export_max_days: number;
-  facets: Record<string, ArchiveOption[]>; prefixes: Record<string, string>;
+export interface ArchiveFacetOption { id: string; name: string; count: number }
+export interface ArchiveCollection {
+  total: number; page_size: number;
+  facets: Record<string, ArchiveFacetOption[]>; prefixes: Record<string, string>;
   labels: Record<string, string>; aliases: Record<string, string>;
-  years: Record<string, [number, number]>; months: Record<string, [number, number]>; days: Record<string, [number, number]>; chunks: string[];
-  identities?: string; ledger_group_by?: "year" | "day";
+  years: Record<string, [number, number]>; months: Record<string, [number, number]>; days: Record<string, [number, number]>;
+  ledger_group_by?: "year" | "day";
+}
+export interface ArchiveOption extends ArchiveFacetOption { posting?: string }
+export interface ArchiveManifest extends ArchiveCollection {
+  version: number; generation: string; export_max_days: number;
+  facets: Record<string, ArchiveOption[]>; chunks: string[]; identities?: string;
 }
 export interface ArchiveCard {
   id: string; title: string; url: string; markdown_url: string; summary?: string | null; source_url?: string | null;
@@ -15,6 +20,15 @@ export interface ArchiveCard {
 export interface ArchiveQuery { groups: string[][]; range: [number, number]; page: number }
 export type ArchiveQueryMode = "page" | "all" | "first";
 export interface ArchiveMatches { ordinals: number[]; count: number; page: number; pages: number }
+
+export function archivePageNumber(value: string): number | undefined {
+  const page = /^\d+$/.test(value) ? Number(value) : NaN;
+  return Number.isSafeInteger(page) && page > 0 ? page : undefined;
+}
+export function canonicalFacetId(id: string, prefix: string, aliases: Record<string, string>): string {
+  const key = prefix + id, alias = Object.hasOwn(aliases, key) ? aliases[key] : undefined;
+  return alias?.startsWith(prefix) ? alias.slice(prefix.length) : id;
+}
 
 export function matchArchive(total: number, size: number, query: ArchiveQuery, bitmaps: Record<string, Uint8Array>, mode: ArchiveQueryMode = "page", limit = Infinity): ArchiveMatches {
   const union = query.groups.map((keys) => {
@@ -50,14 +64,11 @@ export function decodeBitmap(encoded: string, total: number): Uint8Array {
   return bytes;
 }
 
-export function archiveState(manifest: ArchiveManifest, search: string): { parameters: URLSearchParams; query: ArchiveQuery; keys: string[] } {
+export function archiveState(manifest: ArchiveCollection, search: string): { parameters: URLSearchParams; query: ArchiveQuery; keys: string[] } {
   const input = new URLSearchParams(search), parameters = new URLSearchParams();
   const groups: string[][] = [], keys: string[] = [];
   for (const [name, prefix] of Object.entries(manifest.prefixes)) {
-    const ids = [...new Set(input.getAll(name).filter(Boolean).map((id) => {
-      const tag = manifest.aliases[prefix + id];
-      return tag?.startsWith(prefix) ? tag.slice(prefix.length) : id;
-    }))].sort();
+    const ids = [...new Set(input.getAll(name).filter(Boolean).map(id => canonicalFacetId(id, prefix, manifest.aliases)))].sort();
     groups.push(ids.map((id) => `${name}/${id}`));
     for (const id of ids) { parameters.append(name, id); keys.push(`${name}/${id}`); }
   }
@@ -66,8 +77,7 @@ export function archiveState(manifest: ArchiveManifest, search: string): { param
   if (day) { parameters.set("day", day); range = Object.hasOwn(manifest.days, day) ? manifest.days[day]! : [0, 0]; }
   else if (month) { parameters.set("month", month); range = Object.hasOwn(manifest.months, month) ? manifest.months[month]! : [0, 0]; }
   else if (year) { parameters.set("year", year); range = Object.hasOwn(manifest.years, year) ? manifest.years[year]! : [0, 0]; }
-  const rawPage = input.get("page") || "1";
-  const page = /^\d+$/.test(rawPage) && Number.isSafeInteger(Number(rawPage)) ? Math.max(1, Number(rawPage)) : 1;
+  const page = archivePageNumber(input.get("page") || "1") || 1;
   if (page > 1) parameters.set("page", String(page));
   return { parameters, query: { groups, range, page }, keys };
 }

@@ -1,4 +1,4 @@
-import type { ArchiveCard, ArchiveManifest } from "./archive-query";
+import type { ArchiveCard, ArchiveCollection } from "./archive-query";
 import { archiveUrl } from "./archive-client";
 import { favoriteButton, favoritesUI, refreshFavoriteButtons } from "./favorite-controls";
 import { facetLabel, favoriteLabels } from "./archive-facets";
@@ -8,8 +8,10 @@ export function textElement<K extends keyof HTMLElementTagNameMap>(tag: K, value
   if (className) element.className = className;
   return element;
 }
-export function renderArchiveLedger(root: HTMLElement, cards: ArchiveCard[], data: ArchiveManifest): void {
-  const fragment = document.createDocumentFragment(), daily = root.dataset.ledgerGroupBy === "day" || data.ledger_group_by === "day";
+export function renderArchiveLedger(root: HTMLElement, cards: ArchiveCard[], data: ArchiveCollection, selection?: ReadonlySet<string>): void {
+  const grouping = data.ledger_group_by || root.dataset.ledgerGroupBy || "year";
+  root.dataset.ledgerGroupBy = grouping;
+  const fragment = document.createDocumentFragment(), daily = grouping === "day";
   const ui = favoritesUI(), favorites = Boolean(document.querySelector("[data-favorites-ui]"));
   let label: string | undefined, ol: HTMLOListElement | undefined;
   for (const card of cards) {
@@ -49,5 +51,5 @@ export function renderArchiveLedger(root: HTMLElement, cards: ArchiveCard[], dat
     content.append(footer); row.append(content); ol!.append(row);
   }
   root.querySelector<HTMLElement>("[data-filter-list]")!.replaceChildren(fragment);
-  refreshFavoriteButtons();
+  refreshFavoriteButtons(selection);
 }

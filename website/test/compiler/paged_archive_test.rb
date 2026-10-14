@@ -225,4 +225,14 @@ class PagedArchiveScaleTest < Minitest::Test
     assert_equal 100_000, identities.fetch("ids").length
     assert_operator JSON.generate(identities).bytesize, :<, 1_000_000
   end
+  def test_custom_facets_keep_their_name_instead_of_being_labeled_topics
+    require "liquid"
+    result = compile(note("items/a.md", "---\npublish: true\ncontent_type: post\ndate: 2026-10-10\ntags: [read/next]\n---\nBody"),
+      home: { "layout" => "archive" }, blog: { "facets" => { "reading" => "read/" } })
+    assert result.success?, result.diagnostics.map(&:message).join("\n")
+    template = Liquid::Template.parse(File.read(File.expand_path("../../_includes/website/archive-facets.html", __dir__)))
+    markup = template.render!("page" => page(result, "/").data, "ui" => { "topics" => "Topics" })
+    assert_equal ["reading"], Nokogiri::HTML5.fragment(markup).css("nav").map { |node| node["aria-label"] }
+  end
+
 end

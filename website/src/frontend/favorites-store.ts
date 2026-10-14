@@ -1,10 +1,11 @@
-import type { ArchiveCard, ArchiveManifest } from "./archive-query";
+import type { ArchiveCard, ArchiveCollection } from "./archive-query";
 import { archiveUrl } from "./archive-client";
 import { favoriteLabels } from "./archive-facets";
 
 export const FAVORITES_CHANGE = "website:favorites-change";
 export const FAVORITES_RECOVERY_CHANGE = "website:favorites-recovery-change";
 export interface Favorite { id: string; saved_at: string; snapshots: Record<string, ArchiveCard> }
+export interface FavoriteCollection { entries: ReadonlyMap<string, Favorite>; revision: string | null }
 let cached: { key: string; raw: string | null; entries: Map<string, Favorite>; damaged: boolean } | undefined;
 export class FavoritesStorageError extends Error {
   constructor(public code: "damaged" | "unreadable" | "unsupported" | "recovery_required") { super(code); }
@@ -34,13 +35,12 @@ export function favoriteCard(value: unknown): ArchiveCard {
     month: card.display_date?.slice(0, 7) || null, facets: structuredClone(card.facets), summary: card.summary ?? null,
     source_url: card.source_url ?? null, date_basis: card.date_basis ?? null, favorite_labels: { ...card.favorite_labels } };
 }
-export function readFavorites(): Map<string, Favorite> {
+export function readFavoriteCollection(): FavoriteCollection {
   const key = favoritesKey(), raw = localStorage.getItem(key);
-  if (cached?.key === key && cached.raw === raw) return new Map(cached.entries);
-  const decoded = decodeFavorites(raw);
-  cached = { key, raw, ...decoded };
-  return new Map(decoded.entries);
+  if (cached?.key !== key || cached.raw !== raw) cached = { key, raw, ...decodeFavorites(raw) };
+  return { entries: cached.entries, revision: raw };
 }
+export function readFavorites(): Map<string, Favorite> { return new Map(readFavoriteCollection().entries); }
 function decodeFavorites(raw: string | null): { entries: Map<string, Favorite>; damaged: boolean } {
   const result = new Map<string, Favorite>();
   if (!raw) return { entries: result, damaged: false };
@@ -66,14 +66,15 @@ function decodeFavorites(raw: string | null): { entries: Map<string, Favorite>; 
   }
   return { entries: result, damaged };
 }
-export function favoritesRevision(): string | null { return localStorage.getItem(favoritesKey()); }
-export function favoritesDamaged(): boolean { return cached?.key === favoritesKey() && cached.damaged || false; }
+export function favoritesDamaged(): boolean { return cached?.key === favoritesKey() ? cached.damaged : false; }
 function persist(entries: Map<string, Favorite>): void {
   const key = favoritesKey(), raw = JSON.stringify({ version: 1, entries: [...entries.values()] });
   // Keep the exact damaged payload before replacing it. If either write fails,
   // the original collection remains intact and no success event is emitted.
   if (cached?.key === key && cached.damaged && cached.raw) {
     const copies = favoriteRecoveryCopies();
+    // A distinct damaged payload needs a separate copy. Keep the earlier
+    // original until the reader explicitly clears it instead of evicting data.
     if (copies.some(copy => copy.raw !== cached!.raw)) throw new FavoritesStorageError("recovery_required");
     if (!copies.length) {
       localStorage.setItem(`${key}:recovery:current`, cached.raw);
@@ -84,17 +85,23 @@ function persist(entries: Map<string, Favorite>): void {
   cached = { key, raw, entries, damaged: false };
 }
 export function favoriteRecoveryCopies(): { key: string; raw: string }[] {
-  const prefix = favoritesKey() + ":recovery:", copies: { key: string; raw: string }[] = [];
+  return favoriteRecoveryKeys().sort().flatMap(key => {
+    const raw = localStorage.getItem(key); return raw === null ? [] : [{ key, raw }];
+  });
+}
+function favoriteRecoveryKeys(): string[] {
+  const prefix = favoritesKey() + ":recovery:", keys: string[] = [];
   for (let index = 0; index < localStorage.length; index++) {
     const key = localStorage.key(index);
-    if (key?.startsWith(prefix)) { const raw = localStorage.getItem(key); if (raw !== null) copies.push({ key, raw }); }
+    if (key?.startsWith(prefix)) keys.push(key);
   }
-  return copies.sort((a, b) => a.key.localeCompare(b.key));
+  return keys;
 }
+export function hasFavoriteRecovery(): boolean { return favoriteRecoveryKeys().length > 0; }
 export async function clearFavoriteRecovery(): Promise<void> {
   if (!navigator.locks) throw new FavoritesStorageError("unsupported");
   await navigator.locks.request(favoritesKey(), () => {
-    for (const copy of favoriteRecoveryCopies()) localStorage.removeItem(copy.key);
+    for (const key of favoriteRecoveryKeys()) localStorage.removeItem(key);
   });
   window.dispatchEvent(new Event(FAVORITES_RECOVERY_CHANGE));
 }
@@ -117,38 +124,56 @@ export async function restoreFavoriteRecovery(): Promise<void> {
   });
   window.dispatchEvent(new Event(FAVORITES_CHANGE));
 }
-async function writeFavorites(operation: (entries: Map<string, Favorite>) => boolean): Promise<void> {
+async function writeFavorites(operation: (entries: Map<string, Favorite>) => boolean): Promise<FavoriteCollection> {
   if (!navigator.locks) throw new FavoritesStorageError("unsupported");
-  await navigator.locks.request(favoritesKey(), () => {
-    const entries = readFavorites();
-    if (operation(entries)) persist(entries);
+  return navigator.locks.request(favoritesKey(), () => {
+    const collection = readFavoriteCollection();
+    const entries = new Map(collection.entries);
+    if (!operation(entries)) return collection;
+    persist(entries);
+    // Return the state actually read/written under this lock, rather than a
+    // later revision that may belong to another tab's yet-unrendered changes.
+    return { entries, revision: cached!.raw };
   });
 }
-export function snapshotCard(card: ArchiveCard, manifest?: ArchiveManifest): ArchiveCard {
+export function snapshotCard(card: ArchiveCard, manifest?: Pick<ArchiveCollection, "labels" | "prefixes">): ArchiveCard {
   const snapshot = favoriteCard(card);
   snapshot.favorite_labels = favoriteLabels(card, manifest);
   return snapshot;
 }
-export async function toggleFavorite(card: ArchiveCard, locale = document.documentElement.lang || "en", selected = !readFavorites().has(card.id)): Promise<void> {
+export async function toggleFavorite(card: ArchiveCard, locale = document.documentElement.lang || "en", selected?: boolean): Promise<void> {
   const snapshot = favoriteCard(card);
   await writeFavorites(entries => {
-    if (!selected) entries.delete(card.id);
+    if (!(selected ?? !entries.has(card.id))) return entries.delete(card.id);
     else {
       const entry = entries.get(card.id);
+      if (sameFavoriteCard(entry?.snapshots[locale], snapshot)) return false;
       entries.set(card.id, { id: card.id, saved_at: entry?.saved_at || new Date().toISOString(), snapshots: { ...entry?.snapshots, [locale]: snapshot } });
     }
     return true;
   });
   window.dispatchEvent(new Event(FAVORITES_CHANGE));
 }
-export async function updateFavoriteSnapshots(cards: ArchiveCard[], locale = document.documentElement.lang || "en"): Promise<void> {
-  if (!cards.length) return;
-  await writeFavorites(entries => {
+export function sameFavoriteCard(a: ArchiveCard | undefined, b: ArchiveCard | undefined): boolean {
+  if (a === b) return true;
+  if (!a || !b) return false;
+  const fields = ["id", "title", "url", "markdown_url", "published_at", "display_date", "year", "month", "summary", "source_url", "date_basis"] as const;
+  if (fields.some(key => a[key] !== b[key])) return false;
+  const names = Object.keys(a.facets);
+  if (names.length !== Object.keys(b.facets).length || names.some(name => !Object.hasOwn(b.facets, name) || a.facets[name]!.length !== b.facets[name]!.length || a.facets[name]!.some((id, i) => id !== b.facets[name]![i]))) return false;
+  const left = a.favorite_labels || {}, right = b.favorite_labels || {};
+  return Object.keys(left).length === Object.keys(right).length && Object.keys(left).every(key => Object.hasOwn(right, key) && left[key] === right[key]);
+}
+export async function updateFavoriteSnapshots(cards: ArchiveCard[], locale = document.documentElement.lang || "en", expected?: ReadonlyMap<string, Favorite>): Promise<FavoriteCollection> {
+  if (!cards.length) return readFavoriteCollection();
+  return writeFavorites(entries => {
     let changed = false;
     for (const card of cards) {
       const entry = entries.get(card.id); if (!entry) continue;
+      // Do not overwrite a newer snapshot saved while this lookup was pending.
+      if (expected && !sameFavoriteCard(entry.snapshots[locale], expected.get(card.id)?.snapshots[locale])) continue;
       const snapshot = favoriteCard(card);
-      if (JSON.stringify(entry.snapshots[locale]) !== JSON.stringify(snapshot)) { entries.set(card.id, { ...entry, snapshots: { ...entry.snapshots, [locale]: snapshot } }); changed = true; }
+      if (!sameFavoriteCard(entry.snapshots[locale], snapshot)) { entries.set(card.id, { ...entry, snapshots: { ...entry.snapshots, [locale]: snapshot } }); changed = true; }
     }
     return changed;
   });

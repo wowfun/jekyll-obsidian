@@ -1,7 +1,9 @@
 {% assign archive = page.website.theme_data.archive %}
 {% for group in archive.facets %}
-  <nav class="tag-filter archive-facet" aria-label="{% if group[0] == 'source' %}{{ ui.sources | default: 'Sources' | escape }}{% else %}{{ ui.topics | default: 'Topics' | escape }}{% endif %}">
-    <h2 class="archive-facet-label">{% if group[0] == 'source' %}{{ ui.sources | default: 'Sources' | escape }}{% else %}{{ ui.topics | default: 'Topics' | escape }}{% endif %}</h2>
+  {% assign facet_label = group[0] %}
+  {% if group[0] == 'source' %}{% assign facet_label = ui.sources | default: 'Sources' %}{% elsif group[0] == 'topic' %}{% assign facet_label = ui.topics | default: 'Topics' %}{% endif %}
+  <nav class="tag-filter archive-facet" aria-label="{{ facet_label | escape }}">
+    <h2 class="archive-facet-label">{{ facet_label | escape }}</h2>
     <ul class="tag-filter__list"><li><button class="tag-chip" type="button" data-archive-facet="{{ group[0] | escape }}" data-archive-value="" aria-pressed="true">{{ ui.all | default: 'All' | escape }} <span>{{ archive.total }}</span></button></li>
     {% for option in group[1] %}<li><button class="tag-chip" type="button" data-archive-facet="{{ group[0] | escape }}" data-archive-value="{{ option.id | escape }}" aria-pressed="false">{{ option.name | escape }} <span>{{ option.count }}</span></button></li>{% endfor %}</ul>
   </nav>

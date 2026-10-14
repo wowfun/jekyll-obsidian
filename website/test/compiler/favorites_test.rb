@@ -33,6 +33,17 @@ class FavoritesTest < Minitest::Test
     refute en.key?("favorite_labels")
     refute en.key?("favorite_prefixes")
     assert result.generated_files.any? { |file| file.route.end_with?("identities.json") }
+    ledger = page(result, "/").data.dig("website", "theme_data", "archive_groups").flat_map { |group| group.fetch("posts") }
+    assert_equal en.fetch("favorite_card"), ledger.find { |card| card.fetch("id") == en.fetch("id") }.fetch("favorite_card")
+    assert ledger.all? { |card| !card.fetch("favorite_card").key?("archive_facets") }
+    %w[en zh-CN].each do |locale|
+      route = locale == "en" ? "/favorites/" : "/zh-CN/favorites/"
+      archive = page(result, route).data.dig("website", "theme_data", "archive")
+      descriptor_route = archive.fetch("current_url").delete_prefix("/garden")
+      descriptor = result.generated_files.find { |file| file.route == descriptor_route }
+      assert_equal archive.fetch("url"), JSON.parse(descriptor.content).fetch("url")
+    end
+
   end
 
   def test_full_ledger_daily_groups_and_default_disabled_feature
@@ -52,4 +63,20 @@ class FavoritesTest < Minitest::Test
     collision = compile(*articles, note("favorites/index.md", "---\npublish: true\n---\n# Mine"), features: { "favorites" => true })
     refute collision.success?
   end
+  def test_lookup_only_favorites_do_not_emit_remote_filter_postings
+    result = compile(*articles, features: { "favorites" => true })
+    assert result.success?, result.diagnostics.map(&:message).join("\n")
+    refute result.generated_files.any? { |file| file.route.include?("/facet-") }
+    archive = page(result, "/favorites/").data.dig("website", "theme_data", "archive")
+    assert archive.fetch("facets").values.flatten.none? { |option| option.key?("posting") }
+    assert result.generated_files.any? { |file| file.route.end_with?("identities.json") }
+  end
+
+  def test_paged_cards_omit_unused_favorite_snapshots_when_the_feature_is_disabled
+    result = compile(*articles, blog: { "page_size" => 2 })
+    assert result.success?
+    cards = page(result, "/blog/").data.dig("website", "theme_data", "archive_groups").flat_map { |group| group.fetch("posts") }
+    assert cards.none? { |card| card.key?("favorite_labels") || card.key?("favorite_card") }
+  end
+
 end

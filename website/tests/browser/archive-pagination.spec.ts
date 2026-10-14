@@ -17,7 +17,7 @@ for (const locale of ["en", "zh-CN"]) {
     await expect(input).toHaveValue(last!);
     await expect(links.last()).toHaveAttribute("aria-current", "page");
     await page.goBack(); await expect(input).toHaveValue("1");
-    for (const value of ["0", "1.5", "99999"]) {
+    for (const value of ["0", "1.5", "99999", "1e1"]) {
       await input.fill(value); await input.press("Enter");
       expect(await input.evaluate(node => (node as HTMLInputElement).checkValidity())).toBe(false);
       expect(await input.evaluate(node => (node as HTMLInputElement).validationMessage)).toContain(locale === "en" ? "Enter a whole number" : "请输入");

@@ -10,7 +10,7 @@
           <div class="blog-ledger__content">
             {% if page.website.features.favorites %}<div class="blog-ledger__heading">{% endif %}
             <a class="blog-ledger__main" href="{{ post.url | escape }}"><strong>{{ post.title | escape }}</strong>{% if post.summary and post.summary != '' %}<span class="blog-ledger__description">{{ post.summary | escape }}</span>{% endif %}</a>
-            {% if post.favorite_card %}{% include website/favorite-button.html card=post.favorite_card %}{% elsif post.archive_facets %}{% include website/favorite-button.html card=post %}{% endif %}
+            {% include website/favorite-button.html card=post.favorite_card %}
             {% if page.website.features.favorites %}</div>{% endif %}
             {% if post.archive_facets %}{% include website/archive-card-footer.html post=post %}{% endif %}
             {% unless post.archive_facets %}{% if post.topics and post.topics.size > 0 %}<ul class="blog-ledger__topics" aria-label="{{ ui.topics | default: 'Topics' | escape }}">{% for topic in post.topics %}<li><a href="{{ blog_url | escape }}?topic={{ topic.anchor | url_encode }}" data-topic-filter-option data-topic-anchor="{{ topic.anchor | escape }}">{{ topic.name | escape }}</a></li>{% endfor %}</ul>{% endif %}{% endunless %}

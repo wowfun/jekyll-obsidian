@@ -151,7 +151,7 @@ it("keeps an offline custom facet named constructor without inheriting Object pr
   const saved = { ...card("custom"), facets: { constructor: ["books"] }, favorite_labels: { "constructor/books": "Books" } };
   const data = favoriteManifest([saved]);
   expect(data.prefixes.constructor).toBe("constructor/");
-  expect(data.facets.constructor).toEqual([{ id: "books", name: "Books", count: 1, posting: "" }]);
+  expect(data.facets.constructor).toEqual([{ id: "books", name: "Books", count: 1 }]);
 });
 
 it("resolves saved custom facets even when the current configuration no longer defines them", async () => {
@@ -218,4 +218,77 @@ it("refreshes a restored current-language snapshot by looking up only its new ID
   const restored = await reconcileFavoriteArchive(loaded, client, new AbortController().signal);
   expect(client.lookup).toHaveBeenCalledExactlyOnceWith(["b"], expect.any(AbortSignal));
   expect(restored.cards.find(card => card.id === "b")!.title).toBe("Current b");
+});
+
+it("uses a rendered button's card directly without serializing or parsing it again", () => {
+  readFavorites();
+  const parse = vi.spyOn(JSON, "parse"), stringify = vi.spyOn(JSON, "stringify");
+  const button = favoriteButton(card("a")); document.body.append(button); refreshFavoriteButtons();
+  expect(parse).not.toHaveBeenCalled(); expect(stringify).not.toHaveBeenCalled();
+  expect(button.hasAttribute("data-favorite-card")).toBe(false);
+  expect(button.getAttribute("aria-label")).toBe("Save: Title a");
+});
+
+it("checks recovery visibility without reading recovery payloads", () => {
+  const key = favoritesKey() + ":recovery:current";
+  localStorage.setItem(key, "original damaged data".repeat(1000));
+  document.body.insertAdjacentHTML("beforeend", "<details data-favorites-recovery hidden></details>");
+  const read = vi.spyOn(localStorage, "getItem"); dispose = initialiseFavorites();
+  window.dispatchEvent(new Event("pageshow"));
+  expect(document.querySelector<HTMLElement>("[data-favorites-recovery]")!.hidden).toBe(false);
+  expect(read.mock.calls.some(([name]) => name === key)).toBe(false);
+});
+
+it("computes implicit toggle intent under the shared lock", async () => {
+  await Promise.all([toggleFavorite(card("a")), toggleFavorite(card("a"))]);
+  expect(readFavorites().size).toBe(0);
+});
+
+it("does not mark a stale loading collection current when favorites change during lookup", async () => {
+  await toggleFavorite(card("a"));
+  let release!: () => void; const gate = new Promise<void>(resolve => { release = resolve; });
+  const client = { manifest: async () => favoriteManifest([card("a"), card("b")]), lookup: vi.fn(async () => { await gate; return new Map([["a", card("a")]]); }) };
+  const pending = loadFavoriteArchive(client, new AbortController().signal);
+  await vi.waitFor(() => expect(client.lookup).toHaveBeenCalled());
+  await toggleFavorite(card("b")); release();
+  const loaded = await pending;
+  expect(loaded.cards.map(card => card.id).sort()).toEqual([...loaded.snapshots.keys()].sort());
+});
+
+it("does not retain a removed favorite when a new-ID lookup is pending", async () => {
+  await toggleFavorite(card("a"));
+  const base = favoriteManifest([card("a"), card("c")]);
+  const loaded = await loadFavoriteArchive({ manifest: async () => base, lookup: async () => new Map([["a", card("a")]]) }, new AbortController().signal);
+  await toggleFavorite(card("c"));
+  let release!: () => void; const gate = new Promise<void>(resolve => { release = resolve; });
+  const client = { lookup: vi.fn(async () => { await gate; return new Map([["c", card("c")]]); }) };
+  const pending = reconcileFavoriteArchive(loaded, client, new AbortController().signal);
+  await vi.waitFor(() => expect(client.lookup).toHaveBeenCalled());
+  await toggleFavorite(card("a")); release();
+  expect((await pending).cards.map(card => card.id)).toEqual(["c"]);
+});
+
+it("does not overwrite a snapshot saved by another tab while article lookup was pending", async () => {
+  await toggleFavorite(card("a"));
+  let release!: () => void; const gate = new Promise<void>(resolve => { release = resolve; });
+  const client = { manifest: async () => favoriteManifest([card("a")]), lookup: vi.fn(async () => { await gate; return new Map([["a", { ...card("a"), title: "Earlier server title" }]]); }) };
+  const pending = loadFavoriteArchive(client, new AbortController().signal);
+  await vi.waitFor(() => expect(client.lookup).toHaveBeenCalled());
+  await toggleFavorite({ ...card("a"), title: "Newer tab title" }, "en", true); release();
+  expect((await pending).cards[0]!.title).toBe("Newer tab title");
+  expect(readFavorites().get("a")!.snapshots.en!.title).toBe("Newer tab title");
+});
+
+it("does not write unchanged snapshots when facet or label key order changes", async () => {
+  await toggleFavorite({ ...card("a"), favorite_labels: { "source/hn": "HN", "topic/agents": "Agents" } });
+  const write = vi.spyOn(localStorage, "setItem");
+  await updateFavoriteSnapshots([{ ...card("a"), facets: { topic: ["agents"], source: ["hn"] }, favorite_labels: { "topic/agents": "Agents", "source/hn": "HN" } }]);
+  expect(write).not.toHaveBeenCalled();
+});
+
+it("does not rewrite the collection for an already-applied explicit save or removal", async () => {
+  await toggleFavorite(card("a"), "en", true);
+  const write = vi.spyOn(localStorage, "setItem");
+  await toggleFavorite(card("a"), "en", true); await toggleFavorite(card("missing"), "en", false);
+  expect(write).not.toHaveBeenCalled();
 });

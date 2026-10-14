@@ -126,6 +126,7 @@ module JekyllObsidian
 
       private
 
+      # Testable boundary for a path replacement between lstat and opening.
       def open_entry(target, flags, &block)
         File.open(target, flags, &block)
       end
