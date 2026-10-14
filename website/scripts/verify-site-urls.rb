@@ -280,6 +280,9 @@ class SiteUrlVerifier
     expected_directives["media-src"] += external_origins(document, "video[src], audio[src], video source[src], audio source[src]")
     expected_directives["frame-src"] += external_origins(document, "iframe[src]")
     expected_directives["frame-src"] << X_WIDGET_ORIGIN if tweet
+    pdf_origins = external_origins(document, "[data-website-pdf-source]", attribute: "data-website-pdf-source")
+    expected_directives["frame-src"] << "blob:" unless pdf_origins.empty?
+    expected_directives["connect-src"] += pdf_origins
     expected_directives.transform_values! { |tokens| tokens.uniq.sort }
     (directives.keys - expected_directives.keys).sort.each do |name|
       add_error("#{source}: unsupported CSP directive #{name}")
@@ -333,8 +336,6 @@ class SiteUrlVerifier
           verify_player_frame(node, value, source)
         elsif node["data-website-external-frame"] == "web"
           verify_web_frame(node, value, source)
-        elsif node.key?("data-website-external-pdf")
-          verify_pdf_frame(node, value, source)
         else
           add_error("#{source}: external iframe is missing a compiler-owned marker: #{value.inspect}")
         end
@@ -344,6 +345,7 @@ class SiteUrlVerifier
     rescue URI::InvalidURIError, JekyllObsidian::ExternalMedia::Invalid
       add_error("#{source}: invalid external #{node.name} source #{value.inspect}")
     end
+    verify_pdf_cards(document, source)
     verify_tweets(document, source)
   end
 
@@ -392,22 +394,20 @@ class SiteUrlVerifier
     end
   end
 
-  def verify_pdf_frame(node, value, source)
-    descriptor = JekyllObsidian::ExternalMedia.resolve(value)
-    valid = descriptor&.kind == :pdf && descriptor.source_url == value &&
-      node["class"].to_s.split.include?("website-external-pdf__viewport") &&
-      !node["title"].to_s.strip.empty? && node["loading"] == "lazy" &&
-      node["referrerpolicy"] == "strict-origin-when-cross-origin" &&
-      node["sandbox"] == JekyllObsidian::ExternalMedia::PDF_SANDBOX &&
-      JekyllObsidian::ExternalMedia.dimension(node["height"]) &&
-      node.attribute_nodes.none? { |attribute| attribute.name.match?(/\Aon/i) } &&
-      %w[srcdoc style allow].none? { |name| node.key?(name) }
-    add_error("#{source}: external PDF iframe is not canonical: #{value.inspect}") unless valid
-    wrapper = node.ancestors("figure").find { |candidate| candidate["class"].to_s.split.include?("website-external-pdf") }
-    fallback = wrapper&.at_css("a.website-external-pdf__fallback")
-    unless fallback && fallback["href"] == descriptor&.fallback_url && fallback["target"] == "_blank" &&
+  def verify_pdf_cards(document, source)
+    document.css("[data-website-pdf-source]").each do |node|
+      value = node["data-website-pdf-source"]
+      descriptor = JekyllObsidian::ExternalMedia.resolve(value)
+      fallback = node.at_css("a.website-external-pdf__fallback")
+      valid = descriptor&.kind == :pdf && descriptor.source_url == value &&
+        node.name == "figure" && node["class"].to_s.split.include?("website-external-pdf") &&
+        JekyllObsidian::ExternalMedia.dimension(node["data-pdf-height"]) && node.css("iframe, object, script").empty? &&
+        node.at_css("button[data-pdf-preview][hidden][aria-expanded='false']") &&
+        fallback && fallback["href"] == value && fallback["target"] == "_blank" &&
         fallback["rel"].to_s.split.sort == %w[noopener noreferrer]
-      add_error("#{source}: external PDF iframe is missing its fallback link")
+      add_error("#{source}: external PDF card is not canonical: #{value.inspect}") unless valid
+    rescue JekyllObsidian::ExternalMedia::Invalid
+      add_error("#{source}: external PDF card has an invalid source")
     end
   end
 
@@ -447,9 +447,9 @@ class SiteUrlVerifier
     end
   end
 
-  def external_origins(document, selector)
+  def external_origins(document, selector, attribute: "src")
     document.css(selector).filter_map do |node|
-      JekyllObsidian::ExternalMedia.https_origin(node["src"])
+      JekyllObsidian::ExternalMedia.https_origin(node[attribute])
     end.uniq.sort
   end
 

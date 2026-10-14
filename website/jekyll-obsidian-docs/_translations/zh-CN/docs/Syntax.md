@@ -75,7 +75,7 @@ flowchart LR
 
 本地音频、视频和 PDF 使用浏览器原生控件。在 v1 中，`.3gp` 统一视为音频，`.webm` 统一视为视频。PDF 嵌入支持页码和高度选项。Canvas 与 Bases 文件会显示为下载卡片，因为 v1 不执行其中的数据模型。
 
-外部 HTTPS 媒体继续使用普通 Markdown 图片语法。GIF 与其他受支持图片会保留图片语义，也支持可选的 Obsidian 尺寸。直接音频和视频文件使用原生控件。PDF 使用延迟载入的 frame，并保留可见链接，便于在浏览器或服务器无法显示文档时打开原文。YouTube、Bilibili 和 Vimeo 链接会变成重视隐私的延迟载入播放器；X 或 Twitter 状态链接会变成延迟载入的 Tweet 嵌入，并保留普通链接作为降级入口。
+外部 HTTPS 媒体继续使用普通 Markdown 图片语法。GIF 与其他受支持图片会保留图片语义，也支持可选的 Obsidian 尺寸。直接音频和视频文件使用原生控件。PDF 默认显示为紧凑链接；支持原生 PDF 查看器的浏览器提供预览按钮。YouTube、Bilibili 和 Vimeo 链接会变成重视隐私的延迟载入播放器；X 或 Twitter 状态链接会变成延迟载入的 Tweet 嵌入，并保留普通链接作为降级入口。
 
 ```md
 ![Animation|320x180](https://media.example/loop.gif)
@@ -91,7 +91,7 @@ flowchart LR
 
 支持的文件参照 [Obsidian 文件格式](https://obsidian.md/help/file-formats)：图片（`avif`、`bmp`、`gif`、`jpeg`、`jpg`、`png`、`svg`、`webp`，另支持 `apng`）、音频（`3gp`、`flac`、`m4a`、`mp3`、`ogg`、`wav`）、视频（`mkv`、`mov`、`mp4`、`ogv`、`webm`）和 PDF。能否播放取决于浏览器支持的编码。远程文件通过 URL 路径中的扩展名识别，兼容大写扩展名和查询参数；arXiv 的 `/pdf/` URL 无需扩展名。PDF fragment 仅接受正整数 `page` 和 64 至 4096 的 `height`。普通 Markdown 链接仍显示为链接。编译器不抓取远程笔记、不渲染 Canvas 或 Bases 数据，也不展开平台短链接。
 
-远程 PDF frame 使用不透明来源，返回 HTML 或跳转也不能访问父页面。部分浏览器（包括 Chromium 原生 PDF 查看器）会禁止在沙箱中显示 PDF，此时可通过可见链接打开文档。链接保留 `page` 和签名查询参数，并移除仅用于嵌入布局的 `height`。
+远程 PDF 仅在点击预览后载入。服务器需要允许 CORS，并返回 `application/pdf`；浏览器验证 PDF 文件头后，通过指定类型的 Blob 在原生查看器中打开。HTML 响应不会进入 frame。预览限制为 20 MiB、30 秒，每页同时只保留一个预览。无法预览时仍保留紧凑链接，不会留下空白区域。链接保留 `page` 和签名查询参数，并移除仅用于嵌入布局的 `height`。
 
 只有无法通过上述媒体形式表达的页面才应使用显式 iframe：
 

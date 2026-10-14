@@ -26,14 +26,14 @@ class ExternalMediaTest < Minitest::Test
     assert result.success?, result.diagnostics.map(&:message).join("\n")
     output = page(result, "/")
     document = Nokogiri::HTML5.fragment(output.content)
-    frame = document.at_css("iframe[data-website-external-pdf]")
-    assert_equal "https://cdn.example/paper.PDF?token=signed#page=3", frame["src"]
-    assert_equal "560", frame["height"]
-    assert_equal "Paper", frame["title"]
-    assert_equal "lazy", frame["loading"]
-    assert_equal JekyllObsidian::ExternalMedia::PDF_SANDBOX, frame["sandbox"]
+    card = document.at_css("[data-website-pdf-source]")
+    assert_equal "https://cdn.example/paper.PDF?token=signed#page=3", card["data-website-pdf-source"]
+    assert_equal "560", card["data-pdf-height"]
+    assert_empty card.css("iframe, object")
+    assert card.at_css("button[data-pdf-preview][hidden]")
     assert_equal "https://cdn.example/paper.PDF?token=signed#page=3", document.at_css("a.website-external-pdf__fallback")["href"]
-    assert_equal ["https://cdn.example"], output.data.dig("website", "content_security", "frame_sources")
+    assert_equal ["blob:"], output.data.dig("website", "content_security", "frame_sources")
+    assert_equal ["https://cdn.example"], output.data.dig("website", "content_security", "connect_sources")
     assert_empty output.data.dig("website", "content_security", "media_sources")
   end
 
@@ -59,6 +59,14 @@ class ExternalMediaTest < Minitest::Test
     assert result.diagnostics.any? { |item| item.code == "invalid_external_media" }
   end
 
+  def test_local_pdf_options_follow_the_same_policy_as_remote_options
+    %w[page=0 page=-1 page=1&page=2 height=63 height=4097 toolbar=0].each do |fragment|
+      result = compile(note("index.md", "---\npublish: true\n---\n![[paper.pdf##{fragment}]]\n"))
+      refute result.success?, fragment
+      assert result.diagnostics.any? { |item| item.code == "invalid_pdf_options" }, fragment
+    end
+  end
+
   def test_transclusion_carries_audio_and_pdf_origins_to_the_host
     result = compile(
       note("index.md", "---\npublish: true\n---\n![[media]]\n"),
@@ -66,7 +74,8 @@ class ExternalMediaTest < Minitest::Test
     )
     assert result.success?, result.diagnostics.map(&:message).join("\n")
     assert_equal ["https://cdn.example"], page(result, "/").data.dig("website", "content_security", "media_sources")
-    assert_equal ["https://papers.example"], page(result, "/").data.dig("website", "content_security", "frame_sources")
+    assert_equal ["blob:"], page(result, "/").data.dig("website", "content_security", "frame_sources")
+    assert_equal ["https://papers.example"], page(result, "/").data.dig("website", "content_security", "connect_sources")
   end
 
   def test_external_images_keep_image_semantics_and_obsidian_dimensions

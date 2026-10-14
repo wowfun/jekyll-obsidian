@@ -35,6 +35,10 @@ module JekyllObsidian
       "favorite_recovery_clear" => "Clear recovery copies",
       "favorite_recovery_restored" => "Available favorites restored. Original recovery copies are kept.",
       "favorite_recovery_cleared" => "Recovery copies cleared. Current favorites are kept.",
+      "pdf_preview" => "Preview PDF",
+      "pdf_close" => "Close preview",
+      "pdf_loading" => "Loading PDF…",
+      "pdf_error" => "Preview unavailable. Open the PDF using its link.",
       "favorite_storage_error" => "Could not save favorites. Allow browser storage or free some space, then retry.",
       "favorite_storage_damaged" => "Some saved data is damaged. Healthy favorites are shown; original data is backed up before repair.",
       "favorite_storage_unreadable" => "Could not read favorites. The stored data is damaged; original data has been kept.",
@@ -840,6 +844,10 @@ module JekyllObsidian
       fragment.css(".website-embed--unresolved").each do |node|
         match = node.text.match(/\AMissing fragment: (?<label>.*)\z/m)
         replace_generated_text(node, messages.fetch("missing_fragment").sub("{label}", match[:label]), locale) if match
+      end
+      fragment.css("[data-website-pdf-source]").each do |node|
+        %w[preview close loading error].each { |name| node["data-pdf-#{name}"] = messages.fetch("pdf_#{name}") }
+        node.at_css("button[data-pdf-preview]").content = messages.fetch("pdf_preview")
       end
       fragment.css("object[type='application/pdf'] > a").each do |node|
         replace_generated_text(node, messages.fetch("download_pdf"), locale) if node.text == MESSAGE_DEFAULTS.fetch("download_pdf")

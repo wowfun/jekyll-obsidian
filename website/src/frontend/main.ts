@@ -8,6 +8,7 @@ import { initialiseArchiveFilters } from "./archive-filters";
 import { initialisePriorityNavigation } from "./priority-navigation";
 import { initialisePageActions } from "./page-actions";
 import { initialiseFavorites } from "./favorite-controls";
+import { initialisePdfPreviews } from "./pdf-preview";
 import { initialiseCodeBlockCopy } from "./code-block-copy";
 import { initialiseTweets } from "./tweets";
 import { initialiseAnalytics } from "./analytics";
@@ -28,6 +29,7 @@ function initialisePageFeatures(): void {
   const cleanupArchiveFilters = initialiseArchiveFilters();
   const cleanupPageActions = initialisePageActions();
   const cleanupFavorites = initialiseFavorites();
+  const cleanupPdfPreviews = initialisePdfPreviews();
   const cleanupCodeBlockCopy = initialiseCodeBlockCopy();
   const cleanupImageViewer = initialiseImageViewer();
   initialiseMediaViewerControls();
@@ -38,6 +40,7 @@ function initialisePageFeatures(): void {
     cleanupArchiveFilters();
     cleanupPageActions();
     cleanupFavorites();
+    cleanupPdfPreviews();
     cleanupCodeBlockCopy();
     cleanupImageViewer();
     cleanupTweets();

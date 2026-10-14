@@ -83,7 +83,7 @@ An image embed can include its width or width and height:
 
 Local audio, video, and PDF files use native browser controls. In v1, `.3gp` is audio and `.webm` is video. PDF embeds accept page and height options. Canvas and Bases files become download cards because v1 does not execute their data models.
 
-External HTTPS media uses the same Markdown image syntax. GIFs and other supported images keep image semantics and optional Obsidian dimensions. Direct audio and video files use native controls. PDFs use a lazy frame with a visible link for browsers or servers that cannot display the document. YouTube, Bilibili, and Vimeo links become privacy-conscious, lazy player frames, while X or Twitter status links become lazy Tweet embeds with a normal link as their fallback.
+External HTTPS media uses the same Markdown image syntax. GIFs and other supported images keep image semantics and optional Obsidian dimensions. Direct audio and video files use native controls. PDFs start as compact links with an optional preview action in browsers with a native PDF viewer. YouTube, Bilibili, and Vimeo links become privacy-conscious, lazy player frames, while X or Twitter status links become lazy Tweet embeds with a normal link as their fallback.
 
 ```md
 ![Animation|320x180](https://media.example/loop.gif)
@@ -99,7 +99,7 @@ External HTTPS media uses the same Markdown image syntax. GIFs and other support
 
 Supported files follow [Obsidian's accepted formats](https://obsidian.md/help/file-formats): images (`avif`, `bmp`, `gif`, `jpeg`, `jpg`, `png`, `svg`, `webp`, plus `apng`), audio (`3gp`, `flac`, `m4a`, `mp3`, `ogg`, `wav`), video (`mkv`, `mov`, `mp4`, `ogv`, `webm`), and PDF. Codec support depends on the browser. Remote files are recognized by the URL path's extension, including uppercase extensions and URLs with query parameters; arXiv `/pdf/` URLs also work without an extension. PDF fragments accept a positive `page` and a `height` between 64 and 4096. Ordinary Markdown links stay links. The compiler does not fetch remote notes, render Canvas or Bases data, or expand shortened provider URLs.
 
-Remote PDF frames keep an opaque origin, so even an HTML response or redirect cannot access the parent page. Some browsers, including Chromium's native PDF viewer, block viewing a PDF inside a sandbox; use the visible link to open the document in that case. The link retains `page` and signed query parameters, and omits the embed-only `height` option.
+Remote PDF previews load only on request. The server must allow CORS and return `application/pdf`; the browser verifies the PDF signature before opening a typed Blob in its native viewer. HTML responses never enter a frame. Previews are limited to 20 MiB and 30 seconds, with one active preview per page. If previewing fails, the compact link stays usable without an empty frame. The link retains `page` and signed query parameters, and omits the embed-only `height` option.
 
 Use an explicit iframe only when the page cannot be represented by one of those media forms:
 

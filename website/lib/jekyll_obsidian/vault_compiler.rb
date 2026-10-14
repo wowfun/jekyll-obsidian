@@ -1212,7 +1212,13 @@ module JekyllObsidian
     end
 
     def resolve_occurrence(note, occurrence)
-      target_text, fragment, options = split_target(occurrence.raw_target, occurrence.kind)
+      begin
+        target_text, fragment, options = split_target(occurrence.raw_target, occurrence.kind)
+      rescue ExternalMedia::Invalid => exception
+        occurrence.unresolved = true
+        error("invalid_pdf_options", exception.message, note.id, occurrence.source_span)
+        return
+      end
       occurrence.fragment = fragment
       occurrence.options = options
 
@@ -1929,12 +1935,13 @@ module JekyllObsidian
         .filter_map { |node| ExternalMedia.https_origin(node["src"]) }
         .uniq
         .sort
+      pdf_sources = fragment.css("[data-website-pdf-source]").filter_map { |node| ExternalMedia.https_origin(node["data-website-pdf-source"]) }.uniq.sort
       tweet = !fragment.at_css("[data-website-tweet]").nil?
       ContentSecurityNeeds.new(
         media_sources: media_sources,
-        frame_sources: (frame_sources + (tweet ? ["https://platform.twitter.com"] : [])).uniq.sort,
+        frame_sources: (frame_sources + (tweet ? ["https://platform.twitter.com"] : []) + (pdf_sources.empty? ? [] : ["blob:"])).uniq.sort,
         script_sources: tweet ? ["https://platform.twitter.com"] : [],
-        connect_sources: []
+        connect_sources: pdf_sources
       )
     end
 
@@ -2504,12 +2511,11 @@ module JekyllObsidian
         options["height"] = height.to_i if height
       end
 
-      if File.extname(target.to_s).downcase == ".pdf" && fragment
-        fragment.split("&").each do |part|
-          key, value = part.split("=", 2)
-          options[key] = value.to_i if %w[page height].include?(key) && value&.match?(/\A\d+\z/)
-        end
-        fragment = nil if options.any?
+      if kind == :embed && File.extname(target.to_s).downcase == ".pdf" && fragment
+        page, height = ExternalMedia.pdf_options(fragment)
+        options["page"] = page if page
+        options["height"] = height if height
+        fragment = nil
       end
       [target.to_s.strip, fragment&.strip, options]
     end
@@ -2670,16 +2676,12 @@ module JekyllObsidian
     def external_pdf_node(document, descriptor, label)
       wrapper = Nokogiri::XML::Node.new("figure", document)
       wrapper["class"] = "website-external-pdf"
-      frame = Nokogiri::XML::Node.new("iframe", document)
-      frame["class"] = "website-external-pdf__viewport"
-      frame["data-website-external-pdf"] = ""
-      frame["sandbox"] = descriptor.iframe_sandbox
-      frame["src"] = descriptor.source_url
-      frame["title"] = label.to_s.strip.empty? ? "PDF document" : label.to_s.strip
-      frame["height"] = descriptor.height.to_s
-      frame["loading"] = "lazy"
-      frame["referrerpolicy"] = "strict-origin-when-cross-origin"
-      wrapper.add_child(frame)
+      wrapper["data-website-pdf-source"] = descriptor.source_url
+      wrapper["data-pdf-height"] = descriptor.height.to_s
+      wrapper["data-pdf-preview"] = "Preview PDF"
+      wrapper["data-pdf-close"] = "Close preview"
+      wrapper["data-pdf-loading"] = "Loading PDF…"
+      wrapper["data-pdf-error"] = "Preview unavailable. Open the PDF using its link."
       fallback = Nokogiri::XML::Node.new("a", document)
       fallback["class"] = "website-external-pdf__fallback"
       fallback["href"] = descriptor.fallback_url
@@ -2687,6 +2689,17 @@ module JekyllObsidian
       fallback["rel"] = "noopener noreferrer"
       fallback.content = label.to_s.strip.empty? ? "Open PDF" : label.to_s.strip
       wrapper.add_child(fallback)
+      button = Nokogiri::XML::Node.new("button", document)
+      button["type"] = "button"
+      button["data-pdf-preview"] = ""
+      button["aria-expanded"] = "false"
+      button["hidden"] = ""
+      button.content = "Preview PDF"
+      wrapper.add_child(button)
+      status = Nokogiri::XML::Node.new("span", document)
+      status["data-pdf-status"] = ""
+      status["role"] = "status"
+      wrapper.add_child(status)
       wrapper
     end
 
@@ -2763,9 +2776,9 @@ module JekyllObsidian
       node = Nokogiri::XML::Node.new("object", document)
       node["data"] = data
       node["type"] = "application/pdf"
-      node["height"] = occurrence.options.fetch("height", 640).to_s
+      node["height"] = occurrence.options.fetch("height", ExternalMedia::PDF_DEFAULT_HEIGHT).to_s
       fallback = Nokogiri::XML::Node.new("a", document)
-      fallback["href"] = href
+      fallback["href"] = data
       fallback.content = "Download PDF"
       node.add_child(fallback)
       node

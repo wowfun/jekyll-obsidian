@@ -201,3 +201,7 @@ messages:
   favorite_recovery_clear: "清理恢复备份"
   favorite_recovery_restored: "已恢复可用收藏，原始备份仍保留。"
   favorite_recovery_cleared: "已清理恢复备份，现有收藏仍保留。"
+  pdf_preview: "预览 PDF"
+  pdf_close: "关闭预览"
+  pdf_loading: "正在载入 PDF…"
+  pdf_error: "无法预览，请通过链接打开 PDF。"

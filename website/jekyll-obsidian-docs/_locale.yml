@@ -26,3 +26,7 @@ messages:
   favorite_recovery_clear: "Clear recovery copies"
   favorite_recovery_restored: "Available favorites restored. Original recovery copies are kept."
   favorite_recovery_cleared: "Recovery copies cleared. Current favorites are kept."
+  pdf_preview: "Preview PDF"
+  pdf_close: "Close preview"
+  pdf_loading: "Loading PDF…"
+  pdf_error: "Preview unavailable. Open the PDF using its link."
