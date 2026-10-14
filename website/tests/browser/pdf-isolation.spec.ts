@@ -18,6 +18,8 @@ test("PDF previews start compact, render in Chromium, close and retain the page 
   await button.click(); await expect(card.locator("iframe")).toHaveAttribute("src", /^blob:.*#page=3$/);
   await expect.poll(() => page.frames().some(frame => frame.url().startsWith("chrome-extension://mhjfbmdgcfjbbpaeojofohoefgiehjai/"))).toBe(true);
   expect(requests).toBe(1);
+  const viewer = page.frames().find(frame => frame.url().startsWith("chrome-extension://mhjfbmdgcfjbbpaeojofohoefgiehjai/"))!;
+  await expect(viewer.locator("viewer-toolbar")).not.toHaveAttribute("loading_", "");
   await card.screenshot({ path: testInfo.outputPath("pdf-preview.png") });
   await button.click(); await expect(card.locator("iframe")).toHaveCount(0);
   await expect(button).toHaveAttribute("aria-expanded", "false");
