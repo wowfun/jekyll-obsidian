@@ -187,8 +187,9 @@ it("restores healthy entries without overwriting newer snapshots, and clears onl
   const raw = localStorage.getItem(favoritesKey())!;
   localStorage.setItem(favoritesKey() + ":recovery:legacy", raw);
   localStorage.setItem("website:favorites:v1:/other:recovery:current", raw);
-  await toggleFavorite(card("a")); await toggleFavorite(card("b"));
+  await toggleFavorite({ ...card("a"), title: "Newer snapshot" }, "en", true); await toggleFavorite(card("b"));
   await restoreFavoriteRecovery(); expect([...readFavorites().keys()].sort()).toEqual(["a", "b"]);
+  expect(readFavorites().get("a")!.snapshots.en!.title).toBe("Newer snapshot");
   expect(favoriteRecoveryCopies()[0]!.raw).toBe(raw);
   await clearFavoriteRecovery(); expect(favoriteRecoveryCopies()).toHaveLength(0);
   expect(localStorage.getItem("website:favorites:v1:/other:recovery:current")).toBe(raw);
@@ -206,4 +207,15 @@ it("reconciles removals locally and looks up only new IDs without a current-lang
   const added = await reconcileFavoriteArchive(removed, client, new AbortController().signal);
   expect(client.lookup).toHaveBeenCalledExactlyOnceWith(["c"], expect.any(AbortSignal));
   expect(added.cards.map(card => card.id)).toEqual(["b", "c"]);
+});
+
+it("refreshes a restored current-language snapshot by looking up only its new ID", async () => {
+  await toggleFavorite(card("a"));
+  const client = { manifest: async () => favoriteManifest([card("a"), card("b")]), lookup: vi.fn(async (ids: string[]) => new Map(ids.map(id => [id, { ...card(id), title: "Current " + id }]))) };
+  const loaded = await loadFavoriteArchive(client, new AbortController().signal); client.lookup.mockClear();
+  localStorage.setItem(favoritesKey() + ":recovery:current", JSON.stringify({ version: 1, entries: [{ id: "b", saved_at: "2026-10-10T00:00:00Z", snapshots: { en: { ...card("b"), title: "Old backup title" } } }] }));
+  await restoreFavoriteRecovery();
+  const restored = await reconcileFavoriteArchive(loaded, client, new AbortController().signal);
+  expect(client.lookup).toHaveBeenCalledExactlyOnceWith(["b"], expect.any(AbortSignal));
+  expect(restored.cards.find(card => card.id === "b")!.title).toBe("Current b");
 });

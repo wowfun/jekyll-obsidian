@@ -104,9 +104,11 @@ test("recovery copies can be downloaded, restored without overwriting, and expli
   await page.goto(root); await ready(page);
   const save = page.locator("[data-filter-item] [data-favorite-toggle]").first();
   await save.click(); await expect(save).toHaveAttribute("aria-pressed", "true");
+  const originalTitle = await page.locator("[data-filter-item] strong").first().innerText();
   const raw = await page.evaluate(() => {
-    const key = "website:favorites:v1:/__site__/minimal-archive", raw = localStorage.getItem(key)!;
-    localStorage.setItem(key + ":recovery:old", raw); return raw;
+    const key = "website:favorites:v1:/__site__/minimal-archive", backup = JSON.parse(localStorage.getItem(key)!);
+    backup.entries[0].snapshots.en.title = "Old backup title";
+    const raw = JSON.stringify(backup); localStorage.setItem(key + ":recovery:old", raw); return raw;
   });
   await save.click(); await expect(save).toHaveAttribute("aria-pressed", "false");
   await page.goto(root + "favorites/"); await ready(page);
@@ -116,6 +118,7 @@ test("recovery copies can be downloaded, restored without overwriting, and expli
   const stream = await file.createReadStream(); const chunks = []; for await (const chunk of stream!) chunks.push(chunk);
   expect(JSON.parse(Buffer.concat(chunks).toString()).copies[0].raw).toBe(raw);
   await recovery.locator('[data-favorite-recovery="restore"]').click(); await expect(page.locator("[data-filter-item]")).toHaveCount(1);
+  await expect(page.locator("[data-filter-item] strong")).toHaveText(originalTitle);
   await recovery.locator('[data-favorite-recovery="clear"]').click(); await expect(recovery).toBeHidden();
   await expect(page.locator("[data-filter-item]")).toHaveCount(1);
 });

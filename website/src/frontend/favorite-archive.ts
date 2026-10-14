@@ -69,7 +69,7 @@ export async function reconcileFavoriteArchive(previous: FavoriteArchive, client
   let cards = [...entries.values()].map(entry => {
     const prior = old.get(entry.id);
     if (prior && references.get(entry.id) === previous.snapshots.get(entry.id)) return prior;
-    if (!Object.hasOwn(entry.snapshots, locale) && !prior) missing.push(entry.id);
+    if (!prior) missing.push(entry.id);
     const selected = !Object.hasOwn(entry.snapshots, locale) && prior?.snapshot_locale === locale ? prior : selectedSnapshot(entry, locale);
     return { ...selected, unavailable: Boolean(prior?.unavailable) };
   });
