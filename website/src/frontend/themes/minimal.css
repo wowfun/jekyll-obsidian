@@ -993,10 +993,12 @@
   }
 }
 
-@media (max-width: 520px) {
-  .minimal-entry > .page-actions {
-    position: static;
-    inset: auto;
+@layer components {
+  @media (max-width: 520px) {
+    .minimal-entry > .page-actions {
+      position: static;
+      inset: auto;
+    }
   }
 }
 
