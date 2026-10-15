@@ -2340,8 +2340,9 @@
   }
 
   .page-actions__primary {
-    padding-inline: 0.78rem;
-    gap: 0.48rem;
+    justify-content: center;
+    inline-size: 2.55rem;
+    padding-inline: 0;
     font-size: 0.78rem;
     font-weight: 650;
   }
@@ -2682,23 +2683,6 @@
     margin-inline-start: 0;
   }
 
-  .page-actions__primary {
-    justify-content: center;
-    inline-size: 2.55rem;
-    padding-inline: 0;
-  }
-
-  .page-actions__primary-label {
-    position: absolute;
-    inline-size: 1px;
-    block-size: 1px;
-    padding: 0;
-    border: 0;
-    margin: -1px;
-    clip-path: inset(50%);
-    overflow: hidden;
-    white-space: nowrap;
-  }
 }
 
 @media (prefers-reduced-motion: reduce) {

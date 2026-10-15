@@ -73,6 +73,10 @@
 
   .minimal-entry {
     position: relative;
+    --page-actions-clearance: 6rem;
+  }
+
+  .minimal-entry:has(> .page-actions .favorite-button) {
     --page-actions-clearance: 10.25rem;
   }
 
@@ -271,6 +275,17 @@
 
   .minimal-recent {
     margin-block-start: clamp(3rem, 7vw, 5rem);
+  }
+
+  /* A collection with no introduction shares its first title row with the actions. */
+  .minimal-entry:has(> .note-content > h1.visually-hidden:only-child):not(:has(> .note-header p, > .note-header time, > .note-header .tag-chip, > .note-properties)) {
+    > .note-header { margin-block-end: 0; }
+    > .page-actions { position: absolute; inset-block-start: 0; inset-inline-end: 0; }
+    > .tab-collection { margin-block-start: 0; }
+    > .tab-collection .minimal-post-card:first-child {
+      padding-block-start: 0;
+      h2 { min-block-size: 2.55rem; padding-inline-end: var(--page-actions-clearance); }
+    }
   }
 
   .note-content > .minimal-recent:first-child {
