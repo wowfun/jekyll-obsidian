@@ -895,6 +895,26 @@ class JekyllAdapterTest < Minitest::Test
     end
   end
 
+  def test_custom_tab_archive_renders_scoped_timeline_facets_and_preserves_its_introduction
+    folder = File.join(@temporary_root, "vault", "podcast")
+    FileUtils.mkdir_p(folder)
+    File.write(File.join(folder, "index.md"), "---\npublish: true\ncontent_type: page\ntab:\n  id: podcasts\n  layout: archive\n---\n# Podcasts\n\nIntroduction.\n")
+    File.write(File.join(folder, "episode.md"), "---\npublish: true\ncontent_type: post\ndate: 2026-10-15\ntags: [source/podcast, topics/agents]\n---\n# Episode\n")
+    install_project_layout
+    build_site("website" => website_config.merge("theme" => "minimal", "blog" => { "timeline_granularity" => "day" })).process
+    document = Nokogiri::HTML5.parse(File.read(File.join(destination, "podcast", "index.html")))
+    assert_equal 1, document.css("main h1").size
+    assert_equal "Podcasts", document.at_css("main h1.visually-hidden").text
+    assert_includes document.at_css(".note-content").text, "Introduction."
+    assert_empty document.css(".tab-collection, main [data-page-actions]")
+    assert_equal "/assets/website/archive/tabs/podcasts/current.json", document.at_css("[data-paged-archive]")["data-archive-current-url"]
+    assert_equal "/podcast/?day=2026-10-15", document.at_css("[data-day-filter-option]")["href"]
+    assert_equal "/podcast/?topic=agents", document.at_css("a[data-archive-facet='topic']")["href"]
+    assert_equal "agents", document.at_css("button[data-archive-value='agents']").text.strip.split.first
+    assert_equal "Episode", document.at_css(".blog-ledger__main strong").text
+    assert_equal "page", document.at_css("[data-priority-navigation] a[href='/podcast/']")["aria-current"]
+  end
+
   def test_host_docs_source_is_compiled_without_entering_the_reader
     FileUtils.mv(File.join(@temporary_root, "vault"), File.join(@temporary_root, "docs"))
     site = build_site("website" => website_config.merge("source" => "docs"))

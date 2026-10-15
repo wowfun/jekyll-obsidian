@@ -309,6 +309,10 @@ module JekyllObsidian
             next
           end
           seen[id] = note.id
+          if authored["layout"] == "archive" && @theme != "minimal"
+            navigation_error("invalid_tab_layout", "tab.layout archive requires the minimal theme", note.id)
+            next
+          end
           unless note.content_type == "page" && directory_index_note?(note) && File.dirname(note.id) != "." && !note.nav_exclude
             navigation_error(
               "invalid_tab_root",

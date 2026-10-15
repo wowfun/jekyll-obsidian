@@ -33,13 +33,13 @@ module JekyllObsidian
     # Cards must be in descending display-date order with undated cards last.
     # Within each day, preserve the presenter's stable ordering. Date ranges in
     # the emitted index refer to contiguous ordinal blocks in this sequence.
-    def build(cards, config, postings: true)
+    def build(cards, config, postings: true, scope: nil)
       size = config.blog.fetch("page_size") || 50
       labels = config.site.tag_labels || {}
       aliases = config.site.tag_aliases || {}
       facets = config.blog.fetch("facets")
       records = cards.map { |card| record(card, config) }
-      generation = Digest::SHA256.hexdigest(JSON.generate([records, labels, aliases, config.blog, config.features.fetch("favorites"), postings]))
+      generation = Digest::SHA256.hexdigest(JSON.generate([records, labels, aliases, config.blog, config.features.fetch("favorites"), postings, scope]))
       root = "/assets/website/archive/#{generation}"
       files = []
       emit = lambda do |name, data, localize_content: false|
@@ -100,8 +100,9 @@ module JekyllObsidian
       end
       emit.call("manifest.json", manifest)
       url = config.url_builder.href("#{root}/manifest.json")
-      current_url = config.url_builder.href("/assets/website/archive/current.json")
-      files << GeneratedFile.new(route: "/assets/website/archive/current.json", content: "#{JSON.generate("version" => 1, "url" => url)}\n", media_type: "application/json", localize_content: true)
+      current_route = scope ? "/assets/website/archive/tabs/#{scope}/current.json" : "/assets/website/archive/current.json"
+      current_url = config.url_builder.href(current_route)
+      files << GeneratedFile.new(route: current_route, content: "#{JSON.generate("version" => 1, "url" => url)}\n", media_type: "application/json", localize_content: true)
       first = records.first(size).each_with_index.map do |record, index|
         labeled = card_labels(record, manifest)
         if config.features.fetch("favorites")

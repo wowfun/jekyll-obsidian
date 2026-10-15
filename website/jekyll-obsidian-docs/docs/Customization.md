@@ -185,6 +185,8 @@ Membership is additional: a Blog post remains active under Blog, a documentation
 
 Duplicate IDs, labels, or destinations, unknown `tabs` references, invalid roots, and reserved conflicts fail the build. Notes keep one canonical URL even when several tabs include them; custom tabs never create redirects or duplicate Search, feed, or sitemap entries.
 
+In Minimal, set `tab.layout: archive` to give a tab the same paginated ledger, time archive, and facet filters as the homepage archive. The default is `collection`. Archive tabs use `website.blog` settings for page size, timezone, date grouping, timeline granularity, and source/topic facet prefixes. Their counts, filters, pagination, and Markdown exports include only that tab's members. Members appear newest first with undated entries last; `pinned` and `nav_order` do not override archive chronology. The authored introduction remains above the filters. Docs supports the default collection layout only. Translations inherit `tab.layout` from the default-language index and may still override `tab.label`.
+
 Tabs that do not fit the desktop header move into an accessible More menu. The mobile Browse sheet and the Search dialog's quick navigation use the same ordered destinations and active state. Search narrows those quick links by their configured labels while it queries note content. Without JavaScript, the header links remain visible and wrap naturally. Opening Docs from Minimal keeps the Minimal site shell while adding the handbook tree, page outline, and previous or next links.
 
 ## Graph and wiki-link previews

@@ -95,6 +95,14 @@ try {
   await writeFile(path.join(archiveHost, "vault/_locale.yml"), "name: English\n");
   await copyFile(path.join(projectRoot, "jekyll-obsidian-docs/_translations/zh-CN/_locale.yml"), path.join(archiveHost, "vault/_translations/zh-CN/_locale.yml"));
   await writeFile(path.join(archiveHost, "vault/index.md"), "---\npublish: true\n---\n# Archive\n");
+  for (const [id, title, label, source] of [["news", "News", "新闻", "hn"], ["tools", "Tools", "工具", "dsh"]]) {
+    await mkdir(path.join(archiveHost, `vault/${id}`), { recursive: true });
+    await mkdir(path.join(archiveHost, `vault/_translations/zh-CN/${id}`), { recursive: true });
+    await writeFile(path.join(archiveHost, `vault/${id}/index.md`),
+      `---\npublish: true\ncontent_type: page\ntab:\n  id: ${id}\n  layout: archive\n  topics: [source/${source}]\n---\n# ${title}\n`);
+    await writeFile(path.join(archiveHost, `vault/_translations/zh-CN/${id}/index.md`),
+      `---\npublish: true\ntab:\n  label: ${label}\n---\n# ${label}\n`);
+  }
   for (const [id, title, date, source, topic] of [
     ["a", "Newest", "2026-10-10", "hn", "agents"],
     ["b", "Middle", "2026-10-09", "dsh", "tools"],

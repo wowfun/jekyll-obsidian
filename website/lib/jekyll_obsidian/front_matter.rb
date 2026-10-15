@@ -17,7 +17,7 @@ module JekyllObsidian
     STRING_PROPERTIES = %w[title subtitle description permalink image].freeze
     CONTENT_TYPES = %w[post doc page].freeze
     DATE_BASES = %w[published observed].freeze
-    TAB_KEYS = %w[id label order topics].freeze
+    TAB_KEYS = %w[id label order topics layout].freeze
     TAB_ID_PATTERN = /\A[a-z][a-z0-9-]*\z/.freeze
 
     Result = Struct.new(:properties, :property_links, :body, :diagnostics, keyword_init: true)
@@ -369,6 +369,13 @@ module JekyllObsidian
       unknown = value.keys - TAB_KEYS
       unknown.sort.each { |key| error("invalid_property", "unknown tab setting #{key.inspect}") }
       normalized = {}
+      if value.key?("layout")
+        if %w[collection archive].include?(value["layout"])
+          normalized["layout"] = value["layout"]
+        else
+          error("invalid_property", "tab.layout must be collection or archive")
+        end
+      end
       if value.key?("id")
         id = value["id"]
         if valid_tab_id?(id)

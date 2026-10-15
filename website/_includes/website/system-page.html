@@ -22,7 +22,7 @@
   {% include website/portfolio-grid.html index=true %}
 {% when 'blog-index' %}
   {% if page.website.theme_data.archive %}
-    <h1 class="{% if page.title == site.title or page.website.theme_data.favorites %}visually-hidden{% else %}archive-title{% endif %}">{{ page.title | escape }}</h1>
+    {% unless page.website.theme_data.tab_id and page.website.has_h1 %}<h1 class="{% if page.title == site.title or page.website.theme_data.favorites or page.website.theme_data.tab_id %}visually-hidden{% else %}archive-title{% endif %}">{{ page.title | escape }}</h1>{% endunless %}
     {% if page.website.theme_data.favorites %}
       <div data-favorites-facets></div>
       <p class="filter-empty" data-archive-empty hidden>{{ ui.no_matching_entries | escape }} <button type="button" data-archive-clear>{{ ui.clear_filters | escape }}</button></p>

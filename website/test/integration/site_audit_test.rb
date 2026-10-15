@@ -28,6 +28,10 @@ class SiteAuditTest < Minitest::Test
       primary = File.join(site, "assets", "website", "archive")
       FileUtils.mkdir_p(primary)
       File.write(File.join(primary, "current.json"), "{}")
+      [primary, File.dirname(directory)].each do |archive|
+        FileUtils.mkdir_p(File.join(archive, "tabs", "my-news"))
+        File.write(File.join(archive, "tabs", "my-news", "current.json"), "{}")
+      end
       _stdout, stderr, status = audit(site)
       assert status.success?, stderr
       File.write(File.join(primary, "credentials.json"), "{}")
@@ -36,6 +40,11 @@ class SiteAuditTest < Minitest::Test
       assert_includes stderr, "extension allowlist"
       File.delete(File.join(primary, "credentials.json"))
       File.write(File.join(directory, "credentials.json"), "{}")
+      _stdout, stderr, status = audit(site)
+      refute status.success?
+      assert_includes stderr, "extension allowlist"
+      File.delete(File.join(directory, "credentials.json"))
+      File.write(File.join(primary, "tabs", "my-news", "other.json"), "{}")
       _stdout, stderr, status = audit(site)
       refute status.success?
       assert_includes stderr, "extension allowlist"

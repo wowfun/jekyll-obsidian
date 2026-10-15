@@ -1,6 +1,7 @@
 {% if include.posts and include.posts.size > 0 %}
   {% assign ui = page.website.i18n.messages %}
   {% assign blog_url = page.website.routes.blog %}{% unless blog_url %}{% assign blog_url = '/blog/' | relative_url %}{% endunless %}
+  {% if page.website.theme_data.archive %}{% assign blog_url = page.website.href %}{% endif %}
   <section class="blog-ledger"{% if include.compact %} aria-label="{{ ui.dated_posts | default: 'Dated posts' | escape }}"{% else %} aria-labelledby="dispatches-title"{% endif %}>
     {% unless include.compact %}<header class="section-heading"><h2 id="dispatches-title">{{ ui.field_dispatches | default: 'Field dispatches' | escape }}</h2></header>{% endunless %}
     <ol>

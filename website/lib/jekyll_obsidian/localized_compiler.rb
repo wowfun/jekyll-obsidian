@@ -583,7 +583,7 @@ module JekyllObsidian
         return merged.reject { |key, _| key == "tab" }
       end
 
-      %w[id order topics].each do |property|
+      %w[id order topics layout].each do |property|
         next unless translated_tab.key?(property)
 
         error(

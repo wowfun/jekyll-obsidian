@@ -533,7 +533,7 @@ module JekyllObsidian
         website = page.data.fetch("website").dup
         repository = config.site.repository.to_s
         website["repository_url"] = "https://github.com/#{repository}" if repository.match?(/\A[\w.-]+\/[\w.-]+\z/)
-        active_id = if website["kind"] == "note"
+        active_id = if website["kind"] == "note" || website.dig("theme_data", "tab_id")
           navigation.active_by_note_id[website["id"]]
         else
           navigation.items.find do |item|
@@ -644,6 +644,7 @@ module JekyllObsidian
           )
         end
         attach_custom_tab_theme_data(theme_data, model, config)
+        tab_archive_files = attach_tab_archives(theme_data, model, config, taxonomy)
         authored_root_route = model.notes.any? { |note| note.route == "/" }
         home = home_page(displayed, config, system_theme_data, taxonomy) if !root && !authored_root_route && displayed.any? && config.home["layout"] != "archive"
         archive_data = (paged || config.features.fetch("favorites")) && PagedArchive.build(chronological.map { |post| note_card(post, config, taxonomy) }, config, postings: !!paged)
@@ -712,9 +713,12 @@ module JekyllObsidian
           system_theme_data: system_theme_data,
           taxonomy: taxonomy,
           feed_notes: posts,
-          shared_files: archive_data ? archive_data.fetch("files") : []
+          shared_files: (archive_data ? archive_data.fetch("files") : []) + tab_archive_files
         ) do |note, output|
-          if note.id == root&.id && config.home["layout"] == "archive"
+          if theme_data.fetch(note.id)["archive"]
+            website = output.data.fetch("website").merge("kind" => "blog-index")
+            PageOutput.new(route: output.route, content: output.content, data: output.data.merge("website" => website))
+          elsif note.id == root&.id && config.home["layout"] == "archive"
             website = output.data.fetch("website").merge("kind" => "blog-index", "has_h1" => false,
               "theme_data" => system_theme_data.merge(archive_data.reject { |key, _| key == "files" }).merge("ledger_group_by" => config.blog.fetch("ledger_group_by")))
             PageOutput.new(route: output.route, content: "", data: output.data.merge("website" => website))
@@ -725,6 +729,23 @@ module JekyllObsidian
       end
 
       private
+
+      def attach_tab_archives(theme_data, model, config, taxonomy)
+        config.navigation.custom_tabs.flat_map do |tab|
+          root = model.notes_by_id.fetch(tab.index_note_id)
+          next [] unless root.properties.dig("tab", "layout") == "archive"
+
+          members = tab.member_note_ids.map { |id| model.notes_by_id.fetch(id) }
+          dated, undated = members.partition(&:published_at)
+          chronological = dated.sort_by { |note| [chronology_key(note.published_at), note.id] }.reverse + undated.sort_by(&:id)
+          archive = PagedArchive.build(chronological.map { |note| note_card(note, config, taxonomy) }, config, scope: tab.id)
+          theme_data[tab.index_note_id] = theme_data.fetch(tab.index_note_id)
+            .reject { |key, _| key == "tab_members" }
+            .merge(archive.reject { |key, _| key == "files" })
+            .merge("ledger_group_by" => config.blog.fetch("ledger_group_by"), "previous" => nil, "next" => nil)
+          archive.fetch("files")
+        end
+      end
 
       def ordered_posts(model)
         dated, undated = model.notes.select { |note| note.content_type == "post" }.partition(&:published_at)
