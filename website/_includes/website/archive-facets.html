@@ -1,5 +1,9 @@
 {% assign archive = page.website.theme_data.archive %}
 {% for group in archive.facets %}
+  {% if page.website.theme_data.tab_id and group[0] == 'source' and group[1].size == 1 %}
+    {% assign only_source = group[1] | first %}
+    {% if only_source.count == archive.total %}{% continue %}{% endif %}
+  {% endif %}
   {% assign facet_label = group[0] %}
   {% if group[0] == 'source' %}{% assign facet_label = ui.sources | default: 'Sources' %}{% elsif group[0] == 'topic' %}{% assign facet_label = ui.topics | default: 'Topics' %}{% endif %}
   <nav class="tag-filter archive-facet" aria-label="{{ facet_label | escape }}">
