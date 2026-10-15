@@ -551,8 +551,21 @@ module JekyllObsidian
         routes["tags"] = config.url_builder.href("/tags/") if config.theme == "docs" && config.features.fetch("tags")
         routes["feed"] = config.url_builder.href("/feed.xml") if config.features.fetch("feed")
         website["routes"] = routes
+        content = page.content
+        if website.dig("theme_data", "tab_id") && website.dig("theme_data", "tab_id") == active_id
+          label = navigation.items.find { |item| item.fetch("id") == active_id }&.fetch("label")
+          fragment = Nokogiri::HTML5.fragment(content)
+          heading = fragment.element_children.first
+          if heading&.name == "h1" && heading.text.strip == label
+            heading["class"] = [heading["class"], "visually-hidden"].compact.join(" ")
+            heading.content = label
+            website["outline"] = website.fetch("outline").reject { |item| item.fetch("id") == heading["id"] }
+            website["has_context"] = context_present?(website)
+            content = fragment.to_html
+          end
+        end
         data = page.data.merge("website" => website)
-        PageOutput.new(route: page.route, content: page.content, data: data)
+        PageOutput.new(route: page.route, content: content, data: data)
       end
     end
 

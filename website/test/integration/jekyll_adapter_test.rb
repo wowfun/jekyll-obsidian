@@ -880,12 +880,18 @@ class JekyllAdapterTest < Minitest::Test
     folder = File.join(@temporary_root, "vault", "collections")
     FileUtils.mkdir_p(folder)
     File.write(File.join(folder, "index.md"), "---\npublish: true\ncontent_type: page\ntab:\n  id: collections\n---\n# Collections\n")
+    File.write(File.join(folder, "member.md"), "---\npublish: true\n---\n# Collections\n")
     install_project_layout
     %w[minimal docs].each do |theme|
       build_site("website" => website_config.merge("theme" => theme)).process
       document = Nokogiri::HTML5.parse(File.read(File.join(destination, "collections", "index.html")))
       assert_equal 1, document.css("main h1").size, theme
+      assert_equal "Collections", document.at_css("main h1.visually-hidden").text, theme
+      assert_empty document.css("main h1 a"), theme
+      assert_empty document.css("[data-outline-link][href='#collections']"), theme
       assert_empty document.css(".note-description"), theme
+      member = Nokogiri::HTML5.parse(File.read(File.join(destination, "collections", "member", "index.html")))
+      assert_equal 1, member.css("main h1:not(.visually-hidden)").size, theme
     end
   end
 
