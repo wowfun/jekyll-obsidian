@@ -125,6 +125,7 @@ module JekyllObsidian
     :nav_exclude,
     :directory_index,
     :has_h1,
+    :presentation,
     :feature_flags,
     :content_security,
     :image_url,

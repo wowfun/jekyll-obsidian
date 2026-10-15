@@ -43,4 +43,12 @@ class RecommendationsTest < Minitest::Test
     refute bad.success?
     assert bad.diagnostics.any? { |d| d.code == "invalid_recommendations" }
   end
+
+  def test_direct_snapshot_requests_cannot_place_recommendations_below_the_vault_root
+    nested = JekyllObsidian::SnapshotEntry.new(path: "nested/_recommendations.json",
+      bytes: JSON.generate(version: 1, items: {}), kind: :recommendation_manifest)
+    result = compile(article("a.md"), nested)
+    refute result.success?
+    assert result.diagnostics.any? { |diagnostic| diagnostic.code == "invalid_recommendations" && diagnostic.message.include?("vault root") }
+  end
 end

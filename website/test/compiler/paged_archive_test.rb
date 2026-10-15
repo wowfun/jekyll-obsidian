@@ -235,4 +235,21 @@ class PagedArchiveScaleTest < Minitest::Test
     assert_equal ["reading"], Nokogiri::HTML5.fragment(markup).css("nav").map { |node| node["aria-label"] }
   end
 
+  def test_empty_facet_controls_are_omitted_but_a_partial_single_source_remains_filterable
+    require "liquid"
+    source = File.read(File.expand_path("../../_includes/website/archive-facets.html", __dir__))
+    template = Liquid::Template.parse(source)
+    [0, 2].each do |total|
+      markup = template.render!("page" => { "website" => { "theme_data" => {
+        "archive" => { "total" => total, "facets" => { "source" => [], "topic" => [] } }
+      } } })
+      assert_empty Nokogiri::HTML5.fragment(markup).css(".archive-facet")
+    end
+    markup = template.render!("page" => { "website" => { "theme_data" => {
+      "tab_id" => "mixed", "archive" => { "total" => 2,
+        "facets" => { "source" => [{ "id" => "hn", "count" => 1, "name" => "HN" }], "topic" => [] } }
+    } } })
+    assert_equal ["Sources"], Nokogiri::HTML5.fragment(markup).css(".archive-facet").map { |nav| nav["aria-label"] }
+  end
+
 end

@@ -1,5 +1,6 @@
 {% assign archive = page.website.theme_data.archive %}
 {% for group in archive.facets %}
+  {% if group[1].size == 0 %}{% continue %}{% endif %}
   {% if page.website.theme_data.tab_id and group[0] == 'source' and group[1].size == 1 %}
     {% assign only_source = group[1] | first %}
     {% if only_source.count == archive.total %}{% continue %}{% endif %}

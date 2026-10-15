@@ -131,10 +131,10 @@ jekyll-obsidian dev
 
 Windows 原生开发可使用 RubyInstaller Ruby+Devkit 4.0.6、Bundler 4.0.16 和 Node 26。开发者指南提供了 PowerShell 构建与归档测试命令。完整 Ruby 测试可通过 `bundle exec rake test` 运行。Windows 缺少符号链接权限时，目录链接测试使用 junction；只有文件符号链接及 Windows 不支持的文件名用例会跳过，并说明原因。预览测试会隔离并只终止自己的子进程。
 
+## 推荐与栏目归档
+
+在内容根目录放置 `_recommendations.json`，可提供有时效的文章推荐；设置 `tab.layout: archive`，可让栏目页提供限定在当前成员内的日期、主题筛选与分页。推荐格式见[自定义配置](website/jekyll-obsidian-docs/_translations/zh-CN/docs/Customization.md#有时效的推荐)，归档设置见[自定义标签页](website/jekyll-obsidian-docs/_translations/zh-CN/docs/Customization.md#自定义标签页)。
+
 ## 许可证
 
 MIT
-
-### 有时效的推荐
-
-在内容根目录放置 `_recommendations.json`，可提供外部推荐而不增加关系图边。格式为 `{ "version": 1, "items": { "a.md": [{ "path": "b.md", "expires_at": "2026-10-18T00:00:00Z" }] } }`。路径指向默认语言目录中的公开文章，标题和链接按当前语言显示；手工 `related` 优先。不存在、私有、自身及过期目标不展示，元数据文件不发布。自动推荐需要 JavaScript，即使站点未重新构建也会到期隐藏；手工关联仍可在禁用 JavaScript 时显示。语言切换按钮使用翻译符号与下拉箭头。

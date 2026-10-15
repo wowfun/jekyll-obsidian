@@ -73,6 +73,10 @@
       monospace;
     --font-article: var(--font-system);
     --font-ui: var(--font-system);
+    --page-action-size: 2.55rem;
+    --page-action-menu-size: 2.15rem;
+    --page-actions-gap: 1rem;
+    --page-action-favorite-clearance: 4.25rem;
   }
 
   :root[data-color-scheme="dark"] {
@@ -391,6 +395,7 @@
     inset-block-start: calc(100% + 0.45rem);
     inset-inline-end: 0;
     inline-size: max-content;
+    max-inline-size: min(16rem, var(--language-panel-available, calc(100vw - 2rem)));
     padding: 0.38rem;
     border: 1px solid var(--line);
     border-radius: 0.42rem;
@@ -421,6 +426,7 @@
     color: var(--ink);
     font-size: 0.76rem;
     text-decoration: none;
+    overflow-wrap: anywhere;
   }
 
   .language-switcher__panel a:hover,
@@ -2334,14 +2340,14 @@
   .page-actions__menu > summary {
     display: inline-flex;
     align-items: center;
-    min-block-size: 2.55rem;
+    min-block-size: var(--page-action-size);
     background: transparent;
     cursor: pointer;
   }
 
   .page-actions__primary {
     justify-content: center;
-    inline-size: 2.55rem;
+    inline-size: var(--page-action-size);
     padding-inline: 0;
     font-size: 0.78rem;
     font-weight: 650;
@@ -2371,7 +2377,7 @@
 
   .page-actions__menu > summary {
     justify-content: center;
-    inline-size: 2.15rem;
+    inline-size: var(--page-action-menu-size);
     border-radius: 0 0.5rem 0.5rem 0;
     list-style: none;
   }

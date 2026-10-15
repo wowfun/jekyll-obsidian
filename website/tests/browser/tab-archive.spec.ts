@@ -7,6 +7,27 @@ const ready = async (page: Page) => {
 
 for (const locale of ["en", "zh-CN"]) {
   const root = "/__site__/minimal-archive/" + (locale === "en" ? "" : locale + "/");
+  test(`collection actions share the first row only when there is no introduction in ${locale}`, async ({ page }) => {
+    await page.goto(root + "plain/");
+    await expect(page.locator(".minimal-entry--compact-collection")).toHaveCount(1);
+    await expect(page.locator("h1.visually-hidden strong")).toHaveText("Collect");
+    for (const direction of ["ltr", "rtl"]) {
+      await page.locator("html").evaluate((element, value) => element.setAttribute("dir", value), direction);
+      const geometry = await page.locator(".tab-collection h2").evaluate(element => {
+        const action = document.querySelector("[data-page-actions]")!.getBoundingClientRect();
+        const range = document.createRange(); range.selectNodeContents(element);
+        return { titleY: element.getBoundingClientRect().y, actionY: action.y,
+          overlap: [...range.getClientRects()].some(line => line.width > 0 && line.left < action.right && line.right > action.left && line.top < action.bottom && line.bottom > action.top),
+          overflow: document.documentElement.scrollWidth > innerWidth + 1 };
+      });
+      expect(geometry.titleY).toBeCloseTo(geometry.actionY, 0);
+      expect(geometry.overlap).toBe(false);
+      expect(geometry.overflow).toBe(false);
+    }
+    await page.goto(root + "plain-intro/");
+    await expect(page.locator(".minimal-entry--compact-collection")).toHaveCount(0);
+    await expect(page.locator(".note-content > p")).toHaveText("An authored introduction.");
+  });
   test(`custom archive intersects topics and dates within its own tab in ${locale}`, async ({ page }, testInfo) => {
     await page.goto(root + "news/"); await ready(page);
     const titles = page.locator(".blog-ledger__main strong");

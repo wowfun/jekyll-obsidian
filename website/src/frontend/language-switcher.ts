@@ -4,6 +4,15 @@ export function initialiseLanguageSwitcher(): void {
     const panel = details.querySelector<HTMLElement>(".language-switcher__panel");
     let openedByHover = false;
     const close = () => { details.open = false; openedByHover = false; };
+    const fitPanel = () => {
+      if (!panel || !details.open) return;
+      const bounds = details.getBoundingClientRect();
+      const available = getComputedStyle(details).direction === "rtl"
+        ? document.documentElement.clientWidth - bounds.left : bounds.right;
+      panel.style.setProperty("--language-panel-available", `${Math.max(0, available - 16)}px`);
+    };
+    details.addEventListener("toggle", fitPanel);
+    window.addEventListener("resize", fitPanel);
 
     details.addEventListener("pointerenter", (event) => {
       if (event.pointerType !== "mouse" || !window.matchMedia("(any-hover: hover)").matches || details.open) return;

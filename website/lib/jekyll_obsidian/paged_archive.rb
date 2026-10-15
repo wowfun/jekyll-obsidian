@@ -39,6 +39,8 @@ module JekyllObsidian
       aliases = config.site.tag_aliases || {}
       facets = config.blog.fetch("facets")
       records = cards.map { |card| record(card, config) }
+      # Each tab owns its artifact namespace as well as its current descriptor.
+      # Identical member sets must not emit duplicate routes during preflight.
       generation = Digest::SHA256.hexdigest(JSON.generate([records, labels, aliases, config.blog, config.features.fetch("favorites"), postings, scope]))
       root = "/assets/website/archive/#{generation}"
       files = []

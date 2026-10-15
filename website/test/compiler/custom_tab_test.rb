@@ -227,6 +227,7 @@ class CustomTabTest < Minitest::Test
       descriptor = generated_json(result, current_route)
       assert_equal archive.fetch("url"), descriptor.fetch("url")
       mirror = page(result, "#{prefix}mirror/").data.dig("website", "theme_data", "archive")
+      assert_equal data.dig("theme_data", "tab_member_ids"), page(result, "#{prefix}mirror/").data.dig("website", "theme_data", "tab_member_ids")
       refute_equal archive.fetch("generation"), mirror.fetch("generation")
       assert_equal 3, page(result, prefix).data.dig("website", "theme_data", "archive", "total")
       assert_equal 3, page(result, "#{prefix}favorites/").data.dig("website", "theme_data", "archive", "total")
@@ -234,6 +235,45 @@ class CustomTabTest < Minitest::Test
     end
     assert_includes page(result, "/podcast/").content, "Introduction."
     assert_equal result.generated_files.map(&:route).uniq, result.generated_files.map(&:route)
+  end
+
+  def test_suppressed_tab_heading_preserves_inline_markup_and_does_not_hide_transclusions
+    %w[minimal docs].each do |theme|
+      result = compile(
+        note("collections/index.md", "---\npublish: true\ncontent_type: page\ntab:\n  id: collections\n---\n# **Collect**ions\n"),
+        note("host.md", "---\npublish: true\n---\n# Host\n\n![[collections/index]]"),
+        theme: theme)
+      assert result.success?, result.diagnostics.map(&:message).join("\n")
+      landing = page(result, "/collections/")
+      heading = Nokogiri::HTML5.fragment(landing.content).at_css("h1.visually-hidden")
+      assert_equal "Collect", heading.at_css("strong")&.text, theme
+      assert_empty heading.css("a"), theme
+      assert_empty landing.data.dig("website", "outline"), theme
+      embedded = Nokogiri::HTML5.fragment(page(result, "/host/").content).at_css(".website-transclusion h1")
+      refute_includes embedded["class"].to_s.split, "visually-hidden", theme
+      assert_equal "Collect", embedded.at_css("strong")&.text, theme
+    end
+  end
+
+  def test_tag_labels_are_consistent_in_articles_ledgers_and_taxonomy_without_changing_anchors
+    %w[minimal docs].each do |theme|
+      result = compile(
+        note("posts/a.md", "---\npublish: true\ncontent_type: post\ndate: 2026-10-15\ntags: [topics/agents]\n---\n# Post"),
+        locale_manifest("_locale.yml", "name: English\ntag_labels:\n  topics/agents: Agents\n"),
+        locale_manifest("_translations/zh-CN/_locale.yml", "name: 简体中文\ntag_labels:\n  topics/agents: 智能体\n"),
+        theme: theme, features: { "tags" => true }, i18n: I18N.merge("enabled" => true))
+      assert result.success?, result.diagnostics.map(&:message).join("\n")
+      website = page(result, "/zh-CN/posts/a/").data.fetch("website")
+      assert_equal ["智能体"], website.fetch("topic_links").map { |link| link.fetch("name") }, theme
+      assert_equal ["智能体"], website.fetch("tag_links").map { |link| link.fetch("name") }, theme
+      assert_equal page(result, "/posts/a/").data.dig("website", "topic_links", 0, "anchor"), website.fetch("topic_links").first.fetch("anchor"), theme
+      if theme == "minimal"
+        card = page(result, "/zh-CN/blog/").data.dig("website", "theme_data", "archive_groups", 0, "posts", 0)
+        assert_equal "智能体", card.fetch("topics").first.fetch("name")
+      else
+        assert_equal "智能体", page(result, "/zh-CN/tags/").data.dig("website", "theme_data", "tag_groups", 0, "name")
+      end
+    end
   end
 
   def test_archive_tab_layout_cannot_be_overridden_by_translations_or_ignored_by_docs

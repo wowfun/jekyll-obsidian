@@ -95,6 +95,13 @@ try {
   await writeFile(path.join(archiveHost, "vault/_locale.yml"), "name: English\n");
   await copyFile(path.join(projectRoot, "jekyll-obsidian-docs/_translations/zh-CN/_locale.yml"), path.join(archiveHost, "vault/_translations/zh-CN/_locale.yml"));
   await writeFile(path.join(archiveHost, "vault/index.md"), "---\npublish: true\n---\n# Archive\n");
+  for (const [id, introduction] of [["plain", ""], ["plain-intro", "An authored introduction."]]) {
+    await mkdir(path.join(archiveHost, `vault/${id}`), { recursive: true });
+    await writeFile(path.join(archiveHost, `vault/${id}/index.md`),
+      `---\npublish: true\ncontent_type: page\ntitle: Collection${introduction ? " with introduction" : ""}\ntab:\n  id: ${id}\n---\n# **Collect**ion${introduction ? " with introduction" : ""}\n\n${introduction}\n`);
+    await writeFile(path.join(archiveHost, `vault/${id}/member.md`),
+      "---\npublish: true\ncontent_type: page\n---\n# A deliberately long collection title that must wrap before the copy actions\n");
+  }
   for (const [id, title, label, source] of [["news", "News", "新闻", "hn"], ["tools", "Tools", "工具", "dsh"]]) {
     await mkdir(path.join(archiveHost, `vault/${id}`), { recursive: true });
     await mkdir(path.join(archiveHost, `vault/_translations/zh-CN/${id}`), { recursive: true });

@@ -778,6 +778,7 @@ module JekyllObsidian
           # Locale manifests are compiler metadata, never public vault assets.
         when :recommendation_manifest
           begin
+            # BuildRequest snapshots can also be supplied without the filesystem adapter.
             raise ArgumentError, "recommendations must be at the vault root" unless path == Recommendations::PATH
             @recommendations = Recommendations.parse(entry.bytes.to_s)
           rescue JSON::ParserError, ArgumentError => exception
@@ -1861,7 +1862,9 @@ module JekyllObsidian
 
       notes = @notes.values.sort_by(&:id).map do |note|
         context = TransclusionContext.new(host_id: note.id, sequence: 0, instances: 0, bytes: 0)
-        content = render_with_transclusions(note.id, [], context, depth: 0).to_html
+        fragment = render_with_transclusions(note.id, [], context, depth: 0)
+        presentation = tab_landing_presentation(note, fragment)
+        content = fragment.to_html
         assert_block_anchors_rendered(note, content)
         PublishedNote.new(
           id: note.id,
@@ -1877,7 +1880,7 @@ module JekyllObsidian
           ),
           authored_text: note.authored_text,
           preview: note.preview,
-          outline: note.outline,
+          outline: note.outline.reject { |heading| heading.fetch("id") == presentation["hidden_title_id"] },
           updated: note.updated,
           created: note.created,
           content_type: note.content_type,
@@ -1886,6 +1889,7 @@ module JekyllObsidian
           nav_exclude: note.nav_exclude,
           directory_index: directory_index_note?(note.id),
           has_h1: note.has_h1,
+          presentation: presentation,
           feature_flags: note.feature_flags,
           content_security: content_security_needs(content),
           image_url: published_image_url(note),
@@ -1907,6 +1911,24 @@ module JekyllObsidian
         graph_edges: graph_edges,
         graph_degrees: graph_degrees_for(notes, graph_edges)
       )
+    end
+
+    # Apply landing-page presentation to this page's final fragment only. The
+    # source fragment stays intact when another note transcludes this index.
+    def tab_landing_presentation(note, fragment)
+      return {} unless note.content_type == "page" && directory_index_note?(note.id) && note.properties["tab"]
+
+      first = note.outline.first
+      label = note.properties.fetch("tab")["label"] || note.title
+      return {} unless first && first.fetch("level") == 1 && first.fetch("label").split.join(" ") == label.split.join(" ")
+
+      heading = fragment.element_children.first
+      return {} unless heading&.name == "h1" && heading["id"] == first.fetch("id")
+
+      heading["class"] = [heading["class"], "visually-hidden"].compact.join(" ")
+      heading.css("a").each { |link| link.replace(link.children) }
+      { "hidden_title_id" => first.fetch("id"),
+        "empty_intro" => fragment.children.all? { |node| node == heading || (node.text? && node.text.strip.empty?) } }
     end
 
     def published_properties(note)

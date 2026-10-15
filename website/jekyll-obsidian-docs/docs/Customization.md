@@ -189,6 +189,16 @@ In Minimal, set `tab.layout: archive` to give a tab the same paginated ledger, t
 
 Tabs that do not fit the desktop header move into an accessible More menu. The mobile Browse sheet and the Search dialog's quick navigation use the same ordered destinations and active state. Search narrows those quick links by their configured labels while it queries note content. Without JavaScript, the header links remain visible and wrap naturally. Opening Docs from Minimal keeps the Minimal site shell while adding the handbook tree, page outline, and previous or next links.
 
+## Expiring recommendations
+
+A vault-root `_recommendations.json` can supply external recommendations without adding graph edges:
+
+```json
+{ "version": 1, "items": { "a.md": [{ "path": "b.md", "expires_at": "2026-10-18T00:00:00Z" }] } }
+```
+
+Paths refer to public posts in the default vault; titles and URLs follow the active locale. Manual `related` takes precedence. Missing, private, self and expired targets are omitted. The metadata file is not published. Automatic cards require JavaScript and disappear at expiry even between builds; manual related cards remain available without JavaScript.
+
 ## Graph and wiki-link previews
 
 A published note places its one-hop graph above Outline and Relations in the right-hand context rail only when it links to, embeds, is linked from, or is embedded by another public note in the current language partition. The graph contains the current note and those direct neighbours. Isolated notes and notes with only self-links omit the local graph, while the complete graph still contains their nodes. Node area grows with its degree in the complete public graph.

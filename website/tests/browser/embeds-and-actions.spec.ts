@@ -69,3 +69,24 @@ for (const theme of ["minimal", "docs"]) for (const locale of ["en", "zh-CN"]) {
     await page.screenshot({ path: testInfo.outputPath(`${theme}-${locale}.png`), fullPage: true });
   });
 }
+
+test("long locale names stay inside narrow LTR and RTL viewports", async ({ page }) => {
+  await page.setViewportSize({ width: 320, height: 780 });
+  for (const theme of ["minimal", "docs"]) {
+    await page.goto(`/__site__/${theme}-media/`);
+    const switcher = page.locator("[data-language-switcher]"), summary = switcher.locator("summary");
+    const panel = switcher.locator(".language-switcher__panel");
+    await panel.locator("a").first().evaluate(element => { element.textContent = "A very long unbroken locale name " + "Language".repeat(40); });
+    for (const direction of ["ltr", "rtl"]) {
+      await page.locator("html").evaluate((element, value) => element.setAttribute("dir", value), direction);
+      await summary.press("Enter");
+      await expect(panel).toBeVisible();
+      await expect.poll(async () => panel.evaluate(element => {
+        const bounds = element.getBoundingClientRect();
+        return bounds.left >= 0 && bounds.right <= innerWidth + 1 && element.scrollWidth <= element.clientWidth + 1;
+      })).toBe(true);
+      await summary.press("Escape");
+      await expect(panel).toBeHidden();
+    }
+  }
+});

@@ -131,10 +131,10 @@ Contributors can continue with the [Developer Guide](website/jekyll-obsidian-doc
 
 Native Windows contributors can use RubyInstaller Ruby+Devkit 4.0.6, Bundler 4.0.16 and Node 26. The Developer Guide includes PowerShell build and archive-test commands. The full Ruby suite runs with `bundle exec rake test`. Directory-link tests use junctions when Windows symbolic-link privileges are unavailable; only file-link tests and filenames unsupported by Windows are skipped, with explicit reasons. Preview tests isolate and stop their own child process.
 
+## Recommendations and collection archives
+
+Supply expiring article recommendations through a vault-root `_recommendations.json`, or declare an archive tab with `tab.layout: archive` for scoped dates, topics, and pagination. See [Customization](website/jekyll-obsidian-docs/docs/Customization.md#expiring-recommendations) for the recommendation format and [Custom tabs](website/jekyll-obsidian-docs/docs/Customization.md#custom-tabs) for archive settings.
+
 ## License
 
 MIT
-
-### Expiring recommendations
-
-A vault-root `_recommendations.json` can supply external recommendations without adding graph edges. Use `{ "version": 1, "items": { "a.md": [{ "path": "b.md", "expires_at": "2026-10-18T00:00:00Z" }] } }`. Paths refer to public posts in the default vault; titles and URLs follow the active locale. Manual `related` takes precedence. Missing, private, self and expired targets are omitted. The metadata file is not published. Automatic cards require JavaScript and disappear at expiry even between builds; manual related cards remain available without JavaScript. The language control uses a translation symbol with a dropdown arrow.
