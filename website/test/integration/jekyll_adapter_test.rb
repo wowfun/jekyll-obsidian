@@ -876,6 +876,19 @@ class JekyllAdapterTest < Minitest::Test
     end
   end
 
+  def test_custom_tab_title_does_not_repeat_as_description
+    folder = File.join(@temporary_root, "vault", "collections")
+    FileUtils.mkdir_p(folder)
+    File.write(File.join(folder, "index.md"), "---\npublish: true\ncontent_type: page\ntab:\n  id: collections\n---\n# Collections\n")
+    install_project_layout
+    %w[minimal docs].each do |theme|
+      build_site("website" => website_config.merge("theme" => theme)).process
+      document = Nokogiri::HTML5.parse(File.read(File.join(destination, "collections", "index.html")))
+      assert_equal 1, document.css("main h1").size, theme
+      assert_empty document.css(".note-description"), theme
+    end
+  end
+
   def test_host_docs_source_is_compiled_without_entering_the_reader
     FileUtils.mv(File.join(@temporary_root, "vault"), File.join(@temporary_root, "docs"))
     site = build_site("website" => website_config.merge("source" => "docs"))
