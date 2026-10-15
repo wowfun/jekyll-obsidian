@@ -379,12 +379,7 @@
 
   .language-switcher > summary {
     list-style: none;
-    inline-size: auto;
-    gap: 0.25rem;
-    padding-inline: 0.4rem;
   }
-
-  .language-switcher__chevron { inline-size: 0.75rem; block-size: 0.75rem; }
 
   .language-switcher > summary::-webkit-details-marker {
     display: none;
@@ -409,6 +404,14 @@
     margin: 0;
     gap: 0.15rem;
     list-style: none;
+  }
+
+  .language-switcher__panel::before {
+    content: "";
+    position: absolute;
+    inset-inline: 0;
+    inset-block-end: 100%;
+    block-size: 0.5rem;
   }
 
   .language-switcher__panel a {

@@ -15,7 +15,7 @@ for (const theme of ["minimal", "docs"]) for (const locale of ["en", "zh-CN"]) {
     await expect(search).toHaveAttribute("title", (locale === "en" ? "Search" : "搜索") + " (Ctrl/⌘ K)");
     await expect(search.locator("kbd")).toHaveCount(0);
     await expect(actions.locator(".language-switcher summary .site-action__icon")).toHaveCount(1);
-    await expect(actions.locator(".language-switcher summary .language-switcher__chevron")).toHaveCount(1);
+    await expect(actions.locator(".language-switcher summary svg")).toHaveCount(1);
     for (const control of await actions.locator("button, summary, a.site-action").all()) {
       await expect(control).toHaveAttribute("aria-label", /.+/);
       await expect(control).toHaveAttribute("title", /.+/);
@@ -27,6 +27,33 @@ for (const theme of ["minimal", "docs"]) for (const locale of ["en", "zh-CN"]) {
     await expect(actions.locator(".language-switcher__panel")).toBeVisible();
     await expect(actions.locator(".language-switcher__panel a")).toHaveText(["English", "简体中文"]);
     await actions.locator(".language-switcher summary").press("Enter");
+    const language = actions.locator(".language-switcher summary"), panel = actions.locator(".language-switcher__panel");
+    await expect(panel).toBeHidden();
+    if (testInfo.project.name.startsWith("mobile")) {
+      await language.tap();
+      await expect(panel).toBeVisible();
+      await language.tap();
+      await expect(panel).toBeHidden();
+    } else {
+      await language.hover();
+      await expect(panel).toBeVisible();
+      const triggerBox = (await language.boundingBox())!;
+      // Cross the visual gap into the panel without losing the hover target.
+      await page.mouse.move(triggerBox.x + triggerBox.width / 2, triggerBox.y + triggerBox.height + 3);
+      await expect(panel).toBeVisible();
+      await panel.getByRole("link", { name: "English", exact: true }).hover();
+      await expect(panel).toBeVisible();
+      await page.mouse.move(1, 1);
+      await expect(panel).toBeHidden();
+      await language.click();
+      await expect(panel).toBeVisible();
+      await language.press("Tab");
+      await page.mouse.move(1, 1);
+      await expect(panel).toBeVisible();
+      await page.keyboard.press("Escape");
+      await expect(panel).toBeHidden();
+      await expect(language).toBeFocused();
+    }
     await search.click(); await expect(page.locator('[data-dialog="search"]')).toBeVisible();
     await page.keyboard.press("Escape");
     await expect(page.locator("audio.website-external-audio")).toBeVisible();
