@@ -390,7 +390,7 @@
     z-index: 30;
     inset-block-start: calc(100% + 0.45rem);
     inset-inline-end: 0;
-    min-inline-size: 11rem;
+    inline-size: max-content;
     padding: 0.38rem;
     border: 1px solid var(--line);
     border-radius: 0.42rem;
