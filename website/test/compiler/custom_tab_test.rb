@@ -173,6 +173,24 @@ class CustomTabTest < Minitest::Test
     assert_equal "/site/zh-CN/docs/guide/", page(result, "/zh-CN/favorites/").data.dig("website", "theme_data", "tab_members", 0, "url")
   end
 
+  def test_custom_tab_cards_use_localized_tag_labels_without_changing_membership
+    %w[minimal docs].each do |theme|
+      result = compile(
+        note("podcast/index.md", "---\npublish: true\ncontent_type: page\ntab:\n  id: podcasts\n  topics: [source/podcast]\n---\n# Podcasts"),
+        note("episodes/one.md", "---\npublish: true\ncontent_type: post\ndate: 2026-10-15\ntags: [source/podcast, topics/agents, other]\n---\n# Episode"),
+        locale_manifest("_locale.yml", "name: English\ntag_labels:\n  source/podcast: Podcasts\n  topics/agents: Agents\n"),
+        locale_manifest("_translations/zh-CN/_locale.yml", "name: 简体中文\ntag_labels:\n  source/podcast: 播客\n  topics/agents: 智能体\n"),
+        theme: theme, i18n: I18N.merge("enabled" => true)
+      )
+      assert result.success?, result.diagnostics.map(&:message).join("\n")
+      { "/podcast/" => %w[Podcasts Agents other], "/zh-CN/podcast/" => %w[播客 智能体 other] }.each do |route, names|
+        cards = page(result, route).data.dig("website", "theme_data", "tab_members")
+        assert_equal ["episodes/one.md"], cards.map { |card| card.fetch("id") }, theme
+        assert_equal names.sort, cards.first.fetch("topics").map { |topic| topic.fetch("name") }.sort, theme
+      end
+    end
+  end
+
   private
 
   def navigation_for(result, route)

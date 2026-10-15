@@ -470,10 +470,15 @@ module JekyllObsidian
       end
 
       def tab_member_card(note, config)
+        labels = config.site.tag_labels || {}
         topics = note.topics
           .select { |topic| %w[tag category].include?(topic.fetch("kind")) }
           .uniq { |topic| topic_name_identity(topic) }
-          .map { |topic| topic.slice("name", "url") }
+          .map do |topic|
+            card = topic.slice("name", "url")
+            card["name"] = labels.fetch(topic.fetch("name"), topic.fetch("name")) if topic.fetch("kind") == "tag"
+            card
+          end
         content_card(note, config).merge(
           "content_type" => note.content_type,
           "topics" => topics
