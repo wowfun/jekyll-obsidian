@@ -495,6 +495,16 @@ module JekyllObsidian
       end
 
       def related_article_cards(note, model, config)
+        if Array(note.related).empty?
+          @recommendation_time ||= Time.now
+          return [] unless note.content_type == "post"
+          return Array((model.recommendations || {})[note.id]).filter_map do |recommendation|
+            next if Time.iso8601(recommendation.fetch("expires_at")) <= @recommendation_time
+            target = model.notes_by_id[recommendation.fetch("path")]
+            next unless target && target.id != note.id && target.content_type == "post"
+            content_card(target, config).merge("recommendation_expires_at" => recommendation.fetch("expires_at"))
+          end
+        end
         Array(note.related).map do |related|
           target = model.notes_by_id.fetch(related.fetch("id"))
           content_card(target, config).merge(

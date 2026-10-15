@@ -134,3 +134,7 @@ Windows 原生开发可使用 RubyInstaller Ruby+Devkit 4.0.6、Bundler 4.0.16 �
 ## 许可证
 
 MIT
+
+### 有时效的推荐
+
+在内容根目录放置 `_recommendations.json`，可提供外部推荐而不增加关系图边。格式为 `{ "version": 1, "items": { "a.md": [{ "path": "b.md", "expires_at": "2026-10-18T00:00:00Z" }] } }`。路径指向默认语言目录中的公开文章，标题和链接按当前语言显示；手工 `related` 优先。不存在、私有、自身及过期目标不展示，元数据文件不发布。自动推荐需要 JavaScript，即使站点未重新构建也会到期隐藏；手工关联仍可在禁用 JavaScript 时显示。语言切换按钮使用翻译符号与下拉箭头。

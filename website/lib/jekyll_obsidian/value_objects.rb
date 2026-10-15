@@ -139,6 +139,7 @@ module JekyllObsidian
   PublishedSiteModel = ImmutableRecord.define(
     :notes,
     :notes_by_id,
+    :recommendations,
     :directory_index_paths,
     :relations,
     :graph_edges,

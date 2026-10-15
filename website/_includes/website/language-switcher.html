@@ -3,6 +3,7 @@
   <details class="language-switcher" data-language-switcher>
     <summary class="site-action" aria-label="{{ ui.language | default: 'Language' | escape }}: {{ page.website.i18n.name | escape }}" title="{{ ui.language | default: 'Language' | escape }}: {{ page.website.i18n.name | escape }}">
       {% include website/action-icon.html name='language' %}
+      <svg class="language-switcher__chevron" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true" focusable="false"><path d="m3 4.5 3 3 3-3"/></svg>
     </summary>
     <nav class="language-switcher__panel" aria-label="{{ ui.language | default: 'Language' | escape }}">
       <ul>

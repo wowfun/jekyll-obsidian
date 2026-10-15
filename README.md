@@ -134,3 +134,7 @@ Native Windows contributors can use RubyInstaller Ruby+Devkit 4.0.6, Bundler 4.0
 ## License
 
 MIT
+
+### Expiring recommendations
+
+A vault-root `_recommendations.json` can supply external recommendations without adding graph edges. Use `{ "version": 1, "items": { "a.md": [{ "path": "b.md", "expires_at": "2026-10-18T00:00:00Z" }] } }`. Paths refer to public posts in the default vault; titles and URLs follow the active locale. Manual `related` takes precedence. Missing, private, self and expired targets are omitted. The metadata file is not published. Automatic cards require JavaScript and disappear at expiry even between builds; manual related cards remain available without JavaScript. The language control uses a translation symbol with a dropdown arrow.

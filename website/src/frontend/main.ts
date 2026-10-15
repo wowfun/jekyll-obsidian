@@ -3,6 +3,7 @@ import { initialiseOutline } from "./outline";
 import { initialiseColorScheme } from "./color-scheme";
 import { readSiteUrl } from "./urls";
 import { initialiseLanguageSwitcher } from "./language-switcher";
+import { initialiseRecommendations } from "./recommendations";
 import { initialiseComments } from "./comments";
 import { initialiseArchiveFilters } from "./archive-filters";
 import { initialisePriorityNavigation } from "./priority-navigation";
@@ -25,6 +26,7 @@ function initialisePageFeatures(): void {
   cleanupPageFeatures();
   initialiseDialogs();
   const cleanupOutline = initialiseOutline();
+  const cleanupRecommendations = initialiseRecommendations();
   const cleanupComments = initialiseComments();
   const cleanupArchiveFilters = initialiseArchiveFilters();
   const cleanupPageActions = initialisePageActions();
@@ -36,6 +38,7 @@ function initialisePageFeatures(): void {
   const cleanupTweets = initialiseTweets();
   cleanupPageFeatures = () => {
     cleanupOutline();
+    cleanupRecommendations();
     cleanupComments();
     cleanupArchiveFilters();
     cleanupPageActions();

@@ -242,7 +242,9 @@ module JekyllObsidian
         fatal("vault contains a non-regular file: #{relative}") unless stat.file?
 
         normalized = relative.tr(File::SEPARATOR, "/")
-        kind = if File.extname(normalized).downcase == ".md"
+        kind = if normalized == Recommendations::PATH
+          :recommendation_manifest
+        elsif File.extname(normalized).downcase == ".md"
           :note
         elsif File.basename(normalized) == LocalizedCompiler::LOCALE_MANIFEST
           :locale_manifest
@@ -255,7 +257,7 @@ module JekyllObsidian
           fatal("vault file changed during snapshot: #{relative}") unless opened_file_matches?(absolute, file, stat)
           entries << SnapshotEntry.new(
             path: normalized,
-            bytes: %i[note locale_manifest].include?(kind) ? file.read : nil,
+            bytes: %i[note locale_manifest recommendation_manifest].include?(kind) ? file.read : nil,
             kind: kind,
             media_type: kind == :note ? "text/markdown" : MediaPolicy.media_type(normalized),
             size: pinned.size,

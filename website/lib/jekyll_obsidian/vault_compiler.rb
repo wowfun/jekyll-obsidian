@@ -776,6 +776,13 @@ module JekyllObsidian
           @attachment_basename_index[basename] << path
         when :locale_manifest
           # Locale manifests are compiler metadata, never public vault assets.
+        when :recommendation_manifest
+          begin
+            raise ArgumentError, "recommendations must be at the vault root" unless path == Recommendations::PATH
+            @recommendations = Recommendations.parse(entry.bytes.to_s)
+          rescue JSON::ParserError, ArgumentError => exception
+            error("invalid_recommendations", exception.message, path)
+          end
         when :symlink
           error("symlink_rejected", "symlinks are not accepted in a vault snapshot", path)
         else
@@ -1894,6 +1901,7 @@ module JekyllObsidian
       PublishedSiteModel.new(
         notes: notes,
         notes_by_id: notes.to_h { |note| [note.id, note] },
+        recommendations: @recommendations || {},
         directory_index_paths: @directory_index_paths,
         relations: relations,
         graph_edges: graph_edges,
