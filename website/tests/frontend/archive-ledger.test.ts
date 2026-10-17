@@ -30,7 +30,7 @@ it("uses the serialized UI and controller when a new manifest switches a year ar
   root.dataset.ledgerGroupBy = "year";
   const days = initialiseArchiveDays(root);
   try {
-    renderArchiveLedger(root, [card], favoriteManifest([card])); days.refresh();
+    days.replace(() => renderArchiveLedger(root, [card], favoriteManifest([card])));
     expect(root.querySelector("h2")!.textContent).toBe("October 10");
     expect(root.querySelector<HTMLDetailsElement>("details")!.open).toBe(true);
     expect(root.querySelector("[data-ledger-day-count]")!.textContent).toBe("1 entry");

@@ -55,11 +55,11 @@ module CompilerTestHelpers
     )
   end
 
-  def compile(*entries, **overrides)
+  def compile(*entries, render_time: Time.now, **overrides)
     snapshot = JekyllObsidian::Snapshot.new(entries: entries)
     config = JekyllObsidian::BuildConfig.new(**DEFAULT_CONFIG.merge(overrides))
     request = JekyllObsidian::BuildRequest.new(snapshot: snapshot, config: config)
-    JekyllObsidian::VaultCompiler.compile(request)
+    JekyllObsidian::VaultCompiler.compile(request, render_time:)
   end
 
   def page(result, route)

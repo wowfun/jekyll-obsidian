@@ -33,9 +33,10 @@ it("opens the newest day, counts only this projection, and localizes old years a
 it("retains explicit choices across replacement and filtering, and disposal starts a fresh view", () => {
   const cards = [card("2026-10-15"), card("2026-10-14")]; render(cards);
   let days = initialiseArchiveDays(root()); dispose = days.dispose;
-  groups()[0]!.open = false; groups()[1]!.open = true; days.capture();
-  render([cards[1]!]); days.refresh(); expect(groups()[0]!.open).toBe(true);
-  render(cards); days.refresh(); expect(groups().map(group => group.open)).toEqual([false, true]);
+  groups()[0]!.open = false; groups()[1]!.open = true;
+  // Replace immediately, before either native toggle event can be delivered.
+  days.replace(() => render([cards[1]!])); expect(groups()[0]!.open).toBe(true);
+  days.replace(() => render(cards)); expect(groups().map(group => group.open)).toEqual([false, true]);
   const last = groups()[1]!; last.closest<HTMLElement>("[data-filter-group]")!.hidden = true;
   days.refresh(); expect(groups()[0]!.open).toBe(false);
   last.closest<HTMLElement>("[data-filter-group]")!.hidden = false;
@@ -47,10 +48,13 @@ it("retains explicit choices across replacement and filtering, and disposal star
 
 it("uses calendar keys rather than browser timezone for Chinese dates and weekdays", () => {
   root().insertAdjacentHTML("afterbegin", '<template data-ledger-day-ui data-date="{month}{day}日" data-date-year="{year}年{month}{day}日" data-months="1月|2月|3月|4月|5月|6月|7月|8月|9月|10月|11月|12月" data-weekdays="星期日|星期一|星期二|星期三|星期四|星期五|星期六" data-entry="{count} 条" data-entries="{count} 条" data-undated="未注明日期"></template>');
-  expect(archiveDayHeading(root(), "2026-10-15", 30)).toEqual({ date: "10月15日", weekday: "星期四", count: "30 条", dated: true });
-  expect(archiveDayHeading(root(), "2025-12-31", 1).date).toBe("2025年12月31日");
-  expect(archiveDayHeading(root(), "2026-02-30", 1).dated).toBe(false);
-  expect(archiveDayHeading(root(), "Undated", 2).date).toBe("未注明日期");
+  expect(archiveDayHeading(root(), "2026-10-15")).toEqual({ date: "10月15日", weekday: "星期四", dated: true });
+  expect(archiveDayHeading(root(), "2025-12-31").date).toBe("2025年12月31日");
+  expect(archiveDayHeading(root(), "2026-02-30").dated).toBe(false);
+  expect(archiveDayHeading(root(), "Undated").date).toBe("未注明日期");
+  render([card("2026-10-15"), card("2026-10-15", "second")]);
+  const days = initialiseArchiveDays(root()); dispose = days.dispose;
+  expect(groups()[0]!.querySelector("[data-ledger-day-count]")!.textContent).toBe("2 条");
 });
 
 it("recomputes the latest visible day without treating automatic defaults as manual choices", () => {
@@ -70,6 +74,6 @@ it("retains explicit SSR disclosure changes made before hydration", () => {
   groups()[1]!.open = true;
   const days = initialiseArchiveDays(root()); dispose = days.dispose;
   expect(groups().map(group => group.open)).toEqual([false, true]);
-  days.capture(); render([card("2026-10-15"), card("2026-10-14")]); days.refresh();
+  days.replace(() => render([card("2026-10-15"), card("2026-10-14")]));
   expect(groups().map(group => group.open)).toEqual([false, true]);
 });

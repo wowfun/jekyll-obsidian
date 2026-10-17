@@ -159,10 +159,10 @@ module JekyllObsidian
     MAX_TRANSCLUSION_INSTANCES = 256
     MAX_TRANSCLUSION_BYTES = 2 * 1024 * 1024
 
-    def self.compile(request)
-      return LocalizedCompiler.compile(request) unless request.config.i18n.nil?
+    def self.compile(request, render_time: Time.now)
+      return LocalizedCompiler.compile(request, render_time:) unless request.config.i18n.nil?
 
-      compile_single(request)
+      compile_single(request, render_time:)
     end
 
     def self.compile_single(request, html_publication: nil, include_html_projection: true, render_time: Time.now)

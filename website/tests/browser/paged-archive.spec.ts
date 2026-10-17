@@ -1,4 +1,4 @@
-import { expandArchiveDays } from "./archive-helpers";
+import { archiveReady, expandArchiveDays } from "./archive-helpers";
 import { expect, test } from "@playwright/test";
 
 for (const locale of ["en", "zh-CN"]) {
@@ -33,7 +33,6 @@ for (const locale of ["en", "zh-CN"]) {
     await page.addStyleTag({ content: '[data-filter-item] { min-height: 200vh; }' });
     const requests: string[] = [];
     page.on('request', request => { if (/\/items\/[ab]\/$/.test(request.url())) requests.push(request.url()); });
-    await expandArchiveDays(page);
     await page.locator('[data-archive-reading-toggle]').click();
     const readingSwitch = page.locator('[data-archive-reading-toggle]');
     await expect(readingSwitch).toHaveAttribute('title', locale === 'en' ? 'Read in full: on' : '平铺阅读：已开启');
@@ -53,11 +52,10 @@ for (const locale of ["en", "zh-CN"]) {
     await expect(toggle).toBeVisible();
     await expect(toggle).toHaveAttribute('title', locale === 'en' ? 'Read in full: off' : '平铺阅读：已关闭');
     await expect(toggle.locator('.site-action__reading-check')).toBeHidden();
-    await expandArchiveDays(page);
+    await archiveReady(page);
     await toggle.press('Space');
     await expect(toggle).toHaveAttribute('aria-checked', 'true');
     await expect(toggle.locator('.site-action__reading-check')).toBeVisible();
-    await expandArchiveDays(page);
     await toggle.press('Space');
     await expect(toggle).toHaveAttribute('aria-checked', 'false');
     await expect(toggle.locator('.site-action__reading-check')).toBeHidden();
@@ -68,7 +66,6 @@ for (const locale of ["en", "zh-CN"]) {
     await expect(page.locator('[data-archive-page-status]')).toHaveText(/3.*1.*2/);
     await expandArchiveDays(page);
     await page.locator('[data-archive-reading-toggle]').click();
-    await expandArchiveDays(page);
     await expect(page.locator('[data-reading-loaded]')).toHaveCount(2);
     const articles: string[] = [], manifests: string[] = [];
     page.on('request', request => {
@@ -177,7 +174,6 @@ for (const locale of ["en", "zh-CN"]) {
     await toggle.press('Space');
     await expect(toggle).toHaveAttribute('aria-checked', 'true');
     const bodies = page.locator('.archive-reading__body');
-    await expandArchiveDays(page);
     await expect(page.locator('[data-reading-loaded]')).toHaveCount(2);
     await expect(bodies.first()).toContainText('First paragraph of Newest.');
     await expect(bodies.first().getByRole('link', { name: 'link', exact: true })).toHaveAttribute('href', 'https://example.com/a');
@@ -211,7 +207,6 @@ for (const locale of ["en", "zh-CN"]) {
     await expect(page.locator('[data-reading-loaded]')).toHaveCount(1);
     await page.unroute('**/items/a/');
     await page.locator('[data-reading-retry]').click();
-    await expandArchiveDays(page);
     await expect(page.locator('[data-reading-loaded]')).toHaveCount(2);
   });
 

@@ -1,1 +1,3 @@
-export const archiveDayUI = '<template data-ledger-day-ui data-date="{month} {day}" data-date-year="{month} {day}, {year}" data-months="January|February|March|April|May|June|July|August|September|October|November|December" data-weekdays="Sunday|Monday|Tuesday|Wednesday|Thursday|Friday|Saturday" data-entry="{count} entry" data-entries="{count} entries" data-undated="Undated"></template>';
+import { readFileSync } from "node:fs";
+
+export const archiveDayUI = readFileSync("tests/frontend/support/archive-day-ui.html", "utf8");

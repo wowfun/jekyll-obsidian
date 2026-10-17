@@ -63,10 +63,7 @@ export function initialisePagedArchive(root: HTMLElement): () => void {
       const cards = saved ? result.ordinals.map(ordinal => saved.cards[ordinal]!) : await client.cards(result.ordinals, controller.signal);
       if (!alive || turn !== epoch) return;
       if (saved && renderedFavoriteManifest !== data) { empty.replaceChildren(...emptyContent.map(node => node.cloneNode(true))); renderFavoriteFilters(root, data); renderedFavoriteManifest = data; }
-      // A queued toggle on an old element would be lost when that element is detached.
-      days.capture();
-      renderArchiveLedger(root, cards, data, saved ? new Set(saved.snapshots.keys()) : undefined);
-      days.refresh();
+      days.replace(() => renderArchiveLedger(root, cards, data, saved ? new Set(saved.snapshots.keys()) : undefined));
       reading.refresh();
       current = result;
       result.page > 1 ? state.parameters.set("page", String(result.page)) : state.parameters.delete("page");

@@ -904,7 +904,7 @@ module JekyllObsidian
 
     class Docs < Presenter
       def render(model:, config:, render_time: Time.now)
-        # All automatic cards in this render share one expiry cutoff.
+        # Locale projections share the build's clock snapshot for cards and dates.
         @recommendation_time = render_time
         @favorite_cards = {}
         taxonomy = taxonomy_for(model.notes, config)

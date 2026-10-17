@@ -235,13 +235,13 @@ module JekyllObsidian
       "open_comments_repository" => "Open the comments repository on GitHub"
     }.freeze
 
-    def self.compile(request)
-      new(request).compile
+    def self.compile(request, render_time: Time.now)
+      new(request, render_time:).compile
     end
 
-    def initialize(request)
+    def initialize(request, render_time: Time.now)
       @request = request
-      @render_time = Time.now
+      @render_time = render_time
       @config = request.config
       @diagnostics = []
       @entries = Array(request.snapshot.entries)
@@ -412,6 +412,18 @@ module JekyllObsidian
           names = messages.fetch(key).split("|", -1)
           if names.length != count || names.any? { |name| name.strip.empty? }
             error("invalid_locale_message", "message #{key.inspect} must contain exactly #{count} non-empty pipe-separated names", path)
+          end
+        end
+        { "ledger_date" => %w[month day], "ledger_date_year" => %w[month day year],
+          "ledger_entry" => %w[count], "ledger_entries" => %w[count] }.each do |key, required|
+          next unless messages.key?(key) && valid_text?(messages[key])
+
+          format = messages.fetch(key)
+          allowed = key.start_with?("ledger_date") ? %w[month day year] : %w[count]
+          tokens = format.scan(/\{([^{}]*)\}/).flatten
+          remainder = format.gsub(/\{(?:#{allowed.join('|')})\}/, "")
+          if (required - tokens).any? || remainder.match?(/[{}]/)
+            error("invalid_locale_message", "message #{key.inspect} requires #{required.map { |token| "{#{token}}" }.join(', ')}; allowed placeholders: #{allowed.join(', ')}", path)
           end
         end
         maps = %w[tag_labels tag_aliases].to_h do |key|

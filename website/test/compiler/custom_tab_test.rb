@@ -205,6 +205,7 @@ class CustomTabTest < Minitest::Test
       locale_manifest("_locale.yml", "name: English\ntag_labels:\n  topics/agents: Agents\n"),
       locale_manifest("_translations/zh-CN/_locale.yml", "name: 简体中文\ntag_labels:\n  topics/agents: 智能体\n"),
       note("_translations/zh-CN/podcast/index.md", "---\npublish: true\ntab:\n  label: 播客\n---\n# 播客"),
+      render_time: Time.utc(2026, 12, 31, 16, 30),
       theme: "minimal", baseurl: "/garden", i18n: I18N.merge("enabled" => true),
       home: { "layout" => "archive" }, features: { "favorites" => true },
       blog: { "page_size" => 1, "utc_offset" => "+08:00", "timeline_granularity" => "day", "ledger_group_by" => "day" }
@@ -216,7 +217,7 @@ class CustomTabTest < Minitest::Test
       archive = data.dig("theme_data", "archive")
       assert_equal "podcasts", data.fetch("active_navigation_id")
       assert_equal "blog-index", data.fetch("kind")
-      assert_equal page(result, prefix).data.dig("website", "theme_data", "ledger_current_year"), data.dig("theme_data", "ledger_current_year")
+      assert_equal 2027, data.dig("theme_data", "ledger_current_year")
       assert_equal 2, archive.fetch("total")
       assert_equal 2, archive.fetch("chunks").length
       assert_equal %w[2026-10-15 2026-10-14], archive.fetch("days").keys

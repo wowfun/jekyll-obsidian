@@ -8,6 +8,15 @@ const ready = async (page: Page) => {
 
 for (const locale of ["en", "zh-CN"]) {
   const root = base + (locale === "en" ? "" : "zh-CN/");
+  test(`date presentation metadata belongs to archive pages in ${locale}`, async ({ page }) => {
+    await page.goto(root); await ready(page);
+    await expect(page.locator("main")).toHaveAttribute("data-ledger-current-year", /\d{4}/);
+    await expect(page.locator("[data-ledger-day-ui]")).toHaveCount(1);
+    await page.goto(root + "items/a/");
+    await expect(page.locator("main")).not.toHaveAttribute("data-ledger-current-year");
+    await expect(page.locator("[data-ledger-day-ui]")).toHaveCount(0);
+  });
+
   test(`day disclosures retain choices through filters, pagination and history in ${locale}`, async ({ page }) => {
     await page.goto(root); await ready(page);
     const newest = page.locator('[data-ledger-day="2026-10-10"]');

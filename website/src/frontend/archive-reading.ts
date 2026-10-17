@@ -154,6 +154,7 @@ export function initialiseArchiveReading(root: HTMLElement, client: Pick<Archive
   const onDayToggle = (event: Event) => {
     if (event.target instanceof HTMLDetailsElement && event.target.hasAttribute("data-ledger-day")) observeRows();
   };
+  // Native disclosure toggle events do not bubble; capture is required.
   root.addEventListener("toggle", onDayToggle, true);
   // Pagination chooses the initial rows before starting saved reading mode.
   updateToggle();
