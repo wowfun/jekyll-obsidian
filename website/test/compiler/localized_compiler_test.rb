@@ -5,6 +5,19 @@ require "test_helper"
 class LocalizedCompilerTest < Minitest::Test
   I18N = { "locales" => %w[en zh-CN] }.freeze
 
+  def test_ledger_name_lists_reject_missing_extra_and_empty_segments
+    { "ledger_months" => 12, "ledger_weekdays" => 7 }.each do |key, count|
+      valid = Array.new(count) { |index| "Name #{index}" }
+      [valid.drop(1), valid + ["Extra"], valid.dup.tap { |names| names[1] = "" }, valid.dup.tap { |names| names[-1] = "  " }].each do |names|
+        result = compile(*default_notes, *manifests("  #{key}: #{JSON.generate(names.join('|'))}\n"), i18n: I18N.merge("enabled" => true))
+        refute result.success?, "accepted malformed #{key}: #{names.inspect}"
+        diagnostic = result.diagnostics.find { |item| item.code == "invalid_locale_message" && item.message.include?(key) }
+        refute_nil diagnostic
+        assert_equal "_translations/zh-CN/_locale.yml", diagnostic.path
+      end
+    end
+  end
+
   def test_incomplete_pdf_markup_reports_a_content_diagnostic
     result = compile(note("index.md", "---\npublish: true\n---\n# Home\n\n<div data-website-pdf-source=\"https://example.test/paper.pdf\">Custom content</div>"), *manifests, i18n: I18N.merge("enabled" => true))
     refute result.success?

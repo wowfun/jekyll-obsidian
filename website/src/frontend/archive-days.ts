@@ -1,5 +1,25 @@
-const MONTHS = "January|February|March|April|May|June|July|August|September|October|November|December";
-const WEEKDAYS = "Sunday|Monday|Tuesday|Wednesday|Thursday|Friday|Saturday";
+interface DayUI {
+  year: string; date: string; dateYear: string; months: string[]; weekdays: string[];
+  entry: string; entries: string; undated: string;
+}
+const presentations = new WeakMap<HTMLElement, DayUI>();
+
+function dayUI(root: HTMLElement): DayUI {
+  let ui = presentations.get(root);
+  if (!ui) {
+    // Every archive serializes resolved locale messages, including non-i18n defaults.
+    const data = root.querySelector<HTMLElement>("[data-ledger-day-ui]")!.dataset;
+    ui = { year: root.dataset.ledgerCurrentYear!, date: data.date!, dateYear: data.dateYear!,
+      months: data.months!.split("|"), weekdays: data.weekdays!.split("|"),
+      entry: data.entry!, entries: data.entries!, undated: data.undated! };
+    presentations.set(root, ui);
+  }
+  return ui;
+}
+
+function entryCount(ui: DayUI, count: number): string {
+  return (count === 1 ? ui.entry : ui.entries).replaceAll("{count}", String(count));
+}
 
 function dayParts(key: string): { year: string; month: number; day: number; weekday: number } | undefined {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(key)) return;
@@ -9,24 +29,22 @@ function dayParts(key: string): { year: string; month: number; day: number; week
 }
 
 export function archiveDayHeading(root: HTMLElement, key: string, count: number): { date: string; weekday: string; count: string; dated: boolean } {
-  const ui = root.querySelector<HTMLElement>("[data-ledger-day-ui]")?.dataset || {};
+  const ui = dayUI(root);
   const parts = dayParts(key);
-  const format = parts?.year === (root.dataset.ledgerCurrentYear || String(new Date().getUTCFullYear()))
-    ? ui.date || "{month} {day}" : ui.dateYear || "{month} {day}, {year}";
+  const format = parts?.year === ui.year ? ui.date : ui.dateYear;
   return {
-    date: parts ? format.replaceAll("{month}", (ui.months || MONTHS).split("|")[parts.month]!)
-      .replaceAll("{day}", String(parts.day)).replaceAll("{year}", parts.year) : ui.undated || "Undated",
-    weekday: parts ? (ui.weekdays || WEEKDAYS).split("|")[parts.weekday]! : "",
-    count: (count === 1 ? ui.entry || "{count} entry" : ui.entries || "{count} entries").replaceAll("{count}", String(count)),
+    date: parts ? format.replaceAll("{month}", ui.months[parts.month]!)
+      .replaceAll("{day}", String(parts.day)).replaceAll("{year}", parts.year) : ui.undated,
+    weekday: parts ? ui.weekdays[parts.weekday]! : "",
+    count: entryCount(ui, count),
     dated: Boolean(parts)
   };
 }
 
-export function createArchiveDay(root: HTMLElement, key: string, count: number, open: boolean): HTMLDetailsElement {
+export function createArchiveDay(root: HTMLElement, key: string): HTMLDetailsElement {
   const details = document.createElement("details"); details.className = "archive-day"; details.dataset.ledgerDay = key;
-  details.open = open; details.dataset.ledgerDefaultOpen = String(open);
   const summary = document.createElement("summary"), heading = document.createElement("h2");
-  const label = archiveDayHeading(root, key, count);
+  const label = archiveDayHeading(root, key, 0);
   const date = document.createElement(label.dated ? "time" : "span"); date.textContent = label.date;
   if (date instanceof HTMLTimeElement) date.dateTime = key;
   heading.append(date);
@@ -42,24 +60,29 @@ export function createArchiveDay(root: HTMLElement, key: string, count: number, 
 export function initialiseArchiveDays(root: HTMLElement): { capture: () => void; refresh: () => void; dispose: () => void } {
   const choices = new Map<string, boolean>(), applied = new WeakMap<HTMLDetailsElement, boolean>();
   const groups = () => Array.from(root.querySelectorAll<HTMLDetailsElement>("details[data-ledger-day]"));
-  for (const group of groups()) applied.set(group, group.dataset.ledgerDefaultOpen === "true");
-  function capture(): void {
-    for (const group of groups()) {
+  // Preserve changes to the usable SSR controls made before hydration finishes.
+  for (const group of groups()) applied.set(group, group.hasAttribute("data-ledger-default-open") ? group.dataset.ledgerDefaultOpen === "true" : group.open);
+  function capture(current = groups()): void {
+    for (const group of current) {
       const previous = applied.get(group);
       if (previous !== undefined && previous !== group.open) choices.set(group.dataset.ledgerDay!, group.open);
       applied.set(group, group.open);
     }
   }
   function refresh(): void {
-    capture();
-    const visible = groups().filter(group => !group.closest("[data-filter-group][hidden]"));
-    const newest = visible.map(group => group.dataset.ledgerDay!).filter(key => dayParts(key)).sort().at(-1)
-      || visible[0]?.dataset.ledgerDay;
+    const current = groups(); capture(current);
+    const visible = current.filter(group => !group.closest("[data-filter-group][hidden]"));
+    let newest: string | undefined;
+    for (const group of visible) {
+      const key = group.dataset.ledgerDay!;
+      if (dayParts(key) && (!newest || key > newest)) newest = key;
+    }
+    newest ||= visible[0]?.dataset.ledgerDay;
     for (const group of visible) {
       const key = group.dataset.ledgerDay!, open = choices.get(key) ?? key === newest;
       applied.set(group, open); group.open = open;
       const count = group.querySelector<HTMLElement>("[data-ledger-day-count]");
-      if (count) count.textContent = archiveDayHeading(root, key, group.querySelectorAll("[data-filter-item]:not([hidden])").length).count;
+      if (count) count.textContent = entryCount(dayUI(root), group.querySelectorAll("[data-filter-item]:not([hidden])").length);
     }
   }
   const onToggle = (event: Event) => {

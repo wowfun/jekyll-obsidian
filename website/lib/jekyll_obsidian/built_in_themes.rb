@@ -569,10 +569,11 @@ module JekyllObsidian
     end
 
     class Minimal < Presenter
-      def render(model:, config:)
-        # All automatic cards in this render share one expiry cutoff.
-        @recommendation_time = Time.now
+      def render(model:, config:, render_time: Time.now)
+        # Locale projections share the build's clock snapshot for cards and dates.
+        @recommendation_time = render_time
         @favorite_cards = {}
+        ledger_current_year = @recommendation_time.getlocal(config.blog["utc_offset"] || "+00:00").year
         posts = ordered_posts(model)
         paged = config.home["layout"] == "archive" || config.blog["page_size"]
         chronological = chronological_notes(posts)
@@ -630,7 +631,7 @@ module JekyllObsidian
         end
         system_theme_data = {
           "archive_groups" => [],
-          "ledger_current_year" => Time.now.getlocal(config.blog["utc_offset"] || "+00:00").year,
+          "ledger_current_year" => ledger_current_year,
           "docs_tree" => documentation.docs_tree,
           "docs_home_url" => documentation.docs_home_url,
           "previous" => nil,
@@ -646,7 +647,7 @@ module JekyllObsidian
           )
         end
         attach_custom_tab_theme_data(theme_data, model, config)
-        tab_archive_files = attach_tab_archives(theme_data, model, config, taxonomy)
+        tab_archive_files = attach_tab_archives(theme_data, model, config, taxonomy, ledger_current_year: ledger_current_year)
         authored_root_route = model.notes.any? { |note| note.route == "/" }
         home = home_page(displayed, config, system_theme_data, taxonomy) if !root && !authored_root_route && displayed.any? && config.home["layout"] != "archive"
         archive_data = (paged || config.features.fetch("favorites")) && PagedArchive.build(chronological.map { |post| note_card(post, config, taxonomy) }, config, postings: !!paged)
@@ -732,7 +733,7 @@ module JekyllObsidian
 
       private
 
-      def attach_tab_archives(theme_data, model, config, taxonomy)
+      def attach_tab_archives(theme_data, model, config, taxonomy, ledger_current_year:)
         config.navigation.custom_tabs.flat_map do |tab|
           root = model.notes_by_id.fetch(tab.index_note_id)
           next [] unless root.properties.dig("tab", "layout") == "archive"
@@ -744,7 +745,7 @@ module JekyllObsidian
             .reject { |key, _| key == "tab_members" }
             .merge(archive.reject { |key, _| key == "files" })
             .merge("ledger_group_by" => config.blog.fetch("ledger_group_by"),
-              "ledger_current_year" => Time.now.getlocal(config.blog["utc_offset"] || "+00:00").year,
+              "ledger_current_year" => ledger_current_year,
               "previous" => nil, "next" => nil)
           archive.fetch("files")
         end
@@ -902,9 +903,9 @@ module JekyllObsidian
     end
 
     class Docs < Presenter
-      def render(model:, config:)
+      def render(model:, config:, render_time: Time.now)
         # All automatic cards in this render share one expiry cutoff.
-        @recommendation_time = Time.now
+        @recommendation_time = render_time
         @favorite_cards = {}
         taxonomy = taxonomy_for(model.notes, config)
         navigation = config.navigation

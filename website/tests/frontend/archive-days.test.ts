@@ -3,11 +3,12 @@ import { archiveDayHeading, initialiseArchiveDays } from "../../src/frontend/arc
 import { renderArchiveLedger } from "../../src/frontend/archive-ledger";
 import type { ArchiveCard } from "../../src/frontend/archive-query";
 import { favoriteManifest } from "../../src/frontend/favorite-archive";
+import { archiveDayUI } from "./support/archive-days";
 
 let dispose = () => {};
 const card = (date: string | null, id = date || "none"): ArchiveCard => ({ id, title: id, url: `/items/${id}/`, markdown_url: `/items/${id}.md`, published_at: date && `${date}T00:00:00+08:00`, display_date: date, year: date?.slice(0, 4) || "Undated", month: date?.slice(0, 7) || null, facets: {} });
 beforeEach(() => {
-  document.body.innerHTML = '<main data-ledger-current-year="2026"><div data-filter-list></div></main>';
+  document.body.innerHTML = `<main data-ledger-current-year="2026">${archiveDayUI}<div data-filter-list></div></main>`;
 });
 afterEach(() => { dispose(); document.body.replaceChildren(); });
 const root = () => document.querySelector<HTMLElement>("main")!;
@@ -16,15 +17,17 @@ const render = (cards: ArchiveCard[]) => renderArchiveLedger(root(), cards, favo
 
 it("opens the newest day, counts only this projection, and localizes old years and undated entries", () => {
   render([card("2026-10-15"), card("2026-10-15", "second"), card("2025-12-31"), card(null)]);
+  const days = initialiseArchiveDays(root()); dispose = days.dispose;
   expect(groups().map(group => group.open)).toEqual([true, false, false]);
   expect(groups().map(group => group.querySelector("summary")!.textContent)).toEqual([
     "October 15Thursday · 2 entries", "December 31, 2025Wednesday · 1 entry", "Undated1 entry"
   ]);
   expect(groups()[0]!.querySelector("time")!.dateTime).toBe("2026-10-15");
   render([card("2026-10-15")]);
+  days.refresh();
   expect(groups()[0]!.querySelector("[data-ledger-day-count]")!.textContent).toBe("1 entry");
-  render([card(null)]); expect(groups()[0]!.open).toBe(true);
-  render([]); expect(groups()).toHaveLength(0);
+  render([card(null)]); days.refresh(); expect(groups()[0]!.open).toBe(true);
+  render([]); days.refresh(); expect(groups()).toHaveLength(0);
 });
 
 it("retains explicit choices across replacement and filtering, and disposal starts a fresh view", () => {
@@ -56,4 +59,17 @@ it("recomputes the latest visible day without treating automatic defaults as man
   const newest = groups()[0]!.closest<HTMLElement>("[data-filter-group]")!;
   newest.hidden = true; days.refresh(); expect(groups()[1]!.open).toBe(true);
   newest.hidden = false; days.refresh(); expect(groups().map(group => group.open)).toEqual([true, false]);
+});
+
+it("retains explicit SSR disclosure changes made before hydration", () => {
+  render([card("2026-10-15"), card("2026-10-14")]);
+  // SSR opened the latest day; the user closes it and opens an older day before JS starts.
+  groups()[0]!.dataset.ledgerDefaultOpen = "true";
+  groups()[0]!.open = false;
+  groups()[1]!.dataset.ledgerDefaultOpen = "false";
+  groups()[1]!.open = true;
+  const days = initialiseArchiveDays(root()); dispose = days.dispose;
+  expect(groups().map(group => group.open)).toEqual([false, true]);
+  days.capture(); render([card("2026-10-15"), card("2026-10-14")]); days.refresh();
+  expect(groups().map(group => group.open)).toEqual([false, true]);
 });

@@ -14,16 +14,13 @@ export function renderArchiveLedger(root: HTMLElement, cards: ArchiveCard[], dat
   root.dataset.ledgerGroupBy = grouping;
   const fragment = document.createDocumentFragment(), daily = grouping === "day";
   const ui = favoritesUI(), favorites = Boolean(document.querySelector("[data-favorites-ui]"));
-  const newest = cards.map(card => card.display_date).filter((date): date is string => Boolean(date)).sort().at(-1);
-  const counts = new Map<string, number>();
-  for (const card of cards) { const key = card.display_date || "Undated"; counts.set(key, (counts.get(key) || 0) + 1); }
   let label: string | undefined, ol: HTMLOListElement | undefined;
   for (const card of cards) {
     const group = (daily ? card.display_date : card.year) || ui.undated || "Undated";
     if (group !== label) {
       label = group; const section = document.createElement("section"); section.dataset.filterGroup = "";
       const key = card.display_date || "Undated";
-      const container = daily ? createArchiveDay(root, key, counts.get(key)!, newest ? key === newest : fragment.childElementCount === 0) : section;
+      const container = daily ? createArchiveDay(root, key) : section;
       if (!daily) section.append(textElement("h2", label));
       const ledger = textElement("section", "", "blog-ledger"); ol = document.createElement("ol"); ledger.append(ol); container.append(ledger);
       if (daily) section.append(container);

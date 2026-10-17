@@ -241,6 +241,7 @@ module JekyllObsidian
 
     def initialize(request)
       @request = request
+      @render_time = Time.now
       @config = request.config
       @diagnostics = []
       @entries = Array(request.snapshot.entries)
@@ -284,7 +285,8 @@ module JekyllObsidian
             tab_memberships: tab_memberships
           ),
           html_publication: @html_publication,
-          include_html_projection: false
+          include_html_projection: false,
+          render_time: @render_time
         )
         @diagnostics.concat(localized_diagnostics(result.diagnostics, locale))
         results[locale] = result
@@ -302,7 +304,7 @@ module JekyllObsidian
 
     def compile_disabled
       config = BuildConfig.new(**@config.to_h.merge(i18n: nil))
-      VaultCompiler.compile_single(BuildRequest.new(snapshot: @request.snapshot, config: config))
+      VaultCompiler.compile_single(BuildRequest.new(snapshot: @request.snapshot, config: config), render_time: @render_time)
     end
 
     def validate_configuration
@@ -403,6 +405,14 @@ module JekyllObsidian
         messages.each do |key, value|
           error("invalid_locale_message", "unknown message key #{key.inspect}", path) unless MESSAGE_DEFAULTS.key?(key)
           error("invalid_locale_message", "message #{key.inspect} must be a string", path) unless valid_text?(value)
+        end
+        { "ledger_months" => 12, "ledger_weekdays" => 7 }.each do |key, count|
+          next unless messages.key?(key) && valid_text?(messages[key])
+
+          names = messages.fetch(key).split("|", -1)
+          if names.length != count || names.any? { |name| name.strip.empty? }
+            error("invalid_locale_message", "message #{key.inspect} must contain exactly #{count} non-empty pipe-separated names", path)
+          end
         end
         maps = %w[tag_labels tag_aliases].to_h do |key|
           value = raw.fetch(key, {})

@@ -165,16 +165,17 @@ module JekyllObsidian
       compile_single(request)
     end
 
-    def self.compile_single(request, html_publication: nil, include_html_projection: true)
-      new(request, html_publication:, include_html_projection:).compile
+    def self.compile_single(request, html_publication: nil, include_html_projection: true, render_time: Time.now)
+      new(request, html_publication:, include_html_projection:, render_time:).compile
     end
 
     def self.giscus_language(locale)
       GISCUS_LANGUAGES.include?(locale.to_s) ? locale.to_s : "en"
     end
 
-    def initialize(request, html_publication: nil, include_html_projection: true)
+    def initialize(request, html_publication: nil, include_html_projection: true, render_time: Time.now)
       @request = request
+      @render_time = render_time
       @config = request.config
       @diagnostics = []
       @notes = {}
@@ -239,7 +240,7 @@ module JekyllObsidian
         site: @config,
         url_builder: @url_builder
       )
-      theme_output = BuiltInThemes.resolve(@theme).render(model: published_site, config: theme_config)
+      theme_output = BuiltInThemes.resolve(@theme).render(model: published_site, config: theme_config, render_time: @render_time)
       pages = theme_output.pages
       generated_files = theme_output.shared_files + build_generated_files(pages, published_site, theme_output)
       raw_html_manifest = HtmlPublication.manifest(@html_publication) if @include_html_projection

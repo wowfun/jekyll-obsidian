@@ -1,6 +1,7 @@
 import { expect, type Page } from "@playwright/test";
 
 export async function expandArchiveDays(page: Page): Promise<void> {
+  // Explicit user choices for reading/action tests; default-state tests must not call this.
   await expect(page.locator("[data-paged-archive]")).not.toHaveAttribute("aria-busy", "true");
   await expect(page.locator("[data-archive-page-status]")).not.toBeEmpty();
   const scroll = await page.evaluate(() => scrollY);
