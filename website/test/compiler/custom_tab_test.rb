@@ -216,6 +216,7 @@ class CustomTabTest < Minitest::Test
       archive = data.dig("theme_data", "archive")
       assert_equal "podcasts", data.fetch("active_navigation_id")
       assert_equal "blog-index", data.fetch("kind")
+      assert_equal Time.now.getlocal("+08:00").year, data.dig("theme_data", "ledger_current_year")
       assert_equal 2, archive.fetch("total")
       assert_equal 2, archive.fetch("chunks").length
       assert_equal %w[2026-10-15 2026-10-14], archive.fetch("days").keys

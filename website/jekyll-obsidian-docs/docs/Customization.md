@@ -465,7 +465,9 @@ See [[docs/development/architecture|Architecture]] before changing compiler or a
 
 ## Daily ledger and local favorites
 
-Set `website.blog.ledger_group_by: day` to group ledger entries under `YYYY-MM-DD` headings and omit the per-entry date column. Dates use `website.blog.utc_offset`; the default grouping is `year`. Static rendering and pagination use the same grouping.
+Set `website.blog.ledger_group_by: day` to group entries under collapsible date headings and omit the per-entry date column. Each heading shows the localized month/day, weekday and count on the current page; dates outside the current year include the year. Dates use `website.blog.utc_offset`, independent of the browser timezone. Only the newest day in the current result opens by default. Days open independently, and manual choices survive filters, pagination and browser history within the current page; reloads reset them. Native disclosures work without JavaScript. Read in full loads visible entries in open days and keeps loaded bodies when a day is closed. This behavior is shared by archive tabs and Favorites. The default grouping remains `year`; static rendering and pagination use the same daily headings.
+
+Customize the date headings with locale messages `ledger_date`, `ledger_date_year`, `ledger_months`, `ledger_weekdays`, `ledger_entry` and `ledger_entries`. Month and weekday names are pipe-separated lists, starting with January and Sunday respectively. Date formats accept `{month}`, `{day}` and `{year}`; entry formats accept `{count}`.
 
 The minimal theme supports `website.features.favorites: true` (default `false`). It adds Save buttons to ledger entries and post actions, and a Favorites navigation tab at `/favorites/`. `website.navigation.favorites` accepts label, order and visible overrides. The route is reserved while the feature is enabled.
 

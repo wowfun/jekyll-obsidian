@@ -2,6 +2,12 @@ name: 简体中文
 hreflang: zh-Hans
 dir: ltr
 messages:
+  ledger_date: "{month}{day}日"
+  ledger_date_year: "{year}年{month}{day}日"
+  ledger_months: "1月|2月|3月|4月|5月|6月|7月|8月|9月|10月|11月|12月"
+  ledger_weekdays: "星期日|星期一|星期二|星期三|星期四|星期五|星期六"
+  ledger_entry: "{count} 条"
+  ledger_entries: "{count} 条"
   favorites: "收藏"
   favorite_save: "收藏"
   favorite_remove: "取消收藏"

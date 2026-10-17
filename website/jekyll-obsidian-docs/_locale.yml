@@ -2,6 +2,12 @@ name: English
 hreflang: en
 dir: ltr
 messages:
+  ledger_date: "{month} {day}"
+  ledger_date_year: "{month} {day}, {year}"
+  ledger_months: "January|February|March|April|May|June|July|August|September|October|November|December"
+  ledger_weekdays: "Sunday|Monday|Tuesday|Wednesday|Thursday|Friday|Saturday"
+  ledger_entry: "{count} entry"
+  ledger_entries: "{count} entries"
   favorites: "Favorites"
   favorite_save: "Save"
   favorite_remove: "Remove favorite"

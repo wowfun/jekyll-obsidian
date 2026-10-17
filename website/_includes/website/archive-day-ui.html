@@ -1,0 +1,5 @@
+{% capture ledger_date_default %}{month} {day}{% endcapture %}
+{% capture ledger_date_year_default %}{month} {day}, {year}{% endcapture %}
+{% capture ledger_entry_default %}{count} entry{% endcapture %}
+{% capture ledger_entries_default %}{count} entries{% endcapture %}
+<template data-ledger-day-ui data-date="{{ ui.ledger_date | default: ledger_date_default | escape }}" data-date-year="{{ ui.ledger_date_year | default: ledger_date_year_default | escape }}" data-months="{{ ui.ledger_months | default: 'January|February|March|April|May|June|July|August|September|October|November|December' | escape }}" data-weekdays="{{ ui.ledger_weekdays | default: 'Sunday|Monday|Tuesday|Wednesday|Thursday|Friday|Saturday' | escape }}" data-entry="{{ ui.ledger_entry | default: ledger_entry_default | escape }}" data-entries="{{ ui.ledger_entries | default: ledger_entries_default | escape }}" data-undated="{{ ui.undated | default: 'Undated' | escape }}"></template>

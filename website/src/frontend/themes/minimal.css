@@ -795,6 +795,41 @@
     margin-block-start: 0;
   }
 
+  .archive-day > summary {
+    display: flex;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: 0.55rem 0.85rem;
+    padding-block: 0.7rem;
+    cursor: pointer;
+    list-style: none;
+    border-block-end: 1px solid var(--line);
+  }
+
+  .archive-day > summary::-webkit-details-marker { display: none; }
+  .archive-day > summary:focus-visible { outline: 2px solid var(--ink); outline-offset: 4px; border-radius: 2px; }
+  .archive-day > summary h2 {
+    margin: 0;
+    font-family: var(--font-article);
+    font-size: 1.2rem;
+    font-weight: 650;
+    color: var(--ink);
+    letter-spacing: -0.015em;
+  }
+  .archive-day__meta { color: var(--graphite); font-size: 0.8rem; }
+  .archive-day__arrow {
+    align-self: center;
+    inline-size: 0.35rem;
+    block-size: 0.35rem;
+    border-block-start: 1px solid currentColor;
+    border-inline-end: 1px solid currentColor;
+    color: var(--graphite);
+    transform: rotate(45deg);
+    margin-inline-end: 0.2rem;
+  }
+  .archive-day[open] > summary .archive-day__arrow { transform: rotate(135deg); }
+  .archive-ledger > section:has(> .archive-day) { margin-block-start: 0.65rem; }
+
   @media (min-width: 1081px) {
     .minimal-shell--blog > .minimal-reading-column > .archive-ledger,
     .minimal-shell--blog > .minimal-reading-column > .archive-ledger > section:first-child {

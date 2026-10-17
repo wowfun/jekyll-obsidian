@@ -630,6 +630,7 @@ module JekyllObsidian
         end
         system_theme_data = {
           "archive_groups" => [],
+          "ledger_current_year" => Time.now.getlocal(config.blog["utc_offset"] || "+00:00").year,
           "docs_tree" => documentation.docs_tree,
           "docs_home_url" => documentation.docs_home_url,
           "previous" => nil,
@@ -742,7 +743,9 @@ module JekyllObsidian
           theme_data[tab.index_note_id] = theme_data.fetch(tab.index_note_id)
             .reject { |key, _| key == "tab_members" }
             .merge(archive.reject { |key, _| key == "files" })
-            .merge("ledger_group_by" => config.blog.fetch("ledger_group_by"), "previous" => nil, "next" => nil)
+            .merge("ledger_group_by" => config.blog.fetch("ledger_group_by"),
+              "ledger_current_year" => Time.now.getlocal(config.blog["utc_offset"] || "+00:00").year,
+              "previous" => nil, "next" => nil)
           archive.fetch("files")
         end
       end

@@ -1,0 +1,17 @@
+{% assign group = include.group %}
+{% assign day_label = ui.undated | default: 'Undated' %}
+{% if group.day %}
+  {% assign months = ui.ledger_months | default: 'January|February|March|April|May|June|July|August|September|October|November|December' | split: '|' %}
+  {% assign weekdays = ui.ledger_weekdays | default: 'Sunday|Monday|Tuesday|Wednesday|Thursday|Friday|Saturday' | split: '|' %}
+  {% assign month_index = group.day.month | minus: 1 %}
+  {% assign date_format = ui.ledger_date | default: '{month} {day}' %}
+  {% unless group.day.year == page.website.theme_data.ledger_current_year %}{% assign date_format = ui.ledger_date_year | default: '{month} {day}, {year}' %}{% endunless %}
+  {% assign day_label = date_format | replace: '{month}', months[month_index] | replace: '{day}', group.day.day | replace: '{year}', group.day.year %}
+{% endif %}
+{% assign count_format = ui.ledger_entries | default: '{count} entries' %}
+{% if group.posts.size == 1 %}{% assign count_format = ui.ledger_entry | default: '{count} entry' %}{% endif %}
+{% assign day_count = count_format | replace: '{count}', group.posts.size %}
+<details class="archive-day" data-ledger-day="{{ group.label | escape }}" data-ledger-default-open="{{ group.open }}"{% if group.open %} open{% endif %}>
+  <summary><h2>{% if group.day %}<time datetime="{{ group.label | escape }}">{{ day_label | escape }}</time>{% else %}{{ day_label | escape }}{% endif %}</h2><span class="archive-day__arrow" aria-hidden="true"></span><span class="archive-day__meta">{% if group.day %}<span>{{ weekdays[group.day.weekday] | escape }}</span> · {% endif %}<span data-ledger-day-count>{{ day_count | escape }}</span></span></summary>
+  {% include website/blog-ledger.html posts=group.posts compact=true filterable=true %}
+</details>

@@ -1,3 +1,4 @@
+import { expandArchiveDays } from "./archive-helpers";
 import { test, expect } from "@playwright/test";
 
 test.describe('favorites without JavaScript', () => {
@@ -20,7 +21,9 @@ for (const locale of ["en", "zh-CN"]) {
   const root = base + (locale === "en" ? "" : locale + "/");
   test(`favorites persist across archive, article, locales and browser navigation in ${locale}`, async ({ page, context }) => {
     await page.goto(root); await ready(page);
-    await expect(page.locator("[data-filter-list] > section > h2")).toHaveText(["2026-10-10", "2026-10-09"]);
+    const dates = page.locator("[data-filter-list] > section .archive-day summary time");
+    await expect(dates).toHaveText(locale === "en" ? ["October 10", "October 9"] : ["10月10日", "10月9日"]);
+    expect(await dates.evaluateAll(nodes => nodes.map(node => node.getAttribute("datetime")))).toEqual(["2026-10-10", "2026-10-09"]);
     await expect(page.locator(".blog-ledger__meta")).toHaveCount(0);
     const save = page.locator("[data-filter-item] [data-favorite-toggle]").first();
     await save.focus(); await page.keyboard.press("Space"); await expect(save).toHaveAttribute("aria-pressed", "true");
@@ -104,6 +107,7 @@ for (const networkFailure of [false, true]) test(`deployment discovery shares co
   });
   await page.evaluate(() => window.dispatchEvent(new PageTransitionEvent("pageshow", { persisted: true })));
   await started;
+  await expandArchiveDays(other);
   const second = other.locator("[data-filter-item] [data-favorite-toggle]").nth(1);
   await second.click(); await expect(second).toHaveAttribute("aria-pressed", "true");
   // Hold discovery long enough for a competing refresh to finish with the old generation.
@@ -143,6 +147,7 @@ test("concurrent tab saves wait for the shared lock and keep both articles", asy
   });
   await expect.poll(() => guard.evaluate(() => (window as unknown as { acquired: boolean }).acquired)).toBe(true);
   const first = page.locator("[data-filter-item] [data-favorite-toggle]").nth(0);
+  await expandArchiveDays(other);
   const second = other.locator("[data-filter-item] [data-favorite-toggle]").nth(1);
   await Promise.all([first.click(), second.click()]);
   await expect(first).toBeDisabled(); await expect(second).toBeDisabled();

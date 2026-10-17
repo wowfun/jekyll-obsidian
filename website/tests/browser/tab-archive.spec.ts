@@ -1,3 +1,4 @@
+import { expandArchiveDays } from "./archive-helpers";
 import { expect, test, type Page } from "@playwright/test";
 
 const ready = async (page: Page) => {
@@ -32,6 +33,8 @@ for (const locale of ["en", "zh-CN"]) {
     await page.goto(root + "news/"); await ready(page);
     const titles = page.locator(".blog-ledger__main strong");
     await expect(titles).toHaveText(["Newest", "Oldest"]);
+    await expect(page.locator(".archive-day[open]")).toHaveCount(1);
+    await expect(page.locator(".archive-day summary h2")).toHaveText(locale === "en" ? ["October 10", "December 31, 2025"] : ["10月10日", "2025年12月31日"]);
     await expect(page.locator("main h1")).toHaveClass("visually-hidden");
     await expect(page.locator(".tab-collection")).toHaveCount(0);
     await expect(page.locator("[data-paged-archive]")).toHaveAttribute("data-archive-current-url", /\/archive\/tabs\/news\/current\.json$/);
@@ -59,6 +62,7 @@ for (const locale of ["en", "zh-CN"]) {
 
   test(`favorites combine topic and time filters in ${locale}`, async ({ page }, testInfo) => {
     await page.goto(root); await ready(page);
+    await expandArchiveDays(page);
     for (const button of await page.locator("[data-filter-item] [data-favorite-toggle]").all()) {
       await button.click(); await expect(button).toHaveAttribute("aria-pressed", "true");
     }
@@ -66,6 +70,8 @@ for (const locale of ["en", "zh-CN"]) {
     await page.locator("[data-filter-item] [data-favorite-toggle]").click();
     await expect(page.locator("[data-filter-item] [data-favorite-toggle]")).toHaveAttribute("aria-pressed", "true");
     await page.goto(root + "favorites/"); await ready(page);
+    await expect(page.locator(".archive-day")).toHaveCount(3);
+    await expect(page.locator(".archive-day[open]")).toHaveCount(1);
     await page.locator('button[data-archive-facet="topic"][data-archive-value="agents"]').click(); await ready(page);
     await expect(page.locator(".blog-ledger__main strong")).toHaveText(["Newest", "Oldest"]);
     if (testInfo.project.name.includes("mobile")) await page.locator('[data-dialog-open="context"]').click();

@@ -18,6 +18,26 @@ function rows(count: number, offset = 0): void {
 }
 function response(text = "Full body"): Response { return new Response(`<div class="note-content"><p>${text}</p><p>Second paragraph</p></div>`, { headers: { 'content-type': 'text/html' } }); }
 
+it('loads newly opened days without reloading existing bodies, including without IntersectionObserver', async () => {
+  rows(2);
+  const items = [...document.querySelectorAll<HTMLElement>('[data-filter-item]')];
+  for (const [index, row] of items.entries()) {
+    const group = document.createElement('details'); group.dataset.ledgerDay = `2026-10-${15 - index}`; group.open = index === 0;
+    row.before(group); group.append(row);
+  }
+  const fetch = vi.fn(async () => response()); vi.stubGlobal('fetch', fetch);
+  const reading = initialiseArchiveReading(document.querySelector('main')!, client); dispose = reading.dispose;
+  document.querySelector<HTMLButtonElement>('button')!.click();
+  await vi.waitFor(() => expect(fetch).toHaveBeenCalledTimes(1));
+  await vi.waitFor(() => expect(items[0]!.dataset.readingLoaded).toBe('true'));
+  const second = items[1]!.parentElement as HTMLDetailsElement; second.open = true; second.dispatchEvent(new Event('toggle'));
+  await vi.waitFor(() => expect(items[1]!.dataset.readingLoaded).toBe('true'));
+  second.open = false; second.dispatchEvent(new Event('toggle'));
+  second.open = true; second.dispatchEvent(new Event('toggle'));
+  expect(fetch).toHaveBeenCalledTimes(2);
+  expect(items[0]!.dataset.readingLoaded).toBe('true');
+});
+
 it('evicts the least recently used body at 100 entries while preserving recently revisited bodies', async () => {
   rows(100);
   const fetch = vi.fn(async () => response()); vi.stubGlobal('fetch', fetch);

@@ -76,7 +76,7 @@ export function initialiseArchiveReading(root: HTMLElement, client: Pick<Archive
   async function load(row: HTMLElement, signal: AbortSignal): Promise<void> {
     const link = row.querySelector<HTMLAnchorElement>("a.blog-ledger__main");
     const content = row.querySelector<HTMLElement>(".blog-ledger__content");
-    if (!link || !content || row.dataset.readingLoaded || loading.get(row) === signal) return;
+    if (!link || !content || !visible(row) || row.dataset.readingLoaded || loading.get(row) === signal) return;
     loading.set(row, signal);
     let body = content.querySelector<HTMLElement>(".archive-reading__body");
     if (!body) { body = document.createElement("div"); body.className = "archive-reading__body note-content"; content.append(body); }
@@ -105,6 +105,22 @@ export function initialiseArchiveReading(root: HTMLElement, client: Pick<Archive
       if (!signal.aborted) body.removeAttribute("aria-busy");
     }
   }
+  function visible(row: HTMLElement): boolean {
+    return !row.closest("[hidden], details[data-ledger-day]:not([open])");
+  }
+  function observeRows(): void {
+    if (!enabled || disposed) return;
+    const signal = controller.signal;
+    const rows = Array.from(root.querySelectorAll<HTMLElement>("[data-filter-item]"));
+    if (observer) {
+      for (const row of rows) {
+        if (!visible(row)) observer.unobserve(row);
+        else if (!row.dataset.readingLoaded && loading.get(row) !== signal) observer.observe(row);
+      }
+    } else {
+      void archiveConcurrent(rows.filter(visible), row => load(row, signal), signal).catch(() => { /* Rows handle errors; cancellation stops the pool. */ });
+    }
+  }
   function refresh(): void {
     observer?.disconnect(); observer = undefined;
     controller.abort(); controller = new AbortController();
@@ -112,19 +128,16 @@ export function initialiseArchiveReading(root: HTMLElement, client: Pick<Archive
     updateToggle();
     if (!enabled || disposed) return;
     const signal = controller.signal;
-    const rows = Array.from(root.querySelectorAll<HTMLElement>("[data-filter-item]"));
     if (typeof IntersectionObserver === 'function') {
       observer = new IntersectionObserver((entries, current) => {
         if (signal.aborted) return;
-        for (const entry of entries) if (entry.isIntersecting) {
+        for (const entry of entries) if (entry.isIntersecting && visible(entry.target as HTMLElement)) {
           current.unobserve(entry.target);
           void load(entry.target as HTMLElement, signal);
         }
       }, { rootMargin: '400px 0px' });
-      for (const row of rows) if (!row.dataset.readingLoaded) observer.observe(row);
-    } else {
-      void archiveConcurrent(rows, row => load(row, signal), signal).catch(() => { /* Rows handle errors; cancellation stops the pool. */ });
     }
+    observeRows();
   }
   function switchReading(): void {
     enabled = !enabled;
@@ -138,7 +151,11 @@ export function initialiseArchiveReading(root: HTMLElement, client: Pick<Archive
   }
   toggle.addEventListener("click", switchReading);
   root.addEventListener("click", retry);
+  const onDayToggle = (event: Event) => {
+    if (event.target instanceof HTMLDetailsElement && event.target.hasAttribute("data-ledger-day")) observeRows();
+  };
+  root.addEventListener("toggle", onDayToggle, true);
   // Pagination chooses the initial rows before starting saved reading mode.
   updateToggle();
-  return { refresh, dispose() { disposed = true; observer?.disconnect(); controller.abort(); cache.clear(); cacheWeight = 0; toggle.removeEventListener("click", switchReading); root.removeEventListener("click", retry); } };
+  return { refresh, dispose() { disposed = true; observer?.disconnect(); controller.abort(); cache.clear(); cacheWeight = 0; toggle.removeEventListener("click", switchReading); root.removeEventListener("click", retry); root.removeEventListener("toggle", onDayToggle, true); } };
 }

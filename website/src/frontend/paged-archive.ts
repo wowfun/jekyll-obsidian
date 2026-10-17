@@ -7,6 +7,7 @@ import { loadFavoriteArchive, refreshFavoriteArchive, renderFavoriteFilters, sel
 import { FAVORITES_CHANGE } from "./favorites-store";
 import { favoritesUI } from "./favorite-controls";
 import { renderArchivePagination } from "./archive-pagination";
+import { initialiseArchiveDays } from "./archive-days";
 
 export function initialisePagedArchive(root: HTMLElement): () => void {
   const client = createArchiveClient(root.dataset.archiveUrl!);
@@ -19,6 +20,7 @@ export function initialisePagedArchive(root: HTMLElement): () => void {
   const prev = pagination.querySelector<HTMLButtonElement>("[data-archive-page=prev]")!;
   const next = pagination.querySelector<HTMLButtonElement>("[data-archive-page=next]")!;
   const controller = new AbortController();
+  const days = initialiseArchiveDays(root);
   const reading = initialiseArchiveReading(root, client);
   const cleanupExport = favorites ? () => {} : initialiseArchiveExport(client);
   let epoch = 0, alive = true;
@@ -61,7 +63,9 @@ export function initialisePagedArchive(root: HTMLElement): () => void {
       const cards = saved ? result.ordinals.map(ordinal => saved.cards[ordinal]!) : await client.cards(result.ordinals, controller.signal);
       if (!alive || turn !== epoch) return;
       if (saved && renderedFavoriteManifest !== data) { empty.replaceChildren(...emptyContent.map(node => node.cloneNode(true))); renderFavoriteFilters(root, data); renderedFavoriteManifest = data; }
+      days.capture();
       renderArchiveLedger(root, cards, data, saved ? new Set(saved.snapshots.keys()) : undefined);
+      days.refresh();
       reading.refresh();
       current = result;
       result.page > 1 ? state.parameters.set("page", String(result.page)) : state.parameters.delete("page");
@@ -140,5 +144,5 @@ export function initialisePagedArchive(root: HTMLElement): () => void {
   document.addEventListener("click", click); window.addEventListener("popstate", onPop); window.addEventListener("pageshow", onShow);
   // SSR is immediately useful; hydration verifies the complete page projection.
   void refresh();
-  return () => { alive = false; controller.abort(); reading.dispose(); cleanupExport(); client.dispose(); jump.removeEventListener("submit", submit); jumpInput.removeEventListener("input", onInput); jumpInput.removeEventListener("invalid", onInvalid); window.removeEventListener(FAVORITES_CHANGE, onFavorites); document.removeEventListener("click", click); window.removeEventListener("popstate", onPop); window.removeEventListener("pageshow", onShow); };
+  return () => { alive = false; controller.abort(); days.dispose(); reading.dispose(); cleanupExport(); client.dispose(); jump.removeEventListener("submit", submit); jumpInput.removeEventListener("input", onInput); jumpInput.removeEventListener("invalid", onInvalid); window.removeEventListener(FAVORITES_CHANGE, onFavorites); document.removeEventListener("click", click); window.removeEventListener("popstate", onPop); window.removeEventListener("pageshow", onShow); };
 }

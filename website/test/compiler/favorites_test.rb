@@ -50,6 +50,10 @@ class FavoritesTest < Minitest::Test
     result = compile(*articles, blog: { "ledger_group_by" => "day", "utc_offset" => "+08:00" })
     assert result.success?
     assert_equal %w[2026-01-01 2025-12-31], page(result, "/blog/").data.dig("website", "theme_data", "archive_groups").map { |g| g.fetch("label") }
+    groups = page(result, "/blog/").data.dig("website", "theme_data", "archive_groups")
+    assert_equal [true, false], groups.map { |group| group.fetch("open") }
+    assert_equal({ "year" => 2026, "month" => 1, "day" => 1, "weekday" => 4 }, groups.first.fetch("day"))
+    assert_equal 2, groups.first.fetch("posts").length
     refute page(result, "/favorites/")
     refute result.generated_files.any? { |file| file.route.end_with?("identities.json") }
     refute compile(*articles, blog: { "ledger_group_by" => "month" }).success?

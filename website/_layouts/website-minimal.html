@@ -24,7 +24,7 @@
     {% include website/header.html theme='minimal' %}
     {% include website/favorites-ui.html %}
 
-    <main class="minimal-shell{% if page.website.archive_item %} minimal-shell--archive-item{% endif %}{% unless page.website.kind == 'note' %} minimal-shell--system{% endunless %}{% if is_authored_home %} minimal-shell--authored-home{% endif %}{% if is_docs_page %} minimal-shell--docs{% endif %}{% if page.website.kind == 'blog-index' %} minimal-shell--blog{% endif %}" id="main-content" data-ledger-group-by="{{ page.website.theme_data.ledger_group_by | default: 'year' | escape }}"{% if page.website.theme_data.favorites %} data-favorites-page data-sources-label="{{ ui.sources | escape }}" data-topics-label="{{ ui.topics | escape }}" data-all-label="{{ ui.all | escape }}"{% endif %}{% if page.website.kind == 'blog-index' %} data-filter-page{% if page.website.theme_data.archive %} data-paged-archive data-archive-url="{{ page.website.theme_data.archive.url | escape }}" data-archive-current-url="{{ page.website.theme_data.archive.current_url | escape }}" data-observed-label="{{ ui.first_observed | default: 'First observed' | escape }}"{% endif %}{% endif %}>
+    <main class="minimal-shell{% if page.website.archive_item %} minimal-shell--archive-item{% endif %}{% unless page.website.kind == 'note' %} minimal-shell--system{% endunless %}{% if is_authored_home %} minimal-shell--authored-home{% endif %}{% if is_docs_page %} minimal-shell--docs{% endif %}{% if page.website.kind == 'blog-index' %} minimal-shell--blog{% endif %}" id="main-content" data-ledger-current-year="{{ page.website.theme_data.ledger_current_year }}" data-ledger-group-by="{{ page.website.theme_data.ledger_group_by | default: 'year' | escape }}"{% if page.website.theme_data.favorites %} data-favorites-page data-sources-label="{{ ui.sources | escape }}" data-topics-label="{{ ui.topics | escape }}" data-all-label="{{ ui.all | escape }}"{% endif %}{% if page.website.kind == 'blog-index' %} data-filter-page{% if page.website.theme_data.archive %} data-paged-archive data-archive-url="{{ page.website.theme_data.archive.url | escape }}" data-archive-current-url="{{ page.website.theme_data.archive.current_url | escape }}" data-observed-label="{{ ui.first_observed | default: 'First observed' | escape }}"{% endif %}{% endif %}>
       {% if is_docs_page %}
         <aside class="minimal-docs-sidebar">
           <nav class="docs-tree" aria-label="{{ ui.documentation | default: 'Documentation' | escape }}" data-docs-navigation>
@@ -34,6 +34,7 @@
       {% endif %}
 
       <div class="minimal-reading-column" data-docs-main>
+        {% if page.website.theme_data.ledger_group_by == 'day' %}{% include website/archive-day-ui.html %}{% endif %}
         <article class="minimal-entry{% if page.website.compact_collection %} minimal-entry--compact-collection{% endif %}{% if page.website.cssclasses %} {{ page.website.cssclasses | join: ' ' }}{% endif %}">
           {% if page.website.i18n.fallback %}<aside class="translation-fallback" role="status">{{ ui.translation_missing | default: 'This page is not translated yet. The default-language version is shown.' | escape }}</aside>{% endif %}
           {% unless page.website.theme_data.archive %}{% unless page.website.has_h1 %}{% include website/page-actions.html %}{% endunless %}{% endunless %}
@@ -62,8 +63,12 @@
           <div class="archive-ledger" id="archive-ledger" data-filter-list>
             {% for group in page.website.theme_data.archive_groups %}
               <section data-filter-group>
+                {% if page.website.theme_data.ledger_group_by == 'day' %}
+                {% include website/archive-day.html group=group %}
+                {% else %}
                 <h2>{{ group.label | default: group.year | escape }}</h2>
                 {% include website/blog-ledger.html posts=group.posts compact=true filterable=true %}
+                {% endif %}
               </section>
             {% endfor %}
           </div>

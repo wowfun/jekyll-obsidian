@@ -445,7 +445,9 @@ Docs 导航沿用内容目录结构。`nav_order` 对同级文档排序，`nav_e
 
 ## 按日分组与本地收藏
 
-设置 `website.blog.ledger_group_by: day`，可按 `YYYY-MM-DD` 标题分组 ledger 条目，并移除每条左侧的日期栏。日期采用 `website.blog.utc_offset`，默认仍按 `year` 分组。静态首屏与分页使用相同规则。
+设置 `website.blog.ledger_group_by: day`，可按日期折叠条目，并移除每条左侧的日期栏。标题显示本地化月日、星期及当前页本组条数，非当前年份补充年份。日期采用 `website.blog.utc_offset`，不受浏览器时区影响。默认只展开当前结果中最新的一天，各日期可独立开合；手动选择在当前页面的筛选、分页和历史前进后退中保留，刷新后重置。原生折叠控件在关闭 JavaScript 时仍可操作。平铺阅读按需加载已展开日期中的可见条目，收起时保留已加载正文。归档栏目页和收藏页共用此行为。默认仍按 `year` 分组，静态首屏与分页使用相同的日期标题。
+
+可通过本地化消息 `ledger_date`、`ledger_date_year`、`ledger_months`、`ledger_weekdays`、`ledger_entry` 和 `ledger_entries` 自定义日期标题。月份和星期名称以竖线分隔，分别从一月和星期日开始；日期格式支持 `{month}`、`{day}` 和 `{year}`，条数格式支持 `{count}`。
 
 minimal 主题支持 `website.features.favorites: true`（默认为 `false`），在 ledger 条目和文章操作区增加收藏按钮，并在导航中增加 `/favorites/` 收藏页。`website.navigation.favorites` 支持 label、order、visible 设置；启用功能时该路由由主题保留。
 

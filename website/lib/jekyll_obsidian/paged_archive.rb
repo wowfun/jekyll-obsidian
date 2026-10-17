@@ -142,7 +142,16 @@ module JekyllObsidian
 
     def groups(cards, config)
       key = config.blog.fetch("ledger_group_by") == "day" ? "display_date" : "year"
-      cards.group_by { |card| card[key] || "Undated" }.map { |label, posts| { "label" => label, "posts" => posts } }
+      latest = cards.filter_map { |card| card["display_date"] }.max
+      cards.group_by { |card| card[key] || "Undated" }.map do |label, posts|
+        group = { "label" => label, "posts" => posts }
+        if key == "display_date"
+          date = label == "Undated" ? nil : Date.iso8601(label)
+          group["day"] = { "year" => date.year, "month" => date.month, "day" => date.day, "weekday" => date.wday } if date
+          group["open"] = latest ? label == latest : true
+        end
+        group
+      end
     end
 
     def card_labels(card, manifest)

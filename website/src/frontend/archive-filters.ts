@@ -1,4 +1,5 @@
 import { initialisePagedArchive } from "./paged-archive";
+import { initialiseArchiveDays } from "./archive-days";
 
 function selectedValue(
   parameters: URLSearchParams,
@@ -66,7 +67,8 @@ export function initialiseArchiveFilters(): () => void {
   const roots = Array.from(document.querySelectorAll<HTMLElement>("[data-filter-page]:not([data-paged-archive])"));
   if (roots.length === 0) return () => cleanups.forEach((cleanup) => cleanup());
 
-  const refresh = () => roots.forEach(applyFilters);
+  const days = roots.map(initialiseArchiveDays);
+  const refresh = () => roots.forEach((root, index) => { applyFilters(root); days[index]!.refresh(); });
   const onClick = (event: MouseEvent) => {
     const target = event.target;
     if (!(target instanceof Element)) return;
@@ -100,6 +102,7 @@ export function initialiseArchiveFilters(): () => void {
   refresh();
 
   return () => {
+    days.forEach(day => day.dispose());
     cleanups.forEach((cleanup) => cleanup());
     document.removeEventListener("click", onClick);
     window.removeEventListener("popstate", refresh);

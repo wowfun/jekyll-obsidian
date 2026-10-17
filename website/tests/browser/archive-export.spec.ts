@@ -1,3 +1,4 @@
+import { expandArchiveDays } from "./archive-helpers";
 import { readFile } from "node:fs/promises";
 import { expect, test, type Page } from "@playwright/test";
 
@@ -108,6 +109,7 @@ for (const locale of ['en', 'zh-CN']) {
     });
     await page.goto(root + '?page=2');
     await expect(page.locator('[data-archive-page-status]')).toHaveText(/60.*2.*30/);
+    await expandArchiveDays(page);
     await page.locator('[data-archive-reading-toggle]').click();
     await expect(page.locator('[data-reading-loaded]')).toHaveCount(2);
     const titles = await page.locator('.blog-ledger__main strong').allTextContents();

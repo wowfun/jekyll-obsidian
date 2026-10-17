@@ -1,3 +1,4 @@
+import { expandArchiveDays } from "./archive-helpers";
 import { expect, test } from "@playwright/test";
 
 for (const locale of ["en", "zh-CN"]) {
@@ -27,10 +28,12 @@ for (const locale of ["en", "zh-CN"]) {
   test(`reading waits for offscreen rows and loads them after scrolling in ${locale}`, async ({ page }) => {
     await page.goto(root);
     await expect(page.locator('[data-archive-page-status]')).toHaveText(/3.*1.*2/);
+    await expandArchiveDays(page);
     // Model the height of long articles without depending on font metrics.
     await page.addStyleTag({ content: '[data-filter-item] { min-height: 200vh; }' });
     const requests: string[] = [];
     page.on('request', request => { if (/\/items\/[ab]\/$/.test(request.url())) requests.push(request.url()); });
+    await expandArchiveDays(page);
     await page.locator('[data-archive-reading-toggle]').click();
     const readingSwitch = page.locator('[data-archive-reading-toggle]');
     await expect(readingSwitch).toHaveAttribute('title', locale === 'en' ? 'Read in full: on' : '平铺阅读：已开启');
@@ -50,9 +53,11 @@ for (const locale of ["en", "zh-CN"]) {
     await expect(toggle).toBeVisible();
     await expect(toggle).toHaveAttribute('title', locale === 'en' ? 'Read in full: off' : '平铺阅读：已关闭');
     await expect(toggle.locator('.site-action__reading-check')).toBeHidden();
+    await expandArchiveDays(page);
     await toggle.press('Space');
     await expect(toggle).toHaveAttribute('aria-checked', 'true');
     await expect(toggle.locator('.site-action__reading-check')).toBeVisible();
+    await expandArchiveDays(page);
     await toggle.press('Space');
     await expect(toggle).toHaveAttribute('aria-checked', 'false');
     await expect(toggle.locator('.site-action__reading-check')).toBeHidden();
@@ -61,7 +66,9 @@ for (const locale of ["en", "zh-CN"]) {
   test(`saved reading starts once on the selected page and reuses bodies in ${locale}`, async ({ page }) => {
     await page.goto(root);
     await expect(page.locator('[data-archive-page-status]')).toHaveText(/3.*1.*2/);
+    await expandArchiveDays(page);
     await page.locator('[data-archive-reading-toggle]').click();
+    await expandArchiveDays(page);
     await expect(page.locator('[data-reading-loaded]')).toHaveCount(2);
     const articles: string[] = [], manifests: string[] = [];
     page.on('request', request => {
@@ -73,6 +80,7 @@ for (const locale of ["en", "zh-CN"]) {
     expect(manifests).toHaveLength(1);
     expect(articles.map(url => new URL(url).pathname)).toEqual([root + 'items/c/']);
     await page.locator('[data-archive-page=prev]').click();
+    await expandArchiveDays(page);
     await expect(page.locator('[data-reading-loaded]')).toHaveCount(2);
     await page.locator('[data-archive-page=next]').click();
     await expect(page.locator('[data-reading-loaded]')).toHaveCount(1);
@@ -98,6 +106,7 @@ for (const locale of ["en", "zh-CN"]) {
     await closeTimeline();
     await expect(titles).toHaveText(['Middle']);
     await expect(page.locator('[data-archive-page=next]')).toBeDisabled();
+    await expandArchiveDays(page);
     await page.locator('[data-archive-reading-toggle]').click();
     await expect(page.locator('[data-reading-loaded]')).toHaveCount(1);
     await expect(page.locator('.archive-reading__body')).toContainText('First paragraph of Middle.');
@@ -120,6 +129,7 @@ for (const locale of ["en", "zh-CN"]) {
     await expect(page).toHaveURL(root);
     await closeTimeline();
     await expect(titles).toHaveText(['Newest', 'Middle']);
+    await expandArchiveDays(page);
     await expect(page.locator('[data-reading-loaded]')).toHaveCount(2);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
     await page.goto(root + '?day=2026-02-30');
@@ -163,9 +173,11 @@ for (const locale of ["en", "zh-CN"]) {
     const toggle = page.getByRole('switch', { name: locale === 'en' ? 'Read in full' : '平铺阅读' });
     await expect(page.locator('[data-archive-page-status]')).toHaveText(/3.*1.*2/);
     await expect(toggle).toHaveAttribute('aria-checked', 'false');
+    await expandArchiveDays(page);
     await toggle.press('Space');
     await expect(toggle).toHaveAttribute('aria-checked', 'true');
     const bodies = page.locator('.archive-reading__body');
+    await expandArchiveDays(page);
     await expect(page.locator('[data-reading-loaded]')).toHaveCount(2);
     await expect(bodies.first()).toContainText('First paragraph of Newest.');
     await expect(bodies.first().getByRole('link', { name: 'link', exact: true })).toHaveAttribute('href', 'https://example.com/a');
@@ -173,11 +185,14 @@ for (const locale of ["en", "zh-CN"]) {
     await expect(page.locator('[data-reading-loaded]')).toHaveCount(1);
     await expect(bodies).toContainText('First paragraph of Oldest.');
     await page.goBack();
+    await expandArchiveDays(page);
     await expect(page.locator('[data-reading-loaded]')).toHaveCount(2);
     await page.locator('button[data-archive-facet=source][data-archive-value=hn]').click();
+    await expandArchiveDays(page);
     await expect(bodies.last()).toContainText('First paragraph of Oldest.');
     await page.reload();
     await expect(toggle).toHaveAttribute('aria-checked', 'true');
+    await expandArchiveDays(page);
     await expect(page.locator('[data-reading-loaded]')).toHaveCount(2);
     await toggle.click();
     await expect(bodies.first()).toBeHidden();
@@ -189,12 +204,14 @@ for (const locale of ["en", "zh-CN"]) {
     await page.route('**/items/a/', route => route.abort());
     await page.goto(root);
     await expect(page.locator('[data-archive-page-status]')).toHaveText(/3.*1.*2/);
+    await expandArchiveDays(page);
     await page.locator('[data-archive-reading-toggle]').click();
     await expect(page.locator('[data-reading-retry]')).toBeVisible();
     await expect(page.locator('.blog-ledger__main strong')).toHaveText(['Newest', 'Middle']);
     await expect(page.locator('[data-reading-loaded]')).toHaveCount(1);
     await page.unroute('**/items/a/');
     await page.locator('[data-reading-retry]').click();
+    await expandArchiveDays(page);
     await expect(page.locator('[data-reading-loaded]')).toHaveCount(2);
   });
 
