@@ -79,6 +79,8 @@ describe("GitHub Discussions comments", () => {
     expect(script.dataset.theme).toBe("light");
 
     const frame = document.createElement("iframe");
+    // Inline content creates a window without enabling network-backed iframe loading.
+    frame.srcdoc = "";
     frame.className = "giscus-frame";
     section.querySelector("[data-website-comments-container]")!.appendChild(frame);
     const postMessage = vi.spyOn(frame.contentWindow!, "postMessage").mockImplementation(() => undefined);
