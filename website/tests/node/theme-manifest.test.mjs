@@ -58,7 +58,10 @@ test("publishes independent theme and feature asset closures", async () => {
   assert.ok(await closureBytes(manifest.features.search.files) < 50_000, "search stays below 50 KB");
   assert.ok(await closureBytes(manifest.features.graph.files) < 200_000, "graph stays below 200 KB");
   assert.ok(await closureBytes(manifest.features.math.files) < 2_000_000, "math stays below 2 MB");
-  assert.ok(await closureBytes(manifest.features.mermaid.files) < 4_000_000, "mermaid stays below 4 MB");
+  // Mermaid 12 includes the lazy ELK engine; this budget covers every optional
+  // diagram and layout chunk, not just the scripts fetched for one diagram.
+  const mermaidBytes = await closureBytes(manifest.features.mermaid.files);
+  assert.ok(mermaidBytes < 6_000_000, `mermaid stays below 6 MB (${mermaidBytes} bytes)`);
 
   const coreFiles = new Set(
     Object.values(manifest.entries).flatMap((entry) => entry.files)
