@@ -19,6 +19,10 @@ for (const theme of ["minimal", "docs"]) for (const locale of ["en", "zh-CN"]) {
     for (const control of await actions.locator("button, summary, a.site-action").all()) {
       await expect(control).toHaveAttribute("aria-label", /.+/);
       await expect(control).toHaveAttribute("title", /.+/);
+      await expect(control.locator(":scope > svg").first()).toHaveAttribute("aria-hidden", "true");
+      await expect(control.locator(":scope > :not(svg):not(.visually-hidden)")).toHaveCount(0);
+      expect(await control.evaluate(element => [...element.childNodes]
+        .filter(node => node.nodeType === Node.TEXT_NODE).map(node => node.textContent).join("").trim())).toBe("");
     }
     const before = await scheme.getAttribute("aria-label"); await scheme.press("Enter");
     await expect(scheme).not.toHaveAttribute("aria-label", before!);

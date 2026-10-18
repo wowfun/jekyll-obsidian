@@ -400,6 +400,8 @@ for (const theme of themes) {
     await page.goto(site(theme, "/docs/Syntax/"));
 
     const image = page.locator('.note-content img[src*="research-folio.svg"]');
+    await image.scrollIntoViewIfNeeded();
+    await expect.poll(() => image.evaluate(element => (element as HTMLImageElement).naturalWidth)).toBeGreaterThan(0);
     await expect(image).toBeVisible();
     await expect(image).toHaveAttribute("role", "button");
     await expect(image).toHaveAccessibleName("Expand image");

@@ -67,6 +67,8 @@ RUN_BROWSER_TESTS=1 website/bin/test
 
 The project workflow runs this full suite. Downstream workflows build and verify only their host content.
 
+Visual snapshots are separate for each operating system because native font rendering differs. After an intentional UI change, review and update the Windows and Linux baselines with `npx playwright test site-visual.spec.ts theme-visual.spec.ts --update-snapshots`, then rerun without that flag. Linux baselines must also pass the Ubuntu CI browser run.
+
 ## Build a production fixture
 
 ```sh

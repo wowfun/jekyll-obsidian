@@ -14,6 +14,8 @@ updated: 2026-08-26
 
 # Customization
 
+Both themes use icon-only header actions for search, language selection and color scheme. Accessible names and hover hints identify each action; search keeps its Ctrl/⌘ K shortcut. Repeated collection headings and descriptions are omitted automatically, and language menus fit their option labels. Daily archives open only the newest day on the current page by default and retain manual folding choices through filtering and pagination until reload. These presentation defaults need no feature flags. Archive homepages, pagination and browser-local favorites remain explicit site choices.
+
 Edit `.github/jekyll-obsidian.yml` to configure the site. The gem supplies defaults, so the host only needs the settings it wants to override:
 
 ```yaml
