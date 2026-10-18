@@ -18,15 +18,33 @@ class SiteAuditTest < Minitest::Test
     end
   end
 
-  def test_accepts_only_generation_scoped_archive_artifact_names
+  def test_accepts_only_current_descriptor_and_generation_scoped_archive_artifact_names
     Dir.mktmpdir("garden-archive-audit") do |site|
       File.write(File.join(site, "index.html"), "<!doctype html><title>Garden</title>")
       directory = File.join(site, "assets", "website", "i18n", "zh-CN", "archive", "a" * 64)
       FileUtils.mkdir_p(directory)
-      %w[manifest.json cards-0.json].each { |name| File.write(File.join(directory, name), "{}") }
+      %w[manifest.json identities.json cards-0.json].each { |name| File.write(File.join(directory, name), "{}") }
+      File.write(File.join(File.dirname(directory), "current.json"), "{}")
+      primary = File.join(site, "assets", "website", "archive")
+      FileUtils.mkdir_p(primary)
+      File.write(File.join(primary, "current.json"), "{}")
+      [primary, File.dirname(directory)].each do |archive|
+        FileUtils.mkdir_p(File.join(archive, "tabs", "my-news"))
+        File.write(File.join(archive, "tabs", "my-news", "current.json"), "{}")
+      end
       _stdout, stderr, status = audit(site)
       assert status.success?, stderr
+      File.write(File.join(primary, "credentials.json"), "{}")
+      _stdout, stderr, status = audit(site)
+      refute status.success?
+      assert_includes stderr, "extension allowlist"
+      File.delete(File.join(primary, "credentials.json"))
       File.write(File.join(directory, "credentials.json"), "{}")
+      _stdout, stderr, status = audit(site)
+      refute status.success?
+      assert_includes stderr, "extension allowlist"
+      File.delete(File.join(directory, "credentials.json"))
+      File.write(File.join(primary, "tabs", "my-news", "other.json"), "{}")
       _stdout, stderr, status = audit(site)
       refute status.success?
       assert_includes stderr, "extension allowlist"
@@ -34,6 +52,7 @@ class SiteAuditTest < Minitest::Test
   end
 
   def test_rejects_control_characters_in_output_names
+    skip "Windows does not allow control characters in filenames" if Gem.win_platform?
     Dir.mktmpdir("garden-site-audit") do |site|
       File.write(File.join(site, "index.html"), "<!doctype html><title>Garden</title>")
       File.write(File.join(site, "unsafe\nname.html"), "secret")
@@ -109,7 +128,7 @@ class SiteAuditTest < Minitest::Test
   private
 
   def audit(site)
-    script = File.expand_path("../../scripts/audit-site.sh", __dir__)
-    Open3.capture3(script, site)
+    script = File.expand_path("../../scripts/audit-site.rb", __dir__)
+    Open3.capture3(RbConfig.ruby, script, site)
   end
 end

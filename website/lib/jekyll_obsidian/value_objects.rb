@@ -89,13 +89,15 @@ module JekyllObsidian
     :html
   )
 
-  BuildRequest = ImmutableRecord.define(:snapshot, :config, :tab_memberships)
+  BuildRequest = ImmutableRecord.define(:snapshot, :config, :tab_memberships, :reference_time)
   SourceSpan = ImmutableRecord.define(:start_line, :start_column, :end_line, :end_column)
   FrontMatterLink = ImmutableRecord.define(:property, :index, :target, :display, :source_span)
   Diagnostic = ImmutableRecord.define(:severity, :code, :message, :path, :span, :property)
   Relation = ImmutableRecord.define(:source_id, :target_id, :kind, :fragment, :source_span, :property)
   PageOutput = ImmutableRecord.define(:route, :content, :data)
-  GeneratedFile = ImmutableRecord.define(:route, :content, :media_type)
+  # Producers may set localize_content: false when their content is already
+  # locale-complete. The output route still receives its language prefix.
+  GeneratedFile = ImmutableRecord.define(:route, :content, :media_type, :localize_content)
   ProjectedFile = ImmutableRecord.define(:source_path, :route, :media_type, :size, :device, :inode, :mtime_ns)
   NoteOutput = ImmutableRecord.define(:id, :title, :route, :properties)
   ContentSecurityNeeds = ImmutableRecord.define(:media_sources, :frame_sources, :script_sources, :connect_sources)
@@ -123,6 +125,7 @@ module JekyllObsidian
     :nav_exclude,
     :directory_index,
     :has_h1,
+    :presentation,
     :feature_flags,
     :content_security,
     :image_url,
@@ -137,6 +140,7 @@ module JekyllObsidian
   PublishedSiteModel = ImmutableRecord.define(
     :notes,
     :notes_by_id,
+    :recommendations,
     :directory_index_paths,
     :relations,
     :graph_edges,
@@ -167,6 +171,7 @@ module JekyllObsidian
     :home,
     :blog,
     :site,
+    :reference_time,
     :url_builder
   )
 

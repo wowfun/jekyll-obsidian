@@ -1,151 +1,70 @@
-import { archiveState, decodeBitmap, type ArchiveCard, type ArchiveManifest, type ArchiveQuery } from "./archive-query";
-import { requireSiteUrl } from "./urls";
-
-type Matches = { ordinals: number[]; count: number; page: number; pages: number };
-function object(value: unknown): Record<string, unknown> {
-  if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("Invalid archive data");
-  return value as Record<string, unknown>;
-}
-function textElement<K extends keyof HTMLElementTagNameMap>(tag: K, value: string, className?: string): HTMLElementTagNameMap[K] {
-  const element = document.createElement(tag); element.textContent = value;
-  if (className) element.className = className;
-  return element;
-}
-function publicUrl(value: string, external = false): string {
-  const url = new URL(value, window.location.href);
-  if (!/^https?:$/.test(url.protocol) || url.username || url.password || (!external && url.origin !== window.location.origin)) throw new Error("Invalid archive URL");
-  return url.href;
-}
+import { archivePageNumber, archiveState, type ArchiveMatches, type ArchiveCollection } from "./archive-query";
+import { createArchiveClient } from "./archive-client";
+import { initialiseArchiveExport } from "./archive-export";
+import { initialiseArchiveReading } from "./archive-reading";
+import { renderArchiveLedger } from "./archive-ledger";
+import { loadFavoriteArchive, refreshFavoriteArchive, renderFavoriteFilters, selectFavorites } from "./favorite-archive";
+import { FAVORITES_CHANGE } from "./favorites-store";
+import { favoritesUI } from "./favorite-controls";
+import { renderArchivePagination } from "./archive-pagination";
+import { initialiseArchiveDays } from "./archive-days";
 
 export function initialisePagedArchive(root: HTMLElement): () => void {
-  const manifestUrl = new URL(root.dataset.archiveUrl!, window.location.href);
-  const list = root.querySelector<HTMLElement>("[data-filter-list]")!;
+  const client = createArchiveClient(root.dataset.archiveUrl!);
+  const favorites = root.hasAttribute("data-favorites-page");
   const status = root.querySelector<HTMLElement>("[data-archive-status]")!;
   const retry = root.querySelector<HTMLButtonElement>("[data-archive-retry]")!;
   const empty = root.querySelector<HTMLElement>("[data-archive-empty]")!;
+  const emptyContent = [...empty.childNodes].map(node => node.cloneNode(true));
   const pagination = root.querySelector<HTMLElement>("[data-archive-pagination]")!;
   const prev = pagination.querySelector<HTMLButtonElement>("[data-archive-page=prev]")!;
   const next = pagination.querySelector<HTMLButtonElement>("[data-archive-page=next]")!;
   const controller = new AbortController();
-  const worker = new Worker(requireSiteUrl("archive-worker"), { type: "module" });
-  const pending = new Map<number, { resolve: (result: Matches) => void; reject: (error: Error) => void }>();
-  const cache = new Map<string, unknown>();
-  const requests = new Map<string, Promise<unknown>>();
-  let manifest: ArchiveManifest | undefined, manifestPromise: Promise<ArchiveManifest> | undefined;
-  let epoch = 0, queryId = 0, alive = true, activeLoads = 0;
-  const loadQueue: (() => void)[] = [];
-  async function fetchResource(url: URL): Promise<unknown> {
-    if (activeLoads >= 4) await new Promise<void>((resolve) => loadQueue.push(resolve));
-    activeLoads++;
-    try {
-      const response = await fetch(url, { signal: AbortSignal.any([controller.signal, AbortSignal.timeout(15000)]) });
-      if (!response.ok) throw new Error("Archive load failed");
-      return await response.json() as unknown;
-    } finally { activeLoads--; loadQueue.shift()?.(); }
-  }
-  let current: Matches = { ordinals: [], count: 0, page: 1, pages: 1 };
-  worker.onmessage = (event: MessageEvent<Matches & { id: number }>) => {
-    pending.get(event.data.id)?.resolve(event.data); pending.delete(event.data.id);
-  };
-  worker.onerror = () => { for (const job of pending.values()) job.reject(new Error("Archive worker failed")); pending.clear(); };
-  async function load(filename: string): Promise<unknown> {
-    if (cache.has(filename)) { const value = cache.get(filename); cache.delete(filename); cache.set(filename, value); return value; }
-    let promise = requests.get(filename);
-    if (!promise) {
-      const url = new URL(filename, manifestUrl);
-      if (url.origin !== manifestUrl.origin || !url.pathname.startsWith(manifestUrl.pathname.slice(0, manifestUrl.pathname.lastIndexOf("/") + 1))) throw new Error("Invalid archive resource path");
-      promise = fetchResource(url).then((value) => {
-        if (filename !== "manifest.json") {
-          if (object(value).generation !== manifest?.generation) throw new Error("Archive generation differs");
-          cache.set(filename, value);
-          while (cache.size > 20) cache.delete(cache.keys().next().value!);
-        }
-        return value;
-      }).finally(() => { requests.delete(filename); });
-      requests.set(filename, promise);
-    }
-    return promise;
-  }
-  async function getManifest(): Promise<ArchiveManifest> {
-    manifestPromise ??= load("manifest.json").then((value) => {
-      const data = object(value);
-      if (data.version !== 1 || !Number.isSafeInteger(data.total) || Number(data.total) < 0 || !Number.isSafeInteger(data.page_size) || Number(data.page_size) < 1 || Number(data.page_size) > 100 || typeof data.generation !== "string" || !/^[a-f0-9]{64}$/.test(data.generation) || !Array.isArray(data.chunks)) throw new Error("Invalid archive manifest");
-      for (const key of ["facets", "prefixes", "labels", "aliases", "years", "months"]) object(data[key]);
-      for (const [name, prefix] of Object.entries(object(data.prefixes))) {
-        if (!/^[a-z][a-z0-9_-]*$/.test(name) || typeof prefix !== "string" || !Array.isArray(object(data.facets)[name])) throw new Error("Invalid archive facet");
-        for (const entry of object(data.facets)[name] as unknown[]) { const option = object(entry); if (typeof option.id !== "string" || typeof option.name !== "string" || typeof option.posting !== "string") throw new Error("Invalid archive option"); }
-      }
-      if (data.chunks.length !== Math.ceil(Number(data.total) / Number(data.page_size))) throw new Error("Invalid archive chunk count");
-      for (const mapping of [data.years, data.months]) for (const range of Object.values(object(mapping))) {
-        if (!Array.isArray(range) || range.length !== 2 || !range.every(Number.isSafeInteger) || range[0] < 0 || range[1] > Number(data.total) || range[0] > range[1]) throw new Error("Invalid chronology bounds");
-      }
-      manifest = data as unknown as ArchiveManifest; return manifest;
-    }).catch((error: unknown) => { manifestPromise = undefined; throw error; });
-    return manifestPromise;
-  }
-  async function concurrent<T>(values: T[], operation: (value: T) => Promise<void>): Promise<void> {
-    let index = 0;
-    await Promise.all(Array.from({ length: Math.min(4, values.length) }, async () => { while (index < values.length) await operation(values[index++]!); }));
-  }
-  function query(total: number, size: number, state: ArchiveQuery, bitmaps: Record<string, Uint8Array>): Promise<Matches> {
-    const id = ++queryId;
-    return new Promise((resolve, reject) => { const timeout = setTimeout(() => { pending.delete(id); reject(new Error("Archive query timed out")); }, 15000);
-      pending.set(id, { resolve: (value) => { clearTimeout(timeout); resolve(value); }, reject: (error) => { clearTimeout(timeout); reject(error); } }); worker.postMessage({ id, total, size, query: state, bitmaps }); });
-  }
-  function render(cards: ArchiveCard[], data: ArchiveManifest): void {
-    const fragment = document.createDocumentFragment();
-    let year: string | undefined, ol: HTMLOListElement | undefined;
-    for (const card of cards) {
-      if (card.year !== year) {
-        year = card.year; const section = document.createElement("section"); section.dataset.filterGroup = "";
-        section.append(textElement("h2", year)); const ledger = textElement("section", "", "blog-ledger"); ol = document.createElement("ol"); ledger.append(ol); section.append(ledger); fragment.append(section);
-      }
-      const row = document.createElement("li"); row.dataset.filterItem = ""; row.dataset.itemId = card.id;
-      const meta = textElement("div", "", "blog-ledger__meta"), time = textElement("time", card.display_date || ""); time.dateTime = card.published_at || ""; meta.append(time);
-      const content = textElement("div", "", "blog-ledger__content"), title = textElement("a", "", "blog-ledger__main"); title.href = publicUrl(card.url); title.append(textElement("strong", card.title)); content.append(title);
-      const footer = textElement("footer", "", "archive-card-footer"), tags = textElement("ul", "", "blog-ledger__topics");
-      for (const [name, ids] of Object.entries(card.facets)) for (const id of ids) {
-        const label = data.labels[data.prefixes[name]! + id] || id;
-        const link = textElement("a", label); link.dataset.archiveFacet = name; link.dataset.archiveValue = id;
-        link.href = `${window.location.pathname}?${new URLSearchParams([[name, id]])}`;
-        const li = document.createElement("li"); li.append(link); tags.append(li);
-      }
-      footer.append(tags);
-      if (card.source_url) { const original = textElement("a", card.source_url, "archive-source-url"); original.href = publicUrl(card.source_url, true); original.rel = "noopener noreferrer"; footer.append(original); }
-      if (card.date_basis === "observed") footer.append(textElement("small", root.dataset.observedLabel || "First observed"));
-      content.append(footer); row.append(meta, content); ol!.append(row);
-    }
-    list.replaceChildren(fragment);
-  }
-  async function refresh(): Promise<void> {
+  const days = initialiseArchiveDays(root);
+  const reading = initialiseArchiveReading(root, client);
+  const cleanupExport = favorites ? () => {} : initialiseArchiveExport(client);
+  let epoch = 0, alive = true;
+  let pendingSearch: string | undefined;
+  let savedArchive: Awaited<ReturnType<typeof loadFavoriteArchive>> | undefined;
+  let renderedFavoriteManifest: ArchiveCollection | undefined;
+  let deploymentVerified = true, discovery: Promise<void> | undefined;
+  const unavailable = async (): Promise<never> => { throw new Error("Current deployment could not be verified"); };
+  const snapshotsOnly = { manifest: unavailable, lookup: unavailable };
+  let current: ArchiveMatches = { ordinals: [], count: 0, page: 1, pages: 1 };
+  async function refresh(revalidate = false): Promise<void> {
+    const search = window.location.search;
+    if (pendingSearch === search) return;
+    pendingSearch = search;
     const turn = ++epoch; status.textContent = status.dataset.loading || "Loading…"; retry.hidden = true;
     root.setAttribute("aria-busy", "true"); prev.disabled = true; next.disabled = true;
     try {
-      const data = await getManifest();
+      if (revalidate && !discovery) {
+        savedArchive = undefined;
+        deploymentVerified = false;
+        // This small descriptor changes on deployment even when an older
+        // immutable manifest is still available in the browser or CDN cache.
+        discovery = client.revalidateCurrent(root.dataset.archiveCurrentUrl!, controller.signal)
+          .then(() => { deploymentVerified = true; })
+          .catch(() => { controller.signal.throwIfAborted(); })
+          .finally(() => { discovery = undefined; });
+      }
+      // Failed discovery keeps favorites snapshots authoritative. The ordinary
+      // archive can still query its last successfully loaded generation.
+      await discovery;
       if (!alive || turn !== epoch) return;
-      const state = archiveState(data, window.location.search), bitmaps: Record<string, Uint8Array> = Object.create(null) as Record<string, Uint8Array>;
-      await concurrent(state.keys, async (key) => {
-        const split = key.indexOf("/"), name = key.slice(0, split), id = key.slice(split + 1);
-        const option = data.facets[name]?.find((entry) => entry.id === id);
-        if (!option) return;
-        const posting = object(await load(option.posting));
-        if (posting.total !== data.total || typeof posting.bitmap !== "string") throw new Error("Invalid posting");
-        bitmaps[key] = decodeBitmap(posting.bitmap, data.total);
-      });
+      let saved: Awaited<ReturnType<typeof loadFavoriteArchive>> | undefined;
+      if (favorites) saved = await refreshFavoriteArchive(deploymentVerified ? client : snapshotsOnly, controller.signal, savedArchive);
+      const data = saved?.manifest || await client.manifest(controller.signal);
       if (!alive || turn !== epoch) return;
-      const result = await query(data.total, data.page_size, state.query, bitmaps);
+      if (saved) savedArchive = saved;
+      const state = archiveState(data, window.location.search);
+      const result = saved ? selectFavorites(saved.cards, data, state) : await client.select(state, "page", controller.signal);
       if (!alive || turn !== epoch) return;
-      const chunks = new Map<number, ArchiveCard[]>();
-      await concurrent([...new Set(result.ordinals.map((ordinal) => Math.floor(ordinal / data.page_size)))], async (index) => {
-        const file = data.chunks[index]; if (!file) throw new Error("Missing archive chunk");
-        const chunk = object(await load(file));
-        if (chunk.start !== index * data.page_size || !Array.isArray(chunk.cards) || chunk.cards.length > data.page_size) throw new Error("Invalid card chunk");
-        const cards = chunk.cards as ArchiveCard[];
-        for (const raw of cards) { const card = object(raw); if (typeof card.id !== "string" || typeof card.title !== "string" || typeof card.url !== "string" || typeof card.year !== "string") throw new Error("Invalid card"); object(card.facets); }
-        chunks.set(index, cards);
-      });
+      const cards = saved ? result.ordinals.map(ordinal => saved.cards[ordinal]!) : await client.cards(result.ordinals, controller.signal);
       if (!alive || turn !== epoch) return;
-      render(result.ordinals.map((ordinal) => { const card = chunks.get(Math.floor(ordinal / data.page_size))?.[ordinal % data.page_size]; if (!card) throw new Error("Missing archive card"); return card; }), data);
+      if (saved && renderedFavoriteManifest !== data) { empty.replaceChildren(...emptyContent.map(node => node.cloneNode(true))); renderFavoriteFilters(root, data); renderedFavoriteManifest = data; }
+      days.replace(() => renderArchiveLedger(root, cards, data, saved ? new Set(saved.snapshots.keys()) : undefined));
+      reading.refresh();
       current = result;
       result.page > 1 ? state.parameters.set("page", String(result.page)) : state.parameters.delete("page");
       const search = state.parameters.toString(); history.replaceState(null, "", window.location.pathname + (search ? `?${search}` : ""));
@@ -153,23 +72,36 @@ export function initialisePagedArchive(root: HTMLElement): () => void {
         const name = control.dataset.archiveFacet!, id = control.dataset.archiveValue!;
         control.setAttribute("aria-pressed", String(id ? state.parameters.getAll(name).includes(id) : !state.parameters.getAll(name).length));
       }
-      const pageText = pagination.dataset.pageLabel || "Page {page} of {pages}", resultText = pagination.dataset.resultLabel || "{count} entries";
-      pagination.querySelector<HTMLElement>("[data-archive-page-status]")!.textContent = `${resultText.replace("{count}", String(result.count))} · ${pageText.replace("{page}", String(result.page)).replace("{pages}", String(result.pages))}`;
-      prev.disabled = result.page <= 1; next.disabled = result.page >= result.pages;
-      empty.hidden = result.count !== 0; status.textContent = ""; root.removeAttribute("aria-busy");
+      for (const name of ["year", "month", "day"]) {
+        for (const control of document.querySelectorAll<HTMLElement>(`[data-timeline-nav] [data-${name}-filter-option]`)) {
+          if (state.parameters.get(name) === control.getAttribute(`data-filter-${name}`)) control.setAttribute("aria-current", "page");
+          else control.removeAttribute("aria-current");
+        }
+      }
+      renderArchivePagination(pagination, result.page, result.pages, result.count);
+      const refreshFailed = saved ? saved.refreshFailed : !deploymentVerified;
+      empty.hidden = result.count !== 0;
+      status.textContent = refreshFailed ? saved ? favoritesUI().refreshError || "Could not refresh articles. Your saved summaries are shown. Retry to continue." : status.dataset.refreshError || "Could not check for updates. Previously loaded entries remain available. Retry to check again." : "";
+      retry.hidden = !refreshFailed; root.removeAttribute("aria-busy");
     } catch {
-      if (alive && turn === epoch) { status.textContent = status.dataset.unavailable || "Entries could not be loaded."; retry.hidden = false; root.removeAttribute("aria-busy"); }
-    }
+      if (alive && turn === epoch) { status.textContent = status.dataset.unavailable || "Entries could not be loaded."; retry.hidden = false; root.removeAttribute("aria-busy"); reading.refresh(); }
+    } finally { if (turn === epoch) pendingSearch = undefined; }
   }
   function click(event: MouseEvent): void {
     if (!(event.target instanceof Element) || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
-    const control = event.target.closest<HTMLElement>("[data-archive-facet], [data-year-filter-option], [data-month-filter-option], [data-archive-page], [data-archive-clear], [data-archive-retry]");
+    const control = event.target.closest<HTMLElement>("[data-archive-facet], [data-year-filter-option], [data-month-filter-option], [data-day-filter-option], [data-archive-page], [data-archive-clear], [data-archive-retry]");
     if (!control || !root.contains(control) && !control.closest("[data-timeline-nav]")) return;
     event.preventDefault();
-    if (control.hasAttribute("data-archive-retry")) { void refresh(); return; }
+    if (control.hasAttribute("data-archive-retry")) { void refresh(true); return; }
+    if (root.hasAttribute("aria-busy") && control.hasAttribute("data-archive-page")) return;
     const nextUrl = new URL(window.location.href);
     if (control.hasAttribute("data-archive-clear")) nextUrl.search = "";
-    else if (control.dataset.archivePage) nextUrl.searchParams.set("page", String(Math.max(1, current.page + (control.dataset.archivePage === "next" ? 1 : -1))));
+    else if (control.dataset.archivePage) {
+      const target = control.dataset.archivePage;
+      const page = target === "next" ? current.page + 1 : target === "prev" ? current.page - 1 : Number(target);
+      if (!Number.isSafeInteger(page)) return;
+      nextUrl.searchParams.set("page", String(Math.max(1, Math.min(current.pages, page))));
+    }
     else {
       nextUrl.searchParams.delete("page");
       if (control.dataset.archiveFacet) {
@@ -177,17 +109,38 @@ export function initialisePagedArchive(root: HTMLElement): () => void {
         id ? (values.has(id) ? values.delete(id) : values.add(id)) : values.clear(); nextUrl.searchParams.delete(name);
         [...values].sort().forEach((value) => nextUrl.searchParams.append(name, value));
       } else {
-        const name = control.hasAttribute("data-year-filter-option") ? "year" : "month", value = name === "year" ? control.dataset.filterYear! : control.dataset.filterMonth!;
-        nextUrl.searchParams.delete(name === "year" ? "month" : "year");
+        const name = control.hasAttribute("data-year-filter-option") ? "year" : control.hasAttribute("data-month-filter-option") ? "month" : "day", value = control.getAttribute(`data-filter-${name}`)!;
+        for (const other of ["year", "month", "day"]) if (other !== name) nextUrl.searchParams.delete(other);
         nextUrl.searchParams.get(name) === value ? nextUrl.searchParams.delete(name) : nextUrl.searchParams.set(name, value);
       }
     }
     if (nextUrl.search !== window.location.search) history.pushState(null, "", nextUrl.pathname + nextUrl.search);
     void refresh();
   }
+  const jump = pagination.querySelector<HTMLFormElement>("[data-archive-page-jump]")!;
+  const jumpInput = jump.querySelector<HTMLInputElement>("input")!;
+  const onInput = () => { jumpInput.setCustomValidity(""); };
+  const onInvalid = () => { jumpInput.setCustomValidity((pagination.dataset.jumpError || "Enter a whole number from 1 to {pages}.").replace("{pages}", String(current.pages))); };
+  function submit(event: SubmitEvent): void {
+    event.preventDefault();
+    if (root.hasAttribute("aria-busy")) return;
+    const page = archivePageNumber(jumpInput.value);
+    if (page === undefined || page > current.pages) {
+      onInvalid();
+      jumpInput.reportValidity(); return;
+    }
+    const url = new URL(location.href);
+    page === 1 ? url.searchParams.delete("page") : url.searchParams.set("page", String(page));
+    if (url.search !== location.search) history.pushState(null, "", url.pathname + url.search);
+    void refresh();
+  }
+  const onFavorites = () => { if (favorites) { pendingSearch = undefined; void refresh(); } };
   const onPop = () => { void refresh(); };
-  document.addEventListener("click", click); window.addEventListener("popstate", onPop); window.addEventListener("pageshow", onPop);
+  const onShow = (event: PageTransitionEvent) => { if (event.persisted) { pendingSearch = undefined; void refresh(true); } };
+  window.addEventListener(FAVORITES_CHANGE, onFavorites);
+  jump.addEventListener("submit", submit); jumpInput.addEventListener("input", onInput); jumpInput.addEventListener("invalid", onInvalid);
+  document.addEventListener("click", click); window.addEventListener("popstate", onPop); window.addEventListener("pageshow", onShow);
   // SSR is immediately useful; hydration verifies the complete page projection.
   void refresh();
-  return () => { alive = false; controller.abort(); worker.terminate(); for (const job of pending.values()) job.reject(new Error("Archive disposed")); pending.clear(); document.removeEventListener("click", click); window.removeEventListener("popstate", onPop); window.removeEventListener("pageshow", onPop); };
+  return () => { alive = false; controller.abort(); days.dispose(); reading.dispose(); cleanupExport(); client.dispose(); jump.removeEventListener("submit", submit); jumpInput.removeEventListener("input", onInput); jumpInput.removeEventListener("invalid", onInvalid); window.removeEventListener(FAVORITES_CHANGE, onFavorites); document.removeEventListener("click", click); window.removeEventListener("popstate", onPop); window.removeEventListener("pageshow", onShow); };
 }

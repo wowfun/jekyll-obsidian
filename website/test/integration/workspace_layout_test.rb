@@ -47,7 +47,7 @@ class WorkspaceLayoutTest < Minitest::Test
   end
 
   def test_rejects_symlink_components_and_regular_file_sources
-    File.symlink(File.join(@workspace, "docs"), File.join(@workspace, "linked"))
+    create_test_symlink(File.join(@workspace, "docs"), File.join(@workspace, "linked"))
     assert_raises(JekyllObsidian::WorkspaceLayout::Invalid) { resolve(source: "linked") }
     File.write(File.join(@workspace, "file"), "not a directory")
     assert_raises(JekyllObsidian::WorkspaceLayout::Invalid) { resolve(source: "file") }
@@ -69,10 +69,10 @@ class WorkspaceLayoutTest < Minitest::Test
   end
 
   def test_rejects_destination_and_cache_symlinks
-    File.symlink(@assets, File.join(@cache, "site"))
+    create_test_symlink(@assets, File.join(@cache, "site"))
     assert_raises(JekyllObsidian::WorkspaceLayout::Invalid) { resolve }
     File.unlink(File.join(@cache, "site"))
-    File.symlink(@assets, File.join(@runtime, ".jekyll-cache"))
+    create_test_symlink(@assets, File.join(@runtime, ".jekyll-cache"))
     assert_raises(JekyllObsidian::WorkspaceLayout::Invalid) { resolve }
   end
 

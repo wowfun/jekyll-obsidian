@@ -33,7 +33,7 @@ module JekyllObsidian
         path = File.join(root, relative)
         WorkspaceLayout.assert_path!(root, path, relative, missing: true)
         next false unless File.exist?(path)
-        unless File.file?(path) && File.binread(path) == content
+        unless File.file?(path) && File.binread(path).gsub("\r\n", "\n") == content.b.gsub("\r\n", "\n")
           raise ArgumentError, "#{relative} already exists. Edit it directly; init does not overwrite files."
         end
         true
@@ -54,7 +54,7 @@ module JekyllObsidian
             Dir.mkdir(directory)
             created_directories << directory
           end
-          File.open(path, File::WRONLY | File::CREAT | File::EXCL, 0o644) { |file| file.write(content) }
+          File.open(path, File::WRONLY | File::CREAT | File::EXCL | File::BINARY, 0o644) { |file| file.write(content) }
           created_files << path
         end
       rescue StandardError

@@ -21,7 +21,7 @@ function graphMarkup(): string {
 }
 
 describe("interactive graphs", () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.resetModules();
     document.body.innerHTML = graphMarkup();
     Object.defineProperty(HTMLElement.prototype, "clientWidth", { configurable: true, get: () => 320 });
@@ -40,7 +40,10 @@ describe("interactive graphs", () => {
       this.open = false;
       this.dispatchEvent(new Event("close"));
     };
-  });
+    // Cold dependency transforms are setup; rendering retains its normal
+    // five-second budget. Import after mocks and resetModules for isolation.
+    await import("../../src/frontend/graph");
+  }, 60000);
 
   afterEach(() => {
     window.dispatchEvent(new Event("pagehide"));

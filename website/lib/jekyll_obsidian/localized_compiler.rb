@@ -18,13 +18,74 @@ module JekyllObsidian
     ].freeze
     STRUCTURAL_PROPERTIES = (FrontMatter::SUPPORTED - TRANSLATABLE_PROPERTIES - %w[publish tab]).freeze
     URL_PROPERTIES = %w[
-      absolute_url canonical_url discussion_url docs_home_url
+      absolute_url canonical_url current_url discussion_url docs_home_url
       home_url href image markdown_url redirect_url route url
     ].freeze
     SOURCE_LINK_PROPERTIES = %w[edit history imported issue repository source].freeze
     LOCALE_PATTERN = /\A[A-Za-z]{2,8}(?:-[A-Za-z0-9]{1,8})*\z/
     RESERVED_LOCALE_PREFIXES = %w[assets].freeze
     MESSAGE_DEFAULTS = {
+      "favorites" => "Favorites", "favorite_save" => "Save", "favorite_remove" => "Remove favorite",
+      "favorite_saved" => "Saved", "favorites_empty" => "No favorites yet. Save an entry to find it here.",
+      "favorites_requires_js" => "Enable JavaScript to show favorites saved in this browser.",
+      "archive_refresh_error" => "Could not check for updates. Previously loaded entries remain available. Retry to check again.",
+      "flat_reading_enabled" => "Read in full: on",
+      "flat_reading_disabled" => "Read in full: off",
+      "favorite_recovery_required" => "A recovery copy is already saved. Download and clear it before repairing more data.",
+      "favorite_recovery_title" => "Recovery copies",
+      "favorite_recovery_description" => "Download the original data before clearing it. Restoring adds available favorites without replacing current ones.",
+      "favorite_recovery_download" => "Download original data",
+      "favorite_recovery_restore" => "Restore available favorites",
+      "favorite_recovery_clear" => "Clear recovery copies",
+      "favorite_recovery_restored" => "Available favorites restored. Original recovery copies are kept.",
+      "favorite_recovery_cleared" => "Recovery copies cleared. Current favorites are kept.",
+      "pdf_preview" => "Preview PDF",
+      "pdf_close" => "Close preview",
+      "pdf_loading" => "Loading PDF…",
+      "pdf_error" => "Preview unavailable. Open the PDF using its link.",
+      "favorite_storage_error" => "Could not save favorites. Allow browser storage or free some space, then retry.",
+      "favorite_storage_damaged" => "Some saved data is damaged. Healthy favorites are shown; original data is backed up before repair.",
+      "favorite_storage_unreadable" => "Could not read favorites. The stored data is damaged; original data has been kept.",
+      "favorite_storage_unsupported" => "Could not save favorites. Use a current browser over HTTPS or localhost.",
+      "favorite_storage_quota" => "Could not save favorites. Browser storage is full; free some space and retry.",
+      "favorite_storage_blocked" => "Could not save favorites. Allow browser storage and retry.",
+      "favorite_removed_article" => "This article is no longer published. Your saved summary and original link are kept.",
+      "favorites_refresh_error" => "Could not refresh articles. Your saved summaries are shown. Retry to continue.",
+      "undated" => "Undated",
+      "ledger_date" => "{month} {day}", "ledger_date_year" => "{month} {day}, {year}",
+      "ledger_months" => "January|February|March|April|May|June|July|August|September|October|November|December",
+      "ledger_weekdays" => "Sunday|Monday|Tuesday|Wednesday|Thursday|Friday|Saturday",
+      "ledger_entry" => "{count} entry", "ledger_entries" => "{count} entries",
+      "export" => "Export",
+      "export_title" => "Export Markdown",
+      "export_close" => "Close export",
+      "export_description" => "Combine matching entries into one Markdown file.",
+      "export_filters" => "Export filters",
+      "export_start" => "Start date",
+      "export_end" => "End date",
+      "export_download" => "Download Markdown",
+      "export_cancel" => "Cancel export",
+      "export_dates" => "Date range",
+      "export_entries" => "Entries",
+      "export_date" => "Date",
+      "export_article" => "Article",
+      "export_required" => "Choose a start and end date.",
+      "export_invalid" => "Enter valid dates.",
+      "export_order" => "The end date must be on or after the start date.",
+      "export_limit" => "Choose no more than {days} days, including both dates.",
+      "export_limit_hint" => "Up to {days} days, including both dates.",
+      "export_calculating" => "Finding matching entries…",
+      "export_matches" => "{count} entries to export",
+      "export_empty" => "No matching entries. Adjust the dates or filters.",
+      "export_unavailable" => "Could not prepare the export. Retry to continue.",
+      "export_progress" => "Preparing {done} of {count} entries…",
+      "export_loading_cards" => "Loading entry details…",
+      "export_too_many" => "{count} matching entries; export up to {limit} at a time. Narrow the dates or filters.",
+      "export_too_large" => "The export is too large. Narrow the dates or filters.",
+      "export_failed" => "{count} entries could not be loaded. Retry to download the complete file.",
+      "export_complete" => "Downloaded {count} entries.",
+      "export_cancelled" => "Export cancelled.",
+      "export_updated" => "The site changed. Review the updated selection before downloading.",
       "language" => "Language",
       "translation_missing" => "This page is not translated yet. The default-language version is shown.",
       "skip_to_content" => "Skip to content",
@@ -38,8 +99,13 @@ module JekyllObsidian
       "no_matching_entries" => "No entries match these filters.",
       "sources" => "Sources", "clear_filters" => "Clear filters", "retry" => "Retry",
       "archive_loading" => "Loading selected entries…",
+      "flat_reading" => "Read in full",
+      "reading_loading" => "Loading article…",
+      "reading_unavailable" => "Article could not be loaded.",
       "archive_unavailable" => "Selected entries could not be loaded. Retry or clear the filters.",
       "archive_results" => "{count} entries", "page_label" => "Page {page} of {pages}",
+      "pagination" => "Pagination", "page_number" => "Page {page}", "page_input" => "Page number",
+      "page_go" => "Go", "page_jump_error" => "Enter a whole number from 1 to {pages}.",
       "first_observed" => "First observed", "original" => "Original",
       "contact" => "Contact",
       "graph" => "Graph",
@@ -212,7 +278,7 @@ module JekyllObsidian
       ([@default_locale] + @locales.reject { |locale| locale == @default_locale }).each do |locale|
         config = BuildConfig.new(**@config.to_h.merge(i18n: nil, tag_labels: @locale_data.fetch(locale).fetch("tag_labels"), tag_aliases: @locale_data.fetch(locale).fetch("tag_aliases")))
         result = VaultCompiler.compile_single(
-          BuildRequest.new(
+          @request.with(
             snapshot: snapshots.fetch(locale),
             config: config,
             tab_memberships: tab_memberships
@@ -236,7 +302,7 @@ module JekyllObsidian
 
     def compile_disabled
       config = BuildConfig.new(**@config.to_h.merge(i18n: nil))
-      VaultCompiler.compile_single(BuildRequest.new(snapshot: @request.snapshot, config: config))
+      VaultCompiler.compile_single(@request.with(config: config))
     end
 
     def validate_configuration
@@ -337,6 +403,26 @@ module JekyllObsidian
         messages.each do |key, value|
           error("invalid_locale_message", "unknown message key #{key.inspect}", path) unless MESSAGE_DEFAULTS.key?(key)
           error("invalid_locale_message", "message #{key.inspect} must be a string", path) unless valid_text?(value)
+        end
+        { "ledger_months" => 12, "ledger_weekdays" => 7 }.each do |key, count|
+          next unless messages.key?(key) && valid_text?(messages[key])
+
+          names = messages.fetch(key).split("|", -1)
+          if names.length != count || names.any? { |name| name.strip.empty? }
+            error("invalid_locale_message", "message #{key.inspect} must contain exactly #{count} non-empty pipe-separated names", path)
+          end
+        end
+        { "ledger_date" => %w[month day], "ledger_date_year" => %w[month day year],
+          "ledger_entry" => %w[count], "ledger_entries" => %w[count] }.each do |key, required|
+          next unless messages.key?(key) && valid_text?(messages[key])
+
+          format = messages.fetch(key)
+          allowed = key.start_with?("ledger_date") ? %w[month day year] : %w[count]
+          tokens = format.scan(/\{([^{}]*)\}/).flatten
+          remainder = format.gsub(/\{(?:#{allowed.join('|')})\}/, "")
+          if (required - tokens).any? || remainder.match?(/[{}]/)
+            error("invalid_locale_message", "message #{key.inspect} requires #{required.map { |token| "{#{token}}" }.join(', ')}; allowed placeholders: #{allowed.join(', ')}", path)
+          end
         end
         maps = %w[tag_labels tag_aliases].to_h do |key|
           value = raw.fetch(key, {})
@@ -521,7 +607,7 @@ module JekyllObsidian
         return merged.reject { |key, _| key == "tab" }
       end
 
-      %w[id order topics].each do |property|
+      %w[id order topics layout].each do |property|
         next unless translated_tab.key?(property)
 
         error(
@@ -636,11 +722,6 @@ module JekyllObsidian
       website["alternates"] = alternates
       website["robots"] = "noindex" unless actual
       website["resources"] = resource_urls(locale)
-      archive = website.dig("theme_data", "archive")
-      if archive
-        archive_route = archive.fetch("url").delete_prefix(@config.baseurl.to_s)
-        archive["url"] = @url_builder.href(generated_route(archive_route, locale))
-      end
       website["home_route"] = prefixed_route(website.fetch("home_route", "/"), locale)
       localize_navigation_labels!(website, locale_data.fetch("messages"))
       preserve_default_navigation_order!(website, default_navigation_order)
@@ -666,8 +747,11 @@ module JekyllObsidian
         end
       end
       validate_localized_navigation!(website, locale)
+      website["alternates"] = [] if website.dig("theme_data", "favorites")
       website["canonical_url"] = if kind == "redirect"
         absolute_for(website.fetch("redirect_url"))
+      elsif website.dig("theme_data", "favorites")
+        @url_builder.absolute_url(website.fetch("home_route"))
       elsif actual
         @url_builder.absolute_url(route)
       else
@@ -703,17 +787,21 @@ module JekyllObsidian
       return nil if locale != @default_locale && file.route == "/sitemap.xml"
 
       route = generated_route(file.route, locale)
-      content = case file.media_type
-      when "application/json"
-        "#{JSON.generate(localize_data(JSON.parse(file.content), locale))}\n"
-      when "text/html"
-        localize_html(file.content, locale)
-      when "application/atom+xml", "application/xml"
-        localize_xml(file.content, locale)
-      else
+      content = if file.localize_content == false
         file.content
+      else
+        case file.media_type
+        when "application/json"
+          "#{JSON.generate(localize_data(JSON.parse(file.content), locale))}\n"
+        when "text/html"
+          localize_html(file.content, locale)
+        when "application/atom+xml", "application/xml"
+          localize_xml(file.content, locale)
+        else
+          file.content
+        end
       end
-      GeneratedFile.new(route: route, content: content, media_type: file.media_type)
+      GeneratedFile.new(route: route, content: content, media_type: file.media_type, localize_content: file.localize_content)
     end
 
     def generated_route(route, locale)
@@ -781,6 +869,15 @@ module JekyllObsidian
         match = node.text.match(/\AMissing fragment: (?<label>.*)\z/m)
         replace_generated_text(node, messages.fetch("missing_fragment").sub("{label}", match[:label]), locale) if match
       end
+      fragment.css("[data-website-pdf-source]").each do |node|
+        button = node.at_css("button[data-pdf-preview]")
+        unless button
+          error("invalid_external_media", "PDF preview markup requires a preview button: #{node['data-website-pdf-source']}")
+          next
+        end
+        %w[preview close loading error].each { |name| node["data-pdf-#{name}"] = messages.fetch("pdf_#{name}") }
+        button.content = messages.fetch("pdf_preview")
+      end
       fragment.css("object[type='application/pdf'] > a").each do |node|
         replace_generated_text(node, messages.fetch("download_pdf"), locale) if node.text == MESSAGE_DEFAULTS.fetch("download_pdf")
       end
@@ -827,7 +924,9 @@ module JekyllObsidian
       relative = "/" if relative.empty?
       return value if @shared_html_routes.include?(relative)
 
-      localized = if relative.start_with?("/assets/vault/", "/assets/website/")
+      localized = if relative.start_with?("/assets/website/archive/")
+        generated_route(relative, locale)
+      elsif relative.start_with?("/assets/vault/", "/assets/website/")
         relative
       else
         prefixed_route(relative, locale)
@@ -970,6 +1069,10 @@ module JekyllObsidian
 
     def localize_page_copy!(data, kind, messages)
       if kind == "blog-index"
+        if data.dig("website", "theme_data", "favorites")
+          data["title"] = localized_builtin_label(data.fetch("website"), "favorites", messages)
+          return
+        end
         return if data.dig("website", "theme_data", "archive") && data.dig("website", "home_route") == data.dig("website", "route")
         data["title"] = localized_builtin_label(data.fetch("website"), "blog", messages)
         return
@@ -994,11 +1097,12 @@ module JekyllObsidian
 
     def localize_navigation_labels!(website, messages)
       labels = if website.fetch("theme") == "minimal"
-        { "home" => "home", "blog" => "blog", "docs" => "docs", "portfolio" => "portfolio" }
+        { "home" => "home", "blog" => "blog", "docs" => "docs", "portfolio" => "portfolio", "favorites" => "favorites" }
       else
         { "home" => "overview", "docs" => "documentation" }
       end
       Array(website["navigation"]).each do |item|
+        next if item["id"] == "favorites" && !website.fetch("features").fetch("favorites")
         message_key = labels[item["id"]]
         next unless message_key
 

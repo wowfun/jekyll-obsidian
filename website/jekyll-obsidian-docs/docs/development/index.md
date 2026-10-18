@@ -32,6 +32,24 @@ website/bin/dev
 
 Setup installs locked Ruby and Node dependencies and builds the gem. After editing frontend sources, rerun the package command before previewing. Restart the preview after changing Ruby implementation files.
 
+On native Windows, install RubyInstaller Ruby+Devkit 4.0.6, Bundler 4.0.16, Node 26 and Git globally, then open a fresh PowerShell. Use the underlying commands instead of the Unix shell wrappers:
+
+```powershell
+cd website
+gem install bundler -v 4.0.16 --no-document
+bundle install
+npm ci
+npm run build
+bundle exec ruby scripts/package.rb --skip-assets
+bundle exec rake test
+npm run test:prepared
+npm run build:browser-sites
+npx playwright install chromium
+npx playwright test paged-archive.spec.ts
+```
+
+Gems use the shared Ruby installation. The lockfile includes `x64-mingw-ucrt`; npm dependencies stay under `website/node_modules`. Directory-link tests use junctions when symbolic-link privileges are unavailable. File-link tests require Windows Developer Mode or symbolic-link privileges and otherwise skip with a reason; Windows cannot create the control-character filenames covered by the POSIX audit test. Audit tests invoke Ruby directly, and preview tests terminate only their isolated child process.
+
 ## Run the tests
 
 ```sh
@@ -48,6 +66,8 @@ RUN_BROWSER_TESTS=1 website/bin/test
 ```
 
 The project workflow runs this full suite. Downstream workflows build and verify only their host content.
+
+Visual snapshots are separate for each operating system because native font rendering differs. After an intentional UI change, review and update the Windows and Linux baselines with `npx playwright test site-visual.spec.ts theme-visual.spec.ts --update-snapshots`, then rerun without that flag. Linux baselines must also pass the Ubuntu CI browser run.
 
 ## Build a production fixture
 

@@ -2,6 +2,8 @@
 
 require "json"
 require "minitest/autorun"
+require "open3"
+require_relative "support/filesystem_links"
 require_relative "support/warning_filter"
 require "jekyll_obsidian"
 
@@ -53,10 +55,10 @@ module CompilerTestHelpers
     )
   end
 
-  def compile(*entries, **overrides)
+  def compile(*entries, reference_time: Time.now, **overrides)
     snapshot = JekyllObsidian::Snapshot.new(entries: entries)
     config = JekyllObsidian::BuildConfig.new(**DEFAULT_CONFIG.merge(overrides))
-    request = JekyllObsidian::BuildRequest.new(snapshot: snapshot, config: config)
+    request = JekyllObsidian::BuildRequest.new(snapshot: snapshot, config: config, reference_time: reference_time)
     JekyllObsidian::VaultCompiler.compile(request)
   end
 
@@ -73,4 +75,5 @@ end
 
 class Minitest::Test
   include CompilerTestHelpers
+  include TestFilesystemLinks
 end

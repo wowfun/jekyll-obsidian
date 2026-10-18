@@ -10,6 +10,9 @@ require "tmpdir"
 require "jekyll"
 require_relative "../jekyll_obsidian"
 require_relative "workspace_layout"
+require_relative "template_filters"
+
+Liquid::Template.register_filter(JekyllObsidian::TemplateFilters)
 
 module JekyllObsidian
   module Adapter
@@ -242,7 +245,9 @@ module JekyllObsidian
         fatal("vault contains a non-regular file: #{relative}") unless stat.file?
 
         normalized = relative.tr(File::SEPARATOR, "/")
-        kind = if File.extname(normalized).downcase == ".md"
+        kind = if normalized == Recommendations::PATH
+          :recommendation_manifest
+        elsif File.extname(normalized).downcase == ".md"
           :note
         elsif File.basename(normalized) == LocalizedCompiler::LOCALE_MANIFEST
           :locale_manifest
@@ -252,10 +257,10 @@ module JekyllObsidian
         flags = File::RDONLY | (File.const_defined?(:NOFOLLOW) ? File::NOFOLLOW : 0)
         File.open(absolute, flags) do |file|
           pinned = file.stat
-          fatal("vault file changed during snapshot: #{relative}") unless pinned.file? && pinned.dev == stat.dev && pinned.ino == stat.ino
+          fatal("vault file changed during snapshot: #{relative}") unless opened_file_matches?(absolute, file, stat)
           entries << SnapshotEntry.new(
             path: normalized,
-            bytes: %i[note locale_manifest].include?(kind) ? file.read : nil,
+            bytes: %i[note locale_manifest recommendation_manifest].include?(kind) ? file.read : nil,
             kind: kind,
             media_type: kind == :note ? "text/markdown" : MediaPolicy.media_type(normalized),
             size: pinned.size,
@@ -352,14 +357,21 @@ module JekyllObsidian
       fatal("#{label} must be a non-symlink regular file") unless before.file? && !before.symlink?
       flags = File::RDONLY | (File.const_defined?(:NOFOLLOW) ? File::NOFOLLOW : 0)
       File.open(path, flags) do |file|
-        opened = file.stat
-        unless opened.file? && opened.dev == before.dev && opened.ino == before.ino
+        unless opened_file_matches?(path, file, before)
           fatal("#{label} changed while opening")
         end
         file.read
       end
     rescue SystemCallError => exception
       fatal("cannot read #{label}: #{exception.message}")
+    end
+
+    def opened_file_matches?(path, file, before)
+      current = File.lstat(path)
+      # Ruby on Windows reports different dev values for lstat and IO#stat.
+      # File.identical? compares the native handle identity on that platform.
+      current.file? && !current.symlink? && file.stat.file? &&
+        current.dev == before.dev && current.ino == before.ino && File.identical?(path, file)
     end
 
     def repository_identity(site, layout)
@@ -380,10 +392,12 @@ module JekyllObsidian
     end
 
     def compile(site, layout)
+      reference_time = Time.now
       repository = repository_identity(site, layout)
       Jekyll.logger.warn("Website:", "repository identity unavailable; GitHub collaboration links are hidden") unless repository
       website = site.config.fetch("website")
       request = BuildRequest.new(
+        reference_time: reference_time,
         snapshot: build_snapshot(layout),
         config: BuildConfig.new(
           title: site.config["title"].to_s,

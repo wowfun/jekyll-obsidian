@@ -55,7 +55,7 @@ module JekyllObsidian
     NOTE_EXTENSION = ".md"
     TRANSLATIONS_DIRECTORY = "_translations/"
     THEMES = BuiltInThemes::IDS
-    FEATURE_KEYS = %w[search tags feed graph relations previews outline].freeze
+    FEATURE_KEYS = %w[search tags feed graph relations previews outline favorites].freeze
     COMMENT_KEYS = %w[enabled repository repository_id category category_id].freeze
     ANALYTICS_PROVIDERS = %w[cloudflare google].freeze
     CONTACT_KEYS = %w[label url].freeze
@@ -77,7 +77,8 @@ module JekyllObsidian
     NAVIGATION_BUILTINS = {
       "home" => { "order" => 0, "visible" => true }.freeze,
       "blog" => { "order" => 10, "visible" => true }.freeze,
-      "docs" => { "order" => 20, "visible" => true }.freeze
+      "docs" => { "order" => 20, "visible" => true }.freeze,
+      "favorites" => { "order" => 15, "visible" => true }.freeze
     }.freeze
     PORTFOLIO_NAVIGATION_DEFAULTS = {
       "path" => "portfolio", "order" => 30, "visible" => true
@@ -93,11 +94,11 @@ module JekyllObsidian
     THEME_FEATURE_DEFAULTS = {
       "minimal" => {
         "search" => true, "tags" => true, "feed" => true,
-        "graph" => true, "relations" => true, "previews" => true, "outline" => true
+        "graph" => true, "relations" => true, "previews" => true, "outline" => true, "favorites" => false
       },
       "docs" => {
         "search" => true, "tags" => false, "feed" => false,
-        "graph" => true, "relations" => true, "previews" => true, "outline" => true
+        "graph" => true, "relations" => true, "previews" => true, "outline" => true, "favorites" => false
       },
     }.transform_values(&:freeze).freeze
     MutableNote = Struct.new(
@@ -203,6 +204,7 @@ module JekyllObsidian
 
     def compile
       validate_request
+      return BuildFailure.new(diagnostics: sorted_diagnostics) if @diagnostics.any? { |item| item.code == "invalid_request" }
       resolve_html_publication
       index_snapshot
       parse_public_notes
@@ -221,7 +223,8 @@ module JekyllObsidian
         url_builder: @url_builder,
         theme: @theme,
         member_ids_by_tab_id: @request.tab_memberships,
-        home_archive: @home_config["layout"] == "archive"
+        home_archive: @home_config["layout"] == "archive",
+        favorites: @features.fetch("favorites")
       )
       @diagnostics.concat(navigation.diagnostics)
       theme_config = EffectiveThemeConfig.new(
@@ -235,6 +238,7 @@ module JekyllObsidian
         home: @home_config,
         blog: @blog_config,
         site: @config,
+        reference_time: @request.reference_time,
         url_builder: @url_builder
       )
       theme_output = BuiltInThemes.resolve(@theme).render(model: published_site, config: theme_config)
@@ -272,6 +276,7 @@ module JekyllObsidian
         error("invalid_request", "compile expects a BuildRequest containing Snapshot and BuildConfig")
         return
       end
+      error("invalid_request", "reference_time must be an explicit Time supplied by the caller") unless @request.reference_time.is_a?(Time)
 
       @config.to_h.each do |name, value|
         next if FrontMatter.valid_output_text?(value.to_s)
@@ -306,12 +311,15 @@ module JekyllObsidian
       })
       @feed_config = output_options("feed", @config.feed, { "max_entries" => nil })
       @home_config = output_options("home", @config.home, { "recent_posts_limit" => 6, "layout" => "recent" })
-      @blog_config = output_options("blog", @config.blog, { "page_size" => nil, "utc_offset" => nil, "facets" => { "source" => "source/", "topic" => "topics/" } })
+      @blog_config = output_options("blog", @config.blog, { "page_size" => nil, "utc_offset" => nil, "timeline_granularity" => "month", "ledger_group_by" => "year", "export_max_days" => 7, "facets" => { "source" => "source/", "topic" => "topics/" } })
       validate_output_option(@home_config, "home", "layout", "recent") { |value| %w[recent archive].include?(value) }
       validate_output_option(@blog_config, "blog", "page_size", nil) { |value| value.nil? || (value.is_a?(Integer) && value.between?(1, 100)) }
       validate_output_option(@blog_config, "blog", "utc_offset", nil) { |value| value.nil? || value.is_a?(String) && value.match?(/\A[+-](?:0\d|1[0-4]):[0-5]\d\z/) }
+      validate_output_option(@blog_config, "blog", "timeline_granularity", "month") { |value| %w[month day].include?(value) }
+      validate_output_option(@blog_config, "blog", "ledger_group_by", "year") { |value| %w[year day].include?(value) }
+      validate_output_option(@blog_config, "blog", "export_max_days", 7) { |value| value.is_a?(Integer) && value.positive? }
       validate_output_option(@blog_config, "blog", "facets", { "source" => "source/", "topic" => "topics/" }) do |value|
-        value.is_a?(Hash) && !value.empty? && value.all? { |key, prefix| key.is_a?(String) && key.match?(/\A[a-z][a-z0-9_-]*\z/) && !%w[page year month].include?(key) && prefix.is_a?(String) && prefix.match?(/\A[a-z][a-z0-9_-]*\/\z/) } && value.values.uniq.length == value.length
+        value.is_a?(Hash) && !value.empty? && value.all? { |key, prefix| key.is_a?(String) && key.match?(/\A[a-z][a-z0-9_-]*\z/) && !%w[page year month day].include?(key) && prefix.is_a?(String) && prefix.match?(/\A[a-z][a-z0-9_-]*\/\z/) } && value.values.uniq.length == value.length
       end
       validate_output_option(@search_config, "search", "mode", "full") { |value| %w[full summary].include?(value) }
       validate_output_option(@search_config, "search", "content_types", []) do |value|
@@ -388,6 +396,7 @@ module JekyllObsidian
         normalized[name] = value
       end
       @features = THEME_FEATURE_DEFAULTS.fetch(@theme).merge(normalized).sort.to_h.freeze
+      error("invalid_feature", "favorites requires the minimal theme") if @features.fetch("favorites") && @theme != "minimal"
     end
 
     def resolve_comments_config
@@ -770,6 +779,14 @@ module JekyllObsidian
           @attachment_basename_index[basename] << path
         when :locale_manifest
           # Locale manifests are compiler metadata, never public vault assets.
+        when :recommendation_manifest
+          begin
+            # BuildRequest snapshots can also be supplied without the filesystem adapter.
+            raise ArgumentError, "recommendations must be at the vault root" unless path == Recommendations::PATH
+            @recommendations = Recommendations.parse(entry.bytes.to_s)
+          rescue JSON::ParserError, ArgumentError => exception
+            error("invalid_recommendations", exception.message, path)
+          end
         when :symlink
           error("symlink_rejected", "symlinks are not accepted in a vault snapshot", path)
         else
@@ -1206,7 +1223,13 @@ module JekyllObsidian
     end
 
     def resolve_occurrence(note, occurrence)
-      target_text, fragment, options = split_target(occurrence.raw_target, occurrence.kind)
+      begin
+        target_text, fragment, options = split_target(occurrence.raw_target, occurrence.kind)
+      rescue ExternalMedia::Invalid => exception
+        occurrence.unresolved = true
+        error("invalid_pdf_options", exception.message, note.id, occurrence.source_span)
+        return
+      end
       occurrence.fragment = fragment
       occurrence.options = options
 
@@ -1607,7 +1630,11 @@ module JekyllObsidian
       when :image
         image_node(node.document, occurrence, descriptor.source_url)
       when :direct_video
-        external_video_node(node.document, descriptor, occurrence.display)
+        external_av_node(node.document, descriptor, occurrence.display, "video")
+      when :direct_audio
+        external_av_node(node.document, descriptor, occurrence.display, "audio")
+      when :pdf
+        external_pdf_node(node.document, descriptor, occurrence.display)
       when :player
         external_player_node(node.document, descriptor, occurrence.display)
       when :web_frame
@@ -1838,7 +1865,9 @@ module JekyllObsidian
 
       notes = @notes.values.sort_by(&:id).map do |note|
         context = TransclusionContext.new(host_id: note.id, sequence: 0, instances: 0, bytes: 0)
-        content = render_with_transclusions(note.id, [], context, depth: 0).to_html
+        fragment = render_with_transclusions(note.id, [], context, depth: 0)
+        presentation = tab_landing_presentation(note, fragment)
+        content = fragment.to_html
         assert_block_anchors_rendered(note, content)
         PublishedNote.new(
           id: note.id,
@@ -1854,7 +1883,7 @@ module JekyllObsidian
           ),
           authored_text: note.authored_text,
           preview: note.preview,
-          outline: note.outline,
+          outline: note.outline.reject { |heading| heading.fetch("id") == presentation["hidden_title_id"] },
           updated: note.updated,
           created: note.created,
           content_type: note.content_type,
@@ -1863,6 +1892,7 @@ module JekyllObsidian
           nav_exclude: note.nav_exclude,
           directory_index: directory_index_note?(note.id),
           has_h1: note.has_h1,
+          presentation: presentation,
           feature_flags: note.feature_flags,
           content_security: content_security_needs(content),
           image_url: published_image_url(note),
@@ -1878,11 +1908,30 @@ module JekyllObsidian
       PublishedSiteModel.new(
         notes: notes,
         notes_by_id: notes.to_h { |note| [note.id, note] },
+        recommendations: @recommendations || {},
         directory_index_paths: @directory_index_paths,
         relations: relations,
         graph_edges: graph_edges,
         graph_degrees: graph_degrees_for(notes, graph_edges)
       )
+    end
+
+    # Apply landing-page presentation to this page's final fragment only. The
+    # source fragment stays intact when another note transcludes this index.
+    def tab_landing_presentation(note, fragment)
+      return {} unless note.content_type == "page" && directory_index_note?(note.id) && note.properties["tab"]
+
+      first = note.outline.first
+      label = note.properties.fetch("tab")["label"] || note.title
+      return {} unless first && first.fetch("level") == 1 && first.fetch("label").split.join(" ") == label.split.join(" ")
+
+      heading = fragment.element_children.first
+      return {} unless heading&.name == "h1" && heading["id"] == first.fetch("id")
+
+      heading["class"] = [heading["class"], "visually-hidden"].compact.join(" ")
+      heading.css("a").each { |link| link.replace(link.children) }
+      { "hidden_title_id" => first.fetch("id"),
+        "empty_intro" => fragment.children.all? { |node| node == heading || (node.text? && node.text.strip.empty?) } }
     end
 
     def published_properties(note)
@@ -1919,12 +1968,13 @@ module JekyllObsidian
         .filter_map { |node| ExternalMedia.https_origin(node["src"]) }
         .uniq
         .sort
+      pdf_sources = fragment.css("[data-website-pdf-source]").filter_map { |node| ExternalMedia.https_origin(node["data-website-pdf-source"]) }.uniq.sort
       tweet = !fragment.at_css("[data-website-tweet]").nil?
       ContentSecurityNeeds.new(
         media_sources: media_sources,
-        frame_sources: (frame_sources + (tweet ? ["https://platform.twitter.com"] : [])).uniq.sort,
+        frame_sources: (frame_sources + (tweet ? ["https://platform.twitter.com"] : []) + (pdf_sources.empty? ? [] : ["blob:"])).uniq.sort,
         script_sources: tweet ? ["https://platform.twitter.com"] : [],
-        connect_sources: []
+        connect_sources: pdf_sources
       )
     end
 
@@ -2494,12 +2544,11 @@ module JekyllObsidian
         options["height"] = height.to_i if height
       end
 
-      if File.extname(target.to_s).downcase == ".pdf" && fragment
-        fragment.split("&").each do |part|
-          key, value = part.split("=", 2)
-          options[key] = value.to_i if %w[page height].include?(key) && value&.match?(/\A\d+\z/)
-        end
-        fragment = nil if options.any?
+      if kind == :embed && File.extname(target.to_s).downcase == ".pdf" && fragment
+        page, height = ExternalMedia.pdf_options(fragment)
+        options["page"] = page if page
+        options["height"] = height if height
+        fragment = nil
       end
       [target.to_s.strip, fragment&.strip, options]
     end
@@ -2645,16 +2694,46 @@ module JekyllObsidian
       node
     end
 
-    def external_video_node(document, descriptor, label)
-      node = media_node(document, "video", descriptor.source_url, descriptor.media_type)
-      node["class"] = "website-external-video"
+    def external_av_node(document, descriptor, label, kind)
+      node = media_node(document, kind, descriptor.source_url, descriptor.media_type)
+      node["class"] = "website-external-#{kind}"
       node["aria-label"] = label.to_s.strip unless label.to_s.strip.empty?
       fallback = Nokogiri::XML::Node.new("a", document)
       fallback["href"] = descriptor.fallback_url
       fallback["rel"] = "noopener noreferrer"
-      fallback.content = label.to_s.strip.empty? ? "Open video" : label.to_s.strip
+      fallback.content = label.to_s.strip.empty? ? "Open #{kind}" : label.to_s.strip
       node.add_child(fallback)
       node
+    end
+
+    def external_pdf_node(document, descriptor, label)
+      wrapper = Nokogiri::XML::Node.new("figure", document)
+      wrapper["class"] = "website-external-pdf"
+      wrapper["data-website-pdf-source"] = descriptor.source_url
+      wrapper["data-pdf-height"] = descriptor.height.to_s
+      wrapper["data-pdf-preview"] = "Preview PDF"
+      wrapper["data-pdf-close"] = "Close preview"
+      wrapper["data-pdf-loading"] = "Loading PDF…"
+      wrapper["data-pdf-error"] = "Preview unavailable. Open the PDF using its link."
+      fallback = Nokogiri::XML::Node.new("a", document)
+      fallback["class"] = "website-external-pdf__fallback"
+      fallback["href"] = descriptor.fallback_url
+      fallback["target"] = "_blank"
+      fallback["rel"] = "noopener noreferrer"
+      fallback.content = label.to_s.strip.empty? ? "Open PDF" : label.to_s.strip
+      wrapper.add_child(fallback)
+      button = Nokogiri::XML::Node.new("button", document)
+      button["type"] = "button"
+      button["data-pdf-preview"] = ""
+      button["aria-expanded"] = "false"
+      button["hidden"] = ""
+      button.content = "Preview PDF"
+      wrapper.add_child(button)
+      status = Nokogiri::XML::Node.new("span", document)
+      status["data-pdf-status"] = ""
+      status["role"] = "status"
+      wrapper.add_child(status)
+      wrapper
     end
 
     def external_player_node(document, descriptor, label)
@@ -2730,9 +2809,9 @@ module JekyllObsidian
       node = Nokogiri::XML::Node.new("object", document)
       node["data"] = data
       node["type"] = "application/pdf"
-      node["height"] = occurrence.options.fetch("height", 640).to_s
+      node["height"] = occurrence.options.fetch("height", ExternalMedia::PDF_DEFAULT_HEIGHT).to_s
       fallback = Nokogiri::XML::Node.new("a", document)
-      fallback["href"] = href
+      fallback["href"] = data
       fallback.content = "Download PDF"
       node.add_child(fallback)
       node

@@ -44,6 +44,7 @@ class CustomTabTest < Minitest::Test
         label: 7
         order: first
         topics: favorite
+        layout: grid
         visible: false
       tabs:
         - favorites
@@ -59,6 +60,7 @@ class CustomTabTest < Minitest::Test
     assert_includes messages, "tab.label must be a non-empty string containing only output-safe Unicode characters"
     assert_includes messages, "tab.order must be an integer"
     assert_includes messages, "tab.topics must be an array of non-empty strings"
+    assert_includes messages, "tab.layout must be collection or archive"
     assert_includes messages, "tabs entries must be unique lowercase ASCII identifiers"
   end
 
@@ -171,6 +173,121 @@ class CustomTabTest < Minitest::Test
     assert_equal ["docs/guide.md"], page(result, "/zh-CN/favorites/").data.dig("website", "theme_data", "tab_members").map { |card| card.fetch("id") }
     assert_equal "指南", page(result, "/zh-CN/favorites/").data.dig("website", "theme_data", "tab_members", 0, "title")
     assert_equal "/site/zh-CN/docs/guide/", page(result, "/zh-CN/favorites/").data.dig("website", "theme_data", "tab_members", 0, "url")
+  end
+
+  def test_custom_tab_cards_use_localized_tag_labels_without_changing_membership
+    %w[minimal docs].each do |theme|
+      result = compile(
+        note("podcast/index.md", "---\npublish: true\ncontent_type: page\ntab:\n  id: podcasts\n  topics: [source/podcast]\n---\n# Podcasts"),
+        note("episodes/one.md", "---\npublish: true\ncontent_type: post\ndate: 2026-10-15\ntags: [source/podcast, topics/agents, other]\n---\n# Episode"),
+        locale_manifest("_locale.yml", "name: English\ntag_labels:\n  source/podcast: Podcasts\n  topics/agents: Agents\n"),
+        locale_manifest("_translations/zh-CN/_locale.yml", "name: 简体中文\ntag_labels:\n  source/podcast: 播客\n  topics/agents: 智能体\n"),
+        theme: theme, i18n: I18N.merge("enabled" => true)
+      )
+      assert result.success?, result.diagnostics.map(&:message).join("\n")
+      { "/podcast/" => %w[Podcasts Agents other], "/zh-CN/podcast/" => %w[播客 智能体 other] }.each do |route, names|
+        cards = page(result, route).data.dig("website", "theme_data", "tab_members")
+        assert_equal ["episodes/one.md"], cards.map { |card| card.fetch("id") }, theme
+        assert_equal names.sort, cards.first.fetch("topics").map { |topic| topic.fetch("name") }.sort, theme
+      end
+    end
+  end
+
+  def test_archive_tabs_have_independent_localized_dates_facets_and_current_descriptors
+    result = compile(
+      note("index.md", "---\npublish: true\n---\n# Home"),
+      note("podcast/index.md", "---\npublish: true\ncontent_type: page\ntab:\n  id: podcasts\n  layout: archive\n  topics: [source/podcast]\n---\n# Podcasts\n\nIntroduction."),
+      note("mirror/index.md", "---\npublish: true\ncontent_type: page\ntab:\n  id: mirror\n  layout: archive\n  topics: [source/podcast]\n---\n# Mirror"),
+      note("empty/index.md", "---\npublish: true\ncontent_type: page\ntab:\n  id: empty\n  layout: archive\n---\n# Empty"),
+      note("episodes/a.md", "---\npublish: true\ncontent_type: post\ndate: 2026-10-14T18:00:00Z\ntags: [source/podcast, topics/agents]\n---\n# A newest"),
+      note("episodes/z.md", "---\npublish: true\ncontent_type: post\ndate: 2026-10-14T10:00:00Z\ntags: [source/podcast, topics/tools]\n---\n# Z older"),
+      note("github/outside.md", "---\npublish: true\ncontent_type: post\ndate: 2026-10-16\ntags: [source/github, topics/outside]\n---\n# Outside"),
+      locale_manifest("_locale.yml", "name: English\ntag_labels:\n  topics/agents: Agents\n"),
+      locale_manifest("_translations/zh-CN/_locale.yml", "name: 简体中文\ntag_labels:\n  topics/agents: 智能体\n"),
+      note("_translations/zh-CN/podcast/index.md", "---\npublish: true\ntab:\n  label: 播客\n---\n# 播客"),
+      reference_time: Time.utc(2026, 12, 31, 16, 30),
+      theme: "minimal", baseurl: "/garden", i18n: I18N.merge("enabled" => true),
+      home: { "layout" => "archive" }, features: { "favorites" => true },
+      blog: { "page_size" => 1, "utc_offset" => "+08:00", "timeline_granularity" => "day", "ledger_group_by" => "day" }
+    )
+    assert result.success?, result.diagnostics.map(&:message).join("\n")
+    %w[/ /zh-CN/].each do |prefix|
+      landing = page(result, "#{prefix}podcast/")
+      data = landing.data.fetch("website")
+      archive = data.dig("theme_data", "archive")
+      assert_equal "podcasts", data.fetch("active_navigation_id")
+      assert_equal "blog-index", data.fetch("kind")
+      assert_equal 2027, data.dig("theme_data", "ledger_current_year")
+      assert_equal 2, archive.fetch("total")
+      assert_equal 2, archive.fetch("chunks").length
+      assert_equal %w[2026-10-15 2026-10-14], archive.fetch("days").keys
+      assert_equal %w[agents tools], archive.dig("facets", "topic").map { |item| item.fetch("id") }.sort
+      assert_equal prefix == "/" ? "Agents" : "智能体", archive.dig("facets", "topic").find { |item| item.fetch("id") == "agents" }.fetch("name")
+      assert_equal "A newest", data.dig("theme_data", "archive_groups", 0, "posts", 0, "title")
+      current_route = "/assets/website/#{prefix == '/' ? '' : 'i18n/zh-CN/'}archive/tabs/podcasts/current.json"
+      assert_equal "/garden#{current_route}", archive.fetch("current_url")
+      descriptor = generated_json(result, current_route)
+      assert_equal archive.fetch("url"), descriptor.fetch("url")
+      mirror = page(result, "#{prefix}mirror/").data.dig("website", "theme_data", "archive")
+      assert_equal data.dig("theme_data", "tab_member_ids"), page(result, "#{prefix}mirror/").data.dig("website", "theme_data", "tab_member_ids")
+      refute_equal archive.fetch("generation"), mirror.fetch("generation")
+      assert_equal 3, page(result, prefix).data.dig("website", "theme_data", "archive", "total")
+      assert_equal 3, page(result, "#{prefix}favorites/").data.dig("website", "theme_data", "archive", "total")
+      assert_equal 0, page(result, "#{prefix}empty/").data.dig("website", "theme_data", "archive", "total")
+    end
+    assert_includes page(result, "/podcast/").content, "Introduction."
+    assert_equal result.generated_files.map(&:route).uniq, result.generated_files.map(&:route)
+  end
+
+  def test_suppressed_tab_heading_preserves_inline_markup_and_does_not_hide_transclusions
+    %w[minimal docs].each do |theme|
+      result = compile(
+        note("collections/index.md", "---\npublish: true\ncontent_type: page\ntab:\n  id: collections\n---\n# **Collect**ions\n"),
+        note("host.md", "---\npublish: true\n---\n# Host\n\n![[collections/index]]"),
+        theme: theme)
+      assert result.success?, result.diagnostics.map(&:message).join("\n")
+      landing = page(result, "/collections/")
+      heading = Nokogiri::HTML5.fragment(landing.content).at_css("h1.visually-hidden")
+      assert_equal "Collect", heading.at_css("strong")&.text, theme
+      assert_empty heading.css("a"), theme
+      assert_empty landing.data.dig("website", "outline"), theme
+      embedded = Nokogiri::HTML5.fragment(page(result, "/host/").content).at_css(".website-transclusion h1")
+      refute_includes embedded["class"].to_s.split, "visually-hidden", theme
+      assert_equal "Collect", embedded.at_css("strong")&.text, theme
+    end
+  end
+
+  def test_tag_labels_are_consistent_in_articles_ledgers_and_taxonomy_without_changing_anchors
+    %w[minimal docs].each do |theme|
+      result = compile(
+        note("posts/a.md", "---\npublish: true\ncontent_type: post\ndate: 2026-10-15\ntags: [topics/agents]\n---\n# Post"),
+        locale_manifest("_locale.yml", "name: English\ntag_labels:\n  topics/agents: Agents\n"),
+        locale_manifest("_translations/zh-CN/_locale.yml", "name: 简体中文\ntag_labels:\n  topics/agents: 智能体\n"),
+        theme: theme, features: { "tags" => true }, i18n: I18N.merge("enabled" => true))
+      assert result.success?, result.diagnostics.map(&:message).join("\n")
+      website = page(result, "/zh-CN/posts/a/").data.fetch("website")
+      assert_equal ["智能体"], website.fetch("topic_links").map { |link| link.fetch("name") }, theme
+      assert_equal ["智能体"], website.fetch("tag_links").map { |link| link.fetch("name") }, theme
+      assert_equal page(result, "/posts/a/").data.dig("website", "topic_links", 0, "anchor"), website.fetch("topic_links").first.fetch("anchor"), theme
+      if theme == "minimal"
+        card = page(result, "/zh-CN/blog/").data.dig("website", "theme_data", "archive_groups", 0, "posts", 0)
+        assert_equal "智能体", card.fetch("topics").first.fetch("name")
+      else
+        assert_equal "智能体", page(result, "/zh-CN/tags/").data.dig("website", "theme_data", "tag_groups", 0, "name")
+      end
+    end
+  end
+
+  def test_archive_tab_layout_cannot_be_overridden_by_translations_or_ignored_by_docs
+    root = note("podcast/index.md", "---\npublish: true\ncontent_type: page\ntab:\n  id: podcasts\n  layout: archive\n---\n# Podcasts")
+    result = compile(root, theme: "docs")
+    assert_diagnostic result, "invalid_tab_layout", "podcast/index.md"
+    result = compile(root,
+      locale_manifest("_locale.yml", "name: English\n"),
+      locale_manifest("_translations/zh-CN/_locale.yml", "name: 简体中文\n"),
+      note("_translations/zh-CN/podcast/index.md", "---\npublish: true\ntab:\n  layout: collection\n---\n# 播客"),
+      theme: "minimal", i18n: I18N.merge("enabled" => true))
+    assert_diagnostic result, "localized_structure_override", "_translations/zh-CN/podcast/index.md"
   end
 
   private

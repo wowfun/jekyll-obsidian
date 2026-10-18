@@ -62,9 +62,9 @@ Each feature has one of three outcomes:
 | External HTTP and HTTPS links | render | Preserved with context-safe escaping. |
 | `javascript:`, `data:`, `file:`, and `vbscript:` Markdown URLs | unsupported | Rejected. |
 | Images: APNG, AVIF, BMP, GIF, JPEG, PNG, SVG, WebP | render | Local files publish only when reached from public authored content or its transclusion closure. HTTPS images and GIFs remain remote. Wikilink dimensions and Markdown alt suffixes such as `alt\|320x180` are supported for both. Animated formats are copied without transcoding. |
-| Audio: 3GP, FLAC, M4A, MP3, OGG, WAV | render | Rendered with native controls when local and reachable. In v1, `.3gp` is always audio. |
+| Audio: 3GP, FLAC, M4A, MP3, OGG, WAV | render | Local reachable files and direct HTTPS audio URLs render with native controls. In v1, `.3gp` is always audio. |
 | Video: MKV, MOV, MP4, OGV, WebM | render | Local reachable files and direct HTTPS video URLs render with native controls. In v1, `.webm` is always video; browser codec support still applies. |
-| PDF embeds | render | Native PDF objects support page and height options. Only local published attachments are embedded. |
+| PDF embeds | render | Local published attachments use native PDF objects. Direct HTTPS PDF URLs and arXiv `/pdf/` URLs use compact links and opt-in, CORS-enabled, verified-Blob previews. Both support page and height options. |
 | YouTube, Bilibili, and Vimeo video links | render | Markdown image syntax produces a canonical lazy player with the provider's minimum permissions. Shortened URLs are rejected because builds never expand them over the network. |
 | X and Twitter status links | render | Markdown image syntax produces a viewport-near Tweet widget with tracking protection enabled and a canonical X fallback link. The provider script and frame permission exist only on pages that contain a Tweet. |
 | HTTPS iframe embeds | render | A complete authored `iframe` element is parsed and rebuilt by the compiler. Known video providers use their canonical player policy; all other pages receive a fixed sandbox, lazy loading, an accessible title, and a fallback link. Authored scripts, event handlers, `srcdoc`, permission policy, and sandbox values are discarded. Credentials, custom ports, insecure URLs, and unclosed frames fail the build. |

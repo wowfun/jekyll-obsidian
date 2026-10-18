@@ -2,6 +2,8 @@
 
 [English](README.md) | 简体中文
 
+两个主题的顶栏操作均使用带无障碍名称和悬停提示的紧凑图标。笔记可嵌入受支持的本地文件和 HTTPS 媒体，包括原生音视频、PDF、YouTube、Bilibili、Vimeo 和 X；格式及示例见[语法指南](website/jekyll-obsidian-docs/_translations/zh-CN/docs/Syntax.md)。分页归档显示最多五个邻近页码，并支持输入页码直接跳转。
+
 `jekyll-obsidian` 可以将 Markdown 文件夹（包括 Obsidian 知识库）发布为博客或文档站。继续在编辑器中写作并推送，GitHub Actions 就会构建和发布。仓库只需添加配置文件和工作流，发布实现通过 `jekyll-obsidian-site` Ruby gem 安装。
 
 在线预览：[sinputer.top/jekyll-obsidian](https://sinputer.top/jekyll-obsidian/)
@@ -126,6 +128,12 @@ jekyll-obsidian dev
 - [部署](website/jekyll-obsidian-docs/_translations/zh-CN/docs/Deployment.md)：介绍 GitHub Pages、URL 路径和自定义域名。
 
 贡献者可以继续阅读[开发者指南](website/jekyll-obsidian-docs/docs/development/index.md)。
+
+Windows 原生开发可使用 RubyInstaller Ruby+Devkit 4.0.6、Bundler 4.0.16 和 Node 26。开发者指南提供了 PowerShell 构建与归档测试命令。完整 Ruby 测试可通过 `bundle exec rake test` 运行。Windows 缺少符号链接权限时，目录链接测试使用 junction；只有文件符号链接及 Windows 不支持的文件名用例会跳过，并说明原因。预览测试会隔离并只终止自己的子进程。
+
+## 推荐与栏目归档
+
+在内容根目录放置 `_recommendations.json`，可提供有时效的文章推荐；设置 `tab.layout: archive`，可让栏目页提供限定在当前成员内的日期、主题筛选与分页。推荐格式见[自定义配置](website/jekyll-obsidian-docs/_translations/zh-CN/docs/Customization.md#有时效的推荐)，归档设置见[自定义标签页](website/jekyll-obsidian-docs/_translations/zh-CN/docs/Customization.md#自定义标签页)。
 
 ## 许可证
 

@@ -81,6 +81,7 @@ class NavigationConfigurationTest < Minitest::Test
         "home" => { "order" => 0, "visible" => true },
         "blog" => { "order" => 10, "visible" => true },
         "docs" => { "order" => 20, "visible" => true },
+      "favorites" => { "order" => 15, "visible" => true },
         "portfolio" => { "path" => "portfolio", "order" => 30, "visible" => true }
       },
       navigation
@@ -695,7 +696,7 @@ class NavigationConfigurationTest < Minitest::Test
   def normalized_navigation(raw)
     config = JekyllObsidian::BuildConfig.new(**DEFAULT_CONFIG.merge(navigation: raw))
     compiler = JekyllObsidian::VaultCompiler.new(
-      JekyllObsidian::BuildRequest.new(snapshot: JekyllObsidian::Snapshot.new(entries: []), config: config)
+      JekyllObsidian::BuildRequest.new(snapshot: JekyllObsidian::Snapshot.new(entries: []), config: config, reference_time: Time.utc(2026))
     )
     compiler.send(:resolve_navigation_config)
     [compiler.instance_variable_get(:@navigation_config), compiler.instance_variable_get(:@diagnostics)]

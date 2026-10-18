@@ -6,7 +6,7 @@ description: 使用随附的 GitHub Pages 工作流检查并部署任意内置�
 
 # 部署
 
-[Pages 工作流示例](https://github.com/wowfun/jekyll-obsidian/blob/v0.2.1/examples/pages.yml)使用版本化的 Jekyll Obsidian Action。Action 安装 Ruby，并使用对应版本的 `jekyll-obsidian-site` gem 构建宿主内容。宿主提交了 Gemfile 和锁文件时，Action 使用 frozen bundle；否则直接安装 gem。下游仓库无需安装 npm 依赖或运行本项目的回归测试。
+[Pages 工作流示例](https://github.com/wowfun/jekyll-obsidian/blob/v0.3.0/examples/pages.yml)使用版本化的 Jekyll Obsidian Action。Action 安装 Ruby，并使用对应版本的 `jekyll-obsidian-site` gem 构建宿主内容。宿主提交了 Gemfile 和锁文件时，Action 使用 frozen bundle；否则直接安装 gem。下游仓库无需安装 npm 依赖或运行本项目的回归测试。
 
 ## 拉取请求与推送
 
@@ -22,6 +22,10 @@ description: 使用随附的 GitHub Pages 工作流检查并部署任意内置�
 
 Action 接受 `url` 和 `baseurl`，通过 `site-path` 返回输出目录的绝对路径。示例工作流将 Pages 元数据传给这些输入，并上传返回的目录。
 
+## 归档部署信息
+
+分页归档与收藏会生成轻量的 `assets/website/archive/current.json` 描述文件，各语言的副本位于 `assets/website/i18n/<locale>/archive/`。浏览器返回页面或点击重试时，会读取它来发现当前索引版本，无需再次下载整页 HTML。请将它与对应归档文件一起发布。自定义缓存响应头时，应允许此文件重新验证；只有带版本哈希的路径适合永久缓存。
+
 ## 查找已部署站点
 
 部署作业和 **Settings > Pages** 会显示站点地址。普通项目仓库通常使用 `https://<owner>.github.io/<repository>/`，名为 `<owner>.github.io` 的仓库使用根路径。
@@ -35,6 +39,15 @@ jekyll-obsidian build --url https://example.com --baseurl /project
 ```
 
 上传 `.jekyll-obsidian-cache/site/`。根路径站点使用 `--baseurl ""`。生产构建需要域名来源，也可以在站点配置中设置 `url` 和 `baseurl`；显式命令行参数优先。
+
+## Markdown 导出资源
+
+将生成的 `.md` 文件与 HTML、归档资源一起上传，并从同一来源提供。
+推荐使用 `text/markdown` 或 `text/plain`；也支持通用的
+`application/octet-stream` 和未设置 Content-Type 的响应。
+HTML/XML 响应及可识别的整页回退内容会被拒绝，包括返回 HTTP 200 的回退页。
+不要把缺失的 Markdown 请求重写到首页。任一正文失败都不会触发下载，
+重试会复用该次导出中已经成功载入的其他正文。
 
 ## 自定义域名
 

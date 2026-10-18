@@ -358,6 +358,35 @@ class SiteUrlVerifierTest < Minitest::Test
     end
   end
 
+  def test_audio_and_pdf_require_exact_file_types_verified_card_and_visible_fallback
+    Dir.mktmpdir("website-audio-pdf-verifier") do |site|
+      result = compile(note("index.md", "---\npublish: true\n---\n![Interview](https://cdn.example/a.mp3)\n\n![Paper](https://papers.example/a.pdf#page=3&height=560)\n"))
+      assert result.success?
+      body = page(result, "/").content
+      markup = <<~HTML
+        <!doctype html><html><head>
+        <meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'self'; form-action 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' https:; media-src 'self' https://cdn.example; object-src 'self'; font-src 'self'; connect-src 'self' https://papers.example; frame-src 'self' blob:">
+        <link rel="canonical" href="https://example.test/"><meta property="og:url" content="https://example.test/">
+        </head><body>#{body}</body></html>
+      HTML
+      path = File.join(site, "index.html")
+      script = File.expand_path("../../scripts/verify-site-urls.rb", __dir__)
+      File.write(path, markup)
+      _stdout, stderr, status = Open3.capture3(Gem.ruby, script, site, "https://example.test", "")
+      assert status.success?, stderr
+      [markup.sub('data-pdf-height="560"', 'data-pdf-height="0"'),
+       markup.sub('data-website-pdf-source=', 'data-authored-pdf-source='),
+       markup.sub('class="website-external-pdf__fallback"', ''),
+       markup.sub('a.mp3', 'a.mp4'),
+       markup.sub('a.pdf#page=3', 'a.html#page=3')].each do |invalid|
+        File.write(path, invalid)
+        _stdout, stderr, status = Open3.capture3(Gem.ruby, script, site, "https://example.test", "")
+        refute status.success?, stderr
+        assert_match(/external|CSP directive/, stderr)
+      end
+    end
+  end
+
   def test_rejects_unscoped_or_noncanonical_external_players
     cases = {
       "wide-csp" => [

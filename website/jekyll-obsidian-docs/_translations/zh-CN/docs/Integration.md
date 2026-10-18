@@ -10,7 +10,7 @@ description: 通过 RubyGems 或 GitHub Actions 安装发布工具，内容和�
 
 ## 无需安装工具链即可部署
 
-将[配置示例](https://github.com/wowfun/jekyll-obsidian/blob/v0.2.1/examples/jekyll-obsidian.yml)复制到 `.github/jekyll-obsidian.yml`，将 [Pages 工作流](https://github.com/wowfun/jekyll-obsidian/blob/v0.2.1/examples/pages.yml)复制到 `.github/workflows/pages.yml`。
+将[配置示例](https://github.com/wowfun/jekyll-obsidian/blob/v0.3.0/examples/jekyll-obsidian.yml)复制到 `.github/jekyll-obsidian.yml`，将 [Pages 工作流](https://github.com/wowfun/jekyll-obsidian/blob/v0.3.0/examples/pages.yml)复制到 `.github/workflows/pages.yml`。
 
 ```yaml
 title: My Site
@@ -43,7 +43,7 @@ jekyll-obsidian dev
 
 ```ruby
 source "https://rubygems.org"
-gem "jekyll-obsidian-site", "0.2.1"
+gem "jekyll-obsidian-site", "0.3.0"
 ```
 
 ```sh
@@ -60,7 +60,7 @@ bundle exec jekyll-obsidian dev
 
 ## 更新
 
-将工作流中的 `uses: wowfun/jekyll-obsidian@v0.2.1` 改为需要的发行 tag，Action 会安装该版本对应的 gem。
+将工作流中的 `uses: wowfun/jekyll-obsidian@v0.3.0` 改为需要的发行 tag，Action 会安装该版本对应的 gem。
 
 直接安装的 gem 用 `gem update jekyll-obsidian-site` 更新。使用 Bundler 时，按需要调整版本约束，运行 `bundle update jekyll-obsidian-site` 并提交锁文件。包更新不会改写宿主内容和配置。
 

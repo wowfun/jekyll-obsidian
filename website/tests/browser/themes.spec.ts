@@ -400,6 +400,8 @@ for (const theme of themes) {
     await page.goto(site(theme, "/docs/Syntax/"));
 
     const image = page.locator('.note-content img[src*="research-folio.svg"]');
+    await image.scrollIntoViewIfNeeded();
+    await expect.poll(() => image.evaluate(element => (element as HTMLImageElement).naturalWidth)).toBeGreaterThan(0);
     await expect(image).toBeVisible();
     await expect(image).toHaveAttribute("role", "button");
     await expect(image).toHaveAccessibleName("Expand image");
@@ -576,8 +578,7 @@ test("Copy failure opens a visible Markdown fallback", async ({ page }, testInfo
   await expect(actions.getByRole("link", { name: /View as Markdown/ })).toBeVisible();
 });
 
-test("Mobile Copy page keeps a dynamic accessible name while showing only its icon", async ({ page }, testInfo) => {
-  test.skip(testInfo.project.name !== "mobile-chromium", "one mobile rendering contract is sufficient");
+test("Copy page keeps a dynamic accessible name while showing only its icon", async ({ page }) => {
   await page.addInitScript(() => {
     Object.defineProperty(navigator, "clipboard", {
       configurable: true,
@@ -611,8 +612,8 @@ test("Mobile Copy page keeps a dynamic accessible name while showing only its ic
   await expect(primary).toHaveAccessibleName("Copied");
 
   await page.setViewportSize({ width: 521, height: 900 });
-  await expect(primaryLabel).toBeVisible();
-  expect((await primaryLabel.boundingBox())?.width).toBeGreaterThan(1);
+  expect((await primaryLabel.boundingBox())?.width).toBeLessThanOrEqual(1);
+  expect((await primary.boundingBox())?.width).toBeCloseTo(2.55 * rootFontSize, 0);
 });
 
 test("Minimal Home combines authored content with at most six recent posts", async ({ page }, testInfo) => {

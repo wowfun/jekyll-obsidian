@@ -1,2 +1,2 @@
-- Pre-release, backward compatibility is not required; use a first-principles approach and avoid unnecessary technical debt.
+- Pre-release with no compatibility guarantees. Prefer the correct foundation over compatibility shims, and update all affected paths, code, tests, and docs together.
 - The product experience MUST minimize cognitive load by omitting anything that does not clarify intent, enable action, or add incremental value, unless required for correctness, safety, or explicit user confirmation.

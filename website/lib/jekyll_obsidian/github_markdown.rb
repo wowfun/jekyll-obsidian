@@ -79,9 +79,13 @@ module JekyllObsidian
         flags = File::RDONLY | File::BINARY |
           (File.const_defined?(:NOFOLLOW) ? File::NOFOLLOW : 0) |
           (File.const_defined?(:SHARE_DELETE) ? File::SHARE_DELETE : 0)
-        File.open(target, flags) do |file|
+        open_entry(target, flags) do |file|
           opened = file.stat
-          unless opened.file? && opened.dev == before.dev && opened.ino == before.ino
+          current = File.lstat(target)
+          # lstat and IO#stat have different dev values on Windows. Use the
+          # native handle comparison while also checking the original path.
+          unless opened.file? && current.file? && !current.symlink? &&
+              current.dev == before.dev && current.ino == before.ino && File.identical?(target, file)
             raise CacheError, "GitHub Markdown cache entry changed while opening"
           end
           file.read
@@ -121,6 +125,11 @@ module JekyllObsidian
       end
 
       private
+
+      # Testable boundary for a path replacement between lstat and opening.
+      def open_entry(target, flags, &block)
+        File.open(target, flags, &block)
+      end
 
       def target_path(repository, commit, path)
         digest = Digest::SHA256.hexdigest([repository, commit, path].join("\0"))

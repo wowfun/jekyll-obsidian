@@ -58,8 +58,9 @@ class CliPreviewTest < Minitest::Test
         end)
         load ARGV.shift
       RUBY
-      pid = Process.spawn(RbConfig.ruby, "-e", boot, EXECUTABLE, "dev", "--port", port.to_s, "--baseurl", "/preview",
-        chdir: root, out: log, err: log)
+      spawn_options = { chdir: root, out: log, err: log }
+      spawn_options[:new_pgroup] = true if Gem.win_platform?
+      pid = Process.spawn(RbConfig.ruby, "-e", boot, EXECUTABLE, "dev", "--port", port.to_s, "--baseurl", "/preview", **spawn_options)
       uri = URI("http://127.0.0.1:#{port}/preview/")
       wait_for(log_path) { File.exist?(File.join(root, "initial-build-ready")) }
       assert_includes File.read(File.join(root, ".jekyll-obsidian-cache", "site", "index.html")), "Welcome"
@@ -87,7 +88,8 @@ class CliPreviewTest < Minitest::Test
       wait_for(log_path) { http_body(uri)&.include?("Recovered content") }
     ensure
       if pid
-        Process.kill("INT", pid) rescue Errno::ESRCH
+        # Windows INT broadcasts a console event; terminate only this child.
+        Process.kill(Gem.win_platform? ? "KILL" : "INT", pid) rescue Errno::ESRCH
         begin
           Timeout.timeout(5) { Process.wait(pid) }
         rescue Timeout::Error

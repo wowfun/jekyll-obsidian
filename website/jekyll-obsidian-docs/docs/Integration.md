@@ -16,7 +16,7 @@ A host repository needs content, `.github/jekyll-obsidian.yml`, and a Pages work
 
 ## Deploy without installing a toolchain
 
-Copy [the configuration example](https://github.com/wowfun/jekyll-obsidian/blob/v0.2.1/examples/jekyll-obsidian.yml) to `.github/jekyll-obsidian.yml` and [the Pages workflow](https://github.com/wowfun/jekyll-obsidian/blob/v0.2.1/examples/pages.yml) to `.github/workflows/pages.yml`.
+Copy [the configuration example](https://github.com/wowfun/jekyll-obsidian/blob/v0.3.0/examples/jekyll-obsidian.yml) to `.github/jekyll-obsidian.yml` and [the Pages workflow](https://github.com/wowfun/jekyll-obsidian/blob/v0.3.0/examples/pages.yml) to `.github/workflows/pages.yml`.
 
 ```yaml
 title: My Site
@@ -49,7 +49,7 @@ For a project with a Gemfile:
 
 ```ruby
 source "https://rubygems.org"
-gem "jekyll-obsidian-site", "0.2.1"
+gem "jekyll-obsidian-site", "0.3.0"
 ```
 
 ```sh
@@ -66,7 +66,7 @@ An existing Jekyll `_config.yml` and its plugins are not loaded by this tool.
 
 ## Update
 
-Change `uses: wowfun/jekyll-obsidian@v0.2.1` in the workflow to the desired release tag. The Action installs that release's exact gem version.
+Change `uses: wowfun/jekyll-obsidian@v0.3.0` in the workflow to the desired release tag. The Action installs that release's exact gem version.
 
 For a direct installation, use `gem update jekyll-obsidian-site`. For Bundler, adjust the version constraint when necessary, run `bundle update jekyll-obsidian-site`, and commit the lockfile. Package updates do not rewrite host content or configuration.
 

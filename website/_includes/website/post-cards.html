@@ -1,5 +1,5 @@
 {% for post in include.posts %}
-  <article class="minimal-post-card{% if post.image or post.image_url %} minimal-post-card--with-image{% endif %}">
+  <article class="minimal-post-card{% if post.image or post.image_url %} minimal-post-card--with-image{% endif %}"{% if post.recommendation_expires_at %} data-recommendation-expires-at="{{ post.recommendation_expires_at | escape }}"{% endif %}>
     {% if post.image or post.image_url %}<div class="minimal-post-card__media"><img src="{{ post.image | default: post.image_url | escape }}" alt="" loading="lazy" decoding="async"></div>{% endif %}
     <div class="minimal-post-card__body">
       <h3><a href="{{ post.url | escape }}">{{ post.title | escape }}</a></h3>

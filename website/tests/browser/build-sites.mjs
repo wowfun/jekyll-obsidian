@@ -16,7 +16,7 @@ const environment = {
 
 function build(host, theme, name, config) {
   const code = `require "jekyll_obsidian/runtime"; runtime = JekyllObsidian::Runtime.new(root: ARGV[0], config_path: ARGV[1], assets_root: ARGV[2], destination_name: ARGV[3]); runtime.build(theme: ARGV[4], url: "http://127.0.0.1:4173", baseurl: ARGV[5], quiet: true)`;
-  const result = spawnSync("bundle", ["exec", "ruby", "-e", code, host, config,
+  const result = spawnSync("ruby", ["-S", "bundle", "exec", "ruby", "-e", code, host, config,
     path.join(projectRoot, ".jekyll-obsidian-cache/assets"), `site-browser-${name}`, theme, `/__site__/${name}`], {
     cwd: projectRoot, env: environment, stdio: "inherit",
   });
@@ -66,6 +66,23 @@ try {
   await rm(propertiesHost, { force: true, recursive: true });
 }
 
+const mediaHost = await mkdtemp(path.join(tmpdir(), "jekyll-obsidian-media-"));
+try {
+  await mkdir(path.join(mediaHost, "vault/_translations/zh-CN"), { recursive: true });
+  await mkdir(path.join(mediaHost, ".jekyll-obsidian-cache"));
+  await writeFile(path.join(mediaHost, ".jekyll-obsidian-cache/github-markdown-browser.json"), JSON.stringify({ version: 1, documents: [] }));
+  await writeFile(path.join(mediaHost, "host.yml"), "title: Media fixture with a long site name\nwebsite:\n  source: vault\n  repository: example/media\n  contacts: []\n  features:\n    search: true\n  i18n:\n    enabled: true\n    locales: [en, zh-CN]\n");
+  await writeFile(path.join(mediaHost, "vault/_locale.yml"), "name: English\n");
+  await copyFile(path.join(projectRoot, "jekyll-obsidian-docs/_translations/zh-CN/_locale.yml"), path.join(mediaHost, "vault/_translations/zh-CN/_locale.yml"));
+  const body = "![Figure](https://media.example/figure.svg)\n\n![Interview](https://media.example/interview.wav)\n\n![Demo](https://media.example/demo.mp4)\n\n![Paper](https://papers.example/paper.pdf#page=3&height=560)\n\n![Video](https://youtu.be/NnTvZWp5Q7o)\n";
+  for (const [prefix, title] of [["", "Media"], ["_translations/zh-CN/", "媒体"]]) {
+    await writeFile(path.join(mediaHost, `vault/${prefix}index.md`), `---\npublish: true\n---\n# ${title}\n` + body);
+  }
+  await buildFixtureSites(mediaHost, "media", path.join(mediaHost, "host.yml"));
+} finally {
+  await rm(mediaHost, { force: true, recursive: true });
+}
+
 const archiveHost = await mkdtemp(path.join(tmpdir(), "jekyll-obsidian-archive-"));
 try {
   await mkdir(path.join(archiveHost, "vault/items"), { recursive: true });
@@ -74,22 +91,51 @@ try {
   await writeFile(path.join(archiveHost, ".jekyll-obsidian-cache/github-markdown-browser.json"),
     JSON.stringify({ version: 1, documents: [] }));
   await writeFile(path.join(archiveHost, "host.yml"),
-    "title: Archive fixture\nwebsite:\n  source: vault\n  theme: minimal\n  contacts: []\n  home:\n    layout: archive\n  blog:\n    page_size: 2\n  i18n:\n    enabled: true\n    locales: [en, zh-CN]\n");
+    "title: Archive fixture\nwebsite:\n  source: vault\n  theme: minimal\n  repository: example/archive\n  contacts: []\n  home:\n    layout: archive\n  blog:\n    page_size: 2\n    utc_offset: '+08:00'\n    timeline_granularity: day\n    ledger_group_by: day\n  features:\n    favorites: true\n  i18n:\n    enabled: true\n    locales: [en, zh-CN]\n");
   await writeFile(path.join(archiveHost, "vault/_locale.yml"), "name: English\n");
-  await writeFile(path.join(archiveHost, "vault/_translations/zh-CN/_locale.yml"), "name: 简体中文\n");
+  await copyFile(path.join(projectRoot, "jekyll-obsidian-docs/_translations/zh-CN/_locale.yml"), path.join(archiveHost, "vault/_translations/zh-CN/_locale.yml"));
   await writeFile(path.join(archiveHost, "vault/index.md"), "---\npublish: true\n---\n# Archive\n");
+  for (const [id, introduction] of [["plain", ""], ["plain-intro", "An authored introduction."]]) {
+    await mkdir(path.join(archiveHost, `vault/${id}`), { recursive: true });
+    await writeFile(path.join(archiveHost, `vault/${id}/index.md`),
+      `---\npublish: true\ncontent_type: page\ntitle: Collection${introduction ? " with introduction" : ""}\ntab:\n  id: ${id}\n---\n# **Collect**ion${introduction ? " with introduction" : ""}\n\n${introduction}\n`);
+    await writeFile(path.join(archiveHost, `vault/${id}/member.md`),
+      "---\npublish: true\ncontent_type: page\n---\n# A deliberately long collection title that must wrap before the copy actions\n");
+  }
+  for (const [id, title, label, source] of [["news", "News", "新闻", "hn"], ["tools", "Tools", "工具", "dsh"]]) {
+    await mkdir(path.join(archiveHost, `vault/${id}`), { recursive: true });
+    await mkdir(path.join(archiveHost, `vault/_translations/zh-CN/${id}`), { recursive: true });
+    await writeFile(path.join(archiveHost, `vault/${id}/index.md`),
+      `---\npublish: true\ncontent_type: page\ntab:\n  id: ${id}\n  layout: archive\n  topics: [source/${source}]\n---\n# ${title}\n`);
+    await writeFile(path.join(archiveHost, `vault/_translations/zh-CN/${id}/index.md`),
+      `---\npublish: true\ntab:\n  label: ${label}\n---\n# ${label}\n`);
+  }
   for (const [id, title, date, source, topic] of [
     ["a", "Newest", "2026-10-10", "hn", "agents"],
     ["b", "Middle", "2026-10-09", "dsh", "tools"],
     ["c", "Oldest", "2025-12-31", "hn", "agents"]
   ]) {
     await writeFile(path.join(archiveHost, `vault/items/${id}.md`),
-      `---\npublish: true\ncontent_type: post\ntitle: ${title}\ndate: ${date}\ntags: [source/${source}, topics/${topic}]\n---\nBody.\n`);
+      `---\npublish: true\ncontent_type: post\ntitle: ${title}\ndescription: Description of ${title}\nsource_url: https://example.com/${id}\ndate: ${date}\ntags: [source/${source}, topics/${topic}]\n---\nFirst paragraph of ${title}.\n\nSecond paragraph with a [link](https://example.com/${id}).\n`);
   }
   build(archiveHost, "minimal", "minimal-archive", path.join(archiveHost, "host.yml"));
   const destination = path.join(workspaceRoot, ".jekyll-obsidian-cache/site-browser-minimal-archive");
   await rm(destination, { force: true, recursive: true });
   await cp(path.join(archiveHost, ".jekyll-obsidian-cache/site-browser-minimal-archive"), destination, { recursive: true });
+  // A separate collection crosses the page-size boundary without changing the
+  // compact fixture used for pagination and reading assertions.
+  await mkdir(path.join(archiveHost, "vault/_translations/zh-CN/items"), { recursive: true });
+  for (let i = 0; i < 57; i++) {
+    const id = `bulk-${String(i).padStart(2, "0")}`;
+    const metadata = `---\npublish: true\ncontent_type: post\ntitle: Export ${id}\ndescription: Short description\ndate: 2026-10-09T${String(i % 16).padStart(2, "0")}:00:00Z\nsource_url: https://example.com/${id}\ntags: [source/hn, topics/agents, topics/topic-${i % 20}]\n---\n`;
+    const body = `## Article\n\nComplete body of ${id}.\n\n- A list item\n\n> Source quote\n\n\`\`\`md\n# Code heading\n---\n\`\`\`\n\n## HN discussion\n\nDiscussion of ${id}.\n\n[Comments](https://news.ycombinator.com/item?id=123)\n\n![Image](https://example.com/image.png)\n`;
+    await writeFile(path.join(archiveHost, `vault/items/${id}.md`), metadata + body);
+    await writeFile(path.join(archiveHost, `vault/_translations/zh-CN/items/${id}.md`), metadata + `中文完整正文 ${id}。\n\n` + body);
+  }
+  build(archiveHost, "minimal", "minimal-export", path.join(archiveHost, "host.yml"));
+  const exportDestination = path.join(workspaceRoot, ".jekyll-obsidian-cache/site-browser-minimal-export");
+  await rm(exportDestination, { force: true, recursive: true });
+  await cp(path.join(archiveHost, ".jekyll-obsidian-cache/site-browser-minimal-export"), exportDestination, { recursive: true });
 } finally {
   await rm(archiveHost, { force: true, recursive: true });
 }

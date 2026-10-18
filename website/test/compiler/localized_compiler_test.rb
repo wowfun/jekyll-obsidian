@@ -5,6 +5,49 @@ require "test_helper"
 class LocalizedCompilerTest < Minitest::Test
   I18N = { "locales" => %w[en zh-CN] }.freeze
 
+  def test_ledger_formats_reject_missing_unknown_and_unbalanced_placeholders
+    {
+      "ledger_date" => ["{month} {dy}", "{day}", "{month} {day"],
+      "ledger_date_year" => ["{month} {day}", "{month} {day}, {year} {zone}"],
+      "ledger_entry" => ["entry", "{counts} entry"],
+      "ledger_entries" => ["entries", "{count} {extra}"]
+    }.each do |key, formats|
+      formats.each do |format|
+        result = compile(*default_notes, *manifests("  #{key}: #{JSON.generate(format)}\n"), i18n: I18N.merge("enabled" => true))
+        refute result.success?, "accepted malformed #{key}: #{format.inspect}"
+        assert result.diagnostics.any? { |item| item.code == "invalid_locale_message" && item.path == "_translations/zh-CN/_locale.yml" && item.message.include?(key) }
+      end
+    end
+  end
+
+  def test_ledger_formats_allow_localized_order_and_optional_current_year
+    messages = "  ledger_date: '{year}年{month}{day}日'\n  ledger_date_year: '{year}/{month}/{day}'\n  ledger_entry: '条目 {count}'\n  ledger_entries: '条目 {count}'\n"
+    result = compile(*default_notes, *manifests(messages), i18n: I18N.merge("enabled" => true))
+    assert result.success?, result.diagnostics.map(&:message).join("\n")
+  end
+
+  def test_ledger_name_lists_reject_missing_extra_and_empty_segments
+    { "ledger_months" => 12, "ledger_weekdays" => 7 }.each do |key, count|
+      valid = Array.new(count) { |index| "Name #{index}" }
+      [valid.drop(1), valid + ["Extra"], valid.dup.tap { |names| names[1] = "" }, valid.dup.tap { |names| names[-1] = "  " }].each do |names|
+        result = compile(*default_notes, *manifests("  #{key}: #{JSON.generate(names.join('|'))}\n"), i18n: I18N.merge("enabled" => true))
+        refute result.success?, "accepted malformed #{key}: #{names.inspect}"
+        diagnostic = result.diagnostics.find { |item| item.code == "invalid_locale_message" && item.message.include?(key) }
+        refute_nil diagnostic
+        assert_equal "_translations/zh-CN/_locale.yml", diagnostic.path
+      end
+    end
+  end
+
+  def test_incomplete_pdf_markup_reports_a_content_diagnostic
+    result = compile(note("index.md", "---\npublish: true\n---\n# Home\n\n<div data-website-pdf-source=\"https://example.test/paper.pdf\">Custom content</div>"), *manifests, i18n: I18N.merge("enabled" => true))
+    refute result.success?
+    diagnostic = result.diagnostics.find { |item| item.code == "invalid_external_media" }
+    refute_nil diagnostic
+    assert_includes diagnostic.message, "preview button"
+    refute result.diagnostics.any? { |item| item.code == "i18n_internal_error" }
+  end
+
   def manifests(zh_messages = "")
     [
       locale_manifest("_locale.yml", "name: English\n"),

@@ -1,0 +1,63 @@
+{% capture export_limit_default %}Choose no more than {days} days, including both dates.{% endcapture %}
+{% capture export_limit_hint_default %}Up to {days} days, including both dates.{% endcapture %}
+{% capture export_matches_default %}{count} entries to export{% endcapture %}
+{% capture export_progress_default %}Preparing {done} of {count} entries…{% endcapture %}
+{% capture export_failed_default %}{count} entries could not be loaded. Retry to download the complete file.{% endcapture %}
+{% capture export_complete_default %}Downloaded {count} entries.{% endcapture %}
+{% capture export_too_many_default %}{count} matching entries; export up to {limit} at a time. Narrow the dates or filters.{% endcapture %}
+<dialog class="website-dialog archive-export" id="archive-export-dialog" data-dialog="export" aria-labelledby="archive-export-title"
+  data-site="{{ site.title | escape }}"
+  data-download="{{ ui.export_download | default: 'Download Markdown' | escape }}"
+  data-all="{{ ui.all | default: 'All' | escape }}"
+  data-sources="{{ ui.sources | default: 'Sources' | escape }}"
+  data-topics="{{ ui.topics | default: 'Topics' | escape }}"
+  data-dates="{{ ui.export_dates | default: 'Date range' | escape }}"
+  data-entries="{{ ui.export_entries | default: 'Entries' | escape }}"
+  data-date="{{ ui.export_date | default: 'Date' | escape }}"
+  data-original="{{ ui.original | default: 'Original' | escape }}"
+  data-article="{{ ui.export_article | default: 'Article' | escape }}"
+  data-required="{{ ui.export_required | default: 'Choose a start and end date.' | escape }}"
+  data-invalid="{{ ui.export_invalid | default: 'Enter valid dates.' | escape }}"
+  data-order="{{ ui.export_order | default: 'The end date must be on or after the start date.' | escape }}"
+  data-limit="{{ ui.export_limit | default: export_limit_default | escape }}"
+  data-limit-hint="{{ ui.export_limit_hint | default: export_limit_hint_default | escape }}"
+  data-calculating="{{ ui.export_calculating | default: 'Finding matching entries…' | escape }}"
+  data-matches="{{ ui.export_matches | default: export_matches_default | escape }}"
+  data-empty="{{ ui.export_empty | default: 'No matching entries. Adjust the dates or filters.' | escape }}"
+  data-unavailable="{{ ui.export_unavailable | default: 'Could not prepare the export. Retry to continue.' | escape }}"
+  data-progress="{{ ui.export_progress | default: export_progress_default | escape }}"
+  data-loading-cards="{{ ui.export_loading_cards | default: 'Loading entry details…' | escape }}"
+  data-too-many="{{ ui.export_too_many | default: export_too_many_default | escape }}"
+  data-too-large="{{ ui.export_too_large | default: 'The export is too large. Narrow the dates or filters.' | escape }}"
+  data-failed="{{ ui.export_failed | default: export_failed_default | escape }}"
+  data-complete="{{ ui.export_complete | default: export_complete_default | escape }}"
+  data-cancelled="{{ ui.export_cancelled | default: 'Export cancelled.' | escape }}"
+  data-updated="{{ ui.export_updated | default: 'The site changed. Review the updated selection before downloading.' | escape }}">
+  <div class="website-dialog__sheet">
+    <header class="website-dialog__header">
+      <h2 class="website-dialog__title" id="archive-export-title">{{ ui.export_title | default: 'Export Markdown' | escape }}</h2>
+      <button class="website-dialog__close" type="button" data-dialog-close aria-label="{{ ui.export_close | default: 'Close export' | escape }}">&times;</button>
+    </header>
+    <div class="website-dialog__body">
+      <p class="archive-export__intro">{{ ui.export_description | default: 'Combine matching entries into one Markdown file.' | escape }}</p>
+      <fieldset class="archive-export__fields" data-export-fields disabled>
+        <legend class="visually-hidden">{{ ui.export_filters | default: 'Export filters' | escape }}</legend>
+        <div class="archive-export__dates">
+          <label>{{ ui.export_start | default: 'Start date' | escape }}<input type="date" required data-export-start aria-describedby="archive-export-limit"></label>
+          <label>{{ ui.export_end | default: 'End date' | escape }}<input type="date" required data-export-end aria-describedby="archive-export-limit"></label>
+        </div>
+        <p class="archive-export__hint" id="archive-export-limit" data-export-limit></p>
+        <div class="archive-export__facets" data-export-facets></div>
+      </fieldset>
+    </div>
+    <footer class="archive-export__footer">
+      <p data-export-status role="status" aria-live="polite"></p>
+      <progress data-export-progress hidden aria-label="{{ ui.export_title | default: 'Export Markdown' | escape }}"></progress>
+      <div class="archive-export__actions">
+        <button type="button" data-export-cancel hidden>{{ ui.export_cancel | default: 'Cancel export' | escape }}</button>
+        <button type="button" data-export-retry hidden>{{ ui.retry | default: 'Retry' | escape }}</button>
+        <button type="button" data-export-download disabled>{{ ui.export_download | default: 'Download Markdown' | escape }}</button>
+      </div>
+    </footer>
+  </div>
+</dialog>

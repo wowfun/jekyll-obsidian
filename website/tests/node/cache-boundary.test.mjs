@@ -10,7 +10,7 @@ test("refuses a symlinked cache parent without touching its target", async () =>
   const outside = await mkdtemp(path.join(os.tmpdir(), "garden-cache-outside-"));
   try {
     await writeFile(path.join(outside, "canary.txt"), "preserve me");
-    await symlink(outside, path.join(root, ".jekyll-obsidian-cache"));
+    await symlink(outside, path.join(root, ".jekyll-obsidian-cache"), process.platform === "win32" ? "junction" : "dir");
 
     await assert.rejects(
       stageGeneratedAssets(root, path.join(root, ".jekyll-obsidian-cache", "assets")),

@@ -280,6 +280,9 @@ class SiteUrlVerifier
     expected_directives["media-src"] += external_origins(document, "video[src], audio[src], video source[src], audio source[src]")
     expected_directives["frame-src"] += external_origins(document, "iframe[src]")
     expected_directives["frame-src"] << X_WIDGET_ORIGIN if tweet
+    pdf_origins = external_origins(document, "[data-website-pdf-source]", attribute: "data-website-pdf-source")
+    expected_directives["frame-src"] << "blob:" unless pdf_origins.empty?
+    expected_directives["connect-src"] += pdf_origins
     expected_directives.transform_values! { |tokens| tokens.uniq.sort }
     (directives.keys - expected_directives.keys).sort.each do |name|
       add_error("#{source}: unsupported CSP directive #{name}")
@@ -342,6 +345,7 @@ class SiteUrlVerifier
     rescue URI::InvalidURIError, JekyllObsidian::ExternalMedia::Invalid
       add_error("#{source}: invalid external #{node.name} source #{value.inspect}")
     end
+    verify_pdf_cards(document, source)
     verify_tweets(document, source)
   end
 
@@ -390,6 +394,23 @@ class SiteUrlVerifier
     end
   end
 
+  def verify_pdf_cards(document, source)
+    document.css("[data-website-pdf-source]").each do |node|
+      value = node["data-website-pdf-source"]
+      descriptor = JekyllObsidian::ExternalMedia.resolve(value)
+      fallback = node.at_css("a.website-external-pdf__fallback")
+      valid = descriptor&.kind == :pdf && descriptor.source_url == value &&
+        node.name == "figure" && node["class"].to_s.split.include?("website-external-pdf") &&
+        JekyllObsidian::ExternalMedia.dimension(node["data-pdf-height"]) && node.css("iframe, object, script").empty? &&
+        node.at_css("button[data-pdf-preview][hidden][aria-expanded='false']") &&
+        fallback && fallback["href"] == value && fallback["target"] == "_blank" &&
+        fallback["rel"].to_s.split.sort == %w[noopener noreferrer]
+      add_error("#{source}: external PDF card is not canonical: #{value.inspect}") unless valid
+    rescue JekyllObsidian::ExternalMedia::Invalid
+      add_error("#{source}: external PDF card has an invalid source")
+    end
+  end
+
   def verify_tweets(document, source)
     document.css("[data-website-tweet]").each do |node|
       identifier = node["data-website-tweet"].to_s
@@ -417,17 +438,18 @@ class SiteUrlVerifier
       end
 
       descriptor = JekyllObsidian::ExternalMedia.resolve(value)
-      unless descriptor&.kind == :direct_video && node.name != "audio" && node.ancestors("audio").empty?
-        add_error("#{source}: external media source is not a supported direct video: #{value.inspect}")
+      kind = node.name == "audio" || !node.ancestors("audio").empty? ? :direct_audio : :direct_video
+      unless descriptor&.kind == kind
+        add_error("#{source}: external media source has an unsupported file type: #{value.inspect}")
       end
     rescue URI::InvalidURIError, JekyllObsidian::ExternalMedia::Invalid
       add_error("#{source}: invalid external media source #{value.inspect}")
     end
   end
 
-  def external_origins(document, selector)
+  def external_origins(document, selector, attribute: "src")
     document.css(selector).filter_map do |node|
-      JekyllObsidian::ExternalMedia.https_origin(node["src"])
+      JekyllObsidian::ExternalMedia.https_origin(node[attribute])
     end.uniq.sort
   end
 

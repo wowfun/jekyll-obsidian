@@ -1,10 +1,11 @@
 import { initialisePagedArchive } from "./paged-archive";
+import { initialiseArchiveDays } from "./archive-days";
 
 function selectedValue(
   parameters: URLSearchParams,
   name: string,
   options: HTMLElement[],
-  dataKey: "topicAnchor" | "filterYear" | "filterMonth"
+  dataKey: "topicAnchor" | "filterYear" | "filterMonth" | "filterDay"
 ): string {
   const requested = parameters.get(name) ?? "";
   return options.some((option) => option.dataset[dataKey] === requested) ? requested : "";
@@ -17,9 +18,11 @@ function applyFilters(root: HTMLElement): void {
   ));
   const yearOptions = Array.from(document.querySelectorAll<HTMLElement>("[data-year-filter-option]"));
   const monthOptions = Array.from(document.querySelectorAll<HTMLElement>("[data-month-filter-option]"));
+  const dayOptions = Array.from(document.querySelectorAll<HTMLElement>("[data-day-filter-option]"));
   const topic = selectedValue(parameters, "topic", topicOptions, "topicAnchor");
-  const month = selectedValue(parameters, "month", monthOptions, "filterMonth");
-  const year = month ? "" : selectedValue(parameters, "year", yearOptions, "filterYear");
+  const day = selectedValue(parameters, "day", dayOptions, "filterDay");
+  const month = day ? "" : selectedValue(parameters, "month", monthOptions, "filterMonth");
+  const year = day || month ? "" : selectedValue(parameters, "year", yearOptions, "filterYear");
 
   for (const option of topicOptions) {
     if (option.dataset.topicAnchor === topic) option.setAttribute("aria-current", "page");
@@ -33,6 +36,10 @@ function applyFilters(root: HTMLElement): void {
     if (month && option.dataset.filterMonth === month) option.setAttribute("aria-current", "page");
     else option.removeAttribute("aria-current");
   }
+  for (const option of dayOptions) {
+    if (day && option.dataset.filterDay === day) option.setAttribute("aria-current", "page");
+    else option.removeAttribute("aria-current");
+  }
 
   const items = Array.from(root.querySelectorAll<HTMLElement>("[data-filter-item]"));
   for (const item of items) {
@@ -41,7 +48,8 @@ function applyFilters(root: HTMLElement): void {
     item.hidden = Boolean(
       (topic && !topics.includes(topic)) ||
       (year && !itemMonth.startsWith(`${year}-`)) ||
-      (month && itemMonth !== month)
+      (month && itemMonth !== month) ||
+      (day && item.dataset.filterDay !== day)
     );
   }
 
@@ -59,12 +67,13 @@ export function initialiseArchiveFilters(): () => void {
   const roots = Array.from(document.querySelectorAll<HTMLElement>("[data-filter-page]:not([data-paged-archive])"));
   if (roots.length === 0) return () => cleanups.forEach((cleanup) => cleanup());
 
-  const refresh = () => roots.forEach(applyFilters);
+  const days = roots.map(root => { applyFilters(root); return initialiseArchiveDays(root); });
+  const refresh = () => roots.forEach((root, index) => { applyFilters(root); days[index]!.refresh(); });
   const onClick = (event: MouseEvent) => {
     const target = event.target;
     if (!(target instanceof Element)) return;
     const link = target.closest<HTMLAnchorElement>(
-      "a[data-topic-filter-option], a[data-year-filter-option], a[data-month-filter-option]"
+      "a[data-topic-filter-option], a[data-year-filter-option], a[data-month-filter-option], a[data-day-filter-option]"
     );
     if (!link) return;
     const destination = new URL(link.href, window.location.href);
@@ -76,16 +85,12 @@ export function initialiseArchiveFilters(): () => void {
     if (link.hasAttribute("data-topic-filter-option")) {
       const topic = link.dataset.topicAnchor ?? "";
       topic ? next.searchParams.set("topic", topic) : next.searchParams.delete("topic");
-    } else if (link.hasAttribute("data-year-filter-option")) {
-      const year = link.dataset.filterYear ?? "";
-      if (link.getAttribute("aria-current") === "page") next.searchParams.delete("year");
-      else next.searchParams.set("year", year);
-      next.searchParams.delete("month");
     } else {
-      const month = link.dataset.filterMonth ?? "";
-      if (link.getAttribute("aria-current") === "page") next.searchParams.delete("month");
-      else next.searchParams.set("month", month);
-      next.searchParams.delete("year");
+      const name = link.hasAttribute("data-year-filter-option") ? "year" : link.hasAttribute("data-month-filter-option") ? "month" : "day";
+      const value = link.getAttribute(`data-filter-${name}`) ?? "";
+      if (link.getAttribute("aria-current") === "page") next.searchParams.delete(name);
+      else next.searchParams.set(name, value);
+      for (const other of ["year", "month", "day"]) if (other !== name) next.searchParams.delete(other);
     }
     window.history.pushState(null, "", `${next.pathname}${next.search}`);
     refresh();
@@ -94,9 +99,8 @@ export function initialiseArchiveFilters(): () => void {
   document.addEventListener("click", onClick);
   window.addEventListener("popstate", refresh);
   window.addEventListener("pageshow", refresh);
-  refresh();
-
   return () => {
+    days.forEach(day => day.dispose());
     cleanups.forEach((cleanup) => cleanup());
     document.removeEventListener("click", onClick);
     window.removeEventListener("popstate", refresh);

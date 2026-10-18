@@ -2,6 +2,7 @@
 
 require "cgi/escape"
 require "date"
+require_relative "archive_chronology"
 
 module JekyllObsidian
   # The only internal theme seam. Each built-in adapter consumes the same
@@ -74,17 +75,24 @@ module JekyllObsidian
         )
       end
 
+      def favorite_card(note, config)
+        # Shared by the article, ledger and other post cards during one render.
+        @favorite_cards[note.id] ||= begin
+          record = PagedArchive.record(content_card(note, config).merge(
+            "published_at" => ArchiveChronology.local_time(note.published_at, config.blog["utc_offset"]),
+            "markdown_url" => config.url_builder.href(PublishedMarkdown.route(note.route))), config)
+          record.merge("favorite_labels" => PagedArchive.favorite_labels(record.fetch("facets"), config.blog.fetch("facets"), config.site.tag_labels || {}))
+        end
+      end
+
       def note_page(note, config, theme_data, topic_anchors, topic_summaries, local_graph, home_route, home_url)
         properties = note.properties
         comments = page_comments(note, config)
-        display_time = lambda do |value|
-          value && config.blog["utc_offset"] ? DateTime.iso8601(value).new_offset(config.blog.fetch("utc_offset")).iso8601 : value
-        end
         website = {
           "kind" => "note",
           "id" => note.id,
           "content_type" => note.content_type,
-          "published_at" => display_time.call(note.published_at),
+          "published_at" => ArchiveChronology.local_time(note.published_at, config.blog["utc_offset"]),
           "route" => note.route,
           "href" => config.url_builder.href(note.route),
           "absolute_url" => config.url_builder.absolute_url(note.route),
@@ -94,10 +102,10 @@ module JekyllObsidian
           "tags" => Array(properties["tags"]),
           "authors" => note.topics.select { |topic| topic.fetch("kind") == "author" },
           "categories" => Array(properties["categories"]),
-          "topic_links" => blog_topic_links(note, topic_anchors),
+          "topic_links" => blog_topic_links(note, topic_anchors, config),
           "cssclasses" => Array(properties["cssclasses"]),
           "created" => note.created,
-          "updated" => display_time.call(note.updated),
+          "updated" => ArchiveChronology.local_time(note.updated, config.blog["utc_offset"]),
           "directory_index" => note.directory_index,
           "has_h1" => note.has_h1,
           "source_links" => note.source_links,
@@ -111,11 +119,13 @@ module JekyllObsidian
           "routes" => { "home" => home_route },
           "theme" => config.theme,
           "features" => config.features.merge(note.feature_flags),
+          "favorites_scope" => config.url_builder.baseurl,
+          "favorite_card" => config.features.fetch("favorites") && note.content_type == "post" ? favorite_card(note, config) : nil,
           "content_security" => content_security_data(note.content_security, config),
           "theme_data" => theme_data,
           "tag_links" => Array(note.properties["tags"]).filter_map do |tag|
             anchor = topic_anchors[topic_identity("name" => tag)]
-            { "name" => tag, "anchor" => anchor } if anchor
+            { "name" => topic_label({ "kind" => "tag", "name" => tag }, config), "anchor" => anchor } if anchor
           end,
           "outline" => note.outline,
           "related_articles" => theme_data.fetch("related_articles", note.related || []),
@@ -123,6 +133,12 @@ module JekyllObsidian
           "backlinks" => config.features.fetch("relations") ? note.backlinks : [],
           "embedded_by" => config.features.fetch("relations") ? note.embedded_by : []
         }
+        website["compact_collection"] = note.presentation&.fetch("empty_intro", false) &&
+          properties.dig("tab", "layout") != "archive" &&
+          !website["subtitle"] && !website["updated"] && !website["source_url"] &&
+          website.fetch("display_properties").empty? &&
+          (!config.features.fetch("tags") || website.fetch("tag_links").empty?) &&
+          (properties["description"] || note.preview).to_s == note.title
         website["local_graph"] = local_graph if local_graph
         website["has_context"] = context_present?(website)
         website["comments"] = comments if comments
@@ -161,6 +177,7 @@ module JekyllObsidian
               "kind" => kind,
               "theme" => config.theme,
               "features" => config.features,
+              "favorites_scope" => config.url_builder.baseurl,
               "content_security" => content_security_data(nil, config),
               "theme_data" => system_theme_data.merge(theme_data),
               "route" => route,
@@ -229,7 +246,7 @@ module JekyllObsidian
         notes.each { |note| Array(note.properties["tags"]).each { |tag| groups[tag] << note } }
         groups.keys.sort.map do |tag|
           {
-            "name" => tag,
+            "name" => topic_label({ "kind" => "tag", "name" => tag }, config),
             "anchor" => anchors.fetch(topic_identity("name" => tag)),
             "notes" => groups.fetch(tag).sort_by(&:id).map { |note| system_note_card(note, config) }
           }
@@ -249,7 +266,7 @@ module JekyllObsidian
         groups.map do |identity, group|
           topic = group.fetch("topic")
           {
-            "name" => topic.fetch("name"),
+            "name" => topic_label(topic, config),
             "anchor" => anchors.fetch(identity),
             "url" => topic["url"],
             "notes" => group.fetch("notes").sort_by(&:id).map { |note| system_note_card(note, config) }
@@ -275,22 +292,16 @@ module JekyllObsidian
         }
       end
 
-      def timeline_for(notes)
-        month_counts = Hash.new(0)
+      def timeline_for(notes, config)
+        daily = config.blog["timeline_granularity"] == "day"
+        counts = Hash.new(0)
         notes.each do |note|
-          month = month_key(yield(note))
-          month_counts[month] += 1 if month
+          date = ArchiveChronology.local_time(yield(note), config.blog["utc_offset"])
+          key = daily ? date&.slice(0, 10) : month_key(date)
+          counts[key] += 1 if key
         end
 
-        month_counts.keys.group_by { |month| month[0, 4] }.sort.reverse.map do |year, months|
-          {
-            "year" => year,
-            "count" => months.sum { |month| month_counts.fetch(month) },
-            "months" => months.sort.map do |month|
-              { "key" => month, "label" => month[5, 2], "count" => month_counts.fetch(month) }
-            end
-          }
-        end
+        ArchiveChronology.timeline(counts, daily: daily)
       end
 
       def month_key(value)
@@ -434,13 +445,21 @@ module JekyllObsidian
         topics.select { |topic| topic.fetch("kind") == "tag" }
       end
 
-      def blog_topic_links(note, topic_anchors)
+      def topic_label(topic, config)
+        name = topic.fetch("name")
+        return name unless topic.fetch("kind") == "tag"
+
+        canonical = (config.site.tag_aliases || {}).fetch(name, name)
+        (config.site.tag_labels || {}).fetch(canonical, name)
+      end
+
+      def blog_topic_links(note, topic_anchors, config)
         note.topics
           .select { |topic| %w[tag category].include?(topic.fetch("kind")) }
           .uniq { |topic| topic_name_identity(topic) }
           .filter_map do |topic|
             anchor = topic_anchors[topic_identity(topic)]
-            { "name" => topic.fetch("name"), "anchor" => anchor } if anchor
+            { "name" => topic_label(topic, config), "anchor" => anchor } if anchor
           end
       end
 
@@ -468,7 +487,11 @@ module JekyllObsidian
         topics = note.topics
           .select { |topic| %w[tag category].include?(topic.fetch("kind")) }
           .uniq { |topic| topic_name_identity(topic) }
-          .map { |topic| topic.slice("name", "url") }
+          .map do |topic|
+            card = topic.slice("name", "url")
+            card["name"] = topic_label(topic, config)
+            card
+          end
         content_card(note, config).merge(
           "content_type" => note.content_type,
           "topics" => topics
@@ -490,6 +513,15 @@ module JekyllObsidian
       end
 
       def related_article_cards(note, model, config)
+        if Array(note.related).empty?
+          return [] unless note.content_type == "post"
+          return Array((model.recommendations || {})[note.id]).filter_map do |recommendation|
+            next if Time.iso8601(recommendation.fetch("expires_at")) <= @recommendation_time
+            target = model.notes_by_id[recommendation.fetch("path")]
+            next unless target && target.id != note.id && target.content_type == "post"
+            content_card(target, config).merge("recommendation_expires_at" => recommendation.fetch("expires_at"))
+          end
+        end
         Array(note.related).map do |related|
           target = model.notes_by_id.fetch(related.fetch("id"))
           content_card(target, config).merge(
@@ -513,7 +545,7 @@ module JekyllObsidian
         website = page.data.fetch("website").dup
         repository = config.site.repository.to_s
         website["repository_url"] = "https://github.com/#{repository}" if repository.match?(/\A[\w.-]+\/[\w.-]+\z/)
-        active_id = if website["kind"] == "note"
+        active_id = if website["kind"] == "note" || website.dig("theme_data", "tab_id")
           navigation.active_by_note_id[website["id"]]
         else
           navigation.items.find do |item|
@@ -538,11 +570,15 @@ module JekyllObsidian
 
     class Minimal < Presenter
       def render(model:, config:)
+        # Locale projections share the build's clock snapshot for cards and dates.
+        @recommendation_time = config.reference_time
+        @favorite_cards = {}
+        ledger_current_year = @recommendation_time.getlocal(config.blog["utc_offset"] || "+00:00").year
         posts = ordered_posts(model)
         paged = config.home["layout"] == "archive" || config.blog["page_size"]
-        displayed = paged ? posts.select(&:published_at).reverse + posts.reject(&:published_at) : displayed_posts(posts)
+        chronological = chronological_notes(posts)
+        displayed = paged ? chronological : displayed_posts(posts)
         taxonomy = taxonomy_for(posts, config)
-        timeline = timeline_for(displayed, &:published_at)
         documentation = config.navigation
         portfolio = documentation.portfolio
         portfolio_notes = portfolio ? portfolio.project_note_ids.map { |id| model.notes_by_id.fetch(id) } : []
@@ -610,13 +646,16 @@ module JekyllObsidian
           )
         end
         attach_custom_tab_theme_data(theme_data, model, config)
+        tab_archive_files = attach_tab_archives(theme_data, model, config, taxonomy, ledger_current_year: ledger_current_year)
         authored_root_route = model.notes.any? { |note| note.route == "/" }
         home = home_page(displayed, config, system_theme_data, taxonomy) if !root && !authored_root_route && displayed.any? && config.home["layout"] != "archive"
-        groups = archive_groups(displayed, config, taxonomy)
-        archive_data = paged && PagedArchive.build(displayed.map { |post| note_card(post, config, taxonomy) }, config)
-        if archive_data
+        archive_data = (paged || config.features.fetch("favorites")) && PagedArchive.build(chronological.map { |post| note_card(post, config, taxonomy) }, config, postings: !!paged)
+        if archive_data && paged
           groups = archive_data.fetch("archive_groups")
           timeline = archive_data.fetch("timeline")
+        else
+          groups = archive_groups(displayed, config, taxonomy)
+          timeline = timeline_for(displayed, config, &:published_at)
         end
         blog = if (displayed.any? || config.home["layout"] == "archive") && !(root && config.home["layout"] == "archive")
           system_page(
@@ -627,10 +666,12 @@ module JekyllObsidian
             system_theme_data,
             {
               "archive_groups" => groups,
+              "ledger_current_year" => ledger_current_year,
               "topic_summaries" => taxonomy.fetch("summaries"),
               "topic_filter_count" => displayed.length,
               "timeline" => timeline,
-              "archive" => archive_data && archive_data.fetch("archive")
+              "archive" => paged && archive_data && archive_data.fetch("archive"),
+              "ledger_group_by" => config.blog.fetch("ledger_group_by")
             },
             home_route: "/",
             home_url: config.url_builder.href("/")
@@ -648,7 +689,12 @@ module JekyllObsidian
             home_url: config.url_builder.href("/")
           )
         end
-        theme_pages = [home, blog, portfolio_page].compact
+        favorites_page = if config.features.fetch("favorites")
+          system_page(config, "/favorites/", navigation_label(config, "favorites", "Favorites"), "blog-index", system_theme_data,
+            { "archive" => archive_data.fetch("archive"), "archive_groups" => [], "timeline" => archive_data.fetch("timeline"),
+              "favorites" => true, "ledger_group_by" => "day", "ledger_current_year" => ledger_current_year }, website_data: { "robots" => "noindex", "canonical_url" => config.url_builder.absolute_url("/") })
+        end
+        theme_pages = [home, blog, portfolio_page, favorites_page].compact
         root_route_claimed = authored_root_route || theme_pages.any? { |page| page.route == "/" }
         unless root || home || root_route_claimed
           destination = config.navigation.items.first
@@ -670,11 +716,14 @@ module JekyllObsidian
           system_theme_data: system_theme_data,
           taxonomy: taxonomy,
           feed_notes: posts,
-          shared_files: archive_data ? archive_data.fetch("files") : []
+          shared_files: (archive_data ? archive_data.fetch("files") : []) + tab_archive_files
         ) do |note, output|
-          if note.id == root&.id && config.home["layout"] == "archive"
+          if theme_data.fetch(note.id)["archive"]
+            website = output.data.fetch("website").merge("kind" => "blog-index")
+            PageOutput.new(route: output.route, content: output.content, data: output.data.merge("website" => website))
+          elsif note.id == root&.id && config.home["layout"] == "archive"
             website = output.data.fetch("website").merge("kind" => "blog-index", "has_h1" => false,
-              "theme_data" => system_theme_data.merge(archive_data.reject { |key, _| key == "files" }))
+              "theme_data" => system_theme_data.merge(archive_data.reject { |key, _| key == "files" }).merge("ledger_group_by" => config.blog.fetch("ledger_group_by"), "ledger_current_year" => ledger_current_year))
             PageOutput.new(route: output.route, content: "", data: output.data.merge("website" => website))
           else
             note.id == root&.id ? authored_home_page(output) : output
@@ -684,24 +733,40 @@ module JekyllObsidian
 
       private
 
+      def attach_tab_archives(theme_data, model, config, taxonomy, ledger_current_year:)
+        config.navigation.custom_tabs.flat_map do |tab|
+          root = model.notes_by_id.fetch(tab.index_note_id)
+          next [] unless root.properties.dig("tab", "layout") == "archive"
+
+          members = tab.member_note_ids.map { |id| model.notes_by_id.fetch(id) }
+          chronological = chronological_notes(members)
+          archive = PagedArchive.build(chronological.map { |note| note_card(note, config, taxonomy) }, config, scope: tab.id)
+          theme_data[tab.index_note_id] = theme_data.fetch(tab.index_note_id)
+            .reject { |key, _| key == "tab_members" }
+            .merge(archive.reject { |key, _| key == "files" })
+            .merge("ledger_group_by" => config.blog.fetch("ledger_group_by"),
+              "ledger_current_year" => ledger_current_year,
+              "previous" => nil, "next" => nil)
+          archive.fetch("files")
+        end
+      end
+
       def ordered_posts(model)
-        dated, undated = model.notes.select { |note| note.content_type == "post" }.partition(&:published_at)
-        dated.sort_by! { |note| [chronology_key(note.published_at), note.id] }
-        undated.sort_by!(&:id)
-        dated + undated
+        chronological_notes(model.notes.select { |note| note.content_type == "post" }, newest_first: false)
       end
 
       def displayed_posts(posts)
-        dated, undated = posts.partition(&:published_at)
-        displayed = dated.reverse + undated
+        displayed = chronological_notes(posts)
         pinned, remaining = displayed.partition { |note| note.properties["pinned"] == true }
         pinned + remaining
       end
 
       def archive_groups(posts, config, taxonomy)
-        posts.group_by { |note| note.published_at ? note.published_at[0, 4] : "Undated" }.map do |label, grouped|
-          { "label" => label, "posts" => grouped.map { |note| note_card(note, config, taxonomy) } }
+        cards = posts.map do |note|
+          card = note_card(note, config, taxonomy)
+          card.merge(PagedArchive.calendar_fields(card["published_at"]))
         end
+        PagedArchive.groups(cards, config)
       end
 
       def home_theme_data(posts, config, taxonomy)
@@ -807,7 +872,7 @@ module JekyllObsidian
           anchor = anchors[topic_identity(topic)]
           next unless anchor
 
-          topic.slice("name", "url").merge("anchor" => anchor).compact
+          topic.slice("name", "url").merge("name" => topic_label(topic, config), "anchor" => anchor).compact
         end
       end
 
@@ -817,17 +882,31 @@ module JekyllObsidian
         [1, value.to_s]
       end
 
+      def chronological_notes(notes, newest_first: true)
+        dated, undated = notes.partition(&:published_at)
+        dated = dated.sort_by { |note| [chronology_key(note.published_at), note.id] }
+        (newest_first ? dated.reverse : dated) + undated.sort_by(&:id)
+      end
+
       def note_card(note, config, taxonomy)
+        date = ArchiveChronology.local_time(note.published_at, config.blog["utc_offset"])
         content_card(note, config).merge(
-          "topics" => blog_topic_links(note, taxonomy.fetch("anchors")),
+          "markdown_url" => config.url_builder.href(PublishedMarkdown.route(note.route)),
+          "published_at" => date,
+          "topics" => blog_topic_links(note, taxonomy.fetch("anchors"), config),
           "topic_anchors" => topic_anchors_for(note, taxonomy, config),
-          "filter_month" => month_key(note.published_at)
+          "filter_month" => month_key(date),
+          "filter_day" => date&.slice(0, 10),
+          "favorite_card" => config.features.fetch("favorites") ? favorite_card(note, config) : nil
         )
       end
     end
 
     class Docs < Presenter
       def render(model:, config:)
+        # Locale projections share the build's clock snapshot for cards and dates.
+        @recommendation_time = config.reference_time
+        @favorite_cards = {}
         taxonomy = taxonomy_for(model.notes, config)
         navigation = config.navigation
         docs_home_url = navigation.docs_home_url

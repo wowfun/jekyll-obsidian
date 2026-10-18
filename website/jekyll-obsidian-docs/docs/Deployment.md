@@ -12,7 +12,7 @@ updated: 2026-08-19
 
 # Deployment
 
-The [Pages workflow example](https://github.com/wowfun/jekyll-obsidian/blob/v0.2.1/examples/pages.yml) uses the versioned Jekyll Obsidian Action. The Action installs Ruby and builds with the matching `jekyll-obsidian-site` gem. If the host commits a Gemfile and lockfile, it uses that frozen bundle; otherwise it installs the gem directly. No npm installation or project regression suite runs in downstream repositories.
+The [Pages workflow example](https://github.com/wowfun/jekyll-obsidian/blob/v0.3.0/examples/pages.yml) uses the versioned Jekyll Obsidian Action. The Action installs Ruby and builds with the matching `jekyll-obsidian-site` gem. If the host commits a Gemfile and lockfile, it uses that frozen bundle; otherwise it installs the gem directly. No npm installation or project regression suite runs in downstream repositories.
 
 ## Pull requests and pushes
 
@@ -28,6 +28,10 @@ Before upload, the audit checks output paths, file types, site size, URLs, and a
 
 The Action accepts `url` and `baseurl`, and returns `site-path`, the absolute output directory. The example workflow passes Pages metadata to these inputs and uploads that directory.
 
+## Archive deployment metadata
+
+Paged archives and favorites emit a small `assets/website/archive/current.json` descriptor, with a language-specific copy under `assets/website/i18n/<locale>/archive/`. Browser history restores and Retry read this descriptor to discover the current generation without downloading the page again. Publish it with the matching archive files. If you customize cache headers, allow the descriptor to revalidate; only generation paths are immutable.
+
 ## Find the deployed site
 
 The deployment job and **Settings > Pages** show the published URL. A project repository normally uses `https://<owner>.github.io/<repository>/`; an `<owner>.github.io` repository uses the origin root.
@@ -41,6 +45,16 @@ jekyll-obsidian build --url https://example.com --baseurl /project
 ```
 
 Upload `.jekyll-obsidian-cache/site/`. Set `--baseurl ""` for an origin-root site. Production builds require an origin; `url` and `baseurl` can also be set in the site configuration. Explicit command-line values take precedence.
+
+## Markdown export resources
+
+Upload the generated `.md` files alongside HTML and archive assets. Serve them
+from the same origin with `text/markdown` or `text/plain`; generic
+`application/octet-stream` responses and responses without a Content-Type are
+also supported. HTML/XML responses and document-shaped fallback pages are
+rejected, including fallback pages returned with HTTP 200. Do not rewrite missing
+Markdown requests to the site's home page. A failed body prevents the download;
+retry reuses the other bodies already loaded for that export.
 
 ## Custom domains
 

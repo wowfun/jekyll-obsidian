@@ -1,0 +1,6 @@
+{% assign favorite = include.card %}
+{% if page.website.features.favorites and favorite %}
+  <button class="favorite-button" type="button" data-favorite-toggle data-favorite-card="{{ favorite | jsonify | escape }}" data-favorite-id="{{ favorite.id | escape }}" aria-pressed="false" aria-label="{{ ui.favorite_save | default: 'Save' | escape }}: {{ favorite.title | escape }}" hidden>
+    <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5 3h10v14l-5-3-5 3z"></path></svg><span data-favorite-label>{{ ui.favorite_save | default: 'Save' | escape }}</span>
+  </button>
+{% endif %}

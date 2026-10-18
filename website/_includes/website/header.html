@@ -21,14 +21,22 @@
     </nav>
 
     <div class="site-actions">
+      {% if page.website.theme_data.archive %}
+        <button class="site-action archive-reading-switch" type="button" role="switch" aria-checked="false" aria-controls="archive-ledger" aria-label="{{ ui.flat_reading | default: 'Read in full' | escape }}" title="{{ ui.flat_reading_disabled | escape }}" data-enabled="{{ ui.flat_reading_enabled | escape }}" data-disabled="{{ ui.flat_reading_disabled | escape }}" data-archive-reading-toggle hidden data-loading="{{ ui.reading_loading | default: 'Loading article…' | escape }}" data-unavailable="{{ ui.reading_unavailable | default: 'Article could not be loaded.' | escape }}" data-retry="{{ ui.retry | default: 'Retry' | escape }}">
+          {% include website/action-icon.html name='reading' %}
+        </button>
+        {% unless page.website.theme_data.favorites %}<button class="site-action" type="button" data-archive-export-open aria-label="{{ ui.export | default: 'Export' | escape }}" title="{{ ui.export | default: 'Export' | escape }}" aria-haspopup="dialog" aria-controls="archive-export-dialog" hidden>{% include website/action-icon.html name='export' %}</button>{% endunless %}
+      {% endif %}
       {% if page.website.features.search %}
-        <button class="site-action" type="button" data-search-open aria-label="{{ ui.search | default: 'Search' | escape }}">
-          <span class="site-action__label">{{ ui.search | default: 'Search' | escape }}</span><kbd class="site-action__shortcut" aria-hidden="true">⌘K</kbd>
+        <button class="site-action" type="button" data-search-open aria-label="{{ ui.search | default: 'Search' | escape }}" title="{{ ui.search | default: 'Search' | escape }} (Ctrl/⌘ K)" aria-keyshortcuts="Control+k Meta+k">
+          {% include website/action-icon.html name='search' %}
         </button>
       {% endif %}
       {% include website/language-switcher.html %}
       <button class="site-action" type="button" data-color-scheme-toggle data-scheme-use-light="{{ ui.use_light_scheme | default: 'Use light color scheme' | escape }}" data-scheme-use-dark="{{ ui.use_dark_scheme | default: 'Use dark color scheme' | escape }}" data-scheme-light="{{ ui.light_scheme | default: 'Light' | escape }}" data-scheme-dark="{{ ui.dark_scheme | default: 'Dark' | escape }}" aria-label="{{ ui.toggle_scheme | default: 'Toggle color scheme' | escape }}">
-        <span data-color-scheme-label>{{ ui.scheme | default: 'Scheme' | escape }}</span>
+        {% include website/action-icon.html name='moon' class='site-action__moon' %}
+        {% include website/action-icon.html name='sun' class='site-action__sun' %}
+        <span class="visually-hidden" data-color-scheme-label>{{ ui.scheme | default: 'Scheme' | escape }}</span>
       </button>
       {% if page.website.repository_url %}
         {% assign repository_label = ui.open_project_on_github | default: 'Open {title} on GitHub' | replace: '{title}', site.title %}

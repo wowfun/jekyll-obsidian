@@ -2,6 +2,66 @@ name: 简体中文
 hreflang: zh-Hans
 dir: ltr
 messages:
+  ledger_date: "{month}{day}日"
+  ledger_date_year: "{year}年{month}{day}日"
+  ledger_months: "1月|2月|3月|4月|5月|6月|7月|8月|9月|10月|11月|12月"
+  ledger_weekdays: "星期日|星期一|星期二|星期三|星期四|星期五|星期六"
+  ledger_entry: "{count} 条"
+  ledger_entries: "{count} 条"
+  favorites: "收藏"
+  favorite_save: "收藏"
+  favorite_remove: "取消收藏"
+  favorite_saved: "已收藏"
+  favorites_empty: "还没有收藏。在条目或文章页点击收藏，即可在这里查看。"
+  favorites_requires_js: "请启用 JavaScript，以查看保存在此浏览器中的收藏。"
+  archive_refresh_error: "无法检查站点更新。仍可浏览已加载的条目，请重试检查更新。"
+  flat_reading_enabled: "平铺阅读：已开启"
+  flat_reading_disabled: "平铺阅读：已关闭"
+  favorite_storage_error: "无法保存收藏。请允许浏览器本地存储或释放空间后重试。"
+  favorite_storage_damaged: "部分收藏数据损坏，仍可查看可用收藏。修复写入前会备份原始数据。"
+  favorite_storage_unreadable: "无法读取收藏，存储数据已损坏。原始数据已保留。"
+  favorite_storage_unsupported: "无法保存收藏。请使用新版浏览器，并通过 HTTPS 或 localhost 访问。"
+  favorite_storage_quota: "无法保存收藏。浏览器存储空间不足，请释放空间后重试。"
+  favorite_storage_blocked: "无法保存收藏。请允许浏览器本地存储后重试。"
+  favorite_removed_article: "此文章已下架，已保留收藏摘要和原文链接。"
+  favorites_refresh_error: "无法更新文章信息，暂时显示收藏快照。请重试。"
+  undated: "未注明日期"
+  original: 原文
+  sources: 来源
+  topics: 主题
+  export: "导出"
+  export_title: "导出 Markdown"
+  export_close: "关闭导出"
+  export_description: "将符合条件的条目合并为一个 Markdown 文件。"
+  export_filters: "导出筛选"
+  export_start: "开始日期"
+  export_end: "结束日期"
+  export_download: "下载 Markdown"
+  export_cancel: "取消导出"
+  export_dates: "日期范围"
+  export_entries: "条目数"
+  export_date: "日期"
+  export_article: "站内文章"
+  export_required: "请选择开始和结束日期。"
+  export_invalid: "请输入有效日期。"
+  export_order: "结束日期不能早于开始日期。"
+  export_limit: "日期范围最多 {days} 天，包含起止两天。"
+  export_limit_hint: "最多 {days} 天，包含起止两天。"
+  export_calculating: "正在查找符合条件的条目…"
+  export_matches: "将导出 {count} 条内容"
+  export_empty: "没有符合条件的条目，请调整日期或筛选。"
+  export_unavailable: "导出准备失败，请重试。"
+  export_progress: "正在准备 {done} / {count} 条内容…"
+  export_loading_cards: "正在加载条目信息…"
+  export_too_many: "匹配 {count} 条，每次最多导出 {limit} 条，请缩小日期范围或增加筛选条件。"
+  export_too_large: "导出内容过大，请缩小日期范围或增加筛选条件。"
+  export_failed: "有 {count} 条正文载入失败，重试后可下载完整文件。"
+  export_complete: "已下载 {count} 条内容。"
+  export_cancelled: "已取消导出。"
+  export_updated: "站点已更新，请核对新的筛选结果后再下载。"
+  flat_reading: 平铺阅读
+  reading_loading: 正在载入正文…
+  reading_unavailable: 正文载入失败。
   language: 语言
   translation_missing: 本页尚无译文，以下显示默认语言版本。
   skip_to_content: 跳到正文
@@ -30,6 +90,11 @@ messages:
   context: 上下文
   previous: 上一页
   next: 下一页
+  pagination: 分页导航
+  page_number: 第 {page} 页
+  page_input: 页码
+  page_go: 跳转
+  page_jump_error: 请输入 1 到 {pages} 之间的整数。
   manual: 手册
   dispatch: 通讯
   note: 笔记
@@ -139,3 +204,15 @@ messages:
   comments_stored: 评论存储于 GitHub Discussions。
   open_discussions: 在 GitHub 中打开讨论
   open_comments_repository: 在 GitHub 中打开评论仓库
+  favorite_recovery_required: "已保留一份恢复备份。请先下载并清理备份，再修复其他损坏数据。"
+  favorite_recovery_title: "恢复备份"
+  favorite_recovery_description: "清理前请下载原始数据。恢复只会补回可用收藏，不会替换现有收藏。"
+  favorite_recovery_download: "下载原始数据"
+  favorite_recovery_restore: "恢复可用收藏"
+  favorite_recovery_clear: "清理恢复备份"
+  favorite_recovery_restored: "已恢复可用收藏，原始备份仍保留。"
+  favorite_recovery_cleared: "已清理恢复备份，现有收藏仍保留。"
+  pdf_preview: "预览 PDF"
+  pdf_close: "关闭预览"
+  pdf_loading: "正在载入 PDF…"
+  pdf_error: "无法预览，请通过链接打开 PDF。"

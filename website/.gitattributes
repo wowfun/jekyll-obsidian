@@ -2,3 +2,4 @@ bin/* text eol=lf
 exe/* text eol=lf
 scripts/*.rb text eol=lf
 scripts/templates/*.yml text eol=lf
+*.pdf binary
