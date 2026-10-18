@@ -89,7 +89,7 @@ module JekyllObsidian
     :html
   )
 
-  BuildRequest = ImmutableRecord.define(:snapshot, :config, :tab_memberships)
+  BuildRequest = ImmutableRecord.define(:snapshot, :config, :tab_memberships, :reference_time)
   SourceSpan = ImmutableRecord.define(:start_line, :start_column, :end_line, :end_column)
   FrontMatterLink = ImmutableRecord.define(:property, :index, :target, :display, :source_span)
   Diagnostic = ImmutableRecord.define(:severity, :code, :message, :path, :span, :property)
@@ -171,6 +171,7 @@ module JekyllObsidian
     :home,
     :blog,
     :site,
+    :reference_time,
     :url_builder
   )
 

@@ -235,13 +235,12 @@ module JekyllObsidian
       "open_comments_repository" => "Open the comments repository on GitHub"
     }.freeze
 
-    def self.compile(request, render_time: Time.now)
-      new(request, render_time:).compile
+    def self.compile(request)
+      new(request).compile
     end
 
-    def initialize(request, render_time: Time.now)
+    def initialize(request)
       @request = request
-      @render_time = render_time
       @config = request.config
       @diagnostics = []
       @entries = Array(request.snapshot.entries)
@@ -279,14 +278,13 @@ module JekyllObsidian
       ([@default_locale] + @locales.reject { |locale| locale == @default_locale }).each do |locale|
         config = BuildConfig.new(**@config.to_h.merge(i18n: nil, tag_labels: @locale_data.fetch(locale).fetch("tag_labels"), tag_aliases: @locale_data.fetch(locale).fetch("tag_aliases")))
         result = VaultCompiler.compile_single(
-          BuildRequest.new(
+          @request.with(
             snapshot: snapshots.fetch(locale),
             config: config,
             tab_memberships: tab_memberships
           ),
           html_publication: @html_publication,
-          include_html_projection: false,
-          render_time: @render_time
+          include_html_projection: false
         )
         @diagnostics.concat(localized_diagnostics(result.diagnostics, locale))
         results[locale] = result
@@ -304,7 +302,7 @@ module JekyllObsidian
 
     def compile_disabled
       config = BuildConfig.new(**@config.to_h.merge(i18n: nil))
-      VaultCompiler.compile_single(BuildRequest.new(snapshot: @request.snapshot, config: config), render_time: @render_time)
+      VaultCompiler.compile_single(@request.with(config: config))
     end
 
     def validate_configuration

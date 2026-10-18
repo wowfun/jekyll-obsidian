@@ -67,7 +67,7 @@ export function initialiseArchiveFilters(): () => void {
   const roots = Array.from(document.querySelectorAll<HTMLElement>("[data-filter-page]:not([data-paged-archive])"));
   if (roots.length === 0) return () => cleanups.forEach((cleanup) => cleanup());
 
-  const days = roots.map(initialiseArchiveDays);
+  const days = roots.map(root => { applyFilters(root); return initialiseArchiveDays(root); });
   const refresh = () => roots.forEach((root, index) => { applyFilters(root); days[index]!.refresh(); });
   const onClick = (event: MouseEvent) => {
     const target = event.target;
@@ -99,8 +99,6 @@ export function initialiseArchiveFilters(): () => void {
   document.addEventListener("click", onClick);
   window.addEventListener("popstate", refresh);
   window.addEventListener("pageshow", refresh);
-  refresh();
-
   return () => {
     days.forEach(day => day.dispose());
     cleanups.forEach((cleanup) => cleanup());

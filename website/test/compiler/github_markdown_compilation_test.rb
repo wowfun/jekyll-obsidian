@@ -16,6 +16,23 @@ class GitHubMarkdownCompilationTest < Minitest::Test
     FileUtils.remove_entry(@temporary_root) if File.exist?(@temporary_root)
   end
 
+  def test_remote_materialization_preserves_reference_time_in_the_final_localized_pass
+    @transport = transport_for({ ["acme/widget", "main"] => COMMIT }, { ["acme/widget", COMMIT, "README.md"] => "# Imported\n" })
+    result = compile_site(
+      note("index.md", "---\npublish: true\n---\n# Home"),
+      note("portfolio/widget.md", "---\npublish: true\ngithub_markdown: https://github.com/acme/widget/blob/main/README.md\n---\n"),
+      note("post.md", "---\npublish: true\ncontent_type: post\ndate: 2040-12-31\n---\n# Post"),
+      locale_manifest("_locale.yml", "name: English\n"), locale_manifest("_translations/zh-CN/_locale.yml", "name: 简体中文\n"),
+      reference_time: Time.utc(2040, 12, 31, 16, 30), home: { "layout" => "archive" },
+      blog: { "utc_offset" => "+08:00" }, features: { "favorites" => true },
+      i18n: { "enabled" => true, "locales" => %w[en zh-CN] })
+    assert result.success?, result.diagnostics.map(&:message).join("\n")
+    assert_equal 1, @transport.fetch_calls.length
+    %w[/ /favorites/ /zh-CN/ /zh-CN/favorites/].each do |route|
+      assert_equal 2041, page(result, route).data.dig("website", "theme_data", "ledger_current_year"), route
+    end
+  end
+
   def test_imported_markdown_replaces_the_wrapper_body_and_uses_a_safe_remote_profile
     remote = <<~MARKDOWN
       # Imported project
@@ -443,10 +460,10 @@ class GitHubMarkdownCompilationTest < Minitest::Test
     JekyllObsidian::GitHubMarkdown::MemoryTransport.new(commits: commits, files: files)
   end
 
-  def compile_site(*entries, manifest: nil, **overrides)
+  def compile_site(*entries, manifest: nil, reference_time: Time.now, **overrides)
     snapshot = JekyllObsidian::Snapshot.new(entries: entries)
     config = JekyllObsidian::BuildConfig.new(**CompilerTestHelpers::DEFAULT_CONFIG.merge(overrides))
-    request = JekyllObsidian::BuildRequest.new(snapshot: snapshot, config: config)
+    request = JekyllObsidian::BuildRequest.new(snapshot: snapshot, config: config, reference_time: reference_time)
     JekyllObsidian::SiteCompilation.compile(
       request,
       transport: @transport,

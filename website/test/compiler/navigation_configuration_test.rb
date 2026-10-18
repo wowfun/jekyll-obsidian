@@ -696,7 +696,7 @@ class NavigationConfigurationTest < Minitest::Test
   def normalized_navigation(raw)
     config = JekyllObsidian::BuildConfig.new(**DEFAULT_CONFIG.merge(navigation: raw))
     compiler = JekyllObsidian::VaultCompiler.new(
-      JekyllObsidian::BuildRequest.new(snapshot: JekyllObsidian::Snapshot.new(entries: []), config: config)
+      JekyllObsidian::BuildRequest.new(snapshot: JekyllObsidian::Snapshot.new(entries: []), config: config, reference_time: Time.utc(2026))
     )
     compiler.send(:resolve_navigation_config)
     [compiler.instance_variable_get(:@navigation_config), compiler.instance_variable_get(:@diagnostics)]

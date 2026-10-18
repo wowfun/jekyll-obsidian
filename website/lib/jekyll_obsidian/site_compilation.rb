@@ -45,7 +45,7 @@ module JekyllObsidian
         document = documents_by_path[entry.path.to_s]
         document ? SnapshotEntry.new(**entry.to_h.merge(external_document: document)) : entry
       end)
-      final_request = BuildRequest.new(snapshot: snapshot, config: @request.config)
+      final_request = @request.with(snapshot: snapshot)
       result = VaultCompiler.compile(final_request)
       return result unless result.success?
 

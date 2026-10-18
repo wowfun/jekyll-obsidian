@@ -159,23 +159,22 @@ module JekyllObsidian
     MAX_TRANSCLUSION_INSTANCES = 256
     MAX_TRANSCLUSION_BYTES = 2 * 1024 * 1024
 
-    def self.compile(request, render_time: Time.now)
-      return LocalizedCompiler.compile(request, render_time:) unless request.config.i18n.nil?
+    def self.compile(request)
+      return LocalizedCompiler.compile(request) unless request.config.i18n.nil?
 
-      compile_single(request, render_time:)
+      compile_single(request)
     end
 
-    def self.compile_single(request, html_publication: nil, include_html_projection: true, render_time: Time.now)
-      new(request, html_publication:, include_html_projection:, render_time:).compile
+    def self.compile_single(request, html_publication: nil, include_html_projection: true)
+      new(request, html_publication:, include_html_projection:).compile
     end
 
     def self.giscus_language(locale)
       GISCUS_LANGUAGES.include?(locale.to_s) ? locale.to_s : "en"
     end
 
-    def initialize(request, html_publication: nil, include_html_projection: true, render_time: Time.now)
+    def initialize(request, html_publication: nil, include_html_projection: true)
       @request = request
-      @render_time = render_time
       @config = request.config
       @diagnostics = []
       @notes = {}
@@ -205,6 +204,7 @@ module JekyllObsidian
 
     def compile
       validate_request
+      return BuildFailure.new(diagnostics: sorted_diagnostics) if @diagnostics.any? { |item| item.code == "invalid_request" }
       resolve_html_publication
       index_snapshot
       parse_public_notes
@@ -238,9 +238,10 @@ module JekyllObsidian
         home: @home_config,
         blog: @blog_config,
         site: @config,
+        reference_time: @request.reference_time,
         url_builder: @url_builder
       )
-      theme_output = BuiltInThemes.resolve(@theme).render(model: published_site, config: theme_config, render_time: @render_time)
+      theme_output = BuiltInThemes.resolve(@theme).render(model: published_site, config: theme_config)
       pages = theme_output.pages
       generated_files = theme_output.shared_files + build_generated_files(pages, published_site, theme_output)
       raw_html_manifest = HtmlPublication.manifest(@html_publication) if @include_html_projection
@@ -275,6 +276,7 @@ module JekyllObsidian
         error("invalid_request", "compile expects a BuildRequest containing Snapshot and BuildConfig")
         return
       end
+      error("invalid_request", "reference_time must be an explicit Time supplied by the caller") unless @request.reference_time.is_a?(Time)
 
       @config.to_h.each do |name, value|
         next if FrontMatter.valid_output_text?(value.to_s)

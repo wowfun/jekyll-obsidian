@@ -6,7 +6,8 @@
   {% assign month_index = group.day.month | minus: 1 %}
   {% assign date_format = ui.ledger_date | default: '{month} {day}' %}
   {% unless group.day.year == page.website.theme_data.ledger_current_year %}{% assign date_format = ui.ledger_date_year | default: '{month} {day}, {year}' %}{% endunless %}
-  {% assign day_label = date_format | replace: '{month}', months[month_index] | replace: '{day}', group.day.day | replace: '{year}', group.day.year %}
+  {% comment %}Insert the month last so localized names remain literal text.{% endcomment %}
+  {% assign day_label = date_format | replace: '{year}', group.day.year | replace: '{day}', group.day.day | replace_literal: '{month}', months[month_index] %}
 {% endif %}
 {% assign count_format = ui.ledger_entries | default: '{count} entries' %}
 {% if group.posts.size == 1 %}{% assign count_format = ui.ledger_entry | default: '{count} entry' %}{% endif %}

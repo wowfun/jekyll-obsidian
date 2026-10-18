@@ -1,11 +1,7 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test } from "@playwright/test";
+import { archiveReady as ready } from "./archive-helpers";
 
 const base = "/__site__/minimal-archive/";
-const ready = async (page: Page) => {
-  await expect(page.locator("[data-archive-page-status]")).not.toBeEmpty();
-  await expect(page.locator("[data-paged-archive]")).not.toHaveAttribute("aria-busy", "true");
-};
-
 for (const locale of ["en", "zh-CN"]) {
   const root = base + (locale === "en" ? "" : "zh-CN/");
   test(`date presentation metadata belongs to archive pages in ${locale}`, async ({ page }) => {
@@ -14,6 +10,7 @@ for (const locale of ["en", "zh-CN"]) {
     await expect(page.locator("[data-ledger-day-ui]")).toHaveCount(1);
     await page.goto(root + "items/a/");
     await expect(page.locator("main")).not.toHaveAttribute("data-ledger-current-year");
+    await expect(page.locator("main")).not.toHaveAttribute("data-ledger-group-by");
     await expect(page.locator("[data-ledger-day-ui]")).toHaveCount(0);
   });
 

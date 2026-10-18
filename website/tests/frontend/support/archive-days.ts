@@ -1,3 +1,3 @@
-import { readFileSync } from "node:fs";
+import archiveDayUI from "./archive-day-ui.html?raw";
 
-export const archiveDayUI = readFileSync("tests/frontend/support/archive-day-ui.html", "utf8");
+export { archiveDayUI };

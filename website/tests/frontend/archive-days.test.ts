@@ -15,6 +15,12 @@ const root = () => document.querySelector<HTMLElement>("main")!;
 const groups = () => [...document.querySelectorAll<HTMLDetailsElement>("details[data-ledger-day]")];
 const render = (cards: ArchiveCard[]) => renderArchiveLedger(root(), cards, favoriteManifest(cards));
 
+it("substitutes localized month names literally without interpreting dollar patterns or nested tokens", () => {
+  const months = Array.from({ length: 12 }, () => "Month"); months[9] = "Oct$& {day} {year}";
+  root().querySelector<HTMLElement>("[data-ledger-day-ui]")!.dataset.months = months.join("|");
+  expect(archiveDayHeading(root(), "2026-10-15").date).toBe("Oct$& {day} {year} 15");
+});
+
 it("opens the newest day, counts only this projection, and localizes old years and undated entries", () => {
   render([card("2026-10-15"), card("2026-10-15", "second"), card("2025-12-31"), card(null)]);
   const days = initialiseArchiveDays(root()); dispose = days.dispose;

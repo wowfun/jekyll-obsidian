@@ -32,9 +32,9 @@ export function archiveDayHeading(root: HTMLElement, key: string): { date: strin
   const ui = dayUI(root);
   const parts = dayParts(key);
   const format = parts?.year === ui.year ? ui.date : ui.dateYear;
+  const values = parts && { month: ui.months[parts.month]!, day: String(parts.day), year: parts.year };
   return {
-    date: parts ? format.replaceAll("{month}", ui.months[parts.month]!)
-      .replaceAll("{day}", String(parts.day)).replaceAll("{year}", parts.year) : ui.undated,
+    date: values ? format.replace(/\{(month|day|year)\}/g, (_, token: keyof typeof values) => values[token]) : ui.undated,
     weekday: parts ? ui.weekdays[parts.weekday]! : "",
     dated: Boolean(parts)
   };
@@ -79,13 +79,13 @@ export function initialiseArchiveDays(root: HTMLElement): { replace: (render: ()
     newest ||= visible[0]?.dataset.ledgerDay;
     for (const group of visible) {
       const key = group.dataset.ledgerDay!, open = choices.get(key) ?? key === newest;
-      applied.set(group, open); group.open = open;
+      applied.set(group, open); if (group.open !== open) group.open = open;
       const count = group.querySelector<HTMLElement>("[data-ledger-day-count]");
       if (count) count.textContent = entryCount(dayUI(root), group.querySelectorAll("[data-filter-item]:not([hidden])").length);
     }
   }
   const onToggle = (event: Event) => {
-    if (event.target instanceof HTMLDetailsElement && event.target.hasAttribute("data-ledger-day")) capture();
+    if (event.target instanceof HTMLDetailsElement && event.target.hasAttribute("data-ledger-day")) capture([event.target]);
   };
   // Native disclosure toggle events do not bubble; capture is required.
   root.addEventListener("toggle", onToggle, true);

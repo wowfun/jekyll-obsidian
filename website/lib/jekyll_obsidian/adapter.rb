@@ -10,6 +10,9 @@ require "tmpdir"
 require "jekyll"
 require_relative "../jekyll_obsidian"
 require_relative "workspace_layout"
+require_relative "template_filters"
+
+Liquid::Template.register_filter(JekyllObsidian::TemplateFilters)
 
 module JekyllObsidian
   module Adapter
@@ -389,10 +392,12 @@ module JekyllObsidian
     end
 
     def compile(site, layout)
+      reference_time = Time.now
       repository = repository_identity(site, layout)
       Jekyll.logger.warn("Website:", "repository identity unavailable; GitHub collaboration links are hidden") unless repository
       website = site.config.fetch("website")
       request = BuildRequest.new(
+        reference_time: reference_time,
         snapshot: build_snapshot(layout),
         config: BuildConfig.new(
           title: site.config["title"].to_s,

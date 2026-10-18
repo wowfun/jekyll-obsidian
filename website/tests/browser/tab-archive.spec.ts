@@ -1,10 +1,5 @@
-import { expandArchiveDays } from "./archive-helpers";
-import { expect, test, type Page } from "@playwright/test";
-
-const ready = async (page: Page) => {
-  await expect(page.locator("[data-paged-archive]")).not.toHaveAttribute("aria-busy", "true");
-  await expect(page.locator("[data-archive-page-status]")).not.toBeEmpty();
-};
+import { archiveReady as ready, expandArchiveDays } from "./archive-helpers";
+import { expect, test } from "@playwright/test";
 
 for (const locale of ["en", "zh-CN"]) {
   const root = "/__site__/minimal-archive/" + (locale === "en" ? "" : locale + "/");

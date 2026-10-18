@@ -1,8 +1,8 @@
 import { expect, type Page } from "@playwright/test";
 
 export async function archiveReady(page: Page): Promise<void> {
-  await expect(page.locator("[data-paged-archive]")).not.toHaveAttribute("aria-busy", "true");
   await expect(page.locator("[data-archive-page-status]")).not.toBeEmpty();
+  await expect(page.locator("[data-paged-archive]")).not.toHaveAttribute("aria-busy", "true");
 }
 
 export async function expandArchiveDays(page: Page): Promise<void> {

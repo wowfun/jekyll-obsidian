@@ -157,6 +157,26 @@ it("bounds concurrent loads, cancels queued work on switch-off, and ignores late
   expect(fetch).toHaveBeenCalledTimes(4);
 });
 
+it("preserves the client-wide request limit when another date opens without IntersectionObserver", async () => {
+  rows(8);
+  const root = document.querySelector<HTMLElement>("main")!;
+  const entries = [...root.querySelectorAll<HTMLElement>("[data-filter-item]")];
+  const first = document.createElement("details"), second = document.createElement("details");
+  first.dataset.ledgerDay = "2026-10-15"; first.open = true; second.dataset.ledgerDay = "2026-10-14";
+  first.append(...entries.slice(0, 4)); second.append(...entries.slice(4)); root.append(first, second);
+  const finish: ((response: Response) => void)[] = [];
+  const fetch = vi.fn(() => new Promise<Response>(resolve => finish.push(resolve))); vi.stubGlobal("fetch", fetch);
+  const reading = initialiseArchiveReading(root, client); dispose = reading.dispose;
+  document.querySelector<HTMLButtonElement>("button")!.click();
+  expect(fetch).toHaveBeenCalledTimes(4);
+  second.open = true; second.dispatchEvent(new Event("toggle"));
+  expect(fetch).toHaveBeenCalledTimes(4);
+  finish.slice(0, 4).forEach(resolve => resolve(response()));
+  await vi.waitFor(() => expect(fetch).toHaveBeenCalledTimes(8));
+  finish.slice(4).forEach(resolve => resolve(response()));
+  await vi.waitFor(() => expect(root.querySelectorAll("[data-reading-loaded]")).toHaveLength(8));
+});
+
 it("retries a failed article while keeping successful articles and the description", async () => {
   rows(2);
   const fetch = vi.fn().mockResolvedValueOnce(new Response('', { status: 503 })).mockImplementation(async () => response()); vi.stubGlobal('fetch', fetch);

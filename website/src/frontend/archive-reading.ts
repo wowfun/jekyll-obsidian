@@ -108,10 +108,10 @@ export function initialiseArchiveReading(root: HTMLElement, client: Pick<Archive
   function visible(row: HTMLElement): boolean {
     return !row.closest("[hidden], details[data-ledger-day]:not([open])");
   }
-  function observeRows(): void {
+  function observeRows(scope: HTMLElement = root): void {
     if (!enabled || disposed) return;
     const signal = controller.signal;
-    const rows = Array.from(root.querySelectorAll<HTMLElement>("[data-filter-item]"));
+    const rows = Array.from(scope.querySelectorAll<HTMLElement>("[data-filter-item]"));
     if (observer) {
       for (const row of rows) {
         if (!visible(row)) observer.unobserve(row);
@@ -152,7 +152,7 @@ export function initialiseArchiveReading(root: HTMLElement, client: Pick<Archive
   toggle.addEventListener("click", switchReading);
   root.addEventListener("click", retry);
   const onDayToggle = (event: Event) => {
-    if (event.target instanceof HTMLDetailsElement && event.target.hasAttribute("data-ledger-day")) observeRows();
+    if (event.target instanceof HTMLDetailsElement && event.target.hasAttribute("data-ledger-day")) observeRows(event.target);
   };
   // Native disclosure toggle events do not bubble; capture is required.
   root.addEventListener("toggle", onDayToggle, true);

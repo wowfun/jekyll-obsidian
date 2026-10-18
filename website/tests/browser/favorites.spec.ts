@@ -1,4 +1,4 @@
-import { expandArchiveDays } from "./archive-helpers";
+import { archiveReady as ready, expandArchiveDays } from "./archive-helpers";
 import { test, expect } from "@playwright/test";
 
 test.describe('favorites without JavaScript', () => {
@@ -13,10 +13,6 @@ test.describe('favorites without JavaScript', () => {
 });
 
 const base = "/__site__/minimal-archive/";
-const ready = async (page: import("@playwright/test").Page) => {
-  await expect(page.locator("[data-paged-archive]")).not.toHaveAttribute("aria-busy", "true");
-  await expect(page.locator("[data-archive-page-status]")).not.toBeEmpty();
-};
 for (const locale of ["en", "zh-CN"]) {
   const root = base + (locale === "en" ? "" : locale + "/");
   test(`favorites persist across archive, article, locales and browser navigation in ${locale}`, async ({ page, context }) => {

@@ -569,9 +569,9 @@ module JekyllObsidian
     end
 
     class Minimal < Presenter
-      def render(model:, config:, render_time: Time.now)
+      def render(model:, config:)
         # Locale projections share the build's clock snapshot for cards and dates.
-        @recommendation_time = render_time
+        @recommendation_time = config.reference_time
         @favorite_cards = {}
         ledger_current_year = @recommendation_time.getlocal(config.blog["utc_offset"] || "+00:00").year
         posts = ordered_posts(model)
@@ -631,7 +631,6 @@ module JekyllObsidian
         end
         system_theme_data = {
           "archive_groups" => [],
-          "ledger_current_year" => ledger_current_year,
           "docs_tree" => documentation.docs_tree,
           "docs_home_url" => documentation.docs_home_url,
           "previous" => nil,
@@ -667,6 +666,7 @@ module JekyllObsidian
             system_theme_data,
             {
               "archive_groups" => groups,
+              "ledger_current_year" => ledger_current_year,
               "topic_summaries" => taxonomy.fetch("summaries"),
               "topic_filter_count" => displayed.length,
               "timeline" => timeline,
@@ -692,7 +692,7 @@ module JekyllObsidian
         favorites_page = if config.features.fetch("favorites")
           system_page(config, "/favorites/", navigation_label(config, "favorites", "Favorites"), "blog-index", system_theme_data,
             { "archive" => archive_data.fetch("archive"), "archive_groups" => [], "timeline" => archive_data.fetch("timeline"),
-              "favorites" => true, "ledger_group_by" => "day" }, website_data: { "robots" => "noindex", "canonical_url" => config.url_builder.absolute_url("/") })
+              "favorites" => true, "ledger_group_by" => "day", "ledger_current_year" => ledger_current_year }, website_data: { "robots" => "noindex", "canonical_url" => config.url_builder.absolute_url("/") })
         end
         theme_pages = [home, blog, portfolio_page, favorites_page].compact
         root_route_claimed = authored_root_route || theme_pages.any? { |page| page.route == "/" }
@@ -723,7 +723,7 @@ module JekyllObsidian
             PageOutput.new(route: output.route, content: output.content, data: output.data.merge("website" => website))
           elsif note.id == root&.id && config.home["layout"] == "archive"
             website = output.data.fetch("website").merge("kind" => "blog-index", "has_h1" => false,
-              "theme_data" => system_theme_data.merge(archive_data.reject { |key, _| key == "files" }).merge("ledger_group_by" => config.blog.fetch("ledger_group_by")))
+              "theme_data" => system_theme_data.merge(archive_data.reject { |key, _| key == "files" }).merge("ledger_group_by" => config.blog.fetch("ledger_group_by"), "ledger_current_year" => ledger_current_year))
             PageOutput.new(route: output.route, content: "", data: output.data.merge("website" => website))
           else
             note.id == root&.id ? authored_home_page(output) : output
@@ -903,9 +903,9 @@ module JekyllObsidian
     end
 
     class Docs < Presenter
-      def render(model:, config:, render_time: Time.now)
+      def render(model:, config:)
         # Locale projections share the build's clock snapshot for cards and dates.
-        @recommendation_time = render_time
+        @recommendation_time = config.reference_time
         @favorite_cards = {}
         taxonomy = taxonomy_for(model.notes, config)
         navigation = config.navigation
