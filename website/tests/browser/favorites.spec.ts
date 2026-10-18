@@ -46,7 +46,9 @@ for (const locale of ["en", "zh-CN"]) {
   });
 
   test(`removed articles retain snapshots and network failures allow retry in ${locale}`, async ({ page }) => {
-    await page.goto(root); await ready(page); await page.locator("[data-filter-item] [data-favorite-toggle]").first().click();
+    await page.goto(root); await ready(page);
+    const save = page.locator("[data-filter-item] [data-favorite-toggle]").first();
+    await save.click(); await expect(save).toHaveAttribute("aria-pressed", "true");
     await page.route("**/manifest.json", route => route.abort());
     await page.goto(root + "favorites/"); await ready(page);
     await expect(page.locator(".blog-ledger__main strong")).toHaveText(["Newest"]);
