@@ -73,6 +73,13 @@ messages:
   filter_by_topic: 按主题筛选
   chronology: 时间归档
   no_matching_entries: 没有符合这些筛选条件的条目。
+  clear_filters: 清除筛选
+  retry: 重试
+  archive_loading: 正在载入所选条目…
+  archive_unavailable: 所选条目载入失败，请重试或清除筛选。
+  archive_results: "{count} 条"
+  page_label: "第 {page} / {pages} 页"
+  first_observed: 首次发现于
   contact: 联系方式
   graph: 关系图
   feed: 订阅

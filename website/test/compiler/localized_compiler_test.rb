@@ -5,6 +5,17 @@ require "test_helper"
 class LocalizedCompilerTest < Minitest::Test
   I18N = { "locales" => %w[en zh-CN] }.freeze
 
+  def test_bundled_translations_cover_the_default_message_catalog
+    # Hosts may use partial catalogs; maintained translations in this repository
+    # must not silently fall back to English as new UI messages are introduced.
+    root = File.expand_path("../../jekyll-obsidian-docs", __dir__)
+    expected = JekyllObsidian::LocalizedCompiler::MESSAGE_DEFAULTS.keys.sort
+    Dir.glob(File.join(root, "_translations", "*", "_locale.yml")).each do |file|
+      messages = Psych.safe_load_file(file).fetch("messages")
+      assert_equal expected, messages.keys.sort, file
+    end
+  end
+
   def test_ledger_formats_reject_missing_unknown_and_unbalanced_placeholders
     {
       "ledger_date" => ["{month} {dy}", "{day}", "{month} {day"],
