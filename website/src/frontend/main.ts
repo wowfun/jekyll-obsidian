@@ -24,30 +24,31 @@ let graphModule: Promise<typeof import("./graph")> | null = null;
 function initialisePageFeatures(): void {
   const generation = ++pageFeatureGeneration;
   cleanupPageFeatures();
-  initialiseDialogs();
-  const cleanupOutline = initialiseOutline();
-  const cleanupRecommendations = initialiseRecommendations();
-  const cleanupComments = initialiseComments();
-  const cleanupArchiveFilters = initialiseArchiveFilters();
-  const cleanupPageActions = initialisePageActions();
-  const cleanupFavorites = initialiseFavorites();
-  const cleanupPdfPreviews = initialisePdfPreviews();
-  const cleanupCodeBlockCopy = initialiseCodeBlockCopy();
-  const cleanupImageViewer = initialiseImageViewer();
-  initialiseMediaViewerControls();
-  const cleanupTweets = initialiseTweets();
+  const cleanups: (() => void)[] = [];
   cleanupPageFeatures = () => {
-    cleanupOutline();
-    cleanupRecommendations();
-    cleanupComments();
-    cleanupArchiveFilters();
-    cleanupPageActions();
-    cleanupFavorites();
-    cleanupPdfPreviews();
-    cleanupCodeBlockCopy();
-    cleanupImageViewer();
-    cleanupTweets();
+    const failures: unknown[] = [];
+    for (const cleanup of cleanups.splice(0).reverse()) {
+      try { cleanup(); } catch (error) { failures.push(error); }
+    }
+    if (failures.length) throw new AggregateError(failures, "Page feature cleanup failed");
   };
+  try {
+    initialiseDialogs();
+    cleanups.push(initialiseOutline());
+    cleanups.push(initialiseRecommendations());
+    cleanups.push(initialiseComments());
+    cleanups.push(initialiseArchiveFilters());
+    cleanups.push(initialisePageActions());
+    cleanups.push(initialiseFavorites());
+    cleanups.push(initialisePdfPreviews());
+    cleanups.push(initialiseCodeBlockCopy());
+    cleanups.push(initialiseImageViewer());
+    initialiseMediaViewerControls();
+    cleanups.push(initialiseTweets());
+  } catch (error) {
+    try { cleanupPageFeatures(); } catch (cleanupError) { throw new AggregateError([error, cleanupError], "Page feature initialization failed"); }
+    throw error;
+  }
 
   if (readSiteUrl("preview")) {
     void import("./preview")
