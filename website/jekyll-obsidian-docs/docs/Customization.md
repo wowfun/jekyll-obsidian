@@ -16,6 +16,10 @@ updated: 2026-10-21
 
 Both themes use icon-only header actions for search, language selection and color scheme. Accessible names and hover hints identify each action; search keeps its Ctrl/⌘ K shortcut. Repeated collection headings and descriptions are omitted automatically, and language menus fit their option labels. Daily archives open only the newest day on the current page by default and retain manual folding choices through filtering and pagination until reload. These presentation defaults need no feature flags. Archive homepages, pagination and browser-local favorites remain explicit site choices.
 
+Both themes provide a **Back to top** arrow on index, article, documentation, archive, and favorites pages. It appears in the lower-right corner only after scrolling more than one viewport height, hides again within the first screen, and sits above the mobile toolbar without covering translation notices. When visible, it follows the skip link in keyboard navigation order. Activating it moves focus to the main content and scrolls smoothly to the top, or immediately when reduced motion is preferred, without changing the URL. This default needs no configuration and stays hidden without JavaScript and when printing. Translate its accessible name and hover hint with the `back_to_top` locale message.
+
+The early keyboard position makes the control quick to reach when restoring a scrolled page; pressing Tab again continues into the header. The control and its main-content focus target remain outlined in forced-colors mode.
+
 Edit `.github/jekyll-obsidian.yml` to configure the site. The gem supplies defaults, so the host only needs the settings it wants to override:
 
 ```yaml

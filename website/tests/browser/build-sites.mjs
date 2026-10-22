@@ -55,6 +55,30 @@ try {
   await rm(fixtureHost, { force: true, recursive: true });
 }
 
+const scrollHost = await mkdtemp(path.join(tmpdir(), "jekyll-obsidian-back-to-top-"));
+try {
+  await mkdir(path.join(scrollHost, ".jekyll-obsidian-cache"));
+  await writeFile(path.join(scrollHost, ".jekyll-obsidian-cache/github-markdown-browser.json"),
+    JSON.stringify({ version: 1, documents: [] }));
+  await writeFile(path.join(scrollHost, "host.yml"),
+    "title: Back to top fixture\nwebsite:\n  source: vault\n  repository: example/scroll\n  i18n:\n    enabled: true\n    locales: [en, zh-CN]\n");
+  const longBody = Array.from({ length: 60 }, (_, i) => `## Section ${i + 1}\n\nA paragraph to exercise scrolling through a complete page of published content.\n`).join("\n");
+  for (const [prefix, locale, title] of [["", "en", "Long page"], ["_translations/zh-CN/", "zh-CN", "长页面"]]) {
+    const root = path.join(scrollHost, `vault/${prefix}`);
+    await mkdir(path.join(root, "docs"), { recursive: true });
+    await mkdir(path.join(root, "posts"), { recursive: true });
+    await copyFile(path.join(projectRoot, "jekyll-obsidian-docs",
+      locale === "en" ? "_locale.yml" : "_translations/zh-CN/_locale.yml"), path.join(root, "_locale.yml"));
+    await writeFile(path.join(root, "index.md"), `---\npublish: true\n---\n# ${title}\n\n${longBody}`);
+    await writeFile(path.join(root, "docs/long.md"), `---\npublish: true\ncontent_type: doc\n---\n# ${title}\n\n${longBody}`);
+    await writeFile(path.join(root, "docs/short.md"), "---\npublish: true\ncontent_type: doc\n---\n# Short page\n\nShort content.\n");
+    await writeFile(path.join(root, "posts/story.md"), `---\npublish: true\ncontent_type: post\ndate: 2026-10-20\n---\n# ${title}\n\n${longBody}`);
+  }
+  await buildFixtureSites(scrollHost, "back-to-top", path.join(scrollHost, "host.yml"));
+} finally {
+  await rm(scrollHost, { force: true, recursive: true });
+}
+
 const propertiesHost = await mkdtemp(path.join(tmpdir(), "jekyll-obsidian-properties-"));
 try {
   await cp(path.join(projectRoot, "tests/browser/fixtures/note-properties"), propertiesHost, { recursive: true });

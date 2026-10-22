@@ -97,6 +97,7 @@ module JekyllObsidian
       "language" => "Language",
       "translation_missing" => "This page is not translated yet. The default-language version is shown.",
       "skip_to_content" => "Skip to content",
+      "back_to_top" => "Back to top",
       "overview" => "Overview",
       "documentation" => "Documentation",
       "tags" => "Tags",

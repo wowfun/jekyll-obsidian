@@ -14,6 +14,7 @@ import { initialiseCodeBlockCopy } from "./code-block-copy";
 import { initialiseTweets } from "./tweets";
 import { initialiseAnalytics } from "./analytics";
 import { initialiseAutoHideScrollbars } from "./scrollbars";
+import { initialiseBackToTop } from "./back-to-top";
 import { initialiseImageViewer, initialiseMediaViewerControls } from "./media-viewer";
 
 const DOCS_PAGE_CHANGE_EVENT = "website:docs-page-change";
@@ -39,6 +40,7 @@ function initialisePageFeatures(): void {
     cleanups.push(initialiseComments());
     cleanups.push(initialiseArchiveFilters());
     cleanups.push(initialisePageActions());
+    cleanups.push(initialiseBackToTop());
     cleanups.push(initialiseFavorites());
     cleanups.push(initialisePdfPreviews());
     cleanups.push(initialiseCodeBlockCopy());

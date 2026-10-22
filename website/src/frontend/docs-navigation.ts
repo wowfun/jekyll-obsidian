@@ -133,6 +133,7 @@ function commitPage(source: Document, url: URL, push: boolean): void {
   currentMain.replaceWith(importedMain);
   replaceOptional("[data-page-context]", source, importedMain);
   replaceOptional(".mobile-toolbar", source);
+  replaceOptional("[data-back-to-top]", source);
   replaceOptional("[data-page-dialogs]", source);
 
   if (push) history.pushState({ websiteDocs: true }, "", url);

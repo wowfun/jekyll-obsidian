@@ -10,6 +10,7 @@ messages:
   include_tab_sources: Include tab sources
   hide_tab_sources: Hide tab sources
 
+  back_to_top: "Back to top"
   ledger_date: "{month} {day}"
   ledger_date_year: "{month} {day}, {year}"
   ledger_months: "January|February|March|April|May|June|July|August|September|October|November|December"

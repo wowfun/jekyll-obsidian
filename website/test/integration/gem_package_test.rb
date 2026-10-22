@@ -2,6 +2,8 @@
 
 require "digest"
 require "fileutils"
+require "json"
+require "nokogiri"
 require "open3"
 require "rubygems/installer"
 require "rubygems/package"
@@ -15,6 +17,7 @@ class GemPackageTest < Minitest::Test
     assert File.file?(archive), "Run website/bin/test or ruby website/scripts/package.rb before package tests."
     spec = Gem::Package.new(archive).spec
     assert_includes spec.files, "website/assets/manifest.json"
+    assert_includes spec.files, "website/_includes/website/back-to-top.html"
     assert_includes spec.files, "LICENSE"
     refute spec.files.any? { |path| path.match?(%r{/(?:jekyll-obsidian-docs|test|tests|node_modules|vendor|src|\.jekyll-obsidian-cache)/}) }
     refute spec.files.any? { |path| path.end_with?("package.json", "Gemfile", "Gemfile.lock") }
@@ -24,6 +27,8 @@ class GemPackageTest < Minitest::Test
       installed = Gem::Installer.at(archive, install_dir: gem_home, ignore_dependencies: true, wrappers: true).install
       executable = File.join(gem_home, "bin", "jekyll-obsidian")
       package = installed.full_gem_path
+      packaged_assets = File.join(package, "website", "assets")
+      manifest = JSON.parse(File.read(File.join(packaged_assets, "manifest.json")))
       before = digest_files(package)
       host = File.join(temporary, "用户 repository")
       FileUtils.mkdir_p(host)
@@ -54,6 +59,26 @@ class GemPackageTest < Minitest::Test
         assert_includes html, "Welcome"
         assert_includes html, "/project/assets/website/"
         assert_includes html, "class=\"theme-#{theme}\""
+        document = Nokogiri::HTML5.parse(html)
+        buttons = document.css("button[data-back-to-top]")
+        assert_equal 1, buttons.size
+        button = buttons.first
+        assert_equal "button", button["type"]
+        refute_nil button.attribute("hidden")
+        assert_equal "Back to top", button["aria-label"]
+        assert_equal "Back to top", button["title"]
+        assert_equal "-1", document.at_css("main#main-content")&.[]("tabindex")
+        entry = manifest.fetch("entries").fetch(theme)
+        assert_includes document.css("script[type='module'][src]").map { |script| script["src"] },
+          "/project/assets/website/#{entry.fetch('js')}"
+        assert_includes document.css("link[rel='stylesheet']").map { |link| link["href"] },
+          "/project/assets/website/#{entry.fetch('css')}"
+        entry.fetch("files").each do |relative|
+          published = File.join(host, ".jekyll-obsidian-cache", "site", "assets", "website", relative)
+          assert File.file?(published), "#{theme} is missing #{relative}"
+          assert_equal Digest::SHA256.file(File.join(packaged_assets, relative)).hexdigest,
+            Digest::SHA256.file(published).hexdigest, "#{theme} changed packaged asset #{relative}"
+        end
       end
       assert_equal before, digest_files(package)
       assert_equal ["docs"], Dir.children(File.join(host, "website"))

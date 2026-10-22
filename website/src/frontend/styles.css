@@ -77,6 +77,7 @@
     --page-action-menu-size: 2.15rem;
     --page-actions-gap: 1rem;
     --page-action-favorite-clearance: 4.25rem;
+    --back-to-top-size: max(44px, 2.75rem);
   }
 
   :root[data-color-scheme="dark"] {
@@ -153,6 +154,10 @@
   :focus-visible {
     border-radius: 0.2rem;
     box-shadow: var(--focus-ring);
+  }
+
+  #main-content:focus-visible {
+    outline: 0;
   }
 
   button {
@@ -509,6 +514,33 @@
 
   .mobile-toolbar {
     display: none;
+  }
+
+  .back-to-top {
+    position: fixed;
+    z-index: 40;
+    right: calc(1rem + env(safe-area-inset-right, 0px));
+    bottom: calc(1rem + env(safe-area-inset-bottom, 0px));
+    display: grid;
+    place-items: center;
+    inline-size: var(--back-to-top-size);
+    block-size: var(--back-to-top-size);
+    padding: 0;
+    border: 1px solid var(--line-strong);
+    border-radius: 50%;
+    background: var(--surface);
+    color: var(--ink);
+    box-shadow: 0 4px 16px rgb(16 18 31 / 16%);
+    cursor: pointer;
+  }
+
+  .back-to-top:hover {
+    background: var(--frost);
+  }
+
+  .back-to-top:focus-visible {
+    outline: 2px solid var(--ink);
+    outline-offset: 3px;
   }
 }
 
@@ -2524,8 +2556,19 @@
 }
 
 @media (max-width: 880px) {
+  .back-to-top {
+    bottom: calc(1rem + env(safe-area-inset-bottom, 0px) + 4rem);
+  }
+
   .translation-fallback {
     inset-block-end: calc(max(0.7rem, env(safe-area-inset-bottom)) + 4rem);
+  }
+
+  body:has(.back-to-top:not([hidden])) .translation-fallback {
+    inset-inline: auto;
+    left: calc(1rem + env(safe-area-inset-left, 0px));
+    right: calc(1rem + env(safe-area-inset-right, 0px) + var(--back-to-top-size) + 0.75rem);
+    max-inline-size: min(32rem, calc(100% - 2rem - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px) - var(--back-to-top-size) - 0.75rem));
   }
 
   .site-header__inner {
@@ -2717,6 +2760,13 @@
 }
 
 @media (forced-colors: active) {
+  #main-content:focus-visible,
+  .back-to-top:focus-visible {
+    outline: 2px solid ButtonText;
+    outline-offset: 3px;
+    box-shadow: none;
+  }
+
   .note-content img[data-image-expand]:focus-visible {
     outline-color: ButtonText;
   }
@@ -2777,6 +2827,7 @@
   .minimal-docs-sidebar,
   .minimal-context,
   .mobile-toolbar,
+  .back-to-top,
   .site-footer,
   .source-actions,
   .page-actions,
