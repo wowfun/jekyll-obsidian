@@ -8,7 +8,7 @@ globalThis.addEventListener("message", (event: MessageEvent<ArchiveWorkerRequest
   if (generation !== current) { postings.clear(); generation = current; }
   for (const [key, bitmap] of Object.entries(updates)) postings.set(key, bitmap);
   const bitmaps: Record<string, Uint8Array> = Object.create(null);
-  for (const key of query.groups.flat()) {
+  for (const key of [...query.groups.flat(), ...(query.excluded || [])]) {
     const bitmap = postings.get(key);
     if (bitmap) { bitmaps[key] = bitmap; postings.delete(key); postings.set(key, bitmap); }
   }

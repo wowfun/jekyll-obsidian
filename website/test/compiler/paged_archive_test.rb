@@ -63,7 +63,7 @@ class PagedArchiveTest < Minitest::Test
   end
 
   def test_archive_facet_names_cannot_collide_with_query_controls
-    %w[page year month day].each do |name|
+    %w[page year month day include_tabs show_hidden].each do |name|
       result = compile(
         note("index.md", "---\npublish: true\n---\n# Home"),
         home: { "layout" => "archive" }, blog: { "facets" => { name => "#{name}/" } }
@@ -195,7 +195,7 @@ class PagedArchiveScaleTest < Minitest::Test
   def test_rejects_noncontiguous_dates_and_dated_cards_after_undated_cards
     config = Struct.new(:blog, :site, :features).new(
       { "page_size" => 2, "export_max_days" => 7, "facets" => {} },
-      Struct.new(:tag_labels, :tag_aliases).new({}, {}), { "favorites" => false }
+      Struct.new(:tag_labels, :tag_aliases, :hidden_tags).new({}, {}, []), { "favorites" => false }
     )
     [["2026-01-03", "2026-01-01", "2026-01-03"], [nil, "2026-01-03"]].each do |dates|
       cards = dates.each_with_index.map { |date, index| { "id" => index.to_s, "published_at" => date } }
@@ -209,7 +209,7 @@ class PagedArchiveScaleTest < Minitest::Test
     def builder.href(route) = route
     config = Struct.new(:blog, :site, :url_builder, :features).new(
       { "page_size" => 50, "export_max_days" => 7, "ledger_group_by" => "day", "utc_offset" => "+08:00", "facets" => { "source" => "source/", "topic" => "topics/" } },
-      Struct.new(:tag_labels, :tag_aliases).new({}, {}), builder, { "favorites" => true }
+      Struct.new(:tag_labels, :tag_aliases, :hidden_tags).new({}, {}, []), builder, { "favorites" => true }
     )
     cards = Array.new(100_000) do |i|
       { "id" => i.to_s, "title" => "Record #{i}", "url" => "/items/#{i}/", "published_at" => "2026-10-09T00:00:00Z", "tags" => ["source/hn", "topics/agents"] }

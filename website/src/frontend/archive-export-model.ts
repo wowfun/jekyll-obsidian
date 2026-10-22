@@ -34,14 +34,19 @@ export function exportState(data: ArchiveManifest, filters: URLSearchParams, sta
   return state;
 }
 function escape(value: string): string { return value.replace(/[\r\n]+/g, " ").replace(/[\\`*_[\]{}<>#!|~]/g, "\\$&"); }
-export interface ExportLabels { dates: string; source: string; topic: string; all: string; entries: string; date: string; original: string; article: string }
+export interface ExportLabels { dates: string; source: string; topic: string; all: string; allWithoutTabs: string; entries: string; date: string; original: string; article: string }
 export interface ExportSnapshot { site: string; locale: string; start: string; end: string; filters: URLSearchParams; cards: ArchiveCard[] }
 export function exportMarkdownParts(snapshot: ExportSnapshot, data: ArchiveManifest, bodies: Map<string, string>, labels: ExportLabels): string[] {
   const facetName = (name: string) => name === "source" ? labels.source : name === "topic" ? labels.topic : name;
   const facetValues = (name: string, ids: string[]) => ids.map(id => escape(data.labels[data.prefixes[name]! + id] || id)).join(", ");
   const link = (value: string) => `<${archiveUrl(value, true).href.replace(/</g, "%3C").replace(/>/g, "%3E")}>`;
+  const selectedDescription = (name: string) => {
+    const selected = snapshot.filters.getAll(name);
+    return name === "source" && !selected.length && data.tab_sources?.length && snapshot.filters.get("include_tabs") !== "1"
+      ? labels.allWithoutTabs : facetValues(name, selected) || labels.all;
+  };
   const heading = ["# " + escape(snapshot.site), `${labels.dates}: ${snapshot.start} — ${snapshot.end}`,
-    ...Object.keys(data.prefixes).map(name => `${facetName(name)}: ${facetValues(name, snapshot.filters.getAll(name)) || labels.all}`),
+    ...Object.keys(data.prefixes).map(name => `${facetName(name)}: ${selectedDescription(name)}`),
     `${labels.entries}: ${snapshot.cards.length}`].join("\n\n");
   const parts = [heading];
   for (const card of snapshot.cards) {

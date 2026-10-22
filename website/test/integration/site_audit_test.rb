@@ -23,7 +23,7 @@ class SiteAuditTest < Minitest::Test
       File.write(File.join(site, "index.html"), "<!doctype html><title>Garden</title>")
       directory = File.join(site, "assets", "website", "i18n", "zh-CN", "archive", "a" * 64)
       FileUtils.mkdir_p(directory)
-      %w[manifest.json identities.json cards-0.json].each { |name| File.write(File.join(directory, name), "{}") }
+      %w[manifest.json identities.json excluded.json cards-0.json].each { |name| File.write(File.join(directory, name), "{}") }
       File.write(File.join(File.dirname(directory), "current.json"), "{}")
       primary = File.join(site, "assets", "website", "archive")
       FileUtils.mkdir_p(primary)
@@ -34,6 +34,11 @@ class SiteAuditTest < Minitest::Test
       end
       _stdout, stderr, status = audit(site)
       assert status.success?, stderr
+      File.write(File.join(primary, "excluded.json"), "{}")
+      _stdout, stderr, status = audit(site)
+      refute status.success?
+      assert_includes stderr, "extension allowlist"
+      File.delete(File.join(primary, "excluded.json"))
       File.write(File.join(primary, "credentials.json"), "{}")
       _stdout, stderr, status = audit(site)
       refute status.success?

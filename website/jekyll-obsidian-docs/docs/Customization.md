@@ -9,7 +9,7 @@ related:
   - "[[docs/Localization]]"
 description: Adjust site identity, visual tokens, navigation, and repository links.
 created: 2026-07-31
-updated: 2026-08-26
+updated: 2026-10-21
 ---
 
 # Customization
@@ -486,3 +486,13 @@ Enabling favorites also generates a manifest, identity index, deployment descrip
 If checking the current deployment fails on return to an ordinary archive, its last loaded generation remains available for filtering and pagination, with a Retry notice. Favorites continue to use saved snapshots until deployment verification succeeds. The reading switch shows a check mark when enabled and reports its state in the hover hint; the search hint includes Ctrl/⌘ K.
 
 Filtering and pagination reuse the loaded collection and requested facet bitmaps. Retry and browser restoration rediscover the current generation from the page, rather than retrying an old deployment's archive path. Refreshing the same page preserves an unfinished page-number input. Facet links retain the selected filters when opened in another tab.
+
+### Archive visibility
+
+Minimal archive Home can set `website.home.hide_tab_sources: true` (default false). It requires a `source` facet in `website.blog.facets`; the compiler warns if it is enabled with `website.home.layout: recent` or the Docs theme. It derives excluded sources from the source tags of actual archive tabs. The button below Sources includes those sources and their entries; counts, chronology, pagination and Markdown export use the same scope. Collection tabs, search, article pages and Favorites retain their full content.
+
+This option requires a facet named `source` in `website.blog.facets`; its prefix is configurable (normally `source/`). Builds reject the option if that facet is missing. Only `tab.topics` values matching this prefix after alias resolution define excluded sources. A topic-only tab, a tab without explicit source topics, or a misspelled source with no matching posts excludes nothing; this option does not infer sources from tab names or membership. Check the tab's source tag IDs when Home does not change.
+
+Locale manifests accept `hidden_tags`, a unique list of complete tag IDs such as `topics/research`. Aliases are resolved through `tag_aliases`, then deduplicated; locales must describe the same canonical set. Single-language sites can also set `hidden_tags`, `tag_aliases` and `tag_labels` in the vault-root `_locale.yml` without enabling i18n. Both modes reject unknown manifest keys. Hidden tags stay on articles and saved entries but are omitted from default archive, collection, Favorites and export choices. Each button reveals hidden choices only within its own facet: “Show hidden topics” for Topics and “Show hidden tags” for other facets. Sources can offer both this disclosure and “Include tab sources”; the controls operate independently. Selected hidden choices remain visible when collapsed.
+
+Disclosure state uses `include_tabs=1` and repeated `show_hidden` parameters naming the expanded facets, for example `show_hidden=source&show_hidden=topic`. Explicit source links automatically include tab sources. Export inherits each facet's state but its controls are independent of the page. With no explicit source selection, exported headings describe the scope as “All (excluding tab sources)” rather than listing every remaining source. Static HTML always starts with the default scope; JavaScript applies URL selections and reveals selected hidden options after loading. Without JavaScript, entries and counts retain that default and the disclosure buttons remain absent. Customize labels with `include_tab_sources`, `hide_tab_sources`, `show_hidden_topics`, `hide_hidden_topics`, `show_hidden_tags`, `hide_hidden_tags` and `all_without_tab_sources`.

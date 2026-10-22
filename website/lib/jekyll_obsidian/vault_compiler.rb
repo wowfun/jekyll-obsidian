@@ -165,16 +165,17 @@ module JekyllObsidian
       compile_single(request)
     end
 
-    def self.compile_single(request, html_publication: nil, include_html_projection: true)
-      new(request, html_publication:, include_html_projection:).compile
+    def self.compile_single(request, html_publication: nil, include_html_projection: true, tag_policy_resolved: false)
+      new(request, html_publication:, include_html_projection:, tag_policy_resolved:).compile
     end
 
     def self.giscus_language(locale)
       GISCUS_LANGUAGES.include?(locale.to_s) ? locale.to_s : "en"
     end
 
-    def initialize(request, html_publication: nil, include_html_projection: true)
+    def initialize(request, html_publication: nil, include_html_projection: true, tag_policy_resolved: false)
       @request = request
+      @tag_policy_resolved = tag_policy_resolved
       @config = request.config
       @diagnostics = []
       @notes = {}
@@ -205,6 +206,7 @@ module JekyllObsidian
     def compile
       validate_request
       return BuildFailure.new(diagnostics: sorted_diagnostics) if @diagnostics.any? { |item| item.code == "invalid_request" }
+      load_tag_policy unless @tag_policy_resolved
       resolve_html_publication
       index_snapshot
       parse_public_notes
@@ -300,6 +302,24 @@ module JekyllObsidian
       @url_builder = UrlBuilder.new(origin: "", baseurl: "")
     end
 
+    def load_tag_policy
+      entry = Array(@request.snapshot.entries).find do |candidate|
+        candidate.is_a?(SnapshotEntry) && candidate.path == "_locale.yml" && (candidate.kind == :locale_manifest || candidate.kind == "locale_manifest")
+      end
+      return unless entry
+
+      raw = begin
+        TagPolicy.parse(entry.bytes)
+      rescue Psych::Exception, ArgumentError => exception
+        error("invalid_locale_manifest", exception.message, "_locale.yml")
+        return
+      end
+      policy = TagPolicy.resolve(raw)
+      policy.errors.each { |message| error("invalid_locale_manifest", message, "_locale.yml") }
+      @config = BuildConfig.new(**@config.to_h.merge(policy.policy.transform_keys(&:to_sym)))
+      @request = @request.with(config: @config)
+    end
+
     def resolve_output_config
       @properties_config = output_options("properties", @config.properties, { "hidden" => [] })
       validate_output_option(@properties_config, "properties", "hidden", []) do |value|
@@ -310,8 +330,9 @@ module JekyllObsidian
         "mode" => "full", "max_entries" => nil, "excerpt_length" => 240, "content_types" => []
       })
       @feed_config = output_options("feed", @config.feed, { "max_entries" => nil })
-      @home_config = output_options("home", @config.home, { "recent_posts_limit" => 6, "layout" => "recent" })
+      @home_config = output_options("home", @config.home, { "recent_posts_limit" => 6, "layout" => "recent", "hide_tab_sources" => false })
       @blog_config = output_options("blog", @config.blog, { "page_size" => nil, "utc_offset" => nil, "timeline_granularity" => "month", "ledger_group_by" => "year", "export_max_days" => 7, "facets" => { "source" => "source/", "topic" => "topics/" } })
+      validate_output_option(@home_config, "home", "hide_tab_sources", false) { |value| value == true || value == false }
       validate_output_option(@home_config, "home", "layout", "recent") { |value| %w[recent archive].include?(value) }
       validate_output_option(@blog_config, "blog", "page_size", nil) { |value| value.nil? || (value.is_a?(Integer) && value.between?(1, 100)) }
       validate_output_option(@blog_config, "blog", "utc_offset", nil) { |value| value.nil? || value.is_a?(String) && value.match?(/\A[+-](?:0\d|1[0-4]):[0-5]\d\z/) }
@@ -319,9 +340,15 @@ module JekyllObsidian
       validate_output_option(@blog_config, "blog", "ledger_group_by", "year") { |value| %w[year day].include?(value) }
       validate_output_option(@blog_config, "blog", "export_max_days", 7) { |value| value.is_a?(Integer) && value.positive? }
       validate_output_option(@blog_config, "blog", "facets", { "source" => "source/", "topic" => "topics/" }) do |value|
-        value.is_a?(Hash) && !value.empty? && value.all? { |key, prefix| key.is_a?(String) && key.match?(/\A[a-z][a-z0-9_-]*\z/) && !%w[page year month day].include?(key) && prefix.is_a?(String) && prefix.match?(/\A[a-z][a-z0-9_-]*\/\z/) } && value.values.uniq.length == value.length
+        value.is_a?(Hash) && !value.empty? && value.all? { |key, prefix| key.is_a?(String) && key.match?(/\A[a-z][a-z0-9_-]*\z/) && !%w[page year month day include_tabs show_hidden].include?(key) && prefix.is_a?(String) && prefix.match?(/\A[a-z][a-z0-9_-]*\/\z/) } && value.values.uniq.length == value.length
       end
       validate_output_option(@search_config, "search", "mode", "full") { |value| %w[full summary].include?(value) }
+      if @home_config["hide_tab_sources"] && !@blog_config.fetch("facets").key?("source")
+        error("invalid_output_config", "home.hide_tab_sources requires a source facet in blog.facets")
+      end
+      if @home_config["hide_tab_sources"] && (@theme != "minimal" || @home_config["layout"] != "archive")
+        warning("ineffective_output_config", "home.hide_tab_sources only applies to the minimal theme with home.layout: archive")
+      end
       validate_output_option(@search_config, "search", "content_types", []) do |value|
         value.is_a?(Array) && value.all? { |item| %w[page post doc].include?(item) }
       end

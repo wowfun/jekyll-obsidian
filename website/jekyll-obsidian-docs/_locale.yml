@@ -2,6 +2,14 @@ name: English
 hreflang: en
 dir: ltr
 messages:
+  show_hidden_topics: Show hidden topics
+  hide_hidden_topics: Hide hidden topics
+  show_hidden_tags: Show hidden tags
+  hide_hidden_tags: Hide hidden tags
+  all_without_tab_sources: All (excluding tab sources)
+  include_tab_sources: Include tab sources
+  hide_tab_sources: Hide tab sources
+
   ledger_date: "{month} {day}"
   ledger_date_year: "{month} {day}, {year}"
   ledger_months: "January|February|March|April|May|June|July|August|September|October|November|December"

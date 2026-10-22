@@ -22,6 +22,9 @@
   {% include website/portfolio-grid.html index=true %}
 {% when 'blog-index' %}
   {% if page.website.theme_data.archive %}
+    {% if page.website.theme_data.archive.hidden_tags.size > 0 or page.website.theme_data.archive.tab_sources.size > 0 %}
+    <template data-archive-visibility-ui data-hidden-tags="{{ page.website.theme_data.archive.hidden_tags | jsonify | escape }}" data-show-topics="{{ ui.show_hidden_topics | default: 'Show hidden topics' | escape }}" data-hide-topics="{{ ui.hide_hidden_topics | default: 'Hide hidden topics' | escape }}" data-show-tags="{{ ui.show_hidden_tags | default: 'Show hidden tags' | escape }}" data-hide-tags="{{ ui.hide_hidden_tags | default: 'Hide hidden tags' | escape }}" data-include-tabs="{{ ui.include_tab_sources | default: 'Include tab sources' | escape }}" data-hide-tabs="{{ ui.hide_tab_sources | default: 'Hide tab sources' | escape }}"></template>
+    {% endif %}
     {% unless page.website.theme_data.tab_id and page.website.has_h1 %}<h1 class="{% if page.title == site.title or page.website.theme_data.favorites or page.website.theme_data.tab_id %}visually-hidden{% else %}archive-title{% endif %}">{{ page.title | escape }}</h1>{% endunless %}
     {% if page.website.theme_data.favorites %}
       <div data-favorites-facets></div>

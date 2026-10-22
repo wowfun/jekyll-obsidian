@@ -25,6 +25,14 @@ module JekyllObsidian
     LOCALE_PATTERN = /\A[A-Za-z]{2,8}(?:-[A-Za-z0-9]{1,8})*\z/
     RESERVED_LOCALE_PREFIXES = %w[assets].freeze
     MESSAGE_DEFAULTS = {
+      "show_hidden_topics" => "Show hidden topics",
+      "hide_hidden_topics" => "Hide hidden topics",
+      "show_hidden_tags" => "Show hidden tags",
+      "hide_hidden_tags" => "Hide hidden tags",
+      "all_without_tab_sources" => "All (excluding tab sources)",
+      "include_tab_sources" => "Include tab sources",
+      "hide_tab_sources" => "Hide tab sources",
+
       "favorites" => "Favorites", "favorite_save" => "Save", "favorite_remove" => "Remove favorite",
       "favorite_saved" => "Saved", "favorites_empty" => "No favorites yet. Save an entry to find it here.",
       "favorites_requires_js" => "Enable JavaScript to show favorites saved in this browser.",
@@ -276,7 +284,7 @@ module JekyllObsidian
       results = {}
       tab_memberships = nil
       ([@default_locale] + @locales.reject { |locale| locale == @default_locale }).each do |locale|
-        config = BuildConfig.new(**@config.to_h.merge(i18n: nil, tag_labels: @locale_data.fetch(locale).fetch("tag_labels"), tag_aliases: @locale_data.fetch(locale).fetch("tag_aliases")))
+        config = BuildConfig.new(**@config.to_h.merge(i18n: nil, tag_labels: @locale_data.fetch(locale).fetch("tag_labels"), tag_aliases: @locale_data.fetch(locale).fetch("tag_aliases"), hidden_tags: @locale_data.fetch(locale).fetch("hidden_tags")))
         result = VaultCompiler.compile_single(
           @request.with(
             snapshot: snapshots.fetch(locale),
@@ -284,7 +292,8 @@ module JekyllObsidian
             tab_memberships: tab_memberships
           ),
           html_publication: @html_publication,
-          include_html_projection: false
+          include_html_projection: false,
+          tag_policy_resolved: true
         )
         @diagnostics.concat(localized_diagnostics(result.diagnostics, locale))
         results[locale] = result
@@ -375,17 +384,13 @@ module JekyllObsidian
           next
         end
         begin
-          raw = Psych.safe_load(entry.bytes.to_s, permitted_classes: [], aliases: false)
-        rescue Psych::Exception => exception
+          raw = TagPolicy.parse(entry.bytes)
+        rescue Psych::Exception, ArgumentError => exception
           error("invalid_locale_manifest", exception.message, path)
           next
         end
-        unless raw.is_a?(Hash) && raw.keys.all? { |key| key.is_a?(String) }
-          error("invalid_locale_manifest", "locale manifest must be a YAML mapping with string keys", path)
-          next
-        end
-        unknown = raw.keys - %w[name hreflang dir messages tag_labels tag_aliases]
-        unknown.each { |key| error("invalid_locale_manifest", "unknown locale setting #{key.inspect}", path) }
+        policy = TagPolicy.resolve(raw)
+        policy.errors.each { |message| error("invalid_locale_manifest", message, path) }
         name = raw["name"]
         unless valid_text?(name) && !name.empty?
           error("invalid_locale_manifest", "name must be a non-empty string", path)
@@ -424,31 +429,19 @@ module JekyllObsidian
             error("invalid_locale_message", "message #{key.inspect} requires #{required.map { |token| "{#{token}}" }.join(', ')}; allowed placeholders: #{allowed.join(', ')}", path)
           end
         end
-        maps = %w[tag_labels tag_aliases].to_h do |key|
-          value = raw.fetch(key, {})
-          unless value.is_a?(Hash) && value.all? { |tag, label| valid_text?(tag) && !tag.empty? && valid_text?(label) && !label.empty? }
-            error("invalid_locale_manifest", "#{key} must map non-empty tags to non-empty strings", path)
-            value = {}
-          end
-          [key, value]
-        end
-        maps.fetch("tag_aliases").each do |tag, replacement|
-          if tag == replacement || maps.fetch("tag_aliases").key?(replacement) || tag.split("/").first != replacement.split("/").first
-            error("invalid_locale_manifest", "tag_aliases must be flattened replacements within one namespace", path)
-          end
-        end
         @locale_data[locale] = {
           "code" => locale,
           "name" => name,
           "hreflang" => hreflang,
           "dir" => direction,
-          "tag_labels" => maps.fetch("tag_labels"),
-          "tag_aliases" => maps.fetch("tag_aliases"),
+          **policy.policy,
           "messages" => MESSAGE_DEFAULTS.merge(messages.select { |key, value| MESSAGE_DEFAULTS.key?(key) && valid_text?(value) })
         }
       end
       aliases = @locale_data.fetch(@default_locale, {}).fetch("tag_aliases", {})
+      hidden = @locale_data.fetch(@default_locale, {}).fetch("hidden_tags", [])
       @locale_data.each do |locale, data|
+        error("invalid_locale_manifest", "hidden_tags must share stable values across locales", locale) unless data.fetch("hidden_tags") == hidden
         error("invalid_locale_manifest", "tag_aliases must share stable replacements across locales", locale) unless data.fetch("tag_aliases") == aliases
       end
     end

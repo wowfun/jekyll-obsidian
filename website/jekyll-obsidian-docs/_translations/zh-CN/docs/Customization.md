@@ -2,6 +2,7 @@
 publish: true
 title: 自定义
 description: 调整站点信息、视觉 token、导航和仓库链接。
+updated: 2026-10-21
 ---
 
 # 自定义
@@ -468,3 +469,13 @@ minimal 主题支持 `website.features.favorites: true`（默认为 `false`）�
 返回普通索引页时，若无法检查当前部署，仍可使用已加载版本进行筛选和分页，并通过重试检查更新。收藏页继续使用快照，直到部署验证成功。平铺阅读开启时显示勾选标记，悬停提示包含开关状态；搜索提示包含 Ctrl/⌘ K 快捷键。
 
 筛选和分页复用已加载的收藏集合及所需筛选位图。重试和浏览器恢复页面时，从当前页面重新定位索引版本，避免重复请求旧部署的路径。同一页刷新会保留正在输入的页码；在新标签页打开来源或主题链接，也会保留已选筛选条件。
+
+### 归档筛选的可见性
+
+Minimal 归档首页可设置 `website.home.hide_tab_sources: true`（默认 false），要求 `website.blog.facets` 中包含 `source` 筛选组；在 `website.home.layout: recent` 或 Docs 主题中启用时，编译器会给出警告。该设置根据实际归档 tab 的来源标签排除首页来源及条目。“来源”标题下方的按钮可一并展开，计数、日期导航、分页与 Markdown 导出均遵循当前范围。独立栏目、搜索、文章页与收藏保留完整内容。
+
+该选项要求 `website.blog.facets` 中包含名为 `source` 的筛选项；其前缀可配置，通常为 `source/`。缺少该筛选项时构建会报错。仅解析别名后匹配此前缀的 `tab.topics` 值用于排除来源。仅按主题划分的栏目、未明确声明来源标签的栏目，或拼写错误且没有匹配文章的来源标签，都不会排除内容；系统不会从栏目名称或成员推断来源。首页范围未变化时，请检查栏目声明的来源标签 ID。
+
+语言目录的 `_locale.yml` 支持 `hidden_tags`，使用完整标签 ID 的唯一列表，例如 `topics/research`。别名通过 `tag_aliases` 解析后去重，各语言必须表示同一个规范标签集合。单语言站点也可在内容根目录的 `_locale.yml` 中设置 `hidden_tags`、`tag_aliases` 和 `tag_labels`，无需开启 i18n；两种模式均拒绝未知清单键。隐藏标签仍显示在文章和收藏条目中，但默认不出现在归档、栏目、收藏和导出的候选项中。筛选标题下方的按钮仅展开本组的隐藏选项：“主题”使用“显示隐藏主题”，其他筛选项使用“显示隐藏标签”。“来源”可同时提供标签展开与独立栏目展开按钮，两者分别控制。收起后仍保留已选隐藏标签，便于取消筛选。
+
+URL 使用 `include_tabs=1` 和可重复的 `show_hidden` 参数保存展开状态，后者取值为筛选组名称，例如 `show_hidden=source&show_hidden=topic`。明确选择独立栏目来源的链接自动展开。导出弹窗继承各组状态，内部调整独立于页面。未明确选择来源时，导出标题使用“全部（不含独立栏目来源）”说明默认范围，不逐一列出所有剩余来源。静态 HTML 首屏始终使用默认范围；JavaScript 加载后才应用 URL 筛选并显示已选隐藏标签。无 JavaScript 时，条目及计数保持默认范围，不显示展开按钮。文案键为 `include_tab_sources`、`hide_tab_sources`、`show_hidden_topics`、`hide_hidden_topics`、`show_hidden_tags`、`hide_hidden_tags`、`all_without_tab_sources`。

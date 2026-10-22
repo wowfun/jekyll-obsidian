@@ -1,3 +1,4 @@
+import { readArchiveVisibilityUI, toggleArchiveVisibility, visibilityButtons, visibleArchiveOption, type VisibilityKey } from "./archive-visibility";
 import { archiveState, type ArchiveManifest } from "./archive-query";
 import { archiveConcurrent, type ArchiveClient } from "./archive-client";
 import { dateRangeError, defaultExportDates, exportFilename, exportMarkdownParts, exportState, type ExportSnapshot } from "./archive-export-model";
@@ -37,17 +38,21 @@ export function initialiseArchiveExport(client: ArchiveClient): () => void {
   }
   function renderFacets(): void {
     facets.replaceChildren();
+    const ui = readArchiveVisibilityUI();
     for (const [name, options] of Object.entries(data!.facets)) {
       const group = document.createElement("fieldset"), legend = document.createElement("legend");
+      group.dataset.exportFacetGroup = name;
       legend.textContent = name === "source" ? labels("sources") : name === "topic" ? labels("topics") : name;
       group.append(legend);
-      const choices = document.createElement("div"); choices.className = "archive-export__choices";
+      const choices = document.createElement("div"); choices.className = "archive-export__choices"; choices.id = `export-options-${name}`;
+      group.append(...visibilityButtons(data!, filters, name, ui, choices.id));
       const selected = filters.getAll(name);
       const entries = [...options, ...selected.filter(id => !options.some(option => option.id === id)).map(id => ({ id, name: id }))];
       const all = document.createElement("button"); all.type = "button"; all.textContent = labels("all");
       all.className = "tag-chip"; all.dataset.exportAll = name; all.setAttribute("aria-label", `${legend.textContent}: ${labels("all")}`);
       all.setAttribute("aria-pressed", String(selected.length === 0)); choices.append(all);
       for (const option of entries) {
+        if (!visibleArchiveOption(data!, filters, name, option.id)) continue;
         const label = document.createElement("label"); label.className = "archive-export__choice";
         const input = document.createElement("input"); input.type = "checkbox"; input.dataset.exportFacet = name; input.value = option.id; input.checked = selected.includes(option.id);
         const text = document.createElement("span"); text.textContent = option.name; label.append(input, text); choices.append(label);
@@ -136,7 +141,7 @@ export function initialiseArchiveExport(client: ArchiveClient): () => void {
       }, signal);
       signal.throwIfAborted();
       if (failures) { current.status = "failed"; status.textContent = message("failed", failures); setRetry(() => { void save(); }); return; }
-      const parts = exportMarkdownParts(snapshot, data, bodies, { dates: labels("dates"), source: labels("sources"), topic: labels("topics"), all: labels("all"), entries: labels("entries"), date: labels("date"), original: labels("original"), article: labels("article") });
+      const parts = exportMarkdownParts(snapshot, data, bodies, { dates: labels("dates"), source: labels("sources"), topic: labels("topics"), all: labels("all"), allWithoutTabs: labels("allWithoutTabs"), entries: labels("entries"), date: labels("date"), original: labels("original"), article: labels("article") });
       const url = URL.createObjectURL(new Blob(parts, { type: "text/markdown;charset=utf-8" }));
       const link = document.createElement("a"); link.href = url; link.download = exportFilename(snapshot); document.body.append(link); link.click(); link.remove();
       setTimeout(() => URL.revokeObjectURL(url), 1000);
@@ -157,13 +162,33 @@ export function initialiseArchiveExport(client: ArchiveClient): () => void {
   }
   function change(event?: Event): void {
     if (job?.status === "running" || !data) return;
-    filters = new URLSearchParams();
+    for (const name of Object.keys(data.facets)) filters.delete(name);
     for (const input of facets.querySelectorAll<HTMLInputElement>("input:checked")) filters.append(input.dataset.exportFacet!, input.value);
+    filters = archiveState(data, filters.toString()).parameters;
     for (const all of facets.querySelectorAll<HTMLButtonElement>("[data-export-all]")) all.setAttribute("aria-pressed", String(!filters.has(all.dataset.exportAll!)));
+    for (const input of facets.querySelectorAll<HTMLInputElement>("[data-export-facet]")) {
+      const label = input.closest("label")!;
+      label.hidden = !visibleArchiveOption(data, filters, input.dataset.exportFacet!, input.value);
+      if (label.hidden && document.activeElement === input) {
+        const key: VisibilityKey = input.dataset.exportFacet === "source" && data.tab_sources?.includes(input.value) && filters.get("include_tabs") !== "1"
+          ? "include_tabs" : "show_hidden";
+        const group = input.closest("fieldset");
+        (group?.querySelector<HTMLButtonElement>(`[data-archive-visibility="${key}"]`) || group?.querySelector<HTMLButtonElement>("[data-export-all]"))?.focus();
+      }
+    }
     void recount(event?.target === start || event?.target === end);
   }
   function selectAll(event: MouseEvent): void {
     if (!(event.target instanceof Element)) return;
+    const toggle = event.target.closest<HTMLElement>("[data-archive-visibility]");
+    if (toggle && data && job?.status !== "running") {
+      const key = toggle.dataset.archiveVisibility as VisibilityKey;
+      const name = toggle.closest<HTMLElement>("[data-export-facet-group]")!.dataset.exportFacetGroup!;
+      toggleArchiveVisibility(filters, key, data, name); renderFacets();
+      facets.querySelector<HTMLButtonElement>(`[data-export-facet-group="${name}"] [data-archive-visibility="${key}"]`)?.focus();
+      if (key === "include_tabs") void recount();
+      return;
+    }
     const all = event.target.closest<HTMLElement>("[data-export-all]"); if (!all || job?.status === "running") return;
     for (const input of facets.querySelectorAll<HTMLInputElement>("input")) if (input.dataset.exportFacet === all.dataset.exportAll) input.checked = false;
     change();

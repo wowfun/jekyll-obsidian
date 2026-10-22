@@ -649,7 +649,7 @@ module JekyllObsidian
         tab_archive_files = attach_tab_archives(theme_data, model, config, taxonomy, ledger_current_year: ledger_current_year)
         authored_root_route = model.notes.any? { |note| note.route == "/" }
         home = home_page(displayed, config, system_theme_data, taxonomy) if !root && !authored_root_route && displayed.any? && config.home["layout"] != "archive"
-        archive_data = (paged || config.features.fetch("favorites")) && PagedArchive.build(chronological.map { |post| note_card(post, config, taxonomy) }, config, postings: !!paged)
+        archive_data = (paged || config.features.fetch("favorites")) && PagedArchive.build(chronological.map { |post| note_card(post, config, taxonomy) }, config, postings: !!paged, tab_sources: home_tab_sources(model, config))
         if archive_data && paged
           groups = archive_data.fetch("archive_groups")
           timeline = archive_data.fetch("timeline")
@@ -733,11 +733,25 @@ module JekyllObsidian
 
       private
 
-      def attach_tab_archives(theme_data, model, config, taxonomy, ledger_current_year:)
-        config.navigation.custom_tabs.flat_map do |tab|
-          root = model.notes_by_id.fetch(tab.index_note_id)
-          next [] unless root.properties.dig("tab", "layout") == "archive"
+      def home_tab_sources(model, config)
+        return [] unless config.home["layout"] == "archive" && config.home["hide_tab_sources"]
+        # Theme rendering precedes BuildFailure, so invalid configuration must
+        # still reach the compiler's missing-source-facet diagnostic.
+        return [] unless config.blog.fetch("facets")["source"]
+        archive_tabs(model, config).flat_map do |_tab, root|
+          PagedArchive.facet_values(root.properties.dig("tab", "topics"), config).fetch("source")
+        end.uniq.sort
+      end
 
+      def archive_tabs(model, config)
+        config.navigation.custom_tabs.filter_map do |tab|
+          root = model.notes_by_id.fetch(tab.index_note_id)
+          [tab, root] if root.properties.dig("tab", "layout") == "archive"
+        end
+      end
+
+      def attach_tab_archives(theme_data, model, config, taxonomy, ledger_current_year:)
+        archive_tabs(model, config).flat_map do |tab, _root|
           members = tab.member_note_ids.map { |id| model.notes_by_id.fetch(id) }
           chronological = chronological_notes(members)
           archive = PagedArchive.build(chronological.map { |note| note_card(note, config, taxonomy) }, config, scope: tab.id)

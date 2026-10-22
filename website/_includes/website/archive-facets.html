@@ -1,5 +1,8 @@
 {% assign archive = page.website.theme_data.archive %}
 {% for group in archive.facets %}
+  {% assign facet_name = group[0] %}
+  {% assign facet_prefix = archive.prefixes[facet_name] %}
+  {% assign facet_counts = archive.default_view.facets[facet_name] %}
   {% if group[1].size == 0 %}{% continue %}{% endif %}
   {% if page.website.theme_data.tab_id and group[0] == 'source' and group[1].size == 1 %}
     {% assign only_source = group[1] | first %}
@@ -8,9 +11,18 @@
   {% assign facet_label = group[0] %}
   {% if group[0] == 'source' %}{% assign facet_label = ui.sources | default: 'Sources' %}{% elsif group[0] == 'topic' %}{% assign facet_label = ui.topics | default: 'Topics' %}{% endif %}
   <nav class="tag-filter archive-facet" aria-label="{{ facet_label | escape }}">
-    <h2 class="archive-facet-label">{{ facet_label | escape }}</h2>
-    <ul class="tag-filter__list"><li><button class="tag-chip" type="button" data-archive-facet="{{ group[0] | escape }}" data-archive-value="" aria-pressed="true">{{ ui.all | default: 'All' | escape }} <span>{{ archive.total }}</span></button></li>
-    {% for option in group[1] %}<li><button class="tag-chip" type="button" data-archive-facet="{{ group[0] | escape }}" data-archive-value="{{ option.id | escape }}" aria-pressed="false">{{ option.name | escape }} <span>{{ option.count }}</span></button></li>{% endfor %}</ul>
+    <div class="archive-facet-heading"><h2 class="archive-facet-label">{{ facet_label | escape }}</h2></div>
+    <ul class="tag-filter__list"><li><button class="tag-chip" type="button" data-archive-facet="{{ group[0] | escape }}" data-archive-value="" aria-pressed="true">{{ ui.all | default: 'All' | escape }} <span>{{ archive.default_view.total | default: archive.total }}</span></button></li>
+    {% for option in group[1] %}
+      {% comment %}Keep default visibility/counts aligned with src/frontend/archive-visibility.ts; hydration applies URL selections.{% endcomment %}
+      {% assign tag = facet_prefix | append: option.id %}
+      {% assign option_hidden = false %}
+      {% if archive.hidden_tags contains tag %}{% assign option_hidden = true %}{% endif %}
+      {% if group[0] == 'source' and archive.tab_sources contains option.id %}{% assign option_hidden = true %}{% endif %}
+      {% assign option_count = option.count %}
+      {% if archive.default_view %}{% assign option_count = facet_counts[option.id] | default: 0 %}{% endif %}
+      {% if option_count == 0 %}{% assign option_hidden = true %}{% endif %}
+      <li{% if option_hidden %} hidden{% endif %}><button class="tag-chip" type="button" data-archive-facet="{{ group[0] | escape }}" data-archive-value="{{ option.id | escape }}" aria-pressed="false">{{ option.name | escape }} <span>{{ option_count }}</span></button></li>{% endfor %}</ul>
   </nav>
 {% endfor %}
 <p class="filter-empty" data-archive-empty hidden>{{ ui.no_matching_entries | default: 'No entries match these filters.' | escape }} <button type="button" data-archive-clear>{{ ui.clear_filters | default: 'Clear filters' | escape }}</button></p>

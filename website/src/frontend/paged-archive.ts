@@ -1,3 +1,4 @@
+import { syncArchiveVisibility, toggleArchiveVisibility, type VisibilityKey } from "./archive-visibility";
 import { archivePageNumber, archiveState, type ArchiveMatches, type ArchiveCollection } from "./archive-query";
 import { createArchiveClient } from "./archive-client";
 import { initialiseArchiveExport } from "./archive-export";
@@ -30,6 +31,7 @@ export function initialisePagedArchive(root: HTMLElement): () => void {
   let deploymentVerified = true, discovery: Promise<void> | undefined;
   const unavailable = async (): Promise<never> => { throw new Error("Current deployment could not be verified"); };
   const snapshotsOnly = { manifest: unavailable, lookup: unavailable };
+  let currentData: ArchiveCollection | undefined;
   let current: ArchiveMatches = { ordinals: [], count: 0, page: 1, pages: 1 };
   async function refresh(revalidate = false): Promise<void> {
     const search = window.location.search;
@@ -65,7 +67,8 @@ export function initialisePagedArchive(root: HTMLElement): () => void {
       if (saved && renderedFavoriteManifest !== data) { empty.replaceChildren(...emptyContent.map(node => node.cloneNode(true))); renderFavoriteFilters(root, data); renderedFavoriteManifest = data; }
       days.replace(() => renderArchiveLedger(root, cards, data, saved ? new Set(saved.snapshots.keys()) : undefined));
       reading.refresh();
-      current = result;
+      current = result; currentData = data;
+      syncArchiveVisibility(root, data, state.parameters);
       result.page > 1 ? state.parameters.set("page", String(result.page)) : state.parameters.delete("page");
       const search = state.parameters.toString(); history.replaceState(null, "", window.location.pathname + (search ? `?${search}` : ""));
       for (const control of root.querySelectorAll<HTMLElement>("button[data-archive-facet]")) {
@@ -89,13 +92,17 @@ export function initialisePagedArchive(root: HTMLElement): () => void {
   }
   function click(event: MouseEvent): void {
     if (!(event.target instanceof Element) || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
-    const control = event.target.closest<HTMLElement>("[data-archive-facet], [data-year-filter-option], [data-month-filter-option], [data-day-filter-option], [data-archive-page], [data-archive-clear], [data-archive-retry]");
+    const control = event.target.closest<HTMLElement>("[data-archive-visibility], [data-archive-facet], [data-year-filter-option], [data-month-filter-option], [data-day-filter-option], [data-archive-page], [data-archive-clear], [data-archive-retry]");
     if (!control || !root.contains(control) && !control.closest("[data-timeline-nav]")) return;
     event.preventDefault();
     if (control.hasAttribute("data-archive-retry")) { void refresh(true); return; }
     if (root.hasAttribute("aria-busy") && control.hasAttribute("data-archive-page")) return;
     const nextUrl = new URL(window.location.href);
-    if (control.hasAttribute("data-archive-clear")) nextUrl.search = "";
+    if (control.dataset.archiveVisibility) {
+      if (!currentData) return;
+      toggleArchiveVisibility(nextUrl.searchParams, control.dataset.archiveVisibility as VisibilityKey, currentData, control.dataset.archiveVisibilityFacet!);
+    }
+    else if (control.hasAttribute("data-archive-clear")) nextUrl.search = "";
     else if (control.dataset.archivePage) {
       const target = control.dataset.archivePage;
       const page = target === "next" ? current.page + 1 : target === "prev" ? current.page - 1 : Number(target);

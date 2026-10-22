@@ -1,4 +1,4 @@
-import { ARCHIVE_POSTING_CACHE_LIMIT, archiveState, decodeBitmap, type ArchiveCard, type ArchiveManifest, type ArchiveMatches, type ArchiveQueryMode } from "./archive-query";
+import { ARCHIVE_POSTING_CACHE_LIMIT, TAB_SOURCES_POSTING_KEY, archiveState, decodeBitmap, type ArchiveCard, type ArchiveManifest, type ArchiveMatches, type ArchiveQueryMode } from "./archive-query";
 import { requireSiteUrl } from "./urls";
 import { ArchiveBodyBudget } from "./archive-export-budget";
 import type { ArchiveWorkerRequest } from "./archive-worker";
@@ -127,6 +127,22 @@ export function createArchiveClient(source: string) {
     const data = object(value);
     if (data.version !== 1 || !Number.isSafeInteger(data.total) || Number(data.total) < 0 || !Number.isSafeInteger(data.page_size) || Number(data.page_size) < 1 || Number(data.page_size) > 100 || !Number.isSafeInteger(data.export_max_days) || Number(data.export_max_days) < 1 || typeof data.generation !== "string" || !/^[a-f0-9]{64}$/.test(data.generation) || !Array.isArray(data.chunks)) throw new Error("Invalid archive manifest");
     for (const key of ["facets", "prefixes", "labels", "aliases", "years", "months", "days"]) object(data[key]);
+    for (const key of ["hidden_tags", "tab_sources"]) {
+      const tags = data[key];
+      if (tags !== undefined && (!Array.isArray(tags) || tags.some(tag => typeof tag !== "string" || !tag) || new Set(tags).size !== tags.length)) throw new Error("Invalid archive visibility policy");
+    }
+    if (data.default_view !== undefined) {
+      const view = object(data.default_view);
+      const validCount = (value: unknown) => Number.isSafeInteger(value) && Number(value) >= 0 && Number(value) <= Number(data.total);
+      if (!validCount(view.total)) throw new Error("Invalid archive view count");
+      const mappings = [...Object.values(object(view.facets)), view.years, view.months, view.days];
+      for (const mapping of mappings) if (!Object.values(object(mapping)).every(validCount)) throw new Error("Invalid archive view counts");
+    }
+    if ((data.excluded_posting !== undefined || Array.isArray(data.tab_sources) && data.tab_sources.length)
+      && (typeof data.excluded_posting !== "string" || !data.excluded_posting)) throw new Error("Invalid archive exclusion posting");
+    const scoped = Array.isArray(data.tab_sources) && data.tab_sources.length > 0;
+    if (scoped !== (data.default_view !== undefined) || scoped !== (data.excluded_posting !== undefined)
+      || scoped && (typeof object(data.prefixes).source !== "string" || !Array.isArray(object(data.facets).source))) throw new Error("Invalid archive visibility scope");
     if (data.identities !== undefined && typeof data.identities !== "string") throw new Error("Invalid archive identities path");
     if (data.ledger_group_by !== undefined && data.ledger_group_by !== "year" && data.ledger_group_by !== "day") throw new Error("Invalid ledger grouping");
     for (const [name, prefix] of Object.entries(object(data.prefixes))) {
@@ -176,10 +192,11 @@ export function createArchiveClient(source: string) {
     await archiveConcurrent(state.keys, async (key) => {
       const split = key.indexOf("/"), name = key.slice(0, split), id = key.slice(split + 1);
       const option = data.facets[name]?.find(entry => entry.id === id);
-      if (!option) return;
-      if (!option.posting) throw new Error("Archive does not provide remote filter postings");
+      if (!option && key !== TAB_SOURCES_POSTING_KEY) return;
+      const filename = key === TAB_SOURCES_POSTING_KEY ? data.excluded_posting : option?.posting;
+      if (!filename) throw new Error("Archive does not provide remote filter postings");
       if (!postings.has(key)) {
-        const posting = object(await resource(option.posting, signal));
+        const posting = object(await resource(filename, signal));
         if (posting.total !== data.total || typeof posting.bitmap !== "string") throw new Error("Invalid posting");
         if (!postings.has(key)) postings.set(key, decodeBitmap(posting.bitmap, data.total));
       }
@@ -202,7 +219,7 @@ export function createArchiveClient(source: string) {
         currentWorker.postMessage(request);
         // Messages to one worker are ordered. Mirror its bounded posting cache
         // only after a successful send; recreation starts with no known entries.
-        for (const key of state.query.groups.flat()) {
+        for (const key of [...state.query.groups.flat(), ...(state.query.excluded || [])]) {
           const bitmap = bitmaps[key];
           if (bitmap) { workerPostings.delete(key); workerPostings.set(key, bitmap); }
         }

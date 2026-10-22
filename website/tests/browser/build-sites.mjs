@@ -1,4 +1,4 @@
-import { copyFile, cp, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { copyFile, cp, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
@@ -90,8 +90,13 @@ try {
   await mkdir(path.join(archiveHost, ".jekyll-obsidian-cache"));
   await writeFile(path.join(archiveHost, ".jekyll-obsidian-cache/github-markdown-browser.json"),
     JSON.stringify({ version: 1, documents: [] }));
-  await writeFile(path.join(archiveHost, "host.yml"),
-    "title: Archive fixture\nwebsite:\n  source: vault\n  theme: minimal\n  repository: example/archive\n  contacts: []\n  home:\n    layout: archive\n  blog:\n    page_size: 2\n    utc_offset: '+08:00'\n    timeline_granularity: day\n    ledger_group_by: day\n  features:\n    favorites: true\n  i18n:\n    enabled: true\n    locales: [en, zh-CN]\n");
+  const archiveConfig = { title: "Archive fixture", website: {
+    source: "vault", theme: "minimal", repository: "example/archive", contacts: [],
+    home: { layout: "archive" },
+    blog: { page_size: 2, utc_offset: "+08:00", timeline_granularity: "day", ledger_group_by: "day" },
+    features: { favorites: true }, i18n: { enabled: true, locales: ["en", "zh-CN"] }
+  } };
+  await writeFile(path.join(archiveHost, "host.yml"), JSON.stringify(archiveConfig));
   await writeFile(path.join(archiveHost, "vault/_locale.yml"), "name: English\n");
   await copyFile(path.join(projectRoot, "jekyll-obsidian-docs/_translations/zh-CN/_locale.yml"), path.join(archiveHost, "vault/_translations/zh-CN/_locale.yml"));
   await writeFile(path.join(archiveHost, "vault/index.md"), "---\npublish: true\n---\n# Archive\n");
@@ -138,4 +143,43 @@ try {
   await cp(path.join(archiveHost, ".jekyll-obsidian-cache/site-browser-minimal-export"), exportDestination, { recursive: true });
 } finally {
   await rm(archiveHost, { force: true, recursive: true });
+}
+
+// Independent of the pagination/export vault and its bulk item count.
+const governanceHost = await mkdtemp(path.join(tmpdir(), "jekyll-obsidian-governance-"));
+try {
+  const fixture = JSON.parse(await readFile(new URL("./fixtures/archive-governance.json", import.meta.url), "utf8"));
+  await mkdir(path.join(governanceHost, "vault/items"), { recursive: true });
+  await mkdir(path.join(governanceHost, "vault/_translations/zh-CN"), { recursive: true });
+  await mkdir(path.join(governanceHost, ".jekyll-obsidian-cache"));
+  await writeFile(path.join(governanceHost, ".jekyll-obsidian-cache/github-markdown-browser.json"), JSON.stringify({ version: 1, documents: [] }));
+  const configFile = path.join(governanceHost, "host.yml");
+  await writeFile(configFile, JSON.stringify({ title: "Governance fixture", website: {
+    source: "vault", repository: "example/governance", contacts: [],
+    home: { layout: "archive", hide_tab_sources: true },
+    blog: { page_size: fixture.pageSize, utc_offset: "+08:00", timeline_granularity: "day", ledger_group_by: "day" },
+    features: { favorites: true }, i18n: { enabled: true, locales: ["en", "zh-CN"] }
+  } }));
+  await writeFile(path.join(governanceHost, "vault/_locale.yml"), "name: English\n");
+  await copyFile(path.join(projectRoot, "jekyll-obsidian-docs/_translations/zh-CN/_locale.yml"), path.join(governanceHost, "vault/_translations/zh-CN/_locale.yml"));
+  await writeFile(path.join(governanceHost, "vault/index.md"), "---\npublish: true\n---\n# Archive\n");
+  for (const prefix of ["", "_translations/zh-CN/"]) {
+    const localeFile = path.join(governanceHost, `vault/${prefix}_locale.yml`);
+    // Different spellings deliberately exercise cross-locale alias canonicalization.
+    await writeFile(localeFile, (await readFile(localeFile, "utf8")) +
+      `\ntag_aliases: {topics/old-agents: topics/agents}\nhidden_tags: [topics/${prefix ? "agents" : "old-agents"}, source/regular]\n`);
+  }
+  for (const [id, source] of [["news", "hn"], ["tools", "dsh"], ["arxiv", "arxiv"]]) {
+    await mkdir(path.join(governanceHost, `vault/${id}`));
+    await writeFile(path.join(governanceHost, `vault/${id}/index.md`), `---\npublish: true\ntab:\n  id: ${id}\n  layout: archive\n  topics: [source/${source}]\n---\n# ${id}\n`);
+  }
+  for (const { id, source, topic, date } of fixture.posts) {
+    await writeFile(path.join(governanceHost, `vault/items/${id}.md`), `---\npublish: true\ncontent_type: post\ntitle: ${id}\ndate: ${date}\ntags: [source/${source}, topics/${topic}]\n---\nArticle body ${id}.\n`);
+  }
+  build(governanceHost, "minimal", "minimal-governance", configFile);
+  const governanceDestination = path.join(workspaceRoot, ".jekyll-obsidian-cache/site-browser-minimal-governance");
+  await rm(governanceDestination, { force: true, recursive: true });
+  await cp(path.join(governanceHost, ".jekyll-obsidian-cache/site-browser-minimal-governance"), governanceDestination, { recursive: true });
+} finally {
+  await rm(governanceHost, { force: true, recursive: true });
 }

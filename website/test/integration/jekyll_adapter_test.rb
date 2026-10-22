@@ -1153,6 +1153,23 @@ class JekyllAdapterTest < Minitest::Test
     end
   end
 
+  def test_single_language_archive_reads_hidden_aliases_from_the_root_manifest
+    install_project_layout
+    File.write(File.join(@temporary_root, "vault", "_locale.yml"),
+      "tag_aliases: {topics/old: topics/research}\ntag_labels: {topics/research: Research}\nhidden_tags: [topics/old]\n")
+    File.write(File.join(@temporary_root, "vault", "post.md"),
+      "---\npublish: true\ncontent_type: post\ndate: 2026-10-21\ntags: [source/news, topics/old]\n---\n# Article\n")
+    build_site("website" => website_config.merge("theme" => "minimal", "home" => { "layout" => "archive" },
+      "i18n" => { "enabled" => false })).process
+    html = Nokogiri::HTML(File.read(File.join(destination, "index.html")))
+    choice = html.at_css('button[data-archive-facet="topic"][data-archive-value="research"]')
+    assert choice.parent.key?("hidden")
+    assert_equal "Research", choice.text.strip.sub(/\s+1\z/, "")
+    assert_equal '["topics/research"]', html.at_css("[data-archive-visibility-ui]")["data-hidden-tags"]
+    assert html.at_css(".archive-facet-heading > .archive-facet-label")
+    refute File.exist?(File.join(destination, "_locale.yml"))
+  end
+
   def test_minimal_renders_explicit_i18n
     install_project_layout
     FileUtils.mkdir_p(File.join(@temporary_root, "vault", "blog"))

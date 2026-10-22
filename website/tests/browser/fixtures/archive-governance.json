@@ -1,0 +1,12 @@
+{
+  "pageSize": 2,
+  "posts": [
+    { "id": "news-old", "source": "hn", "topic": "agents", "date": "2026-10-10" },
+    { "id": "tool-old", "source": "dsh", "topic": "tools", "date": "2026-10-09" },
+    { "id": "news-oldest", "source": "hn", "topic": "agents", "date": "2025-12-31" },
+    { "id": "regular-1", "source": "regular", "topic": "agents", "date": "2026-10-21" },
+    { "id": "regular-2", "source": "regular", "topic": "agents", "date": "2026-10-21" },
+    { "id": "regular-3", "source": "regular", "topic": "agents", "date": "2026-10-21" },
+    { "id": "paper", "source": "arxiv", "topic": "agents", "date": "2026-10-21" }
+  ]
+}

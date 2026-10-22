@@ -2,6 +2,14 @@ name: 简体中文
 hreflang: zh-Hans
 dir: ltr
 messages:
+  show_hidden_tags: 显示隐藏标签
+  hide_hidden_tags: 收起隐藏标签
+  all_without_tab_sources: 全部（不含独立栏目来源）
+  show_hidden_topics: 显示隐藏主题
+  hide_hidden_topics: 收起隐藏主题
+  include_tab_sources: 显示独立栏目
+  hide_tab_sources: 收起独立栏目
+
   ledger_date: "{month}{day}日"
   ledger_date_year: "{year}年{month}{day}日"
   ledger_months: "1月|2月|3月|4月|5月|6月|7月|8月|9月|10月|11月|12月"

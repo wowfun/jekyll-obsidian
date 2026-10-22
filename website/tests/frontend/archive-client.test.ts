@@ -14,6 +14,48 @@ afterEach(() => { client.dispose(); vi.useRealTimers(); vi.unstubAllGlobals(); }
 const card = (i: number) => ({ markdown_url: `/article-${i}.md` }) as ArchiveCard;
 const manifest = { version: 1, generation: 'a'.repeat(64), total: 0, page_size: 50, export_max_days: 7, facets: {}, prefixes: {}, labels: {}, aliases: {}, years: {}, months: {}, days: {}, chunks: [] };
 
+it.each([
+  { excluded_posting: '' }, { excluded_posting: 1 },
+  { tab_sources: ['arxiv'] }, { tab_sources: ['arxiv'], excluded_posting: '' },
+])('rejects an invalid exclusion posting declaration: %j', async policy => {
+  vi.stubGlobal('fetch', vi.fn(async () => Response.json({ ...manifest, ...policy })));
+  await expect(client.manifest()).rejects.toThrow('Invalid archive exclusion posting');
+});
+
+const defaultView = { total: 0, facets: {}, years: {}, months: {}, days: {} };
+it.each([
+  { default_view: defaultView },
+  { default_view: defaultView, tab_sources: [] },
+  { excluded_posting: 'excluded.json' },
+  { tab_sources: ['arxiv'], excluded_posting: 'excluded.json' },
+  { tab_sources: ['arxiv'], default_view: defaultView, excluded_posting: 'excluded.json' },
+])('rejects contradictory archive scope metadata: %j', async policy => {
+  vi.stubGlobal('fetch', vi.fn(async () => Response.json({ ...manifest, ...policy })));
+  await expect(client.manifest()).rejects.toThrow('Invalid archive visibility scope');
+});
+
+it('loads one exclusion bitmap for 30 tab sources and reuses it on pagination', async () => {
+  const messages: ArchiveWorkerRequest[] = [];
+  vi.stubGlobal('Worker', class {
+    onmessage?: (event: MessageEvent) => void;
+    terminate() {}
+    postMessage(request: ArchiveWorkerRequest) { messages.push(request); queueMicrotask(() => this.onmessage?.(new MessageEvent('message', { data: { id: request.id, count: 1, page: 1, pages: 1, ordinals: [0] } }))); }
+  });
+  const ids = Array.from({ length: 30 }, (_, i) => `tab-${i}`);
+  const data = { ...manifest, total: 100000, chunks: Array.from({ length: 2000 }, (_, i) => `cards-${i}.json`),
+    tab_sources: ids, excluded_posting: 'excluded.json', prefixes: { source: 'source/' },
+    default_view: { ...defaultView, total: 99970, facets: { source: {} } },
+    facets: { source: ids.map(id => ({ id, name: id, count: 1, posting: `${id}.json` })) } };
+  const fetch = vi.fn(async (url: URL) => Response.json(url.pathname.endsWith('manifest.json') ? data : {
+    generation: data.generation, total: data.total, bitmap: btoa(String.fromCharCode(...new Uint8Array(12500)))
+  })); vi.stubGlobal('fetch', fetch);
+  await client.select(archiveState(await client.manifest(), ''), 'page');
+  await client.select(archiveState(await client.manifest(), '?page=2'), 'page');
+  expect(fetch.mock.calls.map(([url]) => url.pathname)).toEqual(['/archive/manifest.json', '/archive/excluded.json']);
+  expect(Object.keys(messages[0]!.bitmaps)).toHaveLength(1);
+  expect(Object.keys(messages[1]!.bitmaps)).toHaveLength(0);
+});
+
 it('uses normal HTTP caching for a manifest pinned by the current page', async () => {
   const fetch = vi.fn(async (_url: URL, _options: RequestInit) => Response.json(manifest)); vi.stubGlobal('fetch', fetch);
   await client.manifest();

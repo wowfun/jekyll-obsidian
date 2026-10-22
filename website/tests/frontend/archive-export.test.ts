@@ -4,6 +4,14 @@ import { calendarDay, dateRangeError, defaultExportDates, exportFilename, export
 
 const data = { total: 5, export_max_days: 7, page_size: 2, prefixes: { source: 'source/', topic: 'topics/' }, facets: {}, labels: { 'source/hn': 'Hacker News', 'topics/tools': '工具' }, aliases: {}, years: { '2026': [0, 2], '2025': [2, 4] }, months: {}, days: { '2026-01-03': [0, 1], '2026-01-01': [1, 2], '2025-12-31': [2, 4] } } as unknown as ArchiveManifest;
 
+it('describes the default source scope without enumerating hundreds of sources', () => {
+  const scoped = { ...data, tab_sources: ['arxiv'], facets: { source: Array.from({ length: 300 }, (_, i) => ({ id: `source-${i}`, name: `Source ${i}`, count: 1 })) } };
+  const labels = { dates: 'Dates', source: 'Sources', topic: 'Topics', all: 'All', allWithoutTabs: 'All (excluding tab sources)', entries: 'Entries', date: 'Date', original: 'Original', article: 'Article' };
+  const snapshot = { site: 'Garden', locale: 'en', start: '2026-01-01', end: '2026-01-03', filters: new URLSearchParams(), cards: [] };
+  expect(exportMarkdownParts(snapshot, scoped, new Map(), labels)[0]).toContain('Sources: All (excluding tab sources)');
+  expect(exportMarkdownParts({ ...snapshot, filters: new URLSearchParams('include_tabs=1') }, scoped, new Map(), labels)[0]).toContain('Sources: All\n');
+});
+
 it('validates inclusive calendar ranges independently of the browser timezone', () => {
   expect(dateRangeError('2025-12-28', '2026-01-03', 7)).toBeNull();
   expect(dateRangeError('2026-01-03', '2026-01-03', 7)).toBeNull();
@@ -53,7 +61,7 @@ it('preserves full Markdown and metadata in stable order, requiring every body',
   const card = (id: string): ArchiveCard => ({ id, title: id, url: 'https://example.test/feedgarden/zh-CN/' + id + '/', markdown_url: '/' + id + '.md', published_at: '2026-01-01T01:00:00+08:00', display_date: '2026-01-01', year: '2026', month: '2026-01', source_url: 'https://source.test/' + id, summary: 'TRUNCATED...', facets: { source: ['hn'], topic: ['tools'] } });
   const cards = [card('a'), card('b')], body = '# 中文正文\n\n完整段落。\n\n## HN 热门讨论\n\n> 引用\n\n- 列表\n\n```md\n# Code heading\n---\n```\n\n![图片](https://example.test/a.png)\n';
   const snapshot = { site: 'Feedgarden', locale: 'zh-CN', start: '2025-12-28', end: '2026-01-03', filters: new URLSearchParams('source=hn'), cards };
-  const labels = { dates: '日期范围', source: '来源', topic: '主题', all: '全部', entries: '条目数', date: '日期', original: '原文', article: '站内文章' };
+  const labels = { dates: '日期范围', source: '来源', topic: '主题', all: '全部', allWithoutTabs: '全部（不含独立栏目来源）', entries: '条目数', date: '日期', original: '原文', article: '站内文章' };
   const parts = exportMarkdownParts(snapshot, data, new Map([['b', '# Second\n\nEnd.'], ['a', body]]), labels), result = parts.join('');
   expect(parts).toContain(body.trimEnd());
   expect(result).toContain(body.trimEnd()); expect(result).toContain('来源: Hacker News'); expect(result).toContain('主题: 工具');

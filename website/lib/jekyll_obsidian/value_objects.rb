@@ -86,6 +86,7 @@ module JekyllObsidian
     :properties,
     :tag_labels,
     :tag_aliases,
+    :hidden_tags,
     :html
   )
 

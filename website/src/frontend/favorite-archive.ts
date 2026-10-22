@@ -4,6 +4,15 @@ import { readFavoriteCollection, sameFavoriteCard, snapshotCard, updateFavoriteS
 import { favoritesUI, showFavoriteError } from "./favorite-controls";
 import { textElement } from "./archive-ledger";
 import { facetLabel, facetPrefix } from "./archive-facets";
+import { readArchiveVisibilityUI } from "./archive-visibility";
+
+function offlineHiddenTags(): string[] {
+  // This fallback controls filter display while saved entries remain available.
+  try {
+    const tags: unknown = JSON.parse(readArchiveVisibilityUI().hiddenTags || "[]");
+    return Array.isArray(tags) && tags.every(tag => typeof tag === "string" && tag.length > 0) ? tags : [];
+  } catch { return []; }
+}
 
 export function favoriteManifest(cards: ArchiveCard[], base?: ArchiveCollection): ArchiveCollection {
   const facets: ArchiveCollection["facets"] = Object.create(null);
@@ -28,6 +37,7 @@ export function favoriteManifest(cards: ArchiveCard[], base?: ArchiveCollection)
   });
   for (const options of Object.values(facets)) options.sort((a, b) => b.count - a.count || a.id.localeCompare(b.id));
   return { total: cards.length, page_size: 50,
+    hidden_tags: base?.hidden_tags || offlineHiddenTags(),
     facets, prefixes, labels, aliases: base?.aliases || {}, years, months, days, ledger_group_by: "day" };
 }
 export interface FavoriteArchive { cards: ArchiveCard[]; manifest: ArchiveCollection; refreshFailed: boolean; sourceManifest: ArchiveCollection | undefined; snapshots: Map<string, ArchiveCard>; revision: string | null }
@@ -140,7 +150,8 @@ export function renderFavoriteFilters(root: HTMLElement, manifest: ArchiveCollec
       const button = textElement("button", "", "tag-chip"); button.type = "button"; button.dataset.archiveFacet = name; button.dataset.archiveValue = option.id;
       button.append(document.createTextNode(option.name + " "), textElement("span", String(option.count))); const li = document.createElement("li"); li.append(button); list.append(li);
     }
-    nav.append(heading, list); host.append(nav);
+    const headingHost = textElement("div", "", "archive-facet-heading"); headingHost.append(heading);
+    nav.append(headingHost, list); host.append(nav);
   }
   for (const nav of document.querySelectorAll<HTMLElement>("[data-timeline-nav]")) {
     const title = nav.querySelector("h2"); nav.replaceChildren(); if (title) nav.append(title);

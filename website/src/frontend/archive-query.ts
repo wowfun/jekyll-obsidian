@@ -1,15 +1,22 @@
 export interface ArchiveFacetOption { id: string; name: string; count: number }
 export interface ArchiveCollection {
   total: number; page_size: number;
+  hidden_tags?: string[]; tab_sources?: string[];
+  default_view?: ArchiveView;
   facets: Record<string, ArchiveFacetOption[]>; prefixes: Record<string, string>;
   labels: Record<string, string>; aliases: Record<string, string>;
   years: Record<string, [number, number]>; months: Record<string, [number, number]>; days: Record<string, [number, number]>;
   ledger_group_by?: "year" | "day";
 }
+export interface ArchiveView {
+  total: number; facets: Record<string, Record<string, number>>;
+  years: Record<string, number>; months: Record<string, number>; days: Record<string, number>;
+}
 export interface ArchiveOption extends ArchiveFacetOption { posting?: string }
 export interface ArchiveManifest extends ArchiveCollection {
   version: number; generation: string; export_max_days: number;
   facets: Record<string, ArchiveOption[]>; chunks: string[]; identities?: string;
+  excluded_posting?: string;
 }
 export interface ArchiveCard {
   id: string; title: string; url: string; markdown_url: string; summary?: string | null; source_url?: string | null;
@@ -17,10 +24,11 @@ export interface ArchiveCard {
   facets: Record<string, string[]>; date_basis?: string | null;
   favorite_labels?: Record<string, string>; unavailable?: boolean; snapshot_locale?: string;
 }
-export interface ArchiveQuery { groups: string[][]; range: [number, number]; page: number }
+export interface ArchiveQuery { groups: string[][]; excluded?: string[]; range: [number, number]; page: number }
 export type ArchiveQueryMode = "page" | "all" | "first";
 export interface ArchiveMatches { ordinals: number[]; count: number; page: number; pages: number }
 export const ARCHIVE_POSTING_CACHE_LIMIT = 20;
+export const TAB_SOURCES_POSTING_KEY = "$tab_sources";
 
 export function archivePageNumber(value: string): number | undefined {
   const page = /^\d+$/.test(value) ? Number(value) : NaN;
@@ -32,7 +40,7 @@ export function canonicalFacetId(id: string, prefix: string, aliases: Record<str
 }
 
 export function matchArchive(total: number, size: number, query: ArchiveQuery, bitmaps: Record<string, Uint8Array>, mode: ArchiveQueryMode = "page", limit = Infinity): ArchiveMatches {
-  const union = query.groups.map((keys) => {
+  const combine = (keys: string[]) => {
     if (!keys.length) return null;
     let result: Uint8Array | undefined, shared = true;
     for (const key of keys) {
@@ -45,9 +53,12 @@ export function matchArchive(total: number, size: number, query: ArchiveQuery, b
       }
     }
     return result || new Uint8Array(0);
-  });
+  };
+  const union = query.groups.map(combine);
   let count = 0;
-  const matches = (ordinal: number) => union.every((bitmap) => !bitmap || Boolean(bitmap[ordinal >> 3]! & (1 << (ordinal & 7))));
+  const excluded = combine(query.excluded || []);
+  const matches = (ordinal: number) => !(excluded && Boolean(excluded[ordinal >> 3]! & (1 << (ordinal & 7))))
+    && union.every((bitmap) => !bitmap || Boolean(bitmap[ordinal >> 3]! & (1 << (ordinal & 7))));
   const [start, end] = query.range;
   const ordinals: number[] = [];
   const requestedPage = Math.max(1, query.page), offset = (requestedPage - 1) * size;
@@ -80,6 +91,13 @@ export function archiveState(manifest: ArchiveCollection, search: string): { par
     groups.push(ids.map((id) => `${name}/${id}`));
     for (const id of ids) { parameters.append(name, id); keys.push(`${name}/${id}`); }
   }
+  const includeTabs = input.get("include_tabs") === "1" || parameters.getAll("source").some(id => manifest.tab_sources?.includes(id));
+  if (includeTabs) parameters.set("include_tabs", "1");
+  for (const name of [...new Set(input.getAll("show_hidden"))].sort()) {
+    if (Object.hasOwn(manifest.prefixes, name)) parameters.append("show_hidden", name);
+  }
+  const excluded = !includeTabs && manifest.tab_sources?.length ? [TAB_SOURCES_POSTING_KEY] : [];
+  keys.push(...excluded);
   let range: [number, number] = [0, manifest.total];
   const day = input.get("day"), month = input.get("month"), year = input.get("year");
   if (day) { parameters.set("day", day); range = Object.hasOwn(manifest.days, day) ? manifest.days[day]! : [0, 0]; }
@@ -87,5 +105,5 @@ export function archiveState(manifest: ArchiveCollection, search: string): { par
   else if (year) { parameters.set("year", year); range = Object.hasOwn(manifest.years, year) ? manifest.years[year]! : [0, 0]; }
   const page = archivePageNumber(input.get("page") || "1") || 1;
   if (page > 1) parameters.set("page", String(page));
-  return { parameters, query: { groups, range, page }, keys };
+  return { parameters, query: { groups, range, page, ...(excluded.length ? { excluded } : {}) }, keys };
 }

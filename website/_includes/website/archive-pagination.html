@@ -1,9 +1,10 @@
+{% assign archive_total = page.website.theme_data.archive.default_view.total | default: page.website.theme_data.archive.total %}
 <nav class="archive-pagination" aria-label="{{ ui.pagination | default: 'Pagination' | escape }}" data-archive-pagination data-page-label="{{ ui.page_label | escape }}" data-result-label="{{ ui.archive_results | escape }}" data-number-label="{{ ui.page_number | escape }}" data-jump-error="{{ ui.page_jump_error | escape }}">
   <span data-archive-page-status aria-live="polite" aria-atomic="true"></span>
   <div class="archive-pagination__navigation">
     <button type="button" data-archive-page="prev" aria-label="{{ ui.previous | default: 'Previous' | escape }}" title="{{ ui.previous | default: 'Previous' | escape }}" disabled>{% include website/action-icon.html name='previous' class='archive-pagination__arrow' %}<span>{{ ui.previous | default: 'Previous' | escape }}</span></button>
     <div class="archive-pagination__numbers" data-archive-page-numbers></div>
-    <button type="button" data-archive-page="next" aria-label="{{ ui.next | default: 'Next' | escape }}" title="{{ ui.next | default: 'Next' | escape }}"{% if page.website.theme_data.archive.total <= page.website.theme_data.archive.page_size %} disabled{% endif %}>{% include website/action-icon.html name='next' class='archive-pagination__arrow' %}<span>{{ ui.next | default: 'Next' | escape }}</span></button>
+    <button type="button" data-archive-page="next" aria-label="{{ ui.next | default: 'Next' | escape }}" title="{{ ui.next | default: 'Next' | escape }}"{% if archive_total <= page.website.theme_data.archive.page_size %} disabled{% endif %}>{% include website/action-icon.html name='next' class='archive-pagination__arrow' %}<span>{{ ui.next | default: 'Next' | escape }}</span></button>
   </div>
   <form class="archive-pagination__jump" data-archive-page-jump hidden>
     <label><span class="visually-hidden">{{ ui.page_input | default: 'Page number' | escape }}</span><input type="number" inputmode="numeric" min="1" step="1" required disabled></label>
