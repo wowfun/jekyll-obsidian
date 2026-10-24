@@ -154,7 +154,7 @@ module JekyllObsidian
 
     Topic = Struct.new(:kind, :name, :occurrence, keyword_init: true)
     Anchor = Struct.new(:kind, :id, :label, :level, :chain, keyword_init: true)
-    TransclusionContext = Struct.new(:host_id, :sequence, :instances, :bytes, keyword_init: true)
+    TransclusionContext = Struct.new(:host_id, :sequence, :instances, :bytes, :host_html, keyword_init: true)
     MAX_TRANSCLUSION_DEPTH = 16
     MAX_TRANSCLUSION_INSTANCES = 256
     MAX_TRANSCLUSION_BYTES = 2 * 1024 * 1024
@@ -171,6 +171,9 @@ module JekyllObsidian
     def self.giscus_language(locale)
       GISCUS_LANGUAGES.include?(locale.to_s) ? locale.to_s : "en"
     end
+
+    ExpansionLimitExceeded = Class.new(StandardError)
+    private_constant :ExpansionLimitExceeded
 
     def initialize(request, html_publication: nil, include_html_projection: true, tag_policy_resolved: false, frontmatter_cache: nil)
       @request = request
@@ -327,6 +330,8 @@ module JekyllObsidian
         features: @features,
         site_data: theme_output.site_data
       )
+    rescue ExpansionLimitExceeded
+      BuildFailure.new(diagnostics: sorted_diagnostics)
     end
 
     private
@@ -1552,24 +1557,37 @@ module JekyllObsidian
       @relations.each do |relation|
         graph[relation.source_id] << relation.target_id if relation.kind == :embed
       end
+      graph.each_value(&:sort!)
 
       state = {}
-      stack = []
-      visit = lambda do |id|
-        return if state[id] == :done
-        if state[id] == :visiting
-          cycle = stack.drop_while { |candidate| candidate != id } + [id]
-          error_or_warning("embed_cycle", "embed cycle detected: #{cycle.join(" -> ")}", id, nil, fatal: production?)
-          return
-        end
+      @notes.keys.sort.each do |root|
+        next if state[root] == :done
 
-        state[id] = :visiting
-        stack << id
-        graph[id].sort.each { |target| visit.call(target) }
-        stack.pop
-        state[id] = :done
+        path = [root]
+        state[root] = :visiting
+        frames = [[root, 0]]
+        until frames.empty?
+          id, index = frames.last
+          target = graph[id][index]
+          unless target
+            state[id] = :done
+            frames.pop
+            path.pop
+            next
+          end
+          frames.last[1] += 1
+          next if state[target] == :done
+          if state[target] == :visiting
+            cycle = path.drop_while { |candidate| candidate != target } + [target]
+            error_or_warning("embed_cycle", "embed cycle detected: #{cycle.join(" -> ")}", target, nil, fatal: production?)
+            next
+          end
+
+          state[target] = :visiting
+          path << target
+          frames << [target, 0]
+        end
       end
-      @notes.keys.sort.each { |id| visit.call(id) }
     end
 
     def render_authored_documents
@@ -1951,8 +1969,8 @@ module JekyllObsidian
         context = TransclusionContext.new(host_id: note.id, sequence: 0, instances: 0, bytes: 0)
         fragment = render_with_transclusions(note.id, [], context, depth: 0)
         presentation = tab_landing_presentation(note, fragment)
-        content = fragment.to_html
-        assert_block_anchors_rendered(note, content)
+        content = context.host_html && presentation.empty? ? context.host_html : fragment.to_html
+        assert_block_anchors_rendered(note, fragment)
         PublishedNote.new(
           id: note.id,
           title: note.title,
@@ -1978,7 +1996,7 @@ module JekyllObsidian
           has_h1: note.has_h1,
           presentation: presentation,
           feature_flags: note.feature_flags,
-          content_security: content_security_needs(content),
+          content_security: content_security_needs(fragment),
           image_url: published_image_url(note),
           source_links: published_source_links(note),
           topics: published_topics(note),
@@ -2042,8 +2060,7 @@ module JekyllObsidian
       @url_builder.href(target_route) + @url_builder.fragment(fragment)
     end
 
-    def content_security_needs(content)
-      fragment = Nokogiri::HTML5.fragment(content)
+    def content_security_needs(fragment)
       media_sources = fragment.css("video[src], audio[src], video source[src], audio source[src]")
         .filter_map { |node| ExternalMedia.https_origin(node["src"]) }
         .uniq
@@ -2080,12 +2097,20 @@ module JekyllObsidian
     end
 
     def render_with_transclusions(note_id, stack, context, depth:, raw_fragment: nil, resolved_anchor_id: nil)
-      fragment = cached_transclusion_selection(note_id, raw_fragment, resolved_anchor_id)
-      unless consume_transclusion_bytes(context, fragment.to_html.bytesize, note_id)
+      if depth.zero?
+        fragment = @notes.fetch(note_id).base_fragment.dup
+        host_html = fragment.to_html
+        bytes = host_html.bytesize
+      else
+        fragment, bytes = cached_transclusion_selection(note_id, raw_fragment, resolved_anchor_id)
+      end
+      unless consume_transclusion_bytes(context, bytes, note_id)
         return transclusion_limit_fragment(fragment.document, "expanded HTML exceeds #{MAX_TRANSCLUSION_BYTES} bytes")
       end
 
-      fragment.css("website-embed").to_a.each do |placeholder|
+      placeholders = fragment.css("website-embed").to_a
+      context.host_html = host_html if depth.zero? && placeholders.empty?
+      placeholders.each do |placeholder|
         target_id = placeholder["data-source-id"]
         if stack.include?(target_id) || target_id == note_id
           replacement = Nokogiri::XML::Node.new("span", fragment.document)
@@ -2133,14 +2158,12 @@ module JekyllObsidian
 
     def cached_transclusion_selection(note_id, raw_fragment, resolved_anchor_id)
       key = [note_id, raw_fragment.to_s, resolved_anchor_id.to_s]
-      cached = @transclusion_selection_cache[key]
-      return Nokogiri::HTML5.fragment(cached) if cached
-
-      fragment = @notes.fetch(note_id).base_fragment.dup
-      selected = select_transclusion_fragment(fragment, raw_fragment, resolved_anchor_id)
-      serialized = selected.to_html.freeze
-      @transclusion_selection_cache[key] = serialized
-      Nokogiri::HTML5.fragment(serialized)
+      selected, bytes = @transclusion_selection_cache[key] ||= begin
+        fragment = @notes.fetch(note_id).base_fragment.dup
+        selection = select_transclusion_fragment(fragment, raw_fragment, resolved_anchor_id)
+        [selection, selection.to_html.bytesize].freeze
+      end
+      [selected.dup, bytes]
     end
 
     def consume_transclusion_instance(context, depth, path)
@@ -2160,6 +2183,8 @@ module JekyllObsidian
 
     def transclusion_limit(_context, message, path)
       error_or_warning("embed_budget_exceeded", message, path, nil, fatal: production?)
+      raise ExpansionLimitExceeded if production?
+
       false
     end
 
@@ -2181,10 +2206,12 @@ module JekyllObsidian
       replacement["id"] = source["id"] if source["id"]
     end
 
-    def assert_block_anchors_rendered(note, content)
-      document = Nokogiri::HTML5.fragment(content)
-      counts = document.css("[id]").each_with_object(Hash.new(0)) { |node, memo| memo[node["id"]] += 1 }
-      note.anchors.select { |anchor| anchor.kind == :block }.each do |anchor|
+    def assert_block_anchors_rendered(note, fragment)
+      anchors = note.anchors.select { |anchor| anchor.kind == :block }
+      return if anchors.empty?
+
+      counts = fragment.css("[id]").each_with_object(Hash.new(0)) { |node, memo| memo[node["id"]] += 1 }
+      anchors.each do |anchor|
         next if counts[anchor.id] == 1
 
         error(

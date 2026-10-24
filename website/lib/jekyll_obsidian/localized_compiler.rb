@@ -843,7 +843,7 @@ module JekyllObsidian
       else
         case file.media_type
         when "application/json"
-          "#{JSON.generate(localize_data(JSON.parse(file.content), locale))}\n"
+          locale == @default_locale ? file.content : "#{JSON.generate(localize_data(JSON.parse(file.content), locale))}\n"
         when "text/html"
           localize_html(file.content, locale)
         when "application/atom+xml", "application/xml"

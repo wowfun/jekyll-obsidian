@@ -32,8 +32,8 @@ The fixed pipeline is:
 3. Materialize or replay remote Markdown for the physical wrappers that will be published.
 4. Scan Obsidian syntax and parse public Markdown once in each language partition.
 5. Build anchor indexes and resolve body and frontmatter references, embeds, and attachments.
-6. Resolve links, embeds, and attachment closure within that partition.
-7. Resolve the selected built-in theme and feature defaults.
+6. Detect embed cycles with an explicit stack and render authored documents, including code highlighting.
+7. Expand embeds within their budgets and check anchors and CSP requirements on the final DOM.
 8. Produce themed HTML and deterministic locale-specific JSON or XML files.
 9. Combine the immutable partitions, shared attachments, routes, and reciprocal SEO metadata.
 
@@ -41,9 +41,11 @@ Preparation reuses the compiler's publication policy and locale overlays before 
 
 Preparation and final compilation share deterministic diagnostic ordering and deduplicate identical physical-source diagnostics across language fallbacks. Distinct paths, spans, properties, messages, and severities remain distinct.
 
-Prepared compiler instances represent one immutable input set. Loading remote documents requires preparation first; an unprepared call raises instead of silently dropping the documents. Repeated compilation returns the completed result, including failures; changing remote documents or tab memberships after compilation is rejected. Frontmatter caches are cleared when the owning build completes, after all locale partitions have used them.
+Prepared compiler instances represent one immutable input set. Loading remote documents requires preparation first; an unprepared call raises instead of silently dropping the documents. Repeated compilation returns the completed result, including failures; changing remote documents or tab memberships after compilation is rejected. Frontmatter caches are cleared when the owning build completes, after all locale partitions have used them. Only fragments selected by actual embeds enter the transclusion cache; ordinary host pages retain one working DOM copy and reuse their serialized HTML when presentation does not change it. Transclusion selections are released on success and failure. Cache size follows the build's input and selected fragments; there is no persistent cache or eviction policy.
 
 Code highlighting uses AST source positions without modifying code text, including nested blocks. Missing or duplicate code positions produce an `ambiguous_code_source` diagnostic instead of silently skipping or rewriting another block; authored HTML must not reuse the renderer's `data-sourcepos` attribute. Reference-binding tokens use a namespace derived from the complete source, so authored URLs and attributes cannot capture a generated occurrence. Generated wikilink tokens are removed after binding.
+
+Cycle detection uses an explicit DFS stack; expansion retains separate depth, instance, and byte budgets. Production compilation stops at the first fatal expansion limit without constructing partial output or expanding other hosts. Development builds retain limited placeholders and warnings. The full 3,000-note chain regression exercises both cycle detection and the expansion limit. Selected transclusion DOM fragments are copied for each host, while CSP and block-anchor validation inspect the final DOM directly.
 
 ## Identity and relations
 

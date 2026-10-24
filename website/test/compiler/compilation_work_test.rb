@@ -31,6 +31,19 @@ class CompilationWorkTest < Minitest::Test
     assert_equal %w[_translations/zh-CN/index.md index.md], diagnostics.select { |item| item.code == "unresolved_link" }.map(&:path)
   end
 
+  def test_plain_hosts_do_not_populate_the_transclusion_selection_cache
+    selections = 0
+    serializations = 0
+    trace = TracePoint.new(:call) do |event|
+      selections += 1 if event.defined_class == JekyllObsidian::VaultCompiler && event.method_id == :cached_transclusion_selection
+      serializations += 1 if event.method_id == :to_html && event.self.is_a?(Nokogiri::HTML5::DocumentFragment)
+    end
+    result = trace.enable { compile(note("index.md", "---\npublish: true\n---\n# Home"), note("other.md", "---\npublish: true\n---\n# Other")) }
+    assert result.success?
+    assert_equal 0, selections
+    assert_equal 2, serializations
+  end
+
   def test_external_documents_cannot_be_loaded_before_preparation
     request = JekyllObsidian::BuildRequest.new(
       snapshot: JekyllObsidian::Snapshot.new(entries: [note("index.md", "---\npublish: true\n---\n# Home")]),
@@ -104,6 +117,23 @@ class CompilationWorkTest < Minitest::Test
     end
   end
 
+  def test_production_stops_expanding_hosts_after_a_fatal_budget_error
+    entries = 30.times.map do |index|
+      note("note-#{index}.md", "---\npublish: true\n---\n# Note #{index}\n" + (index < 29 ? "![[note-#{index + 1}]]" : ""))
+    end
+    hosts = []
+    trace = TracePoint.new(:call) do |event|
+      next unless event.defined_class == JekyllObsidian::VaultCompiler && event.method_id == :render_with_transclusions
+      hosts << event.binding.local_variable_get(:note_id) if event.binding.local_variable_get(:depth).zero?
+    end
+    result = trace.enable { compile(*entries) }
+    refute result.success?
+    assert_instance_of JekyllObsidian::BuildFailure, result
+    assert_equal [:diagnostics], result.to_h.keys # Failure cannot carry partial pages or generated files.
+    assert_equal ["note-0.md"], hosts
+    assert_equal 1, result.diagnostics.count { |item| item.code == "embed_budget_exceeded" }
+  end
+
   def test_failed_compilation_is_also_cached
     [nil, { "enabled" => true, "locales" => %w[en zh-CN] }].each do |i18n|
       entries = [note("index.md", "---\npublish: true\n---\n![[index]]")]
@@ -119,6 +149,29 @@ class CompilationWorkTest < Minitest::Test
       refute first.success?
       assert_empty cached_frontmatter
       assert_same first, compiler.compile
+    end
+  end
+
+  def test_transclusion_selections_are_released_after_success_and_failure
+    [false, true].each do |cycle|
+      request = JekyllObsidian::BuildRequest.new(
+        snapshot: JekyllObsidian::Snapshot.new(entries: [
+          note("index.md", "---\npublish: true\n---\n![[other]]"),
+          note("other.md", "---\npublish: true\n---\n" + (cycle ? "![[index]]" : "# Other"))
+        ]),
+        config: JekyllObsidian::BuildConfig.new(**DEFAULT_CONFIG), reference_time: Time.utc(2026, 10, 23)
+      )
+      compiler = JekyllObsidian::VaultCompiler.prepare(request)
+      populated = false
+      trace = TracePoint.new(:return) do |event|
+        next unless event.self.equal?(compiler) && event.method_id == :cached_transclusion_selection
+
+        populated ||= !compiler.instance_variable_get(:@transclusion_selection_cache).empty?
+      end
+      result = trace.enable { compiler.compile }
+      assert_equal !cycle, result.success?
+      assert populated, "the fixture must use the selection cache before checking release"
+      assert_empty compiler.instance_variable_get(:@transclusion_selection_cache)
     end
   end
 
@@ -143,6 +196,28 @@ class CompilationWorkTest < Minitest::Test
     refute_same cached, cache.parse("mutable.md", bytes)
   end
 
+  def test_plain_notes_build_yaml_twice_and_render_html_only_once_per_note
+    frontmatter = Hash.new(0)
+    yaml = 0
+    html = 0
+    trace = TracePoint.new(:call) do |event|
+      if event.defined_class == JekyllObsidian::FrontMatter.singleton_class && event.method_id == :parse
+        frontmatter[[event.binding.local_variable_get(:path), event.binding.local_variable_get(:bytes)]] += 1
+      elsif event.defined_class == Psych.singleton_class && event.method_id == :parse_stream
+        yaml += 1
+      elsif event.defined_class == Nokogiri::HTML5.singleton_class && event.method_id == :fragment
+        html += 1
+      end
+    end
+    result = trace.enable do
+      compile(note("index.md", "---\npublish: true\n---\n# Home\nBody"), note("other.md", "---\npublish: true\n---\n# Other"))
+    end
+    assert result.success?, result.diagnostics.map(&:message).join("\n")
+    assert_equal [1, 1], frontmatter.values
+    assert_equal 4, yaml
+    assert_equal 2, html
+  end
+
   def test_localized_overlays_share_frontmatter_results_with_preparation_and_compilation
     counts = Hash.new(0)
     trace = TracePoint.new(:call) do |event|
@@ -165,4 +240,53 @@ class CompilationWorkTest < Minitest::Test
     assert counts.values.all? { |count| count == 1 }, counts.inspect
   end
 
+  def test_three_thousand_note_chain_reaches_expansion_budget_without_recursive_cycle_detection
+    entries = 3_000.times.map do |index|
+      body = "---\npublish: true\n---\n# Note #{index}\n"
+      body += "![[note-#{index + 1}]]\n" if index < 2_999
+      note("note-#{index}.md", body)
+    end
+    result = compile(*entries, features: { "graph" => false, "search" => false, "feed" => false })
+    refute result.success?
+    assert result.diagnostics.any? { |item| item.code == "embed_budget_exceeded" }
+    refute result.diagnostics.any? { |item| item.code == "embed_cycle" }
+  end
+
+  def test_cached_transclusion_selections_do_not_share_mutated_ids_between_hosts
+    result = compile(
+      note("a.md", "---\npublish: true\n---\n# A\n![[target#Part]]\n\n![[target#Part]]"),
+      note("b.md", "---\npublish: true\n---\n# B\n![[target#Part]]"),
+      note("target.md", "---\npublish: true\n---\n# Target\n## Part\n[Jump](#Part)")
+    )
+    assert result.success?, result.diagnostics.map(&:message).join("\n")
+    %w[a b].each do |host|
+      doc = Nokogiri::HTML5.fragment(page(result, "/#{host}/").content)
+      ids = doc.css("[id]").map { |node| node["id"] }
+      assert_equal ids.uniq, ids
+      doc.css(".website-transclusion h2").each { |heading| assert_match(/\Aembed-#{host}md-\d+-part\z/, heading["id"]) }
+      doc.css('.website-transclusion a[href^="#"]').each { |link| assert_includes ids, link["href"].delete_prefix("#") }
+    end
+    assert_includes page(result, "/target/").content, 'id="part"'
+  end
+
+  def test_byte_budget_includes_the_host_body_and_charges_each_cached_selection
+    limit = JekyllObsidian::VaultCompiler::MAX_TRANSCLUSION_BYTES
+    # A raw paragraph renders as <p>...</p> followed by one newline.
+    at_limit = note("index.md", "---\npublish: true\n---\n<p>#{'x' * (limit - 8)}</p>\n")
+    accepted = compile(at_limit)
+    assert accepted.success?, accepted.diagnostics.map(&:message).join("\n")
+    assert_equal limit, page(accepted, "/").content.bytesize
+    rejected = compile(at_limit.with(bytes: at_limit.bytes.sub("</p>", "x</p>")))
+    refute rejected.success?
+    assert rejected.diagnostics.any? { |item| item.code == "embed_budget_exceeded" && item.message.include?("bytes") }
+
+    leaf = note("leaf.md", "---\npublish: true\n---\n<p>#{'x' * (limit / 2)}</p>\n")
+    host = note("index.md", "---\npublish: true\n---\n![[leaf]]\n\n![[leaf]]")
+    rejected = compile(host, leaf)
+    refute rejected.success?
+    assert rejected.diagnostics.any? { |item| item.code == "embed_budget_exceeded" && item.message.include?("bytes") }
+    limited = compile(host, leaf, environment: "development")
+    assert limited.success?, limited.diagnostics.map(&:message).join("\n")
+    assert_includes page(limited, "/").content, "website-embed--limited"
+  end
 end
