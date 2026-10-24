@@ -45,7 +45,7 @@ bundle exec rake test
 npm run test:prepared
 npm run build:browser-sites
 npx playwright install chromium
-npx playwright test paged-archive.spec.ts
+npx playwright test
 ```
 
 Gems use the shared Ruby installation. The lockfile includes `x64-mingw-ucrt`; npm dependencies stay under `website/node_modules`. Directory-link tests use junctions when symbolic-link privileges are unavailable. File-link tests require Windows Developer Mode or symbolic-link privileges and otherwise skip with a reason; Windows cannot create the control-character filenames covered by the POSIX audit test. Audit tests invoke Ruby directly, and preview tests terminate only their isolated child process.
@@ -67,7 +67,7 @@ RUN_BROWSER_TESTS=1 website/bin/test
 
 Do not bypass package tests when running Ruby checks separately: rebuild assets and run `bundle exec ruby scripts/package.rb --skip-assets` first. The installed-gem test builds both themes in English and Simplified Chinese, checks their lazy entries and workers, and verifies that packaged files remain unchanged.
 
-Asset builds write `.jekyll-obsidian-cache/asset-statistics.json` inside `website/` for verification only. Each theme's synchronous JavaScript closure, including shared chunks and the color-scheme bootstrap, must stay within 45,000 raw bytes and 18,000 bytes of summed per-file gzip output. Archive and favorites entries belong to both theme manifests but load only when the page has their DOM markers.
+Asset builds write `.jekyll-obsidian-cache/asset-statistics.json` inside `website/` for verification only. Each theme's synchronous JavaScript closure, including shared chunks and the color-scheme bootstrap, must stay within 45,000 raw bytes and 18,000 bytes of summed per-file gzip output. Archive and favorites entries belong to both theme manifests but load only when the page has their DOM markers. Browser navigation fixtures come from the actual compiler.
 
 The statistics record SHA-256 hashes of build inputs, the manifest, and synchronous JavaScript files. `test:prepared` verifies those hashes and recomputes sizes; stale inputs or outputs require `npm run build` before checking the budget. `--skip-assets` is appropriate only after that fresh asset build.
 

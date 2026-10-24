@@ -56,6 +56,8 @@ jobs:
         env:
           JEKYLL_OBSIDIAN_GITHUB_MARKDOWN_MANIFEST_IN: .jekyll-obsidian-cache/github-markdown-browser.json
         run: |
+          mkdir -p .jekyll-obsidian-cache
+          cp website/tests/browser/fixtures/github-markdown-default.json .jekyll-obsidian-cache/github-markdown-browser.json
           for theme in minimal docs; do
             website/bin/build --example --theme "$theme" --url https://example.invalid --baseurl '' --destination "site-$theme-root" --skip-assets
           done

@@ -207,3 +207,27 @@ try {
 } finally {
   await rm(governanceHost, { force: true, recursive: true });
 }
+
+// Compile navigation through the same frontmatter and theme contracts as a host.
+const navigationHost = await mkdtemp(path.join(tmpdir(), "jekyll-obsidian-navigation-"));
+try {
+  await mkdir(path.join(navigationHost, "vault/docs"), { recursive: true });
+  await mkdir(path.join(navigationHost, ".jekyll-obsidian-cache"));
+  await writeFile(path.join(navigationHost, ".jekyll-obsidian-cache/github-markdown-browser.json"), JSON.stringify({ version: 1, documents: [] }));
+  const config = path.join(navigationHost, "host.yml");
+  await writeFile(config, JSON.stringify({ title: "Navigation fixture", website: {
+    source: "vault", repository: "example/navigation", contacts: [], i18n: { enabled: false }
+  } }));
+  await writeFile(path.join(navigationHost, "vault/index.md"), "---\npublish: true\n---\n# Home\n");
+  for (const [index, id] of ["about", "projects", "team", "contact", "examples", "community"].entries()) {
+    const title = id[0].toUpperCase() + id.slice(1);
+    await mkdir(path.join(navigationHost, `vault/${id}`));
+    await writeFile(path.join(navigationHost, `vault/${id}/index.md`), `---\npublish: true\ncontent_type: page\ntab:\n  id: ${id}\n  label: ${title}\n  order: ${30 + index}\n---\n# ${title}\n`);
+  }
+  for (const id of ["one", "two", "three"]) {
+    await writeFile(path.join(navigationHost, `vault/docs/${id}.md`), `---\npublish: true\ncontent_type: doc\n---\n# ${id}\n\n[[docs/one]] [[docs/two]] [[docs/three]]\n\n` + "Paragraph for history and anchor scrolling.\n\n".repeat(45) + "## Details\nTarget section.\n");
+  }
+  await buildFixtureSites(navigationHost, "navigation", config);
+} finally {
+  await rm(navigationHost, { force: true, recursive: true });
+}
