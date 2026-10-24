@@ -31,7 +31,7 @@ title: My first note
 
 ## 配置站点
 
-直接编辑 `.github/jekyll-obsidian.yml`。`website.theme: minimal` 提供 Home、Blog 和自定义栏目，`website.theme: docs` 提供文档目录树。切换主题不会改变笔记 URL。导航和功能配置见 [[Customization|自定义]]。
+直接编辑 `.github/jekyll-obsidian.yml`。站点信息字段（`title`、`description`、`lang`、`url`、`baseurl`）位于 YAML 根级，内容、主题和功能设置位于 `website` 下。`website.theme: minimal` 提供 Home、Blog 和自定义栏目，`website.theme: docs` 提供文档目录树。仍然发布的笔记会保留原 URL。显式设置 `website.i18n.enabled: true` 可在切换主题时继续发布译文。导航和功能配置见 [[Customization|自定义]]。
 
 ## 本地预览
 

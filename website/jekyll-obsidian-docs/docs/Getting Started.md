@@ -38,7 +38,7 @@ A public root `index.md` becomes the home page. Without a physical `index.md`, a
 
 ## Configure the site
 
-Edit `.github/jekyll-obsidian.yml` directly. Use `website.theme: minimal` for a site with Home, Blog, and custom sections, or `website.theme: docs` for a documentation tree. Changing the theme does not change note URLs. See [[Customization|Customization]] for navigation and features.
+Edit `.github/jekyll-obsidian.yml` directly. Site identity fields (`title`, `description`, `lang`, `url`, `baseurl`) belong at the YAML root; content, theme, and feature settings go under `website`. Use `website.theme: minimal` for a site with Home, Blog, and custom sections, or `website.theme: docs` for a documentation tree. Notes that remain published keep their URLs. Set `website.i18n.enabled: true` explicitly to preserve translated pages across theme changes. See [[Customization|Customization]] for navigation and features.
 
 ## Preview locally
 

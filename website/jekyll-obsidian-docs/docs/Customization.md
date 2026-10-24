@@ -91,6 +91,8 @@ An HTML mapping is publication authorization independent of `website.content.pub
 
 ## Site identity
 
+Keep `title`, `description`, `lang`, `url`, and `baseurl` at the YAML root. Put content, theme, and feature settings under `website`.
+
 `title`, `description`, and `lang` feed the shell, metadata, Atom, and accessibility labels. Set `website.repository` to an `owner/repository` pair to show the Edit link and a GitHub icon on the right of the header. If it is blank, the build checks `GITHUB_REPOSITORY` and the local `origin` remote. These actions stay hidden when no repository can be identified. This host repository setting never changes the Built by Jekyll Obsidian footer link, which always identifies the official project at `https://github.com/wowfun/jekyll-obsidian`.
 
 Minimal Home renders the public root directory index, followed by the six most recent posts as editorial rows. The index is `index.md`, or the exact sibling `README.md` when no physical `index.md` exists. A selected directory index without an authored level-one heading does not render a substitute heading from its filename or frontmatter title; the resolved title remains available to metadata and navigation. A row with an image places a 16:9 thumbnail beside its summary on wide screens and above it on narrow screens; a row without an image uses the full width with no placeholder. Each summary can also show `subtitle`, a body excerpt, authors, and its publication date. The Blog link opens the complete reverse-chronological list at `/blog/`.
@@ -106,7 +108,7 @@ jekyll-obsidian dev --theme docs
 jekyll-obsidian build --theme minimal --url https://example.test --baseurl ""
 ```
 
-The built site is written to `.jekyll-obsidian-cache/site/`. Supported theme identifiers are `minimal` and `docs`.
+The built site is written to `.jekyll-obsidian-cache/site/`. Supported theme identifiers are `minimal` and `docs`. Notes that remain published keep their URLs when switching themes; set `website.i18n.enabled: true` explicitly to retain translations.
 
 Feature keys omitted from `website.features` inherit the theme defaults. Explicit YAML booleans can override `search`, `tags`, `feed`, `graph`, `relations`, `previews`, and `outline`.
 
@@ -114,6 +116,15 @@ Feature keys omitted from `website.features` inherit the theme defaults. Explici
 | --- | --- | --- |
 | `search`, `previews`, `outline`, `relations`, `graph` | on | on |
 | `tags`, `feed` | on | off |
+
+The separate `i18n` and `comments` mappings have their own defaults when present without `enabled`:
+
+| Setting | Minimal | Docs |
+| --- | --- | --- |
+| `website.i18n` | off | on |
+| `website.comments` | on | off |
+
+Omitting either mapping disables it. An explicit `enabled: true` or `enabled: false` overrides its theme default.
 
 Set any shared feature to the YAML boolean `false` to remove it. For example:
 

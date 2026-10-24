@@ -16,6 +16,8 @@ A host repository needs content, `.github/jekyll-obsidian.yml`, and a Pages work
 
 ## Deploy without installing a toolchain
 
+If your repository already has a `Gemfile` or `Gemfile.lock`, complete [[Integration#Use Bundler|Use Bundler]] first. The Action requires both files and a locked builder version matching its release.
+
 Copy [the configuration example](https://github.com/wowfun/jekyll-obsidian/blob/v0.3.1/examples/jekyll-obsidian.yml) to `.github/jekyll-obsidian.yml` and [the Pages workflow](https://github.com/wowfun/jekyll-obsidian/blob/v0.3.1/examples/pages.yml) to `.github/workflows/pages.yml`.
 
 ```yaml
@@ -68,7 +70,7 @@ An existing Jekyll `_config.yml` and its plugins are not loaded by this tool.
 
 Change `uses: wowfun/jekyll-obsidian@v0.3.1` in the workflow to the desired release tag. The Action installs that release's exact gem version.
 
-For a direct installation, use `gem update jekyll-obsidian-site`. For Bundler, adjust the version constraint when necessary, run `bundle update jekyll-obsidian-site`, and commit the lockfile. Package updates do not rewrite host content or configuration.
+For Bundler, change the `jekyll-obsidian-site` version constraint in `Gemfile` to the same release, run `bundle update jekyll-obsidian-site`, and commit `Gemfile`, `Gemfile.lock`, and the workflow together. Running `bundle update` alone cannot upgrade an exact Gemfile pin. For a standalone local installation, use `gem update jekyll-obsidian-site`. Package updates do not rewrite host content or configuration.
 
 The earlier copied-workspace installation is not supported by this release. Preserve your content and `.github/jekyll-obsidian.yml`, remove its managed-marker comments, replace the old workflow, and remove the old implementation files. Keep any user-authored files under `website/`.
 

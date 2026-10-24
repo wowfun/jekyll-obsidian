@@ -84,6 +84,8 @@ HTML 映射本身就是发布授权，不受 `website.content.publish_by_default
 
 ## 站点信息
 
+`title`、`description`、`lang`、`url` 和 `baseurl` 位于 YAML 根级，内容、主题和功能设置位于 `website` 下。
+
 `title`、`description` 和 `lang` 会进入站点外壳、元数据、Atom 和无障碍标签。将 `website.repository` 设为 `owner/repository` 可以显示 Edit 链接。该值为空时，构建会检查 `GITHUB_REPOSITORY` 和本地 `origin` remote。无法识别仓库时，操作会保持隐藏。这个宿主仓库配置不会更改页脚中的 Built by Jekyll Obsidian 链接；页脚始终指向官方项目 `https://github.com/wowfun/jekyll-obsidian`。
 
 Minimal Home 会先显示公开的根目录索引，再用编辑式列表显示最近六篇文章。索引默认为 `index.md`；物理 `index.md` 不存在时，才会使用同级且文件名精确为 `README.md` 的公开笔记。被选中的目录索引没有正文一级标题时，不会再通过文件名或 frontmatter 标题补出可见标题；解析后的标题仍用于元数据和导航。带图片的条目在宽屏中把 16:9 缩略图放在摘要旁边，在窄屏中放到摘要上方；没有图片的条目会占满宽度，不显示占位图。摘要还可以显示 `subtitle`、正文摘录、作者和发布日期。Blog 链接会打开 `/blog/` 中完整的倒序文章列表。
@@ -99,7 +101,7 @@ jekyll-obsidian dev --theme docs
 jekyll-obsidian build --theme minimal --url https://example.test --baseurl ""
 ```
 
-生成站点位于 `.jekyll-obsidian-cache/site/`。主题标识只支持 `minimal` 和 `docs`。
+生成站点位于 `.jekyll-obsidian-cache/site/`。主题标识只支持 `minimal` 和 `docs`。切换主题后，仍然发布的笔记会保留原 URL；请显式设置 `website.i18n.enabled: true`，以继续发布译文。
 
 `website.features` 中省略的功能会继承主题默认值。可以用显式 YAML 布尔值覆盖 `search`、`tags`、`feed`、`graph`、`relations`、`previews` 和 `outline`。
 
@@ -107,6 +109,15 @@ jekyll-obsidian build --theme minimal --url https://example.test --baseurl ""
 | --- | --- | --- |
 | `search`、`previews`、`outline`、`relations`、`graph` | 开启 | 开启 |
 | `tags`、`feed` | 开启 | 关闭 |
+
+独立的 `i18n` 和 `comments` 配置在已提供但省略 `enabled` 时，使用以下默认值：
+
+| 设置 | Minimal | Docs |
+| --- | --- | --- |
+| `website.i18n` | 关闭 | 开启 |
+| `website.comments` | 开启 | 关闭 |
+
+未提供相应配置时，该功能关闭。显式设置 `enabled: true` 或 `enabled: false` 可覆盖主题默认值。
 
 将任意共享功能设为 YAML 布尔值 `false` 即可移除。例如：
 

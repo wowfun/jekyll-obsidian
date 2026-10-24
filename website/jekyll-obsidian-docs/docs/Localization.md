@@ -25,6 +25,8 @@ Localization is disabled for every theme when `website.i18n` is absent. When the
 
 The top-level `lang` is the default locale and must appear in `locales`. List order controls the language switcher order.
 
+Set `enabled: true` explicitly when switching between themes. With an implicit default, changing from Docs to Minimal disables localization and removes translated URLs from the next build, even though the source notes are unchanged.
+
 ```yaml
 lang: en
 

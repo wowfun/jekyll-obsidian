@@ -38,6 +38,39 @@ class RuntimeTest < Minitest::Test
     end
   end
 
+  def test_readme_examples_build_and_work_without_a_home_note
+    repository = File.expand_path("../../..", __dir__)
+    examples = %w[README.md README.zh-CN.md].map do |name|
+      readme = File.read(File.join(repository, name))
+      %w[site-config public-note].map do |id|
+        match = readme.match(/<!-- example:#{id} -->\s*```[^\n]*\n(.*?)^```/m)
+        refute_nil match, "missing #{id} in #{name}"
+        match[1]
+      end
+    end
+    assert_equal examples.first, examples.last
+    config, markdown = examples.first
+    assert_equal YAML.safe_load_file(File.join(repository, "examples", "jekyll-obsidian.yml")), YAML.safe_load(config)
+    File.write(@runtime.config_path, config)
+    source = File.join(@root, YAML.safe_load(config).fetch("website").fetch("source"))
+    FileUtils.mkdir_p(source)
+    File.write(File.join(source, "index.md"), markdown)
+    %w[minimal docs].each do |theme|
+      build(theme:, baseurl: "/project")
+      assert_includes File.read(File.join(@runtime.destination, "index.html")), "My first public note."
+    end
+
+    File.rename(File.join(source, "index.md"), File.join(source, "hello.md"))
+    %w[minimal docs].each do |theme|
+      build(theme:, baseurl: "/project")
+      html = Nokogiri::HTML5(File.read(File.join(@runtime.destination, "index.html")))
+      assert_equal "0; url=/project/hello/", html.at_css('meta[http-equiv="refresh"]')["content"]
+      assert_equal "https://example.test/project/hello/", html.at_css('link[rel="canonical"]')["href"]
+      assert_equal "/project/hello/", html.at_css("main a")["href"]
+      assert_includes File.read(File.join(@runtime.destination, "hello", "index.html")), "My first public note."
+    end
+  end
+
   def test_configuration_is_editable_and_cli_overrides_do_not_rewrite_it
     config = YAML.safe_load_file(@runtime.config_path)
     config["title"] = "Changed title"

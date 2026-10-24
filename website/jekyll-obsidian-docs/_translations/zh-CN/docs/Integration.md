@@ -10,6 +10,8 @@ description: 通过 RubyGems 或 GitHub Actions 安装发布工具，内容和�
 
 ## 无需安装工具链即可部署
 
+如果仓库已有 `Gemfile` 或 `Gemfile.lock`，请先完成 [[Integration#使用 Bundler|Bundler 配置]]。Action 要求两份文件齐全，且锁定的构建工具版本与其发行版本一致。
+
 将[配置示例](https://github.com/wowfun/jekyll-obsidian/blob/v0.3.1/examples/jekyll-obsidian.yml)复制到 `.github/jekyll-obsidian.yml`，将 [Pages 工作流](https://github.com/wowfun/jekyll-obsidian/blob/v0.3.1/examples/pages.yml)复制到 `.github/workflows/pages.yml`。
 
 ```yaml
@@ -62,7 +64,7 @@ bundle exec jekyll-obsidian dev
 
 将工作流中的 `uses: wowfun/jekyll-obsidian@v0.3.1` 改为需要的发行 tag，Action 会安装该版本对应的 gem。
 
-直接安装的 gem 用 `gem update jekyll-obsidian-site` 更新。使用 Bundler 时，按需要调整版本约束，运行 `bundle update jekyll-obsidian-site` 并提交锁文件。包更新不会改写宿主内容和配置。
+使用 Bundler 时，将 `Gemfile` 中 `jekyll-obsidian-site` 的版本约束改为相同发行版本，运行 `bundle update jekyll-obsidian-site`，然后将 `Gemfile`、`Gemfile.lock` 和工作流一起提交。单独运行 `bundle update` 无法升级 Gemfile 中固定的版本。本地独立安装可运行 `gem update jekyll-obsidian-site`。包更新不会改写宿主内容和配置。
 
 本版本不再支持旧的目录复制安装。请保留内容和 `.github/jekyll-obsidian.yml`，删除配置中的托管标记注释，替换旧工作流，再移除旧实现文件。保留 `website/` 内自己编写的文件。
 
