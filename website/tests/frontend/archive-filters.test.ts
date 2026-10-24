@@ -1,8 +1,20 @@
-import { afterEach, expect, it } from 'vitest';
+import { afterEach, expect, it, vi } from 'vitest';
 import { initialiseArchiveFilters } from '../../src/frontend/archive-filters';
 
 let cleanup: (() => void) | undefined;
 afterEach(() => { cleanup?.(); document.body.replaceChildren(); history.replaceState(null, '', '/'); });
+
+it('removes earlier listeners when a later archive root fails to initialize', () => {
+  document.body.innerHTML = `<main data-filter-page></main><main data-filter-page>
+    <details data-ledger-day="2026-01-02"><summary><span data-ledger-day-count></span></summary>
+      <p data-filter-item>Entry</p></details></main>`;
+  const roots = [...document.querySelectorAll<HTMLElement>('[data-filter-page]')];
+  const firstRemoved = vi.spyOn(roots[0]!, 'removeEventListener');
+  const secondAdded = vi.spyOn(roots[1]!, 'addEventListener');
+  expect(() => initialiseArchiveFilters()).toThrow();
+  expect(firstRemoved).toHaveBeenCalledWith('toggle', expect.any(Function), true);
+  expect(secondAdded).not.toHaveBeenCalledWith('toggle', expect.any(Function), true);
+});
 
 it('filters a full archive by day and topic, toggles dates and restores history', () => {
   history.replaceState(null, '', '/blog/?topic=tools&day=2026-01-02');

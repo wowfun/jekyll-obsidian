@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import { readFile, stat } from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
+import { createHash } from "node:crypto";
+import { gzipSync } from "node:zlib";
 
 const root = path.resolve(import.meta.dirname, "../..");
 const assets = path.join(root, ".jekyll-obsidian-cache", "assets");
@@ -38,6 +40,9 @@ test("publishes independent theme and feature asset closures", async () => {
     assert.ok(entry.files.includes(entry.css), `${theme} closure includes its stylesheet`);
     assert.deepEqual(entry.files, [...entry.files].sort());
     assert.ok(await closureBytes(entry.files) < 1_000_000, `${theme} core stays below 1 MB`);
+    for (const lazy of ["archive-filters", "favorite-controls"]) {
+      assert.ok(entry.files.some((file) => file.startsWith(`${lazy}-`)), `${theme} ships ${lazy}`);
+    }
   }
 
   const bootstrap = manifest.entries.docs.color_scheme;
@@ -72,5 +77,32 @@ test("publishes independent theme and feature asset closures", async () => {
     );
     assert.ok(entryFile, `${feature} exposes its independently loadable script`);
     assert.ok(!coreFiles.has(entryFile), `${feature} stays out of every theme core`);
+  }
+});
+
+test("both themes keep their synchronous JavaScript within the initial-load budget", async () => {
+  const statistics = JSON.parse(await readFile(path.join(root, ".jekyll-obsidian-cache", "asset-statistics.json"), "utf8"));
+  const sha256 = bytes => createHash("sha256").update(bytes).digest("hex");
+  const stale = "Asset statistics are stale; run npm run build before test:prepared.";
+  assert.ok(statistics.inputs && statistics.themes, stale);
+  assert.equal(sha256(await readFile(path.join(assets, "manifest.json"))), statistics.manifest_sha256, stale);
+  assert.ok(Object.hasOwn(statistics.inputs, "src/frontend/main.ts"), stale);
+  await Promise.all(Object.entries(statistics.inputs).map(async ([file, digest]) => {
+    assert.equal(sha256(await readFile(path.resolve(root, file))), digest, `${file}: ${stale}`);
+  }));
+  assert.deepEqual(Object.keys(statistics.themes).sort(), ["docs", "minimal"]);
+  for (const [theme, summary] of Object.entries(statistics.themes)) {
+    let bytes = 0, gzipBytes = 0;
+    for (const dependency of summary.dependencies) {
+      const content = await readFile(path.join(assets, dependency.file));
+      assert.equal(sha256(content), dependency.sha256, stale);
+      bytes += content.length;
+      gzipBytes += gzipSync(content).length;
+    }
+    assert.equal(summary.bytes, bytes, stale);
+    assert.equal(summary.gzip_bytes, gzipBytes, stale);
+    assert.ok(summary.bytes <= 45_000, `${theme}: ${summary.bytes} raw bytes`);
+    assert.ok(summary.gzip_bytes <= 18_000, `${theme}: ${summary.gzip_bytes} gzip bytes`);
+    assert.ok(summary.dependencies.every(({ file }) => !/^(archive-filters|favorite-controls)-/.test(file)));
   }
 });

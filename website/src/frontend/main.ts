@@ -5,10 +5,8 @@ import { readSiteUrl } from "./urls";
 import { initialiseLanguageSwitcher } from "./language-switcher";
 import { initialiseRecommendations } from "./recommendations";
 import { initialiseComments } from "./comments";
-import { initialiseArchiveFilters } from "./archive-filters";
 import { initialisePriorityNavigation } from "./priority-navigation";
 import { initialisePageActions } from "./page-actions";
-import { initialiseFavorites } from "./favorite-controls";
 import { initialisePdfPreviews } from "./pdf-preview";
 import { initialiseCodeBlockCopy } from "./code-block-copy";
 import { initialiseTweets } from "./tweets";
@@ -16,32 +14,25 @@ import { initialiseAnalytics } from "./analytics";
 import { initialiseAutoHideScrollbars } from "./scrollbars";
 import { initialiseBackToTop } from "./back-to-top";
 import { initialiseImageViewer, initialiseMediaViewerControls } from "./media-viewer";
+import { disposeAll } from "./cleanup";
 
 const DOCS_PAGE_CHANGE_EVENT = "website:docs-page-change";
 let pageFeatureGeneration = 0;
-let cleanupPageFeatures = () => undefined;
+let cleanupPageFeatures: () => void = () => {};
 let graphModule: Promise<typeof import("./graph")> | null = null;
 
 function initialisePageFeatures(): void {
   const generation = ++pageFeatureGeneration;
-  cleanupPageFeatures();
+  try { cleanupPageFeatures(); } catch (error) { console.error(error); }
   const cleanups: (() => void)[] = [];
-  cleanupPageFeatures = () => {
-    const failures: unknown[] = [];
-    for (const cleanup of cleanups.splice(0).reverse()) {
-      try { cleanup(); } catch (error) { failures.push(error); }
-    }
-    if (failures.length) throw new AggregateError(failures, "Page feature cleanup failed");
-  };
+  cleanupPageFeatures = () => disposeAll(cleanups);
   try {
     initialiseDialogs();
     cleanups.push(initialiseOutline());
     cleanups.push(initialiseRecommendations());
     cleanups.push(initialiseComments());
-    cleanups.push(initialiseArchiveFilters());
     cleanups.push(initialisePageActions());
     cleanups.push(initialiseBackToTop());
-    cleanups.push(initialiseFavorites());
     cleanups.push(initialisePdfPreviews());
     cleanups.push(initialiseCodeBlockCopy());
     cleanups.push(initialiseImageViewer());
@@ -50,6 +41,42 @@ function initialisePageFeatures(): void {
   } catch (error) {
     try { cleanupPageFeatures(); } catch (cleanupError) { throw new AggregateError([error, cleanupError], "Page feature initialization failed"); }
     throw error;
+  }
+
+  if (document.querySelector("[data-paged-archive], [data-filter-page]")) {
+    void import("./archive-filters")
+      .then(({ initialiseArchiveFilters }) => {
+        if (generation === pageFeatureGeneration) cleanups.push(initialiseArchiveFilters());
+      })
+      .catch(() => {
+        if (generation !== pageFeatureGeneration) return;
+        const root = document.querySelector<HTMLElement>("[data-paged-archive], [data-filter-page]");
+        let status = document.querySelector<HTMLElement>("[data-archive-status]")
+          ?? document.querySelector<HTMLElement>("[data-filter-empty]");
+        if (!status && root) {
+          status = document.createElement("p");
+          status.setAttribute("role", "status");
+          status.dataset.archiveStatus = "";
+          root.append(status);
+        }
+        if (status) {
+          status.textContent = status.dataset.moduleUnavailable || root?.dataset.moduleUnavailable || "Archive controls could not be loaded. Reload the page to try again.";
+          status.hidden = false;
+        }
+      });
+  }
+
+  if (document.querySelector("[data-favorites-ui]")) {
+    void import("./favorite-controls")
+      .then(({ initialiseFavorites }) => {
+        if (generation === pageFeatureGeneration) cleanups.push(initialiseFavorites());
+      })
+      .catch(() => {
+        if (generation !== pageFeatureGeneration) return;
+        const status = document.querySelector<HTMLElement>("[data-favorite-status]");
+        const ui = document.querySelector<HTMLElement>("[data-favorites-ui]");
+        if (status) status.textContent = ui?.dataset.moduleUnavailable || "Favorites could not be loaded. Reload the page to try again.";
+      });
   }
 
   if (readSiteUrl("preview")) {

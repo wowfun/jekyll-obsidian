@@ -1,5 +1,6 @@
 import { initialisePagedArchive } from "./paged-archive";
 import { initialiseArchiveDays } from "./archive-days";
+import { withCleanup } from "./cleanup";
 
 function selectedValue(
   parameters: URLSearchParams,
@@ -62,48 +63,50 @@ function applyFilters(root: HTMLElement): void {
 }
 
 export function initialiseArchiveFilters(): () => void {
-  const paged = Array.from(document.querySelectorAll<HTMLElement>("[data-paged-archive]"));
-  const cleanups = paged.map(initialisePagedArchive);
-  const roots = Array.from(document.querySelectorAll<HTMLElement>("[data-filter-page]:not([data-paged-archive])"));
-  if (roots.length === 0) return () => cleanups.forEach((cleanup) => cleanup());
+  return withCleanup(addCleanup => {
+    const paged = Array.from(document.querySelectorAll<HTMLElement>("[data-paged-archive]"));
+    paged.forEach(root => addCleanup(initialisePagedArchive(root)));
+    const roots = Array.from(document.querySelectorAll<HTMLElement>("[data-filter-page]:not([data-paged-archive])"));
+    if (roots.length === 0) return;
 
-  const days = roots.map(root => { applyFilters(root); return initialiseArchiveDays(root); });
-  const refresh = () => roots.forEach((root, index) => { applyFilters(root); days[index]!.refresh(); });
-  const onClick = (event: MouseEvent) => {
-    const target = event.target;
-    if (!(target instanceof Element)) return;
-    const link = target.closest<HTMLAnchorElement>(
-      "a[data-topic-filter-option], a[data-year-filter-option], a[data-month-filter-option], a[data-day-filter-option]"
-    );
-    if (!link) return;
-    const destination = new URL(link.href, window.location.href);
-    if (destination.origin !== window.location.origin || destination.pathname !== window.location.pathname) return;
+    const days = roots.map(root => {
+      applyFilters(root);
+      const day = initialiseArchiveDays(root);
+      addCleanup(() => day.dispose());
+      return day;
+    });
+    const refresh = () => roots.forEach((root, index) => { applyFilters(root); days[index]!.refresh(); });
+    const onClick = (event: MouseEvent) => {
+      const target = event.target;
+      if (!(target instanceof Element)) return;
+      const link = target.closest<HTMLAnchorElement>(
+        "a[data-topic-filter-option], a[data-year-filter-option], a[data-month-filter-option], a[data-day-filter-option]"
+      );
+      if (!link) return;
+      const destination = new URL(link.href, window.location.href);
+      if (destination.origin !== window.location.origin || destination.pathname !== window.location.pathname) return;
 
-    event.preventDefault();
-    const next = new URL(window.location.href);
-    next.pathname = destination.pathname;
-    if (link.hasAttribute("data-topic-filter-option")) {
-      const topic = link.dataset.topicAnchor ?? "";
-      topic ? next.searchParams.set("topic", topic) : next.searchParams.delete("topic");
-    } else {
-      const name = link.hasAttribute("data-year-filter-option") ? "year" : link.hasAttribute("data-month-filter-option") ? "month" : "day";
-      const value = link.getAttribute(`data-filter-${name}`) ?? "";
-      if (link.getAttribute("aria-current") === "page") next.searchParams.delete(name);
-      else next.searchParams.set(name, value);
-      for (const other of ["year", "month", "day"]) if (other !== name) next.searchParams.delete(other);
-    }
-    window.history.pushState(null, "", `${next.pathname}${next.search}`);
-    refresh();
-  };
+      event.preventDefault();
+      const next = new URL(window.location.href);
+      next.pathname = destination.pathname;
+      if (link.hasAttribute("data-topic-filter-option")) {
+        const topic = link.dataset.topicAnchor ?? "";
+        topic ? next.searchParams.set("topic", topic) : next.searchParams.delete("topic");
+      } else {
+        const name = link.hasAttribute("data-year-filter-option") ? "year" : link.hasAttribute("data-month-filter-option") ? "month" : "day";
+        const value = link.getAttribute(`data-filter-${name}`) ?? "";
+        if (link.getAttribute("aria-current") === "page") next.searchParams.delete(name);
+        else next.searchParams.set(name, value);
+        for (const other of ["year", "month", "day"]) if (other !== name) next.searchParams.delete(other);
+      }
+      window.history.pushState(null, "", `${next.pathname}${next.search}`);
+      refresh();
+    };
 
-  document.addEventListener("click", onClick);
-  window.addEventListener("popstate", refresh);
-  window.addEventListener("pageshow", refresh);
-  return () => {
-    days.forEach(day => day.dispose());
-    cleanups.forEach((cleanup) => cleanup());
-    document.removeEventListener("click", onClick);
-    window.removeEventListener("popstate", refresh);
-    window.removeEventListener("pageshow", refresh);
-  };
+    const listeners = new AbortController();
+    addCleanup(() => listeners.abort());
+    document.addEventListener("click", onClick, { signal: listeners.signal });
+    window.addEventListener("popstate", refresh, { signal: listeners.signal });
+    window.addEventListener("pageshow", refresh, { signal: listeners.signal });
+  });
 }

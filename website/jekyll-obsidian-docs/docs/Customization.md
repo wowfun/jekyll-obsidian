@@ -338,7 +338,7 @@ website:
 
 
 Use `website.home.layout: archive` to show the chronological archive at `/`.
-`website.blog.page_size` enables a paged archive (1–100; default full archive).
+`website.blog.page_size` enables a paged archive (1 to 100; default full archive).
 `website.blog.facets` maps query parameters to tag prefixes, for example
 `{source: "source/", topic: "topics/"}`. Each group uses OR; groups and chronology use AND.
 The query names `page`, `year`, `month`, and `day` are reserved for pagination and chronology.
@@ -476,6 +476,8 @@ See [[docs/development/architecture|Architecture]] before changing compiler or a
 `source_url`: an absolute HTTP(S) URL without credentials; shown as a clickable original source link.
 
 ## Daily ledger and local favorites
+
+Archive scripts load only on pages with archive controls. When favorites are enabled, their script loads on every page to support the recovery panel for damaged browser data. Both modules load asynchronously. While archive controls load, pagination stays disabled. Without JavaScript, archives keep the first page of entries and their article links, hide interactive controls and per-entry filter links, remove the empty chronology column, and explain when more entries are available.
 
 Set `website.blog.ledger_group_by: day` to group entries under collapsible date headings and omit the per-entry date column. Each heading shows the localized month/day, weekday and count on the current page; dates outside the current year include the year. Dates use `website.blog.utc_offset`, independent of the browser timezone. Only the newest day in the current result opens by default. Days open independently, and manual choices survive filters, pagination and browser history within the current page; reloads reset them. Native disclosures work without JavaScript. Read in full loads visible entries in open days and keeps loaded bodies when a day is closed. This behavior is shared by archive tabs and Favorites. The default grouping remains `year`; static rendering and pagination use the same daily headings.
 

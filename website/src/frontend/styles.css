@@ -2525,6 +2525,14 @@
     white-space: nowrap !important;
   }
 
+  .no-js [data-archive-pagination],
+  .no-js .archive-facet,
+  .no-js [data-timeline-nav],
+  .no-js .archive-context,
+  .no-js .blog-ledger__topics,
+  .no-js [data-topic-filter-nav],
+  .no-js [data-archive-export-open],
+  .no-js [data-archive-reading-toggle],
   .no-js [data-search-open],
   .no-js [data-color-scheme-toggle],
   .no-js .mobile-toolbar {

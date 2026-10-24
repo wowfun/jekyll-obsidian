@@ -52,6 +52,17 @@ class GemPackageTest < Minitest::Test
       entries.each { |path| File.chmod(File.directory?(path) ? 0o555 : 0o444, path) }
       File.chmod(0o555, package)
       run_cli(environment, executable, host, "init", "--source", "website/docs")
+      configuration_path = File.join(host, ".github", "jekyll-obsidian.yml")
+      configuration = Psych.safe_load(File.read(configuration_path))
+      configuration["lang"] = "en"
+      configuration.fetch("website")["i18n"] = { "enabled" => true, "locales" => %w[en zh-CN] }
+      File.write(configuration_path, JSON.generate(configuration))
+      content = File.join(host, "website", "docs")
+      File.write(File.join(content, "_locale.yml"), "name: English\n")
+      translated = File.join(content, "_translations", "zh-CN")
+      FileUtils.mkdir_p(translated)
+      File.write(File.join(translated, "_locale.yml"), "name: 简体中文\nmessages:\n  back_to_top: 回到顶部\n")
+      File.write(File.join(translated, "index.md"), "---\npublish: true\n---\n# 欢迎\n")
       %w[minimal docs].each do |theme|
         run_cli(environment, executable, host, "_#{JekyllObsidian::VERSION}_", "build",
           "--url", "https://example.test", "--baseurl", "/project", "--theme", theme)
@@ -69,6 +80,9 @@ class GemPackageTest < Minitest::Test
         assert_equal "Back to top", button["title"]
         assert_equal "-1", document.at_css("main#main-content")&.[]("tabindex")
         entry = manifest.fetch("entries").fetch(theme)
+        %w[archive-filters favorite-controls].each do |lazy|
+          assert entry.fetch("files").any? { |file| file.start_with?("#{lazy}-") }, "#{theme} must ship #{lazy}"
+        end
         assert_includes document.css("script[type='module'][src]").map { |script| script["src"] },
           "/project/assets/website/#{entry.fetch('js')}"
         assert_includes document.css("link[rel='stylesheet']").map { |link| link["href"] },
@@ -78,6 +92,15 @@ class GemPackageTest < Minitest::Test
           assert File.file?(published), "#{theme} is missing #{relative}"
           assert_equal Digest::SHA256.file(File.join(packaged_assets, relative)).hexdigest,
             Digest::SHA256.file(published).hexdigest, "#{theme} changed packaged asset #{relative}"
+        end
+        localized = Nokogiri::HTML5.parse(File.read(File.join(host, ".jekyll-obsidian-cache", "site", "zh-CN", "index.html")))
+        assert_includes localized.text, "欢迎"
+        assert_equal "回到顶部", localized.at_css("[data-back-to-top]")["aria-label"]
+        [document, localized].each do |built|
+          built.css('meta[name="website:search-worker"], meta[name="website:archive-worker"]').each do |meta|
+            relative = meta["content"].delete_prefix("/project/")
+            assert File.file?(File.join(host, ".jekyll-obsidian-cache", "site", relative)), "missing worker #{relative}"
+          end
         end
       end
       assert_equal before, digest_files(package)

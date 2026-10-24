@@ -88,8 +88,8 @@ export function initialiseArchiveDays(root: HTMLElement): { replace: (render: ()
     if (event.target instanceof HTMLDetailsElement && event.target.hasAttribute("data-ledger-day")) capture([event.target]);
   };
   // Native disclosure toggle events do not bubble; capture is required.
-  root.addEventListener("toggle", onToggle, true);
   refresh();
+  root.addEventListener("toggle", onToggle, true);
   return {
     replace(render) {
       // Read synchronous flips before queued toggle events lose their old elements.

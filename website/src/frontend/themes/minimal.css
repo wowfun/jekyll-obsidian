@@ -57,6 +57,10 @@
     grid-template-columns: minmax(0, 1fr) 220px;
   }
 
+  .no-js .minimal-shell:has(> .archive-context) {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
   .minimal-shell--authored-home:has(> .minimal-home-context),
   .minimal-shell:not(.minimal-shell--system):not(.minimal-shell--docs):has(> .minimal-context) {
     --reading-width: 100%;

@@ -4,12 +4,15 @@
   <div class="archive-pagination__navigation">
     <button type="button" data-archive-page="prev" aria-label="{{ ui.previous | default: 'Previous' | escape }}" title="{{ ui.previous | default: 'Previous' | escape }}" disabled>{% include website/action-icon.html name='previous' class='archive-pagination__arrow' %}<span>{{ ui.previous | default: 'Previous' | escape }}</span></button>
     <div class="archive-pagination__numbers" data-archive-page-numbers></div>
-    <button type="button" data-archive-page="next" aria-label="{{ ui.next | default: 'Next' | escape }}" title="{{ ui.next | default: 'Next' | escape }}"{% if archive_total <= page.website.theme_data.archive.page_size %} disabled{% endif %}>{% include website/action-icon.html name='next' class='archive-pagination__arrow' %}<span>{{ ui.next | default: 'Next' | escape }}</span></button>
+    <button type="button" data-archive-page="next" aria-label="{{ ui.next | default: 'Next' | escape }}" title="{{ ui.next | default: 'Next' | escape }}" disabled>{% include website/action-icon.html name='next' class='archive-pagination__arrow' %}<span>{{ ui.next | default: 'Next' | escape }}</span></button>
   </div>
   <form class="archive-pagination__jump" data-archive-page-jump hidden>
     <label><span class="visually-hidden">{{ ui.page_input | default: 'Page number' | escape }}</span><input type="number" inputmode="numeric" min="1" step="1" required disabled></label>
     <button type="submit">{{ ui.page_go | default: 'Go' | escape }}</button>
   </form>
 </nav>
-<p role="status" aria-live="polite" data-archive-status data-loading="{{ ui.archive_loading | default: 'Loading selected entries…' | escape }}" data-unavailable="{{ ui.archive_unavailable | default: 'Selected entries could not be loaded. Retry or clear the filters.' | escape }}" data-refresh-error="{{ ui.archive_refresh_error | escape }}"></p>
+<p role="status" aria-live="polite" data-archive-status data-module-unavailable="{{ ui.archive_module_unavailable | escape }}" data-loading="{{ ui.archive_loading | default: 'Loading selected entries…' | escape }}" data-unavailable="{{ ui.archive_unavailable | default: 'Selected entries could not be loaded. Retry or clear the filters.' | escape }}" data-refresh-error="{{ ui.archive_refresh_error | escape }}"></p>
 <button type="button" data-archive-retry hidden>{{ ui.retry | default: 'Retry' | escape }}</button>
+{% unless page.website.theme_data.favorites %}{% if archive_total > page.website.theme_data.archive.page_size %}
+<noscript><p>{{ ui.archive_requires_js | default: 'The first page is shown. Enable JavaScript to browse all entries.' | escape }}</p></noscript>
+{% endif %}{% endunless %}

@@ -1,4 +1,6 @@
-import { writeFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
+import { gzipSync } from "node:zlib";
+import { createHash } from "node:crypto";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import * as esbuild from "esbuild";
@@ -21,6 +23,8 @@ const result = await esbuild.build({
     search: "src/frontend/search.ts",
     "search-worker": "src/frontend/search-worker.ts",
     "archive-worker": "src/frontend/archive-worker.ts",
+    "archive-filters": "src/frontend/archive-filters.ts",
+    "favorite-controls": "src/frontend/favorite-controls.ts",
     graph: "src/frontend/graph.ts",
     previews: "src/frontend/preview.ts",
     math: "src/frontend/math.ts",
@@ -90,9 +94,19 @@ function assetClosure(initialOutputs, { includeDynamicImports }) {
 }
 
 const themeSources = {
-  minimal: ["src/frontend/entries/minimal.ts", "src/frontend/docs-navigation.ts", "src/frontend/archive-worker.ts"],
-  docs: ["src/frontend/entries/docs.ts", "src/frontend/docs-navigation.ts"]
+  minimal: {
+    entry: "src/frontend/entries/minimal.ts",
+    ownedEntries: ["src/frontend/docs-navigation.ts", "src/frontend/archive-worker.ts"]
+  },
+  docs: {
+    entry: "src/frontend/entries/docs.ts",
+    ownedEntries: ["src/frontend/docs-navigation.ts"]
+  }
 };
+// Both themes ship these conditional imports and their static dependencies.
+// They are not roots of the synchronous initial-load closure.
+const lazyEntries = ["src/frontend/archive-filters.ts", "src/frontend/favorite-controls.ts"]
+  .map(outputForEntryPoint);
 const colorSchemeBootstrap = outputForEntryPoint("src/frontend/color-scheme-bootstrap.ts");
 const colorSchemeBootstrapPath = path.relative(
   staged.stagingDirectory,
@@ -108,7 +122,8 @@ const featureSources = {
 
 const entries = Object.fromEntries(
   Object.entries(themeSources).map(([theme, sources]) => {
-    const [entry, ...ownedEntries] = sources.map(outputForEntryPoint);
+    const entry = outputForEntryPoint(sources.entry);
+    const ownedEntries = sources.ownedEntries.map(outputForEntryPoint);
     const css = entry.metadata.cssBundle
       ? path.relative(staged.stagingDirectory, path.resolve(projectRoot, entry.metadata.cssBundle)).split(path.sep).join("/")
       : undefined;
@@ -119,7 +134,7 @@ const entries = Object.fromEntries(
         ...(theme === "minimal" ? { archive_worker: path.relative(staged.stagingDirectory, outputForEntryPoint("src/frontend/archive-worker.ts").outputPath).split(path.sep).join("/") } : {}),
         color_scheme: colorSchemeBootstrapPath,
         ...(css ? { css } : {}),
-        files: assetClosure([entry, ...ownedEntries, colorSchemeBootstrap], { includeDynamicImports: false })
+        files: assetClosure([entry, ...ownedEntries, ...lazyEntries, colorSchemeBootstrap], { includeDynamicImports: false })
       }
     ];
   })
@@ -152,6 +167,35 @@ await writeFile(
   "utf8"
 );
 await staged.commit();
+
+// Verification data belongs to the build cache, never to published assets or
+// the gem's manifest contract. Count only statically imported JavaScript.
+const sha256 = bytes => createHash("sha256").update(bytes).digest("hex");
+const inputPaths = [...new Set([...Object.keys(result.metafile.inputs),
+  "scripts/build-assets.mjs", "scripts/cache-boundary.mjs", "package.json", "package-lock.json", "tsconfig.json"
+])].sort();
+const inputs = Object.fromEntries(await Promise.all(inputPaths.map(async file =>
+  [file, sha256(await readFile(path.resolve(projectRoot, file)))]
+)));
+const statistics = {
+  inputs,
+  manifest_sha256: sha256(await readFile(path.join(outputDirectory, "manifest.json"))),
+  themes: {}
+};
+for (const [theme, sources] of Object.entries(themeSources)) {
+  const files = assetClosure([outputForEntryPoint(sources.entry), colorSchemeBootstrap], { includeDynamicImports: false })
+    .filter((file) => file.endsWith(".js"));
+  const dependencies = await Promise.all(files.map(async (file) => {
+    const bytes = await readFile(path.join(outputDirectory, file));
+    return { file, sha256: sha256(bytes), bytes: bytes.length, gzip_bytes: gzipSync(bytes).length };
+  }));
+  statistics.themes[theme] = {
+    dependencies,
+    bytes: dependencies.reduce((sum, file) => sum + file.bytes, 0),
+    gzip_bytes: dependencies.reduce((sum, file) => sum + file.gzip_bytes, 0)
+  };
+}
+await writeFile(path.join(projectRoot, ".jekyll-obsidian-cache", "asset-statistics.json"), `${JSON.stringify(statistics, null, 2)}\n`);
 } catch (error) {
   await staged.discard();
   throw error;

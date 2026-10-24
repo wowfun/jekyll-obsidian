@@ -65,6 +65,12 @@ For browser coverage:
 RUN_BROWSER_TESTS=1 website/bin/test
 ```
 
+Do not bypass package tests when running Ruby checks separately: rebuild assets and run `bundle exec ruby scripts/package.rb --skip-assets` first. The installed-gem test builds both themes in English and Simplified Chinese, checks their lazy entries and workers, and verifies that packaged files remain unchanged.
+
+Asset builds write `.jekyll-obsidian-cache/asset-statistics.json` inside `website/` for verification only. Each theme's synchronous JavaScript closure, including shared chunks and the color-scheme bootstrap, must stay within 45,000 raw bytes and 18,000 bytes of summed per-file gzip output. Archive and favorites entries belong to both theme manifests but load only when the page has their DOM markers.
+
+The statistics record SHA-256 hashes of build inputs, the manifest, and synchronous JavaScript files. `test:prepared` verifies those hashes and recomputes sizes; stale inputs or outputs require `npm run build` before checking the budget. `--skip-assets` is appropriate only after that fresh asset build.
+
 The project workflow runs this full suite. Downstream workflows build and verify only their host content.
 
 Visual snapshots are separate for each operating system because native font rendering differs. After an intentional UI change, review and update the Windows and Linux baselines with `npx playwright test site-visual.spec.ts theme-visual.spec.ts --update-snapshots`, then rerun without that flag. Linux baselines must also pass the Ubuntu CI browser run.

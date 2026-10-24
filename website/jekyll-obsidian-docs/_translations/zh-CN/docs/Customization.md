@@ -413,7 +413,7 @@ Docs 没有根索引时会重定向到第一项导航。每个 Docs 页面都由
 
 
 使用 `website.home.layout: archive` 将倒序归档设为首页。
-`website.blog.page_size` 开启分页（1–100，默认完整归档）。
+`website.blog.page_size` 开启分页（1 至 100，默认完整归档）。
 `website.blog.facets` 将查询参数映射到标签前缀，例如
 `{source: "source/", topic: "topics/"}`。组内为 OR，组间及时间范围为 AND。
 查询参数 `page`、`year`、`month` 和 `day` 保留给分页与时间筛选使用。
@@ -457,6 +457,8 @@ Docs 没有根索引时会重定向到第一项导航。每个 Docs 页面都由
 `source_url`: an absolute HTTP(S) URL without credentials; shown as a clickable original source link.
 
 ## 按日分组与本地收藏
+
+归档脚本仅在包含归档控件的页面加载。启用收藏后，每个页面都会加载收藏脚本，以支持处理浏览器损坏数据的恢复面板。两个模块均异步加载。归档控件加载期间，分页按钮保持禁用。关闭 JavaScript 后，归档保留第一页条目及文章链接，隐藏交互控件及条目内的筛选链接，移除空的时间线栏；还有更多条目时，会显示简短说明。
 
 设置 `website.blog.ledger_group_by: day`，可按日期折叠条目，并移除每条左侧的日期栏。标题显示本地化月日、星期及当前页本组条数，非当前年份补充年份。日期采用 `website.blog.utc_offset`，不受浏览器时区影响。默认只展开当前结果中最新的一天，各日期可独立开合；手动选择在当前页面的筛选、分页和历史前进后退中保留，刷新后重置。原生折叠控件在关闭 JavaScript 时仍可操作。平铺阅读按需加载已展开日期中的可见条目，收起时保留已加载正文。归档栏目页和收藏页共用此行为。默认仍按 `year` 分组，静态首屏与分页使用相同的日期标题。
 
