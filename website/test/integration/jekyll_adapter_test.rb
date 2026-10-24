@@ -301,6 +301,29 @@ class JekyllAdapterTest < Minitest::Test
     assert status.success?, "#{stdout}\n#{stderr}"
   end
 
+  def test_indexless_favorites_pass_url_verification_with_translations_and_fallback
+    FileUtils.rm(File.join(@temporary_root, "vault", "index.md"))
+    File.write(File.join(@temporary_root, "vault", "hello.md"), "---\npublish: true\n---\n# Hello")
+    File.write(File.join(@temporary_root, "vault", "_locale.yml"), "name: English\n")
+    translated = File.join(@temporary_root, "vault", "_translations", "zh-CN")
+    FileUtils.mkdir_p(translated)
+    File.write(File.join(translated, "_locale.yml"), "name: 简体中文\n")
+    install_project_layout
+    [true, false].each do |translation|
+      translated_note = File.join(translated, "hello.md")
+      translation ? File.write(translated_note, "# 你好") : FileUtils.rm(translated_note)
+      [true, false].each do |visible|
+        build_site("baseurl" => "/garden", "website" => website_config.merge(
+          "features" => { "favorites" => true }, "navigation" => { "favorites" => { "visible" => visible } },
+          "i18n" => { "enabled" => true, "locales" => %w[en zh-CN] }
+        )).process
+        verifier = File.expand_path("../../scripts/verify-site-urls.rb", __dir__)
+        stdout, stderr, status = Open3.capture3(Gem.ruby, verifier, destination, "https://example.test", "/garden")
+        assert status.success?, "translation=#{translation}, visible=#{visible}\n#{stdout}\n#{stderr}"
+      end
+    end
+  end
+
   def test_indexless_minimal_home_keeps_system_modules_in_the_first_content_row
     FileUtils.rm(File.join(@temporary_root, "vault", "index.md"))
     FileUtils.mkdir_p(File.join(@temporary_root, "vault", "blog"))

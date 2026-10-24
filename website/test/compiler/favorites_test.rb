@@ -2,6 +2,46 @@
 require "test_helper"
 
 class FavoritesTest < Minitest::Test
+  def test_indexless_favorites_use_the_content_landing_page_even_when_hidden
+    cases = {
+      "hello.md" => ["", "/hello/"],
+      "docs/guide.md" => ["", "/docs/guide/"],
+      "portfolio/project.md" => ["", "/portfolio/"],
+      "projects/index.md" => ["tab:\n  id: projects\n", "/projects/"]
+    }
+    cases.each do |path, (properties, target)|
+      [true, false].each do |visible|
+        result = compile(note(path, "---\npublish: true\n#{properties}---\n# Content"),
+          features: { "favorites" => true }, baseurl: "/garden",
+          navigation: { "favorites" => { "visible" => visible } })
+        assert result.success?, result.diagnostics.map(&:message).join("\n")
+        assert_equal "/garden#{target}", page(result, "/").data.dig("website", "redirect_url"), [path, visible].inspect
+        favorites = page(result, "/favorites/").data.fetch("website")
+        assert_equal target, favorites.fetch("home_route")
+        assert_equal "/garden#{target}", favorites.fetch("home_url")
+        assert_equal "https://example.test/garden#{target}", favorites.fetch("canonical_url")
+        refute_equal "noindex", page(result, target).data.dig("website", "robots")
+      end
+    end
+  end
+
+  def test_localized_indexless_favorites_do_not_redirect_back_to_favorites
+    [true, false].each do |visible|
+      result = compile(note("hello.md", "---\npublish: true\n---\n# Hello"),
+        note("_translations/zh-CN/hello.md", "# 你好"),
+        locale_manifest("_locale.yml", "name: English\n"),
+        locale_manifest("_translations/zh-CN/_locale.yml", "name: 简体中文\n"),
+        baseurl: "/garden", features: { "favorites" => true },
+        navigation: { "favorites" => { "visible" => visible } },
+        i18n: { "enabled" => true, "locales" => %w[en zh-CN] })
+      assert result.success?, result.diagnostics.map(&:message).join("\n")
+      ["", "/zh-CN"].each do |prefix|
+        assert_equal "/garden#{prefix}/hello/", page(result, "#{prefix}/").data.dig("website", "redirect_url")
+        assert_equal "https://example.test/garden#{prefix}/hello/", page(result, "#{prefix}/favorites/").data.dig("website", "canonical_url")
+      end
+    end
+  end
+
   def articles
     [note("index.md", "---\npublish: true\n---\n# Home")] +
       ["2026-01-01T00:30:00Z", "2025-12-31T16:00:00Z", "2025-12-31T15:59:59Z"].each_with_index.map do |date, i|

@@ -34,7 +34,7 @@ To publish a whole directory, explicitly add it to `website.content.publish_by_d
 
 Open the content folder in Obsidian or a text editor. Wiki links, embeds, callouts, and supported Markdown are compiled without rewriting your source. See [[Syntax|Syntax]] for the authoring contract.
 
-A public root `index.md` becomes the home page. Without a physical `index.md`, a public `README.md` can fill that role. Directories do not need an index file; the site can link to the first public page. At least one public note is required.
+A public root `index.md` becomes the home page. Without a physical `index.md`, a public `README.md` can fill that role. Directories do not need an index file. Minimal uses its existing home or section entry when available, otherwise it opens another public note. See [[Customization#Content and navigation|Content and navigation]] for selection rules. At least one public note is required.
 
 ## Configure the site
 

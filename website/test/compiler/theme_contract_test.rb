@@ -56,12 +56,83 @@ class ThemeContractTest < Minitest::Test
     assert_equal "/alpha/", page(custom, "/").data.dig("website", "redirect_url")
   end
 
+  def test_minimal_indexless_page_gets_a_redirect_without_changing_its_route
+    result = compile(note("hello.md", "---\npublish: true\n---\n# Hello"), baseurl: "/project")
+
+    assert result.success?, result.diagnostics.map(&:message).join("\n")
+    assert_equal %w[/ /404.html /hello/], result.pages.map(&:route)
+    root = page(result, "/").data.fetch("website")
+    assert_equal "redirect", root.fetch("kind")
+    assert_equal "/project/hello/", root.fetch("redirect_url")
+    assert_equal "https://example.test/project/hello/", root.fetch("canonical_url")
+    assert_equal "noindex", root.fetch("robots")
+    assert_equal "", page(result, "/").content
+    assert_empty root.fetch("navigation")
+    assert_equal "/project/hello/", page(result, "/hello/").data.dig("website", "routes", "home")
+    sitemap = result.generated_files.find { |file| file.route == "/sitemap.xml" }.content
+    refute_includes sitemap, "<loc>https://example.test/project/</loc>"
+    assert_includes sitemap, "<loc>https://example.test/project/hello/</loc>"
+  end
+
+  def test_minimal_last_resort_landing_prefers_visible_notes_then_order_and_source_path
+    entries = [
+      note("hidden.md", "---\npublish: true\nnav_exclude: true\nnav_order: -10\n---\n# Hidden"),
+      note("unordered.md", "---\npublish: true\n---\n# A title"),
+      note("later.md", "---\npublish: true\nnav_order: 2\n---\n# Later"),
+      note("beta.md", "---\npublish: true\nnav_order: 1\n---\n# Alpha title"),
+      note("alpha.md", "---\npublish: true\nnav_order: 1\n---\n# Zulu title")
+    ]
+    [entries, entries.reverse].each do |snapshot|
+      result = compile(*snapshot)
+      assert result.success?, result.diagnostics.map(&:message).join("\n")
+      assert_equal "/alpha/", page(result, "/").data.dig("website", "redirect_url")
+    end
+
+    hidden = compile(*%w[beta alpha].map do |name|
+      note("#{name}.md", "---\npublish: true\nnav_exclude: true\n---\n# #{name}")
+    end)
+    assert hidden.success?, hidden.diagnostics.map(&:message).join("\n")
+    assert_equal "/alpha/", page(hidden, "/").data.dig("website", "redirect_url")
+  end
+
+  def test_minimal_unpublished_root_does_not_block_the_public_note_fallback
+    result = compile(
+      note("index.md", "---\npublish: false\n---\nPrivate home"),
+      note("README.md", "---\npublish: true\n---\n# Public readme")
+    )
+    assert result.success?, result.diagnostics.map(&:message).join("\n")
+    assert_equal "/README/", page(result, "/").data.dig("website", "redirect_url")
+    assert_equal "README.md", page(result, "/README/").data.dig("website", "id")
+  end
+
+  def test_existing_minimal_landing_destinations_take_priority_over_ordinary_pages
+    ordinary = note("aaa.md", "---\npublish: true\nnav_order: -100\n---\n# Ordinary")
+    [
+      ["index.md", "", "/", "home"],
+      ["README.md", "", "/", "home"],
+      ["blog/post.md", "date: 2026-07-01\n", "/", "home"],
+      ["docs/guide.md", "", "/docs/guide/", "redirect"],
+      ["portfolio/project.md", "", "/portfolio/", "redirect"],
+      ["section/index.md", "tab:\n  id: section\n", "/section/", "redirect"],
+      ["landing.md", "permalink: /\n", "/", "note"]
+    ].each do |path, properties, destination, kind|
+      result = compile(ordinary, note(path, "---\npublish: true\n#{properties}---\n# Landing"))
+      assert result.success?, result.diagnostics.map(&:message).join("\n")
+      root = page(result, "/").data.fetch("website")
+      assert_equal kind, root.fetch("kind"), path
+      assert_equal destination, root["redirect_url"] || root.fetch("route"), path
+    end
+  end
+
   def test_content_directory_without_public_notes_fails_once
     result = compile(note("private.md", "---\npublish: false\n---\n# Private"), theme: "docs")
 
     refute result.success?
     assert_equal 1, result.diagnostics.count { |item| item.code == "missing_public_notes" }
     refute result.diagnostics.any? { |item| item.code == "invalid_index_count" }
+    minimal = compile(note("private.md", "---\npublish: false\n---\n# Private"))
+    refute minimal.success?
+    assert_equal 1, minimal.diagnostics.count { |item| item.code == "missing_public_notes" }
   end
 
   def test_note_routes_are_identical_across_all_built_in_themes

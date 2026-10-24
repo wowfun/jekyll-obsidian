@@ -27,12 +27,12 @@ module JekyllObsidian
     class Presenter
       private
 
-      def project(model:, config:, landing_note:, note_theme_data:, theme_pages:, system_theme_data:, taxonomy:, feed_notes:, shared_files: [], suppressed_note_routes: [], &note_page_transform)
+      def project(model:, config:, landing_note:, note_theme_data:, theme_pages:, system_theme_data:, taxonomy:, feed_notes:, shared_files: [], suppressed_note_routes: [], home_route: nil, &note_page_transform)
         topic_anchors = taxonomy.fetch("anchors")
         tag_groups = taxonomy.fetch("groups")
         topic_summaries = taxonomy.fetch("summaries")
         local_graphs = config.features.fetch("graph") ? local_graphs(model, config) : {}
-        home_route = landing_note ? landing_note.route : "/"
+        home_route ||= landing_note ? landing_note.route : "/"
         home_url = config.url_builder.href(home_route)
         pages = model.notes.reject { |note| suppressed_note_routes.include?(note.route) }.map do |note|
           output = note_page(
@@ -689,15 +689,12 @@ module JekyllObsidian
             home_url: config.url_builder.href("/")
           )
         end
-        favorites_page = if config.features.fetch("favorites")
-          system_page(config, "/favorites/", navigation_label(config, "favorites", "Favorites"), "blog-index", system_theme_data,
-            { "archive" => archive_data.fetch("archive"), "archive_groups" => [], "timeline" => archive_data.fetch("timeline"),
-              "favorites" => true, "ledger_group_by" => "day", "ledger_current_year" => ledger_current_year }, website_data: { "robots" => "noindex", "canonical_url" => config.url_builder.absolute_url("/") })
-        end
-        theme_pages = [home, blog, portfolio_page, favorites_page].compact
+        theme_pages = [home, blog, portfolio_page].compact
         root_route_claimed = authored_root_route || theme_pages.any? { |page| page.route == "/" }
+        landing_note = nil
+        home_route = "/"
         unless root || home || root_route_claimed
-          destination = config.navigation.items.first
+          destination = config.navigation.items.find { |item| item.fetch("id") != "favorites" }
           if !destination && portfolio
             destination = {
               "id" => "portfolio",
@@ -705,12 +702,25 @@ module JekyllObsidian
               "url" => config.url_builder.href(portfolio.route)
             }
           end
-          theme_pages << redirect_to(destination, config) if destination
+          if destination
+            home_route = destination.fetch("url").delete_prefix(config.url_builder.baseurl)
+            theme_pages << redirect_to(destination, config)
+          else
+            landing_note = fallback_landing_note(model.notes)
+            home_route = landing_note.route if landing_note
+          end
+        end
+        if config.features.fetch("favorites")
+          theme_pages << system_page(config, "/favorites/", navigation_label(config, "favorites", "Favorites"), "blog-index", system_theme_data,
+            { "archive" => archive_data.fetch("archive"), "archive_groups" => [], "timeline" => archive_data.fetch("timeline"),
+              "favorites" => true, "ledger_group_by" => "day", "ledger_current_year" => ledger_current_year },
+            home_route: home_route, website_data: { "robots" => "noindex", "canonical_url" => config.url_builder.absolute_url(home_route) })
         end
         project(
           model: model,
           config: config,
-          landing_note: nil,
+          landing_note: landing_note,
+          home_route: home_route,
           note_theme_data: theme_data,
           theme_pages: theme_pages,
           system_theme_data: system_theme_data,
@@ -732,6 +742,13 @@ module JekyllObsidian
       end
 
       private
+
+      def fallback_landing_note(notes)
+        visible = notes.reject(&:nav_exclude)
+        candidates = visible.empty? ? notes : visible
+        # Source paths keep the same landing note when titles are translated.
+        candidates.min_by { |note| [note.nav_order.nil? ? 1 : 0, note.nav_order || 0, note.id] }
+      end
 
       def home_tab_sources(model, config)
         return [] unless config.home["layout"] == "archive" && config.home["hide_tab_sources"]

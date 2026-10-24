@@ -84,6 +84,24 @@ class LocalizedCompilerTest < Minitest::Test
     ]
   end
 
+  def test_minimal_note_fallback_keeps_source_identity_across_localized_titles
+    result = compile(
+      note("alpha.md", "---\npublish: true\ntitle: Zulu\n---\n# Alpha"),
+      note("beta.md", "---\npublish: true\ntitle: Alpha\n---\n# Beta"),
+      note("_translations/zh-CN/alpha.md", "---\ntitle: Alpha\n---\n# Translated Alpha"),
+      note("_translations/zh-CN/beta.md", "---\ntitle: Zulu\n---\n# Translated Beta"),
+      *manifests, theme: "minimal", baseurl: "/project", i18n: I18N.merge("enabled" => true)
+    )
+    assert result.success?, result.diagnostics.map(&:message).join("\n")
+    { "/" => "/project/alpha/", "/zh-CN/" => "/project/zh-CN/alpha/" }.each do |route, destination|
+      root = page(result, route).data.fetch("website")
+      assert_equal destination, root.fetch("redirect_url")
+      assert_equal "https://example.test#{destination}", root.fetch("canonical_url")
+      assert_equal "noindex", root.fetch("robots")
+    end
+    assert_equal "/project/zh-CN/alpha/", page(result, "/zh-CN/beta/").data.dig("website", "routes", "home")
+  end
+
   def test_missing_translations_are_nonfatal_and_locale_outputs_remain_partitioned
     result = compile(
       *default_notes,

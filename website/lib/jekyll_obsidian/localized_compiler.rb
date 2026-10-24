@@ -789,7 +789,7 @@ module JekyllObsidian
       end
       website["routes"] = routes
       if kind == "redirect"
-        destination = Array(website["navigation"]).first
+        destination = Array(website["navigation"]).find { |item| item.fetch("url") == website.fetch("redirect_url") }
         if destination
           website["redirect_url"] = destination.fetch("url")
           data["title"] = destination.fetch("label")
@@ -799,10 +799,16 @@ module JekyllObsidian
       end
       validate_localized_navigation!(website, locale)
       website["alternates"] = [] if website.dig("theme_data", "favorites")
-      website["canonical_url"] = if kind == "redirect"
-        absolute_for(website.fetch("redirect_url"))
-      elsif website.dig("theme_data", "favorites")
-        @url_builder.absolute_url(website.fetch("home_route"))
+      website["canonical_url"] = if kind == "redirect" || website.dig("theme_data", "favorites")
+        target_route = if kind == "redirect"
+          page.data.fetch("website").fetch("redirect_url").delete_prefix(@url_builder.baseurl)
+        else
+          page.data.fetch("website").fetch("home_route")
+        end
+        target_id = default_routes.key(target_route)
+        fallback = target_id && locale != @default_locale && !@actual_by_locale.fetch(locale).include?(target_id)
+        target_locale = fallback ? @default_locale : locale
+        @url_builder.absolute_url(prefixed_route(target_route, target_locale))
       elsif actual
         @url_builder.absolute_url(route)
       else
