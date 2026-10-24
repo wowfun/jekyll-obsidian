@@ -9,6 +9,31 @@ require "tmpdir"
 require "jekyll_obsidian/adapter"
 
 class JekyllAdapterTest < Minitest::Test
+  def test_generated_and_projected_routes_are_resolved_under_the_destination
+    site = build_site
+    page = JekyllObsidian::Adapter::GeneratedPage.allocate
+    page.instance_variable_set(:@site, site)
+    page.instance_variable_set(:@website_route, "/projects/")
+    assert_equal File.join(destination, "projects", "index.html"), page.destination(destination)
+    file = JekyllObsidian::Adapter::ProjectedStaticFile.allocate
+    file.instance_variable_set(:@site, site)
+    file.instance_variable_set(:@website_route, "/projects/figure%20one.svg")
+    assert_equal File.join(destination, "projects", "figure one.svg"), file.destination(destination)
+    assert_equal File.join(site.dest, "projects", "figure one.svg"), file.destination(site.dest)
+    ["", "stage"].each do |root|
+      assert_equal File.join(site.dest, root, "projects", "index.html"), page.destination(root)
+      assert_equal File.join(site.dest, root, "projects", "figure one.svg"), file.destination(root)
+    end
+  end
+
+  def test_encoded_traversal_is_rejected_before_jekyll_writes_output
+    File.write(File.join(@temporary_root, "vault", "escape.md"), "---\npublish: true\npermalink: /safe/%2e%2e/escaped/\n---\n# Escape")
+    site = build_site
+    assert_expected_failure(Jekyll::Errors::FatalException) { site.process }
+    refute File.exist?(File.join(destination, "escaped", "index.html"))
+    assert_empty site.pages
+  end
+
   def setup
     @previous_jekyll_env = ENV["JEKYLL_ENV"]
     @previous_github_repository = ENV.delete("GITHUB_REPOSITORY")
@@ -1515,12 +1540,14 @@ class JekyllAdapterTest < Minitest::Test
   end
 
   def test_unsafe_encoded_jekyll_route_is_rejected_during_preflight
-    File.write(File.join(@site_root, "unsafe.html"), "---\npermalink: /safe/%2Fhidden/\n---\nUnsafe")
-    site = build_site
-
-    error = assert_raises(Jekyll::Errors::FatalException) { site.process }
-    assert_includes error.message, "unsafe output route"
-    refute site.pages.any? { |page| page.class.name.include?("GeneratedPage") }
+    %w[/safe/%2Fhidden/ /safe/%2e%2e/escaped/].each do |route|
+      File.write(File.join(@site_root, "unsafe.html"), "---\npermalink: #{route}\n---\nUnsafe")
+      site = build_site
+      error = assert_expected_failure(Jekyll::Errors::FatalException) { site.process }
+      assert_includes error.message, "unsafe output route"
+      refute site.pages.any? { |page| page.class.name.include?("GeneratedPage") }
+      refute File.exist?(File.join(destination, "escaped", "index.html"))
+    end
   end
 
   def test_non_development_builds_require_the_application_asset_manifest

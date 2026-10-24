@@ -56,6 +56,17 @@ module JekyllObsidian
         @compiler_generated_file ? ".website-generated" : super
       end
 
+      def destination(destination_root)
+        @website_destinations ||= {}
+        @website_destinations[destination_root] ||= begin
+          directory, filename = self.class.route_parts(@website_route)
+          base = @site.in_dest_dir(destination_root)
+          # Resolve the validated route under an absolute destination, including
+          # callers that pass an empty or relative destination root.
+          File.join(base, Jekyll::URL.unescape_path(directory), Jekyll::URL.unescape_path(filename))
+        end
+      end
+
       def self.route_parts(route)
         return ["", "index.html"] if route == "/"
 
@@ -91,9 +102,8 @@ module JekyllObsidian
 
       def destination(destination_root)
         @website_destinations ||= {}
-        @website_destinations[destination_root] ||= @site.in_dest_dir(
-          destination_root,
-          Jekyll::URL.unescape_path(@website_route.delete_prefix("/"))
+        @website_destinations[destination_root] ||= File.join(
+          @site.in_dest_dir(destination_root), Jekyll::URL.unescape_path(@website_route.delete_prefix("/"))
         )
       end
 
