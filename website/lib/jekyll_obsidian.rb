@@ -2,6 +2,7 @@
 
 require_relative "jekyll_obsidian/version"
 require_relative "jekyll_obsidian/value_objects"
+require_relative "jekyll_obsidian/diagnostics"
 require_relative "jekyll_obsidian/output_text"
 require_relative "jekyll_obsidian/github_markdown"
 require_relative "jekyll_obsidian/url_builder"

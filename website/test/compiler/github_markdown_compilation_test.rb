@@ -454,6 +454,77 @@ class GitHubMarkdownCompilationTest < Minitest::Test
     assert_empty @transport.fetch_calls
   end
 
+  def test_imported_sections_resolve_before_the_only_body_compilation_in_each_locale
+    @transport = transport_for(
+      { ["acme/widget", "main"] => COMMIT },
+      { ["acme/widget", COMMIT, "README.md"] => "# Imported\n\n## Details\nRemote details.\n" }
+    )
+    entries = [
+      note("portfolio/widget.md", "---\npublish: true\ngithub_markdown: https://github.com/acme/widget/blob/main/README.md\n---\n"),
+      note("index.md", "---\npublish: true\nrelated: [\"[[portfolio/widget#Details]]\"]\n---\n# Home\n[[portfolio/widget#Details]]\n\n![[portfolio/widget#Details]]\n")
+    ]
+    [nil, { "enabled" => true, "locales" => %w[en zh-CN] }].each do |i18n|
+      count = 0
+      trace = TracePoint.new(:call) do |event|
+        count += 1 if event.defined_class == JekyllObsidian::VaultCompiler && event.method_id == :parse_markdown_once
+      end
+      manifests = i18n ? [locale_manifest("_locale.yml", "name: English\n"), locale_manifest("_translations/zh-CN/_locale.yml", "name: 简体中文\n")] : []
+      result = trace.enable { compile_site(*entries, *manifests, i18n: i18n) }
+      assert result.success?, result.diagnostics.map(&:message).join("\n")
+      assert_equal i18n ? 2 : 1, count
+      assert_includes page(result, "/").content, "Remote details."
+      assert_includes page(result, "/").content, 'href="/portfolio/widget/#details"'
+      if i18n
+        assert_includes page(result, "/zh-CN/").content, "Remote details."
+        assert_includes page(result, "/zh-CN/").content, 'href="/zh-CN/portfolio/widget/#details"'
+      end
+      replayed = compile_site(*entries, *manifests, i18n: i18n, manifest: result.github_markdown_manifest)
+      assert replayed.success?, replayed.diagnostics.map(&:message).join("\n")
+      assert_equal result.pages, replayed.pages
+    end
+
+    missing = entries.last.with(bytes: entries.last.bytes.gsub("#Details", "#Missing"))
+    result = compile_site(entries.first, missing)
+    refute result.success?
+    assert result.diagnostics.any? { |item| item.code == "unresolved_fragment" }
+  end
+
+  def test_invalid_input_prevents_materialization_even_when_another_wrapper_is_valid
+    wrapper = note("portfolio/widget.md", "---\npublish: true\ngithub_markdown: https://github.com/acme/widget/blob/main/README.md\n---\n")
+    [
+      [note("bad.md", "---\npublish: maybe\n---\n"), {}],
+      [note("../bad.md", "---\npublish: true\n---\n"), {}],
+      [note("_translations/zh-CN/orphan.md", "---\npublish: true\n---\n"), { i18n: { "enabled" => true, "locales" => %w[en zh-CN] } }]
+    ].each do |invalid, config|
+      result = compile_site(wrapper, invalid, **config)
+      refute result.success?
+      assert_empty @transport.resolve_calls
+      assert_empty @transport.fetch_calls
+    end
+  end
+
+  def test_prepared_imports_require_every_remote_body_but_not_bodies_for_local_notes
+    wrapper = note("portfolio/widget.md", "---\npublish: true\ngithub_markdown: https://github.com/acme/widget/blob/main/README.md\n---\n")
+    local = note("index.md", "---\npublish: true\n---\n# Local\n")
+    [nil, { "enabled" => false }, { "enabled" => true, "locales" => %w[en zh-CN] }].each do |i18n|
+      entries = [local]
+      if i18n&.fetch("enabled")
+        entries.concat([locale_manifest("_locale.yml", "name: English\n"), locale_manifest("_translations/zh-CN/_locale.yml", "name: 简体中文\n")])
+      end
+      config = JekyllObsidian::BuildConfig.new(**CompilerTestHelpers::DEFAULT_CONFIG.merge(i18n: i18n))
+      request = JekyllObsidian::BuildRequest.new(snapshot: JekyllObsidian::Snapshot.new(entries: entries), config: config, reference_time: Time.utc(2026, 10, 23))
+      compiler = JekyllObsidian::VaultCompiler.prepare(request)
+      compiler.load_external_documents({})
+      result = compiler.compile
+      assert result.success?, result.diagnostics.map(&:message).join("\n")
+
+      request = request.with(snapshot: JekyllObsidian::Snapshot.new(entries: entries + [wrapper]))
+      compiler = JekyllObsidian::VaultCompiler.prepare(request)
+      error = assert_raises(KeyError) { compiler.load_external_documents({}) }
+      assert_equal "portfolio/widget.md", error.key
+    end
+  end
+
   private
 
   def transport_for(commits, files)

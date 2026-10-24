@@ -633,8 +633,8 @@ class LocalizedCompilerTest < Minitest::Test
 
     assert result.success?, result.diagnostics.map(&:message).join("\n")
     ambiguous = result.diagnostics.select { |item| item.code == "ambiguous_target" }
-    assert_equal 3, ambiguous.length
-    assert_equal 2, ambiguous.count { |item| item.path == "index.md" && item.property == "project" }
+    assert_equal 2, ambiguous.length
+    assert_equal 1, ambiguous.count { |item| item.path == "index.md" && item.property == "project" }
     translated_body = ambiguous.find do |item|
       item.path == "_translations/zh-CN/index.md" && item.property.nil?
     end

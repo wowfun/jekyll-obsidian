@@ -21,21 +21,27 @@ The runtime creates an isolated Jekyll source under the host's `.jekyll-obsidian
 
 ## Compiler boundary
 
-The compiler receives an immutable snapshot of public-source bytes, attachment metadata, normalized paths, configuration, optional Git dates, and an explicit `BuildRequest.reference_time` (`Time`). It does not read the filesystem, ask Jekyll for state, use the network, inspect environment variables, or read the current clock. The adapter samples the reference time once; locale projections and both passes around remote Markdown materialization preserve that same input. It controls recommendation expiry and the reference year of daily headings, and never supplies missing post dates. Its sorted result contains pages, generated files, projected files, and diagnostics. Localization stays behind this same `VaultCompiler.compile(BuildRequest)` interface: one locale plan creates default-authoritative overlay snapshots and combines their immutable outputs before Jekyll receives them. ^compiler-contract
+The compiler receives an immutable snapshot of public-source bytes, attachment metadata, normalized paths, configuration, optional Git dates, and an explicit `BuildRequest.reference_time` (`Time`). It does not read the filesystem, ask Jekyll for state, use the network, inspect environment variables, or read the current clock. The adapter samples the reference time once; input preparation, remote Markdown materialization, and every locale compilation preserve that same input. It controls recommendation expiry and the reference year of daily headings, and never supplies missing post dates. Its sorted result contains pages, generated files, projected files, and diagnostics. Localization stays behind this same `VaultCompiler.compile(BuildRequest)` interface: one locale plan creates default-authoritative overlay snapshots and combines their immutable outputs before Jekyll receives them. ^compiler-contract
 
 `HtmlPublication.resolve` validates explicit mappings, expands directory bundles, creates the source-to-route index, and emits the stable raw HTML manifest in one pass. Localized compilation reuses that resolution and merges raw HTML once as a shared projection instead of creating locale copies. The manifest is a publication allowlist, not a MIME policy; the deployment server remains responsible for safe `Content-Type` headers and content-sniffing behavior for uncommon extensions.
 
 The fixed pipeline is:
 
-1. Validate the build configuration and, when i18n is enabled, its locale plan and manifests.
-2. Build the default snapshot and same-path translation overlays.
-3. Resolve one content policy, then use it in each locale partition to validate paths, select default-language notes, and apply translation opt-outs.
-4. Scan Obsidian-specific syntax with lexical state and parse each partition's public note bodies with Commonmarker.
-5. Build locale-local identity, anchor, and relation indexes.
+1. Validate configuration, theme and feature defaults, and the locale plan and manifests.
+2. Resolve the publication policy, build translation overlays, and validate paths, identities, frontmatter, and remote-wrapper scope and bodies.
+3. Materialize or replay remote Markdown for the physical wrappers that will be published.
+4. Scan Obsidian syntax and parse public Markdown once in each language partition.
+5. Build anchor indexes and resolve body and frontmatter references, embeds, and attachments.
 6. Resolve links, embeds, and attachment closure within that partition.
 7. Resolve the selected built-in theme and feature defaults.
 8. Produce themed HTML and deterministic locale-specific JSON or XML files.
 9. Combine the immutable partitions, shared attachments, routes, and reciprocal SEO metadata.
+
+Preparation reuses the compiler's publication policy and locale overlays before any remote request. Each language compiles its bodies once after materialization, so imported headings are available to links, embeds, and `related`. Missing translations share the default import; local translated bodies do not inherit it. A build-scoped immutable frontmatter cache keys results by path and complete bytes. Safe YAML loading and one shared source-position AST require two YAML parses per valid frontmatter.
+
+Preparation and final compilation share deterministic diagnostic ordering and deduplicate identical physical-source diagnostics across language fallbacks. Distinct paths, spans, properties, messages, and severities remain distinct.
+
+Prepared compiler instances represent one immutable input set. Loading remote documents requires preparation first; an unprepared call raises instead of silently dropping the documents. Repeated compilation returns the completed result, including failures; changing remote documents or tab memberships after compilation is rejected. Frontmatter caches are cleared when the owning build completes, after all locale partitions have used them.
 
 ## Identity and relations
 

@@ -160,21 +160,22 @@ module JekyllObsidian
     MAX_TRANSCLUSION_BYTES = 2 * 1024 * 1024
 
     def self.compile(request)
-      return LocalizedCompiler.compile(request) unless request.config.i18n.nil?
-
-      compile_single(request)
+      prepare(request).compile
     end
 
-    def self.compile_single(request, html_publication: nil, include_html_projection: true, tag_policy_resolved: false)
-      new(request, html_publication:, include_html_projection:, tag_policy_resolved:).compile
+    def self.prepare(request)
+      compiler = request.config.i18n.nil? ? new(request) : LocalizedCompiler.new(request)
+      compiler.prepare
     end
 
     def self.giscus_language(locale)
       GISCUS_LANGUAGES.include?(locale.to_s) ? locale.to_s : "en"
     end
 
-    def initialize(request, html_publication: nil, include_html_projection: true, tag_policy_resolved: false)
+    def initialize(request, html_publication: nil, include_html_projection: true, tag_policy_resolved: false, frontmatter_cache: nil)
       @request = request
+      @owns_frontmatter_cache = frontmatter_cache.nil?
+      @frontmatter_cache = frontmatter_cache || FrontMatter::Cache.new
       @tag_policy_resolved = tag_policy_resolved
       @config = request.config
       @diagnostics = []
@@ -203,14 +204,70 @@ module JekyllObsidian
       @navigation_config = default_navigation_config
     end
 
-    def compile
+    # Preparation is shared by pure compilation and the remote-input boundary.
+    # It never parses Markdown or resolves body references.
+    def prepare
+      return self if @prepared
+
+      @prepared = true
       validate_request
-      return BuildFailure.new(diagnostics: sorted_diagnostics) if @diagnostics.any? { |item| item.code == "invalid_request" }
+      return self if @diagnostics.any? { |item| item.code == "invalid_request" }
       load_tag_policy unless @tag_policy_resolved
       resolve_html_publication
       index_snapshot
       parse_public_notes
       establish_identities
+      validate_remote_wrappers
+      self
+    end
+
+    def preparation_diagnostics
+      sorted_diagnostics
+    end
+
+    def remote_references
+      @notes.filter_map do |path, note|
+        reference = note.properties["github_markdown"]
+        [path, reference] if reference
+      end.to_h.freeze
+    end
+
+    def load_external_documents(documents)
+      raise ArgumentError, "prepare must be called before loading external documents" unless @prepared
+      raise ArgumentError, "cannot change inputs after compilation" if @result
+
+      @notes.each do |path, note|
+        next unless note.properties["github_markdown"]
+
+        document = documents.fetch(path)
+
+        note.external_document = document
+        note.body = document.markdown
+        note.entry = SnapshotEntry.new(**note.entry.to_h.merge(external_document: document))
+      end
+    end
+
+    def compile(tab_memberships: nil)
+      if @result
+        raise ArgumentError, "cannot change tab memberships after compilation" unless tab_memberships == @compiled_tab_memberships
+
+        return @result
+      end
+
+      @compiled_tab_memberships = DeepFreeze.call(tab_memberships&.dup)
+      @result = compile_prepared(tab_memberships: tab_memberships)
+    ensure
+      @transclusion_selection_cache.clear
+      @frontmatter_cache.clear if @owns_frontmatter_cache
+    end
+
+    private
+
+    def compile_prepared(tab_memberships:)
+      prepare
+      return BuildFailure.new(diagnostics: sorted_diagnostics) if @diagnostics.any? { |item| item.code == "invalid_request" }
+
+      @request = @request.with(tab_memberships: tab_memberships) if tab_memberships
       parse_markdown_once
       resolve_all_occurrences
       detect_embed_cycles
@@ -218,6 +275,7 @@ module JekyllObsidian
       merge_content_features
 
       published_site = build_published_site_model
+
       navigation = SiteNavigation.build(
         model: published_site,
         settings: @navigation_config,
@@ -272,6 +330,21 @@ module JekyllObsidian
     end
 
     private
+
+    def validate_remote_wrappers
+      portfolio_path = @navigation_config.fetch("portfolio").fetch("path")
+      @notes.each_value do |note|
+        next unless note.properties["github_markdown"]
+
+        unless note.id.start_with?("#{portfolio_path}/") && note.id != @directory_index_paths[portfolio_path]
+          error("github_markdown_scope", "github_markdown is only supported by project wrappers below the configured portfolio path", note.id)
+        end
+        parsed = @frontmatter_cache.parse(note.entry.path, note.entry.bytes.to_s)
+        unless parsed.body.strip.empty?
+          error("github_markdown_body_conflict", "a github_markdown project wrapper must have an empty local body", note.id)
+        end
+      end
+    end
 
     def validate_request
       unless @request.is_a?(BuildRequest) && @request.snapshot.is_a?(Snapshot) && @config.is_a?(BuildConfig)
@@ -765,7 +838,7 @@ module JekyllObsidian
             next
           end
           @all_note_paths << path
-          parsed = FrontMatter.parse(path, entry.bytes.to_s)
+          parsed = @frontmatter_cache.parse(path, entry.bytes.to_s)
           @diagnostics.concat(parsed.diagnostics)
           published = @content_policy.publish?(path, parsed.properties)
           if (parsed.properties.key?("tab") || parsed.properties.key?("tabs")) && !published
@@ -2943,11 +3016,7 @@ module JekyllObsidian
     end
 
     def sorted_diagnostics
-      @diagnostics.uniq do |item|
-        [item.severity, item.code, item.message, item.path, span_key(item.span), item.property]
-      end.sort_by do |item|
-        [item.path.to_s, span_key(item.span), item.severity.to_s, item.code, item.property.to_s]
-      end
+      Diagnostics.normalize(@diagnostics)
     end
 
     def h(value)

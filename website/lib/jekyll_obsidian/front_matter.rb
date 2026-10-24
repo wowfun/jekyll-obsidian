@@ -22,6 +22,24 @@ module JekyllObsidian
 
     Result = Struct.new(:properties, :property_links, :body, :diagnostics, keyword_init: true)
 
+    # One cache belongs to one build, including its translated overlays. Keep
+    # complete bytes in the key so edits and synthetic overlays cannot collide.
+    class Cache
+      def initialize
+        @results = {}
+      end
+
+      def parse(path, bytes)
+        path = path.to_s
+        key = [path.frozen? ? path : path.dup.freeze, bytes.frozen? ? bytes : bytes.dup.freeze].freeze
+        @results[key] ||= DeepFreeze.call(FrontMatter.parse(path, bytes))
+      end
+
+      def clear
+        @results.clear
+      end
+    end
+
     def self.parse(path, bytes)
       new(path, bytes).parse
     end
@@ -104,8 +122,9 @@ module JekyllObsidian
     end
 
     def validate(parsed, raw)
-      unquoted_wiki_links = unquoted_wiki_link_properties(raw)
-      property_nodes, property_key_nodes = frontmatter_nodes(raw)
+      mapping = Psych.parse(raw)&.root
+      unquoted_wiki_links = unquoted_wiki_link_properties(mapping)
+      property_nodes, property_key_nodes = frontmatter_nodes(mapping)
       properties = {}
       property_links = []
       parsed.each do |key, value|
@@ -336,8 +355,7 @@ module JekyllObsidian
       end
     end
 
-    def frontmatter_nodes(raw)
-      mapping = Psych.parse(raw)&.root
+    def frontmatter_nodes(mapping)
       return [{}, {}] unless mapping.is_a?(Psych::Nodes::Mapping)
 
       property_nodes = {}
@@ -434,8 +452,7 @@ module JekyllObsidian
       value.start_with?("[[") || value.end_with?("]]")
     end
 
-    def unquoted_wiki_link_properties(raw)
-      mapping = Psych.parse(raw)&.root
+    def unquoted_wiki_link_properties(mapping)
       return [] unless mapping.is_a?(Psych::Nodes::Mapping)
 
       mapping.children.each_slice(2).filter_map do |key_node, value_node|

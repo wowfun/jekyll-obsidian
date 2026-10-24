@@ -250,6 +250,8 @@ module JekyllObsidian
 
     def initialize(request)
       @request = request
+      @frontmatter_cache = FrontMatter::Cache.new
+      @compilers = {}
       @config = request.config
       @diagnostics = []
       @entries = Array(request.snapshot.entries)
@@ -271,31 +273,89 @@ module JekyllObsidian
       error("invalid_url_config", exception.message)
     end
 
-    def compile
+    def prepare
+      return self if @prepared
+
+      @prepared = true
       validate_configuration
-      return failure if @diagnostics.any? { |item| item.severity == :error }
-      return compile_disabled unless @enabled
+      return self if @diagnostics.any? { |item| item.severity == :error }
+      unless @enabled
+        config = BuildConfig.new(**@config.to_h.merge(i18n: nil))
+        @single_compiler = VaultCompiler.new(@request.with(config: config), frontmatter_cache: @frontmatter_cache).prepare
+        return self
+      end
 
       load_manifests if @diagnostics.none? { |item| item.severity == :error }
       snapshots = build_locale_snapshots if @diagnostics.none? { |item| item.severity == :error }
-      return failure if @diagnostics.any? { |item| item.severity == :error }
+      return self if @diagnostics.any? { |item| item.severity == :error }
       resolve_html_publication(snapshots.fetch(@default_locale))
-      return failure if @diagnostics.any? { |item| item.severity == :error }
+      return self if @diagnostics.any? { |item| item.severity == :error }
 
-      results = {}
-      tab_memberships = nil
       ([@default_locale] + @locales.reject { |locale| locale == @default_locale }).each do |locale|
         config = BuildConfig.new(**@config.to_h.merge(i18n: nil, tag_labels: @locale_data.fetch(locale).fetch("tag_labels"), tag_aliases: @locale_data.fetch(locale).fetch("tag_aliases"), hidden_tags: @locale_data.fetch(locale).fetch("hidden_tags")))
-        result = VaultCompiler.compile_single(
+        @compilers[locale] = VaultCompiler.new(
           @request.with(
             snapshot: snapshots.fetch(locale),
-            config: config,
-            tab_memberships: tab_memberships
+            config: config
           ),
           html_publication: @html_publication,
           include_html_projection: false,
-          tag_policy_resolved: true
-        )
+          tag_policy_resolved: true,
+          frontmatter_cache: @frontmatter_cache
+        ).prepare
+      end
+      self
+    end
+
+    def preparation_diagnostics
+      return Diagnostics.normalize(@diagnostics + @single_compiler.preparation_diagnostics) if @single_compiler
+
+      Diagnostics.normalize(@diagnostics + @compilers.flat_map do |locale, compiler|
+        localized_diagnostics(compiler.preparation_diagnostics, locale)
+      end)
+    end
+
+    def remote_references
+      return @single_compiler.remote_references if @single_compiler
+
+      @compilers.each_with_object({}) do |(locale, compiler), references|
+        compiler.remote_references.each do |path, reference|
+          references[physical_source(locale, path)] = reference
+        end
+      end.freeze
+    end
+
+    def load_external_documents(documents)
+      raise ArgumentError, "prepare must be called before loading external documents" unless @prepared
+      raise ArgumentError, "cannot change inputs after compilation" if @result
+
+      return @single_compiler.load_external_documents(documents) if @single_compiler
+
+      @compilers.each do |locale, compiler|
+        selected = compiler.remote_references.keys.to_h do |path|
+          [path, documents.fetch(physical_source(locale, path))]
+        end
+        compiler.load_external_documents(selected)
+      end
+    end
+
+    def compile
+      @result ||= compile_prepared
+    ensure
+      @frontmatter_cache.clear
+    end
+
+    private
+
+    def compile_prepared
+      prepare
+      return failure if @diagnostics.any? { |item| item.severity == :error }
+      return @single_compiler.compile if @single_compiler
+
+      results = {}
+      tab_memberships = nil
+      @compilers.each do |locale, compiler|
+        result = compiler.compile(tab_memberships: tab_memberships)
         @diagnostics.concat(localized_diagnostics(result.diagnostics, locale))
         results[locale] = result
         tab_memberships = tab_membership(result) if locale == @default_locale && result.success?
@@ -308,11 +368,8 @@ module JekyllObsidian
       failure
     end
 
-    private
-
-    def compile_disabled
-      config = BuildConfig.new(**@config.to_h.merge(i18n: nil))
-      VaultCompiler.compile_single(@request.with(config: config))
+    def physical_source(locale, path)
+      @physical_sources.fetch(locale).fetch(path, path)
     end
 
     def validate_configuration
@@ -453,7 +510,7 @@ module JekyllObsidian
       end
       default_public = default_entries.filter_map do |entry|
         next unless entry.kind.to_sym == :note
-        parsed = FrontMatter.parse(entry.path, entry.bytes.to_s)
+        parsed = @frontmatter_cache.parse(entry.path, entry.bytes.to_s)
         @diagnostics.concat(parsed.diagnostics)
         [entry.path, [entry, parsed]] if @content_policy.publish?(entry.path, parsed.properties)
       end.to_h
@@ -491,7 +548,7 @@ module JekyllObsidian
             error("orphan_translation", "translation has no published default-language counterpart", entry.path)
             next
           end
-          translated_parse = FrontMatter.parse(entry.path, entry.bytes.to_s)
+          translated_parse = @frontmatter_cache.parse(entry.path, entry.bytes.to_s)
           @diagnostics.concat(translated_parse.diagnostics)
           next if translated_parse.properties["publish"] == false
           default_entry, default_parse = default_pair
@@ -543,7 +600,7 @@ module JekyllObsidian
       translated_path,
       translated_parse
     )
-      synthetic_parse = FrontMatter.parse(logical_path, synthetic_bytes)
+      synthetic_parse = @frontmatter_cache.parse(logical_path, synthetic_bytes)
       origins = (@diagnostic_origins[locale] ||= {})
       Array(synthetic_parse.property_links).each do |link|
         translated = translated_parse.properties.key?(link.property)
@@ -1160,9 +1217,7 @@ module JekyllObsidian
     end
 
     def sorted_diagnostics
-      @diagnostics.sort_by do |item|
-        [item.path.to_s.b, item.span&.start_line.to_i, item.property.to_s, item.code.to_s, item.message.to_s]
-      end.freeze
+      Diagnostics.normalize(@diagnostics)
     end
 
     def failure
