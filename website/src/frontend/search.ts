@@ -5,9 +5,12 @@ interface SearchSession {
   worker: Worker;
   ready: Promise<void>;
   nextQueryId: number;
+  dispose: () => void;
 }
 
 const sessions = new WeakMap<HTMLDialogElement, SearchSession>();
+const initializations = new WeakMap<HTMLDialogElement, Promise<void>>();
+const retryHandlers = new WeakMap<HTMLDialogElement, () => void>();
 
 function formatMessage(template: string, values: Record<string, string | number>): string {
   return template.replace(/\{([a-z]+)\}/g, (match, key: string) =>
@@ -35,7 +38,7 @@ function resultLink(result: SearchWorkerResult): HTMLLIElement {
   return item;
 }
 
-function createSession(): SearchSession {
+function createSession(onFailure: () => void, listeners: AbortController): SearchSession {
   const worker = new Worker(requireSiteUrl("search-worker"), { type: "module" });
   let resolveReady: (() => void) | undefined;
   let rejectReady: ((error: Error) => void) | undefined;
@@ -43,16 +46,55 @@ function createSession(): SearchSession {
     resolveReady = resolve;
     rejectReady = reject;
   });
-  worker.addEventListener("message", (event: MessageEvent<SearchWorkerResponse>) => {
-    if (event.data.type === "ready") resolveReady?.();
-    if (event.data.type === "error") rejectReady?.(new Error(event.data.message));
-  });
-  worker.addEventListener("error", () => rejectReady?.(new Error("Search worker failed")), { once: true });
-  worker.postMessage({ type: "init", url: requireSiteUrl("search") } satisfies SearchWorkerRequest);
-  return { worker, ready, nextQueryId: 0 };
+  const fail = (error: Error) => { clearTimeout(timer); rejectReady?.(error); onFailure(); };
+  const timer = setTimeout(() => fail(new Error("Search worker initialization timed out")), 15_000);
+  const onMessage = (event: MessageEvent<SearchWorkerResponse>) => {
+    if (event.data.type === "ready") { clearTimeout(timer); resolveReady?.(); }
+    if (event.data.type === "error") fail(new Error(event.data.message));
+  };
+  const onError = () => fail(new Error("Search worker failed"));
+  worker.addEventListener("message", onMessage);
+  worker.addEventListener("error", onError);
+  worker.addEventListener("messageerror", onError);
+  return { worker, ready, nextQueryId: 0, dispose() {
+    listeners.abort();
+    clearTimeout(timer);
+    rejectReady?.(new DOMException("Search session disposed", "AbortError"));
+    worker.removeEventListener("message", onMessage);
+    worker.removeEventListener("error", onError);
+    worker.removeEventListener("messageerror", onError);
+    worker.terminate();
+  } };
 }
 
-export async function activateSearch(dialog: HTMLDialogElement): Promise<void> {
+export function disposeSearch(dialog: HTMLDialogElement): void {
+  const session = sessions.get(dialog);
+  sessions.delete(dialog);
+  initializations.delete(dialog);
+  session?.dispose();
+  const retry = retryHandlers.get(dialog);
+  if (retry) dialog.querySelector("[data-search-input]")?.removeEventListener("input", retry);
+  retryHandlers.delete(dialog);
+  delete dialog.dataset.searchReady;
+}
+
+export function activateSearch(dialog: HTMLDialogElement): Promise<void> {
+  const pending = initializations.get(dialog);
+  if (pending) return pending;
+  const retry = retryHandlers.get(dialog);
+  if (retry) {
+    dialog.querySelector("[data-search-input]")?.removeEventListener("input", retry);
+    retryHandlers.delete(dialog);
+  }
+  const initialization = initialiseSearch(dialog).catch((error: unknown) => {
+    if (initializations.get(dialog) === initialization) initializations.delete(dialog);
+    throw error;
+  });
+  initializations.set(dialog, initialization);
+  return initialization;
+}
+
+async function initialiseSearch(dialog: HTMLDialogElement): Promise<void> {
   const input = dialog.querySelector<HTMLInputElement>("[data-search-input]");
   const results = dialog.querySelector<HTMLElement>("[data-search-results]");
   const status = dialog.querySelector<HTMLElement>("[data-search-status]");
@@ -63,19 +105,41 @@ export async function activateSearch(dialog: HTMLDialogElement): Promise<void> {
   if (!input || !results || !status) {
     throw new Error("Search dialog is missing its input, results, or status element");
   }
-  if (dialog.dataset.searchReady === "true") {
-    input.focus();
-    return;
-  }
 
   status.textContent = dialog.dataset.searchLoading || "Loading notebook index…";
-  const session = createSession();
+  const listeners = new AbortController();
+  let session: SearchSession | undefined;
+  const fail = () => {
+    if (session && sessions.get(dialog) !== session) return;
+    listeners.abort();
+    session?.dispose();
+    sessions.delete(dialog);
+    initializations.delete(dialog);
+    delete dialog.dataset.searchReady;
+    results.replaceChildren();
+    status.textContent = dialog.dataset.searchRetry || "Search is unavailable. Edit your query to try again.";
+    const retry = () => { void activateSearch(dialog).catch(() => {}); };
+    retryHandlers.set(dialog, retry);
+    input.addEventListener("input", retry, { once: true });
+  };
+  try { session = createSession(fail, listeners); }
+  catch (error) { fail(); throw error; }
   sessions.set(dialog, session);
-  await session.ready;
+  try {
+    session.worker.postMessage({ type: "init", url: requireSiteUrl("search") } satisfies SearchWorkerRequest);
+    await session.ready;
+  } catch (error) {
+    fail();
+    // postMessage can throw before the readiness promise is awaited.
+    await session.ready.catch(() => {});
+    throw error;
+  }
+  if (sessions.get(dialog) !== session) return;
+  const active = session;
   dialog.dataset.searchReady = "true";
 
   let latestQueryId = 0;
-  session.worker.addEventListener("message", (event: MessageEvent<SearchWorkerResponse>) => {
+  active.worker.addEventListener("message", (event: MessageEvent<SearchWorkerResponse>) => {
     const message = event.data;
     if (message.type !== "results" || message.id !== latestQueryId) return;
     results.replaceChildren(...message.results.map(resultLink));
@@ -87,10 +151,10 @@ export async function activateSearch(dialog: HTMLDialogElement): Promise<void> {
             : dialog.dataset.searchResultMany || "{count} notes found.",
           { count: message.results.length }
         );
-  });
+  }, { signal: listeners.signal });
 
   const query = () => {
-    latestQueryId = ++session.nextQueryId;
+    latestQueryId = ++active.nextQueryId;
     const value = input.value.trim();
     const foldedValue = value.normalize("NFKC").toLocaleLowerCase();
     let visibleNavigationItems = 0;
@@ -105,10 +169,11 @@ export async function activateSearch(dialog: HTMLDialogElement): Promise<void> {
       status.textContent = dialog.dataset.searchPrompt || "Type a title, tag, or phrase.";
       return;
     }
-    session.worker.postMessage({ type: "query", id: latestQueryId, query: value } satisfies SearchWorkerRequest);
+    try { active.worker.postMessage({ type: "query", id: latestQueryId, query: value } satisfies SearchWorkerRequest); }
+    catch { fail(); }
   };
 
-  input.addEventListener("input", query);
+  input.addEventListener("input", query, { signal: listeners.signal });
   dialog.addEventListener("keydown", (event) => {
     const links = Array.from(
       dialog.querySelectorAll<HTMLAnchorElement>("[data-search-navigation] a[href], [data-search-results] a[href]")
@@ -121,8 +186,7 @@ export async function activateSearch(dialog: HTMLDialogElement): Promise<void> {
       event.preventDefault();
       (links[current - 1] ?? links.at(-1))?.focus();
     }
-  });
+  }, { signal: listeners.signal });
 
   query();
-  input.focus();
 }

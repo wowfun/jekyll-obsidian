@@ -471,6 +471,8 @@ On indexless Minimal sites, Favorites never becomes the root redirect target. It
 
 Docs redirects an indexless root to its first navigation item. Every Docs page server-renders the complete documentation tree; JavaScript navigation preserves the shared shell while replacing only page-specific content and context. Search builds its index in a Web Worker. Local graphs are projected by the compiler; the browser fetches the complete graph only after its dialog opens.
 
+Search focuses its input immediately, including while its Worker loads; use `Ctrl/⌘ K` to open it. Worker initialization times out after 15 seconds, and Worker failures show an unavailable message. After a Worker failure, edit the query to retry in the open dialog, or close and reopen search. Document navigation disposes the previous search Worker, including unfinished initialization. A failed search-module download retries on the next open; a failed graph-module download retries on the next document navigation.
+
 See [[docs/development/architecture|Architecture]] before changing compiler or adapter seams.
 
 `source_url`: an absolute HTTP(S) URL without credentials; shown as a clickable original source link.

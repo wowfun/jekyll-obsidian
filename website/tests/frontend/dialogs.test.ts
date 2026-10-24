@@ -2,6 +2,14 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { closeWebsiteDialog, openWebsiteDialog } from "../../src/frontend/dialogs";
 
 describe("mobile context dialogs", () => {
+  it("focuses the search input immediately even when the close button comes first", () => {
+    document.body.innerHTML = '<dialog data-dialog="search"><button>Close</button><input data-search-input autofocus></dialog>';
+    const dialog = document.querySelector<HTMLDialogElement>("dialog")!;
+    dialog.showModal = vi.fn(() => dialog.setAttribute("open", ""));
+    openWebsiteDialog("search");
+    expect(document.activeElement).toBe(dialog.querySelector("input"));
+  });
+
   beforeEach(() => {
     document.body.replaceChildren();
     document.body.insertAdjacentHTML(

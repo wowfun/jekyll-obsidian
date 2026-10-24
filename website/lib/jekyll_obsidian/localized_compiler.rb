@@ -180,6 +180,7 @@ module JekyllObsidian
       "search_loading" => "Loading notebook index…",
       "search_prompt" => "Type a title, tag, or phrase.",
       "search_unavailable" => "Search could not be loaded. Reload the page and try again.",
+      "search_retry" => "Search is unavailable. Edit your query to try again.",
       "search_no_results" => "No notes found for “{query}”.",
       "search_result_one" => "{count} note found.",
       "search_result_many" => "{count} notes found.",

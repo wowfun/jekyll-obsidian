@@ -42,6 +42,30 @@ describe("documentation page controls", () => {
     vi.unstubAllGlobals();
   });
 
+  it("ignores a superseded request even when cancellation rejects with a generic error", async () => {
+    document.head.innerHTML = '<meta data-page-csp content="default-src self">';
+    document.body.className = "theme-docs";
+    document.body.innerHTML = '<aside class="docs-sidebar"><nav data-docs-navigation><a href="/two/">Two</a><a href="/three/">Three</a></nav></aside><main data-docs-main tabindex="-1">One</main>';
+    let rejectFirst!: (reason: Error) => void;
+    let resolveLast!: (response: Response) => void;
+    vi.stubGlobal("fetch", vi.fn()
+      .mockImplementationOnce(() => new Promise((_resolve, reject) => { rejectFirst = reject; }))
+      .mockImplementationOnce(() => new Promise((resolve) => { resolveLast = resolve; })));
+    const assign = vi.spyOn(window.location, "assign").mockImplementation(() => {});
+    vi.spyOn(window, "scrollTo").mockImplementation(() => {});
+    initialiseDocsNavigation();
+    document.querySelector<HTMLAnchorElement>('a[href="/two/"]')!.click();
+    document.querySelector<HTMLAnchorElement>('a[href="/three/"]')!.click();
+    rejectFirst(new TypeError("Network cancelled"));
+    await Promise.resolve();
+    expect(assign).not.toHaveBeenCalled();
+    expect(document.activeElement).not.toBe(document.querySelector("main"));
+    resolveLast(new Response('<html><head><meta data-page-csp content="default-src self"></head><body class="theme-docs"><main data-docs-main tabindex="-1">Three</main></body></html>', { headers: { "Content-Type": "text/html" } }));
+    await vi.waitFor(() => expect(document.querySelector("main")?.textContent).toBe("Three"));
+    expect(document.activeElement).toBe(document.querySelector("main"));
+    expect(assign).not.toHaveBeenCalled();
+  });
+
   it("refreshes localized button labels when a same-origin document link changes language", async () => {
     document.head.innerHTML = '<meta data-page-csp content="frame-src \'self\'">';
     document.documentElement.lang = "en";
@@ -55,7 +79,7 @@ describe("documentation page controls", () => {
     const source = `<!doctype html><html lang="zh-CN"><head>
       <meta data-page-csp content="frame-src 'self'">
       </head><body class="theme-docs">
-      <main id="main-content" data-docs-main>中文内容</main>
+      <main id="main-content" data-docs-main tabindex="-1">中文内容</main>
       <button data-back-to-top aria-label="回到顶部" title="回到顶部" hidden></button>
       </body></html>`;
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(source, {
@@ -68,6 +92,7 @@ describe("documentation page controls", () => {
     await vi.waitFor(() => {
       expect(document.documentElement.lang).toBe("zh-CN");
       expect(document.querySelector("[data-docs-main]")?.textContent).toBe("中文内容");
+      expect(document.activeElement).toBe(document.querySelector("[data-docs-main]"));
       expect(document.querySelectorAll("[data-back-to-top]")).toHaveLength(1);
       const button = document.querySelector("[data-back-to-top]")!;
       expect(button.getAttribute("aria-label")).toBe("回到顶部");

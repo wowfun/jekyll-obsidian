@@ -56,8 +56,8 @@ export function openWebsiteDialog(name: WebsiteDialogName): HTMLDialogElement | 
   hydrateDialog(dialog);
   moveDialogContent(dialog);
   if (!dialog.open) dialog.showModal();
-  const initialFocus = dialog.querySelector<HTMLElement>(
-    "[autofocus], input, button:not([disabled]), a[href]"
+  const initialFocus = dialog.querySelector<HTMLElement>("[autofocus]") ?? dialog.querySelector<HTMLElement>(
+    "input, button:not([disabled]), a[href]"
   );
   initialFocus?.focus();
   return dialog;

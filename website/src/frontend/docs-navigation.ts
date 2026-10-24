@@ -140,6 +140,8 @@ function commitPage(source: Document, url: URL, push: boolean): void {
   markCurrentLinks(url);
   scrollToLocation(url);
   document.dispatchEvent(new CustomEvent(DOCS_PAGE_CHANGE_EVENT, { detail: { url: url.href } }));
+  // Minimal replaces the reading column inside its persistent main landmark.
+  (importedMain.closest<HTMLElement>("main") ?? importedMain).focus({ preventScroll: true });
 }
 
 export function initialiseDocsNavigation(): void {
@@ -155,13 +157,14 @@ export function initialiseDocsNavigation(): void {
   const navigate = async (url: URL, push: boolean) => {
     const version = ++requestVersion;
     activeRequest?.abort();
-    activeRequest = new AbortController();
+    const controller = new AbortController();
+    activeRequest = controller;
     document.querySelector<HTMLElement>("[data-docs-main]")?.setAttribute("aria-busy", "true");
     try {
       const response = await fetch(url, {
         credentials: "same-origin",
         headers: { Accept: "text/html" },
-        signal: activeRequest.signal
+        signal: controller.signal
       });
       if (!response.ok || !response.headers.get("content-type")?.includes("text/html")) {
         throw new Error(`Documentation page returned HTTP ${response.status}`);
@@ -171,6 +174,7 @@ export function initialiseDocsNavigation(): void {
       commitPage(source, url, push);
       renderedUrl = new URL(url.href);
     } catch (error) {
+      if (version !== requestVersion || controller.signal.aborted) return;
       if (error instanceof DOMException && error.name === "AbortError") return;
       window.location.assign(url.href);
     } finally {
@@ -204,6 +208,7 @@ export function initialiseDocsNavigation(): void {
     void navigate(url, false);
   };
   const cleanup = () => {
+    requestVersion += 1;
     activeRequest?.abort();
     document.removeEventListener("click", handleClick);
     window.removeEventListener("popstate", handlePopState);

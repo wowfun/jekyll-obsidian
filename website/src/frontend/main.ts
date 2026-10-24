@@ -111,12 +111,17 @@ function initialisePageFeatures(): void {
 
   if (document.querySelector("[data-local-graph-section]")) graphModule ??= import("./graph");
   if (graphModule) {
-    void graphModule
+    const pending = graphModule;
+    void pending
       .then(({ initialiseGraphs }) => {
-        if (generation === pageFeatureGeneration) initialiseGraphs();
+        if (generation === pageFeatureGeneration) {
+          initialiseGraphs();
+          delete document.documentElement.dataset.graphError;
+        }
       })
       .catch(() => {
-        document.documentElement.dataset.graphError = "true";
+        if (graphModule === pending) graphModule = null;
+        if (generation === pageFeatureGeneration) document.documentElement.dataset.graphError = "true";
       });
   }
 }
@@ -143,15 +148,24 @@ export function initialiseWebsite(): void {
 
   if (readSiteUrl("search")) {
     let searchPromise: Promise<typeof import("./search")> | null = null;
+    let cleanupSearch = () => {};
+    document.addEventListener(DOCS_PAGE_CHANGE_EVENT, () => {
+      cleanupSearch();
+      cleanupSearch = () => {};
+    });
     const openSearch = async () => {
       const dialog = openWebsiteDialog("search");
       if (!dialog) return;
-      searchPromise ??= import("./search");
+      const pending = searchPromise ??= import("./search");
       const status = dialog.querySelector<HTMLElement>("[data-search-status]");
       try {
-        const search = await searchPromise;
-        await search.activateSearch(dialog);
+        const search = await pending;
+        if (!dialog.isConnected) return;
+        cleanupSearch = () => search.disposeSearch(dialog);
+        // Worker failures render their own retry state inside the dialog.
+        await search.activateSearch(dialog).catch(() => {});
       } catch {
+        if (searchPromise === pending) searchPromise = null;
         if (status) status.textContent = dialog.dataset.searchUnavailable || "Search could not be loaded. Reload the page and try again.";
       }
     };
