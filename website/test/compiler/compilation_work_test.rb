@@ -42,6 +42,46 @@ class CompilationWorkTest < Minitest::Test
     end
   end
 
+  def test_authored_sentinel_urls_remain_external
+    result = compile(
+      note("index.md", "---\npublish: true\n---\n[user](https://obsidian.invalid/ref/0) [normal](other.md)"),
+      note("other.md", "---\npublish: true\n---\n# Other")
+    )
+    assert result.success?, result.diagnostics.map(&:message).join("\n")
+    links = Nokogiri::HTML5.fragment(page(result, "/").content).css("a")
+    assert_equal ["https://obsidian.invalid/ref/0", "/other/"], links.map { |link| link["href"] }
+    refute_includes links.last.to_html, "data-website-wikilink-token"
+  end
+
+  def test_authored_reference_tokens_cannot_capture_real_occurrences
+    result = compile(
+      note("index.md", <<~MD),
+        ---
+        publish: true
+        ---
+        [user](https://obsidian.invalid/ref/0)
+        [normal](other.md)
+
+        <a data-website-wikilink-token="0">fake</a>
+
+        [[other]]
+
+        <website-ofm-embed data-token="0">authored</website-ofm-embed>
+
+        ![[other]]
+      MD
+      note("other.md", "---\npublish: true\n---\n# Other\nTarget body")
+    )
+    assert result.success?, result.diagnostics.map(&:message).join("\n")
+    doc = Nokogiri::HTML5.fragment(page(result, "/").content)
+    assert_equal "https://obsidian.invalid/ref/0", doc.css("a").find { |node| node.text == "user" }["href"]
+    assert_equal "/other/", doc.css("a").find { |node| node.text == "normal" }["href"]
+    assert_nil doc.css("a").find { |node| node.text == "fake" }["href"]
+    assert_equal "/other/", doc.css("a").find { |node| node.text == "other" }["href"]
+    assert_equal "authored", doc.at_css("website-ofm-embed").text
+    assert_includes doc.at_css(".website-transclusion").text, "Target body"
+  end
+
   def test_prepared_compilers_reuse_the_completed_result_without_accumulating_relations
     [nil, { "enabled" => true, "locales" => %w[en zh-CN] }].each do |i18n|
       entries = [note("index.md", "---\npublish: true\n---\n[[other]]"), note("other.md", "---\npublish: true\n---\n# Other")]

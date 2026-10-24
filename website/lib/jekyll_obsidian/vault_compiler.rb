@@ -1006,7 +1006,6 @@ module JekyllObsidian
         annotate_occurrences(note) unless note.external_document
         annotate_frontmatter_links(note)
         annotate_frontmatter_topics(note)
-        annotate_code_markers(note)
       end
     end
 
@@ -1191,7 +1190,7 @@ module JekyllObsidian
             source_span: source_span(node.source_position)
           )
           note.occurrences << occurrence
-          node.url = token_url(occurrence.index)
+          node.url = token_url(note, occurrence.index)
         end
       end
     end
@@ -1228,7 +1227,7 @@ module JekyllObsidian
         external_media: descriptor
       )
       note.occurrences << occurrence
-      node.url = token_url(occurrence.index)
+      node.url = token_url(note, occurrence.index)
     rescue ExternalMedia::Invalid => exception
       error("invalid_external_media", exception.message, note.id, source_span(node.source_position))
     end
@@ -1576,7 +1575,7 @@ module JekyllObsidian
     def render_authored_documents
       @notes.values.sort_by(&:id).each do |note|
         options = note.external_document ? REMOTE_COMMONMARK_OPTIONS : COMMONMARK_OPTIONS
-        html = note.document.to_html(options: options, plugins: COMMONMARK_PLUGINS)
+        html = note.document.to_html(options: options, plugins: { syntax_highlighter: nil })
         fragment = Nokogiri::HTML5.fragment(html)
         bind_occurrence_nodes(note, fragment)
         normalize_document(note, fragment)
@@ -1602,31 +1601,30 @@ module JekyllObsidian
     end
 
     def bind_occurrence_nodes(note, fragment)
-      note.occurrences.select { |occurrence| occurrence.syntax == :wikilink }.each do |occurrence|
-        node = fragment.at_css("a[data-website-wikilink-token='#{occurrence.scanner_token}']")
-        node["data-website-occurrence"] = occurrence.index.to_s if node
+      nodes = {}
+      fragment.css("a, img, website-ofm-embed, website-ofm-iframe").each do |node|
+        keys = case node.name
+        when "a"
+          [[:wikilink, node["data-website-wikilink-token"]], [:markdown_link, node["href"]]]
+        when "img"
+          [[:markdown_image, node["src"]]]
+        when "website-ofm-embed"
+          [[:ofm_embed, node["data-token"]]]
+        when "website-ofm-iframe"
+          [[:html_iframe, node["data-token"]]]
+        end
+        keys.each { |key| nodes[key] ||= node if key.last }
       end
-
-      note.occurrences.select { |occurrence| occurrence.syntax == :ofm_embed }.each do |occurrence|
-        node = fragment.at_css("website-ofm-embed[data-token='#{occurrence.scanner_token}']")
-        node["data-website-occurrence"] = occurrence.index.to_s if node
-      end
-
-      note.occurrences.select { |occurrence| occurrence.syntax == :html_iframe }.each do |occurrence|
-        node = fragment.at_css("website-ofm-iframe[data-token='#{occurrence.scanner_token}']")
-        node["data-website-occurrence"] = occurrence.index.to_s if node
-      end
-
-      note.occurrences.select { |occurrence| %i[markdown_link markdown_image].include?(occurrence.syntax) }.each do |occurrence|
-        selector = occurrence.syntax == :markdown_image ? "img[src='#{token_url(occurrence.index)}']" : "a[href='#{token_url(occurrence.index)}']"
-        node = fragment.at_css(selector)
-        node["data-website-occurrence"] = occurrence.index.to_s if node
-      end
-
       note.occurrences.each do |occurrence|
-        node = fragment.at_css("[data-website-occurrence='#{occurrence.index}']")
+        token = case occurrence.syntax
+        when :markdown_link, :markdown_image then token_url(note, occurrence.index)
+        when :wikilink, :ofm_embed, :html_iframe then occurrence.scanner_token
+        else next # Frontmatter references have no rendered token.
+        end
+        node = nodes[[occurrence.syntax, token.to_s]]
         next unless node
 
+        node.remove_attribute("data-website-wikilink-token") if occurrence.syntax == :wikilink
         transform_reference_node(note, occurrence, node)
       end
       promote_embed_placeholders(fragment)
@@ -1703,7 +1701,6 @@ module JekyllObsidian
           node["href"] = href
           node["class"] = [node["class"], "website-link"].compact.join(" ")
           node["data-note-id"] = target.id
-          node.remove_attribute("data-website-occurrence")
         end
       elsif occurrence.resolved_type == :attachment
         transform_attachment_node(occurrence, node)
@@ -1757,7 +1754,6 @@ module JekyllObsidian
       node.name = "a"
       node["href"] = @url_builder.href(route)
       node["class"] = [node["class"], "website-link"].compact.join(" ")
-      node.remove_attribute("data-website-occurrence")
     end
 
     def transform_attachment_node(occurrence, node, route: nil)
@@ -1916,11 +1912,23 @@ module JekyllObsidian
     end
 
     def annotate_code_blocks(note, fragment)
-      note.document.select { |node| node.type == :code_block }.each_with_index do |source, index|
-        marker = code_marker(index)
-        pre = fragment.css("pre").find { |candidate| candidate.at_css("code")&.text&.start_with?(marker) }
-        next unless pre
-        remove_text_prefix(pre.at_css("code"), "#{marker}\n")
+      blocks = fragment.css("pre[data-sourcepos]").group_by { |node| node["data-sourcepos"] }
+      options = note.external_document ? REMOTE_COMMONMARK_OPTIONS : COMMONMARK_OPTIONS
+      note.document.walk.each do |source|
+        next unless source.type == :code_block
+
+        candidates = blocks.fetch(sourcepos_value(source.source_position), [])
+        unless candidates.one?
+          error("ambiguous_code_source", "cannot uniquely locate a rendered code block; authored HTML must not reuse its data-sourcepos attribute", note.entry.path, source_span(source.source_position))
+          next
+        end
+        pre = candidates.first
+
+        # Highlight the subtree only after associating it with the source AST.
+        # No sentinel strings ever enter authored code or the Markdown export.
+        highlighted = Nokogiri::HTML5.fragment(source.to_html(options: options, plugins: COMMONMARK_PLUGINS)).at_css("pre")
+        pre.children = highlighted.children
+        pre["class"] = highlighted["class"] if highlighted["class"]
         language = source.fence_info.to_s.split.first.to_s.downcase.gsub(/[^a-z0-9_+-]/, "")
         next if language.empty?
 
@@ -1929,30 +1937,6 @@ module JekyllObsidian
         pre["lang"] = language
         pre["data-website-mermaid"] = "true" if language == "mermaid"
       end
-    end
-
-    def remove_text_prefix(node, prefix)
-      remaining = prefix
-      node.xpath(".//text()").each do |text|
-        break if remaining.empty?
-
-        length = [text.text.length, remaining.length].min
-        return false unless text.text[0, length] == remaining[0, length]
-
-        text.content = text.text[length..].to_s
-        remaining = remaining[length..].to_s
-      end
-      remaining.empty?
-    end
-
-    def annotate_code_markers(note)
-      note.document.select { |node| node.type == :code_block }.each_with_index do |source, index|
-        source.string_content = "#{code_marker(index)}\n#{source.string_content}"
-      end
-    end
-
-    def code_marker(index)
-      "JEKYLL_OBSIDIAN_CODE_#{index}_START"
     end
 
     def build_published_site_model
@@ -2706,8 +2690,8 @@ module JekyllObsidian
       end
     end
 
-    def token_url(index)
-      "https://obsidian.invalid/ref/#{index}"
+    def token_url(note, index)
+      "https://obsidian.invalid/ref/#{note.scanner.token_namespace}/#{index}"
     end
 
     def source_span(position)

@@ -1,13 +1,14 @@
 # frozen_string_literal: true
 
 require "cgi/escape"
+require "digest"
 
 module JekyllObsidian
   class OfmScanner
     Embed = Struct.new(:target, :source_span, :token, keyword_init: true)
     Iframe = Struct.new(:html, :source_span, :token, :closed, keyword_init: true)
     Wikilink = Struct.new(:target, :display, :source_span, :token, keyword_init: true)
-    Result = Struct.new(:markdown, :block_ids, :embeds, :iframes, :wikilinks, :tags, keyword_init: true)
+    Result = Struct.new(:markdown, :block_ids, :embeds, :iframes, :wikilinks, :tags, :token_namespace, keyword_init: true)
 
     VOID_HTML_TAGS = %w[
       area base basefont bgsound br col command embed frame hr img input keygen
@@ -20,6 +21,9 @@ module JekyllObsidian
 
     def initialize(markdown)
       @markdown = markdown
+      # Authored HTML and URLs must not impersonate generated placeholders.
+      # Binding tokens depend on the complete source, while output stays deterministic.
+      @token_namespace = Digest::SHA256.hexdigest(markdown)
       @ofm_comment = false
       @html_comment = false
       @fence = nil
@@ -45,7 +49,8 @@ module JekyllObsidian
         embeds: @embeds,
         iframes: @iframes,
         wikilinks: @wikilinks,
-        tags: @tags.uniq
+        tags: @tags.uniq,
+        token_namespace: @token_namespace
       )
     end
 
@@ -182,7 +187,7 @@ module JekyllObsidian
       end
 
       target = line[(cursor + 3)...ending]
-      token = @embeds.length
+      token = "#{@token_namespace}-#{@embeds.length}"
       @embeds << Embed.new(
         target: target,
         source_span: SourceSpan.new(
@@ -206,7 +211,7 @@ module JekyllObsidian
 
       inner = line[(cursor + 2)...ending]
       target, display = inner.split("|", 2)
-      token = @wikilinks.length
+      token = "#{@token_namespace}-#{@wikilinks.length}"
       @wikilinks << Wikilink.new(
         target: target.to_s,
         display: display,
@@ -409,7 +414,7 @@ module JekyllObsidian
                 end_line: line_number,
                 end_column: cursor + 1
               ),
-              token: @iframes.length,
+              token: "#{@token_namespace}-#{@iframes.length}",
               closed: self_closing
             )
             @iframes << iframe
@@ -441,7 +446,7 @@ module JekyllObsidian
           end_line: tag.fetch(:end_line),
           end_column: tag.fetch(:end_column)
         ),
-        token: @iframes.length,
+        token: "#{@token_namespace}-#{@iframes.length}",
         closed: false
       )
     end

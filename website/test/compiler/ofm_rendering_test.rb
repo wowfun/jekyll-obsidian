@@ -3,6 +3,67 @@
 require "test_helper"
 
 class OfmRenderingTest < Minitest::Test
+  def test_duplicate_code_source_positions_fail_instead_of_overwriting_authored_html
+    result = compile(note("index.md", <<~MARKDOWN))
+      ---
+      publish: true
+      ---
+      ```ruby
+      puts :real
+      ```
+
+      <pre data-sourcepos="1:1-3:3"><code>authored HTML</code></pre>
+    MARKDOWN
+    refute result.success?
+    assert result.diagnostics.any? { |item| item.code == "ambiguous_code_source" && item.path == "index.md" }
+  end
+
+  def test_code_is_highlighted_by_source_position_without_changing_authored_markers
+    result = compile(note("index.md", <<~'MARKDOWN'))
+      ---
+      publish: true
+      ---
+      # Home
+
+      <pre><code>JEKYLL_OBSIDIAN_CODE_0_START
+      authored</code></pre>
+
+      ```ruby
+      puts :same
+      ```
+      ```ruby
+      puts :same
+      ```
+
+      > ```ruby
+      > puts :quoted
+      > ```
+
+      - Nested
+
+        ```ruby
+        puts :listed
+        ```
+
+          indented
+
+      > ```mermaid
+      > graph TD; A-->B
+      > ```
+    MARKDOWN
+    assert result.success?, result.diagnostics.map(&:message).join("\n")
+    html = page(result, "/").content
+    document = Nokogiri::HTML5.fragment(html)
+    assert_equal "JEKYLL_OBSIDIAN_CODE_0_START\nauthored", document.at_css("pre code").text
+    code = document.css("code.language-ruby")
+    assert_equal ["puts :same\n", "puts :same\n", "puts :quoted\n", "puts :listed\n"], code.map(&:text)
+    assert code.all? { |node| node.at_css("span") }
+    assert_equal "graph TD; A-->B\n", document.at_css("blockquote code.language-mermaid").text
+    assert_includes html, "indented"
+    refute_includes html, "data-sourcepos"
+    assert_equal 1, html.scan("JEKYLL_OBSIDIAN_CODE_").length
+  end
+
   def test_non_folding_callout_is_a_note_not_a_nested_complementary_landmark
     result = compile(note("index.md", <<~MARKDOWN))
       ---

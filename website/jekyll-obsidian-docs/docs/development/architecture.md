@@ -43,6 +43,8 @@ Preparation and final compilation share deterministic diagnostic ordering and de
 
 Prepared compiler instances represent one immutable input set. Loading remote documents requires preparation first; an unprepared call raises instead of silently dropping the documents. Repeated compilation returns the completed result, including failures; changing remote documents or tab memberships after compilation is rejected. Frontmatter caches are cleared when the owning build completes, after all locale partitions have used them.
 
+Code highlighting uses AST source positions without modifying code text, including nested blocks. Missing or duplicate code positions produce an `ambiguous_code_source` diagnostic instead of silently skipping or rewriting another block; authored HTML must not reuse the renderer's `data-sourcepos` attribute. Reference-binding tokens use a namespace derived from the complete source, so authored URLs and attributes cannot capture a generated occurrence. Generated wikilink tokens are removed after binding.
+
 ## Identity and relations
 
 A note ID is its NFC-normalized vault-relative path, including `.md`. Relations record source, target, `link` or `embed`, fragment, and source span before rendering. HTML, backlinks, the relation rail, and graph edges all derive from those occurrences. The published model also records each node's complete-graph degree. The presenter projects a `LocalGraphPayload` only for a note with at least one different one-hop neighbour: the current note, all such neighbours, and every incident typed edge, stably sorted inside the current locale partition. A self-link alone does not create a page-local payload.

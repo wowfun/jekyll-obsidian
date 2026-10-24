@@ -85,10 +85,23 @@ class OfmScannerTest < Minitest::Test
     assert iframe.closed
     assert_includes iframe.html, 'src="https://example.test/embed"'
     assert_equal 1, iframe.source_span.start_line
-    assert_includes result.markdown, '<website-ofm-iframe data-token="0">'
+    assert_includes result.markdown, %(<website-ofm-iframe data-token="#{result.iframes.first.token}">)
     assert_includes result.markdown, "https://inline.test"
     assert_includes result.markdown, "https://fenced.test"
     refute_includes result.markdown, "https://comment.test"
+  end
+
+  def test_binding_namespaces_are_stable_source_specific_and_distinguish_occurrences
+    source = '<iframe src="https://example.test"></iframe><iframe src="https://example.test"></iframe>'
+    first = JekyllObsidian::OfmScanner.prepare(source)
+    repeated = JekyllObsidian::OfmScanner.prepare(source.dup)
+    changed = JekyllObsidian::OfmScanner.prepare(source + "\n")
+    tokens = first.iframes.map(&:token)
+    assert tokens.all? { |token| !token.empty? && token != "0" && token != "1" }
+    assert_equal tokens.uniq, tokens
+    assert_equal tokens, repeated.iframes.map(&:token)
+    assert_empty tokens & changed.iframes.map(&:token)
+    tokens.each { |token| assert_includes first.markdown, %(data-token="#{token}") }
   end
 
   def test_unclosed_iframe_is_reported_to_the_compiler

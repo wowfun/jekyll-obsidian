@@ -48,6 +48,10 @@ class GitHubMarkdownCompilationTest < Minitest::Test
       ## Details
 
       Remote details.
+
+      > ```ruby
+      > puts :remote
+      > ```
     MARKDOWN
     @transport = transport_for(
       { ["acme/widget", "main"] => COMMIT },
@@ -79,6 +83,9 @@ class GitHubMarkdownCompilationTest < Minitest::Test
     assert_includes detail.content, "Imported project"
     assert_includes detail.content, "[[Local note]]"
     refute_includes detail.content, "<script"
+    code = Nokogiri::HTML5.fragment(detail.content).at_css("blockquote code.language-ruby")
+    assert_equal "puts :remote\n", code.text
+    refute_nil code.at_css("span")
     assert_includes detail.content, "https://github.com/acme/widget/blob/#{COMMIT}/docs/guide.md"
     assert_includes detail.content, "https://github.com/acme/widget/blob/#{COMMIT}/LICENSE"
     assert_includes detail.content, "https://github.com/acme/widget/tree/#{COMMIT}/docs/v1.0"
