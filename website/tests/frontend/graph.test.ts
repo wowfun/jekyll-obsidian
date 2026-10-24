@@ -199,6 +199,39 @@ describe("interactive graphs", () => {
     expect(document.querySelector<HTMLDialogElement>('[data-dialog="graph-local"]')!.open).toBe(true);
   });
 
+  it.each(["ctrlKey", "metaKey"])("requires %s or the other modifier to zoom a compact graph", async (modifier) => {
+    const { initialiseGraphs } = await import("../../src/frontend/graph");
+    initialiseGraphs();
+    const view = document.querySelector<HTMLElement>("[data-graph-view]")!;
+    const svg = view.querySelector<SVGSVGElement>("svg")!;
+    const ordinary = new WheelEvent("wheel", { deltaY: -120, bubbles: true, cancelable: true });
+    svg.dispatchEvent(ordinary);
+    expect(ordinary.defaultPrevented).toBe(false);
+    expect(Number(view.dataset.graphScale)).toBe(1);
+    const modified = new WheelEvent("wheel", { [modifier]: true, deltaY: -120, bubbles: true, cancelable: true });
+    // happy-dom's WheelEvent currently extends UIEvent and drops modifiers.
+    Object.defineProperty(modified, modifier, { value: true });
+    svg.dispatchEvent(modified);
+    expect(modified.defaultPrevented).toBe(true);
+    expect(Number(view.dataset.graphScale)).toBeGreaterThan(1);
+  });
+
+  it.each(['svg', '.graph-node:not(.graph-node--current)'])("lets compact touch gestures over %s scroll the page", async (selector) => {
+    vi.spyOn(navigator, 'maxTouchPoints', 'get').mockReturnValue(1);
+    const { initialiseGraphs } = await import("../../src/frontend/graph");
+    initialiseGraphs();
+    const target = document.querySelector<HTMLElement>('[data-graph-view]')!.querySelector(selector)!;
+    const touch = (type: string, y: number) => {
+      const event = new Event(type, { bubbles: true, cancelable: true });
+      const point = { identifier: 0, clientX: 100, clientY: y, pageX: 100, pageY: y, target };
+      Object.defineProperties(event, { touches: { value: [point] }, changedTouches: { value: [point] }, view: { value: window } });
+      target.dispatchEvent(event);
+      return event;
+    };
+    touch('touchstart', 150);
+    expect(touch('touchmove', 80).defaultPrevented).toBe(false);
+  });
+
   it("zooms on wheel without scrolling the page and disposes dialog simulations", async () => {
     const { initialiseGraphs } = await import("../../src/frontend/graph");
     initialiseGraphs();

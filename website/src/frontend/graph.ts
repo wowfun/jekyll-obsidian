@@ -351,6 +351,7 @@ function renderGraph(container: HTMLElement, payload: GraphPayload | LocalGraphP
   position();
 
   const dragBehaviour = drag<SVGGElement, VisualNode>()
+    .touchable(() => mode !== "compact")
     .filter((event: MouseEvent, node) => !event.ctrlKey && !event.button && node.id !== currentId)
     .clickDistance(4)
     .on("start", (event: D3DragEvent<SVGGElement, VisualNode, VisualNode>, node) => {
@@ -383,10 +384,12 @@ function renderGraph(container: HTMLElement, payload: GraphPayload | LocalGraphP
   nodeGroups.call(dragBehaviour);
 
   const zoomBehaviour = zoom<SVGSVGElement, unknown>()
+    .touchable(() => mode !== "compact")
     .extent([[0, 0], [width, height]])
     .scaleExtent([0.45, 3])
     .filter((event: Event) => {
-      if (event.type === "wheel" || event.type.startsWith("touch")) return true;
+      if (event instanceof WheelEvent) return mode !== "compact" || event.ctrlKey || event.metaKey;
+      if (event.type.startsWith("touch")) return mode !== "compact";
       if (event instanceof MouseEvent) {
         return event.button === 0 && !(event.target instanceof Element && event.target.closest(".graph-node"));
       }
@@ -430,10 +433,6 @@ function renderGraph(container: HTMLElement, payload: GraphPayload | LocalGraphP
   });
   resizeObserver.observe(canvas);
 
-  const svgElement = svg.node();
-  const preventOuterScroll = (event: WheelEvent) => event.preventDefault();
-  svgElement?.addEventListener("wheel", preventOuterScroll, { passive: false });
-
   if (reducedMotion()) {
     simulation.stop();
     position();
@@ -450,7 +449,6 @@ function renderGraph(container: HTMLElement, payload: GraphPayload | LocalGraphP
     simulation.stop();
     resizeObserver.disconnect();
     cancelAnimationFrame(resizeFrame);
-    svgElement?.removeEventListener("wheel", preventOuterScroll);
     container.dataset.graphDisposed = "true";
     instances.delete(container);
   };

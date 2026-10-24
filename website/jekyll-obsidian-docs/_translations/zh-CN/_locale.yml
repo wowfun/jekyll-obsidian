@@ -5,6 +5,7 @@ messages:
   archive_requires_js: "当前显示第一页。启用 JavaScript 后可浏览全部条目。"
   archive_module_unavailable: "归档控件未能加载，请刷新页面重试。"
   favorites_module_unavailable: "收藏功能未能加载，请刷新页面重试。"
+  graph_zoom_hint: "按住 Ctrl/⌘ 并滚动滚轮可缩放"
   show_hidden_tags: 显示隐藏标签
   hide_hidden_tags: 收起隐藏标签
   all_without_tab_sources: 全部（不含独立栏目来源）

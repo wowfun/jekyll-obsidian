@@ -28,6 +28,7 @@ module JekyllObsidian
       "archive_requires_js" => "The first page is shown. Enable JavaScript to browse all entries.",
       "archive_module_unavailable" => "Archive controls could not be loaded. Reload the page to try again.",
       "favorites_module_unavailable" => "Favorites could not be loaded. Reload the page to try again.",
+      "graph_zoom_hint" => "Ctrl/⌘ + scroll to zoom",
       "show_hidden_topics" => "Show hidden topics",
       "hide_hidden_topics" => "Hide hidden topics",
       "show_hidden_tags" => "Show hidden tags",

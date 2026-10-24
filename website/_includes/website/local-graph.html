@@ -15,6 +15,7 @@
   <div class="graph-view graph-view--compact" data-graph-view data-graph-mode="compact" data-current-note-id="{{ local_graph.current_id | escape }}"{% if ui.graph_loading %} data-graph-loading="{{ ui.graph_loading | escape }}"{% endif %}{% if ui.graph_unavailable %} data-graph-unavailable="{{ ui.graph_unavailable | escape }}"{% endif %}{% if ui.graph_summary %} data-graph-summary="{{ ui.graph_summary | escape }}"{% endif %}{% if ui.graph_node_label %} data-graph-node-label="{{ ui.graph_node_label | escape }}"{% endif %}{% if ui.graph_title %} data-graph-title="{{ ui.graph_title | escape }}"{% endif %}{% if ui.graph_description %} data-graph-description="{{ ui.graph_description | escape }}"{% endif %}>
     <p class="graph-status" data-graph-status aria-live="polite">{{ ui.graph_loading | default: 'Loading graph…' | escape }}</p>
   </div>
+  <p class="local-graph__hint">{{ ui.graph_zoom_hint | default: 'Ctrl/⌘ + scroll to zoom' | escape }}</p>
   <template data-local-graph-data>
     {% for node in local_graph.nodes %}<i data-graph-node data-node-id="{{ node.id | escape }}" data-node-title="{{ node.title | escape }}" data-node-url="{{ node.url | escape }}" data-node-degree="{{ node.degree }}"></i>{% endfor %}
     {% for edge in local_graph.edges %}<i data-graph-edge data-edge-source="{{ edge.source | escape }}" data-edge-target="{{ edge.target | escape }}" data-edge-kind="{{ edge.kind | escape }}" data-edge-count="{{ edge.count }}"></i>{% endfor %}

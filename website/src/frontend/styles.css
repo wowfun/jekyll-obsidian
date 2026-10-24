@@ -2115,6 +2115,18 @@
     gap: 0.55rem;
   }
 
+  .local-graph__hint {
+    display: none;
+    color: var(--graphite);
+    font-size: 0.75rem;
+  }
+
+  @media (any-pointer: fine) {
+    .graph-view[data-graph-ready="true"]:not([data-graph-error="true"]) + .local-graph__hint {
+      display: block;
+    }
+  }
+
   .local-graph__header {
     display: flex;
     align-items: center;
@@ -2190,6 +2202,7 @@
   .graph-view--compact .graph-canvas {
     border: 0;
     border-radius: 0;
+    touch-action: pan-y;
   }
 
   .graph-view--expanded,
@@ -2533,6 +2546,7 @@
   .no-js [data-topic-filter-nav],
   .no-js [data-archive-export-open],
   .no-js [data-archive-reading-toggle],
+  .no-js .local-graph__hint,
   .no-js [data-search-open],
   .no-js [data-color-scheme-toggle],
   .no-js .mobile-toolbar {
