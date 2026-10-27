@@ -867,10 +867,13 @@ module JekyllObsidian
               path
             )
           end
+          properties = parsed.properties
+          tags = @content_policy.tags_for(path, properties["tags"])
+          properties = properties.merge("tags" => tags) unless tags == Array(properties["tags"])
           @notes[path] = MutableNote.new(
             id: path,
             entry: entry,
-            properties: parsed.properties,
+            properties: properties,
             frontmatter_links: parsed.property_links,
             body: external_document ? external_document.markdown : parsed.body,
             occurrences: [],
@@ -933,7 +936,7 @@ module JekyllObsidian
         if note.content_type == "post" && note.published_at.nil?
           error_or_warning(
             "missing_post_date",
-            "published posts require date, created, or Git first commit time",
+            "published posts require date, published, created, or Git first commit time",
             note.id,
             nil,
             fatal: production?
@@ -957,7 +960,7 @@ module JekyllObsidian
     def published_at(note)
       return nil unless note.content_type == "post"
 
-      note.properties["date"] || note.properties["created"] || note.entry.first_committed_at
+      note.properties["date"] || note.properties["published"] || note.properties["created"] || note.entry.first_committed_at
     end
 
     def effective_content_type(note)
@@ -1998,6 +2001,7 @@ module JekyllObsidian
           feature_flags: note.feature_flags,
           content_security: content_security_needs(fragment),
           image_url: published_image_url(note),
+          source_url: note.properties["source_url"] || note.properties["source"],
           source_links: published_source_links(note),
           topics: published_topics(note),
           related: published_related_cards(note),
@@ -2454,7 +2458,7 @@ module JekyllObsidian
     end
 
     def sitemap_xml(pages)
-      urls = pages.reject { |page| %w[404 redirect].include?(page.data.dig("website", "kind")) }
+      urls = pages.reject { |page| %w[404 redirect].include?(page.data.dig("website", "kind")) || Robots.noindex?(page.data.dig("website", "robots")) }
         .map(&:route).sort
       body = urls.map { |route| "  <url><loc>#{h(@url_builder.absolute_url(route))}</loc></url>" }.join("\n")
       %(<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n#{body}\n</urlset>\n)

@@ -9,5 +9,10 @@ module JekyllObsidian
     def valid?(value)
       value.is_a?(String) && value.valid_encoding? && !value.match?(INVALID_CHARACTER)
     end
+
+    def strip(value)
+      # Ruby's Unicode space class excludes the BOM that browser trim removes.
+      value.gsub(/\A[[:space:]\uFEFF]+|[[:space:]\uFEFF]+\z/u, "")
+    end
   end
 end

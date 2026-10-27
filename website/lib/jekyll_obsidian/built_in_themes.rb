@@ -109,7 +109,8 @@ module JekyllObsidian
           "directory_index" => note.directory_index,
           "has_h1" => note.has_h1,
           "source_links" => note.source_links,
-          "source_url" => properties["source_url"],
+          "source_url" => note.source_url,
+          "source_title" => properties["source_title"],
           "display_properties" => note.display_properties,
           "date_basis" => properties["date_basis"],
           "archive_item" => note.content_type == "post" && config.home["layout"] == "archive",
@@ -478,7 +479,8 @@ module JekyllObsidian
           "image" => note.image_url,
           "authors" => note.topics.select { |topic| topic.fetch("kind") == "author" },
           "tags" => Array(note.properties["tags"]),
-          "source_url" => note.properties["source_url"],
+          "source_url" => note.source_url,
+          "source_title" => note.properties["source_title"],
           "date_basis" => note.properties["date_basis"]
         }
       end

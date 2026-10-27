@@ -11,6 +11,18 @@ beforeEach(() => {
   document.body.innerHTML = `<main data-ledger-current-year="2026">${archiveDayUI}<div data-filter-list></div></main>`;
 });
 
+it("renders the original source title as text and falls back to its URL", () => {
+  const root = document.querySelector<HTMLElement>("main")!;
+  for (const source_title of ["<img src=x onerror=alert(1)> [Guide]", "", null, undefined]) {
+    const item = { ...card, source_url: "https://example.test/original", ...(source_title === undefined ? {} : { source_title }) };
+    renderArchiveLedger(root, [item], favoriteManifest([item]));
+    const link = root.querySelector<HTMLAnchorElement>(".archive-source-url")!;
+    expect(link.textContent).toBe(source_title || item.source_url);
+    expect(link.href).toBe(item.source_url);
+    expect(link.children).toHaveLength(0);
+  }
+});
+
 it("facet links toggle their value while preserving other filters for new-tab navigation", () => {
   renderArchiveLedger(document.querySelector("main")!, [card], favoriteManifest([card]));
   expect(document.querySelector<HTMLAnchorElement>('[data-archive-facet="source"]')!.getAttribute("href")).toBe("/garden/?topic=agents&day=2026-10-10");

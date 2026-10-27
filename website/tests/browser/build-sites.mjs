@@ -144,8 +144,9 @@ try {
     ["b", "Middle", "2026-10-09", "dsh", "tools"],
     ["c", "Oldest", "2025-12-31", "hn", "agents"]
   ]) {
+    const sourceTitle = id === "a" ? `source_title: " Source [A] <em>original</em> "\n` : "";
     await writeFile(path.join(archiveHost, `vault/items/${id}.md`),
-      `---\npublish: true\ncontent_type: post\ntitle: ${title}\ndescription: Description of ${title}\nsource_url: https://example.com/${id}\ndate: ${date}\ntags: [source/${source}, topics/${topic}]\n---\nFirst paragraph of ${title}.\n\nSecond paragraph with a [link](https://example.com/${id}).\n`);
+      `---\npublish: true\ncontent_type: post\ntitle: ${title}\ndescription: Description of ${title}\nsource_url: https://example.com/${id}\n${sourceTitle}date: ${date}\ntags: [source/${source}, topics/${topic}]\n---\nFirst paragraph of ${title}.\n\nSecond paragraph with a [link](https://example.com/${id}).\n`);
   }
   build(archiveHost, "minimal", "minimal-archive", path.join(archiveHost, "host.yml"));
   const destination = path.join(workspaceRoot, ".jekyll-obsidian-cache/site-browser-minimal-archive");

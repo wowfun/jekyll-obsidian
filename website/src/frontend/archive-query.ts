@@ -20,6 +20,7 @@ export interface ArchiveManifest extends ArchiveCollection {
 }
 export interface ArchiveCard {
   id: string; title: string; url: string; markdown_url: string; summary?: string | null; source_url?: string | null;
+  source_title?: string | null;
   published_at: string | null; display_date: string | null; year: string; month: string | null;
   facets: Record<string, string[]>; date_basis?: string | null;
   favorite_labels?: Record<string, string>; unavailable?: boolean; snapshot_locale?: string;

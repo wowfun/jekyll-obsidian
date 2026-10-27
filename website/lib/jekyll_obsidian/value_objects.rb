@@ -130,6 +130,7 @@ module JekyllObsidian
     :feature_flags,
     :content_security,
     :image_url,
+    :source_url,
     :source_links,
     :topics,
     :related,

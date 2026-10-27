@@ -2,6 +2,6 @@
   <ul class="blog-ledger__topics" aria-label="{{ ui.sources | default: 'Sources' | escape }} / {{ ui.topics | default: 'Topics' | escape }}">
     {% for tag in include.post.archive_facets %}<li><a href="{{ blog_url | escape }}?{{ tag.facet | url_encode }}={{ tag.id | url_encode }}" data-archive-facet="{{ tag.facet | escape }}" data-archive-value="{{ tag.id | escape }}">{{ tag.name | escape }}</a></li>{% endfor %}
   </ul>
-  {% if include.post.source_url %}<a class="archive-source-url" href="{{ include.post.source_url | escape }}" rel="noopener noreferrer">{{ include.post.source_url | escape }}</a>{% endif %}
+  {% if include.post.source_url %}<a class="archive-source-url" href="{{ include.post.source_url | escape }}" rel="noopener noreferrer">{{ include.post.source_title | default: include.post.source_url | escape }}</a>{% endif %}
   {% if include.post.date_basis == 'observed' %}<small>{{ ui.first_observed | default: 'First observed' | escape }}</small>{% endif %}
 </footer>

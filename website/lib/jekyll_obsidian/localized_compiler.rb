@@ -22,7 +22,7 @@ module JekyllObsidian
       home_url href image markdown_url redirect_url route url
     ].freeze
     SOURCE_LINK_PROPERTIES = %w[edit history imported issue repository source].freeze
-    LOCALE_PATTERN = /\A[A-Za-z]{2,8}(?:-[A-Za-z0-9]{1,8})*\z/
+    LOCALE_PATTERN = FrontMatter::LANGUAGE_PATTERN
     RESERVED_LOCALE_PREFIXES = %w[assets].freeze
     MESSAGE_DEFAULTS = {
       "archive_requires_js" => "The first page is shown. Enable JavaScript to browse all entries.",
@@ -266,6 +266,8 @@ module JekyllObsidian
       @enabled = false
       @locale_data = {}
       @actual_by_locale = {}
+      @shared_directories = []
+      @shared_languages = {}
       @physical_sources = {}
       @diagnostic_origins = {}
       @default_locale = @config.lang.to_s
@@ -387,8 +389,15 @@ module JekyllObsidian
         error("invalid_i18n_config", "website.i18n must be a mapping")
         return
       end
-      unknown = raw.keys.map(&:to_s) - %w[enabled locales]
+      unknown = raw.keys.map(&:to_s) - %w[enabled locales shared_directories]
       unknown.each { |key| error("invalid_i18n_config", "unknown i18n setting #{key.inspect}") }
+      shared = fetch(raw, "shared_directories")
+      shared = [] unless raw.key?("shared_directories") || raw.key?(:shared_directories)
+      if shared.is_a?(Array) && shared.all? { |path| valid_shared_directory?(path) }
+        @shared_directories = shared.uniq.sort
+      else
+        error("invalid_shared_directories", "i18n.shared_directories must be an array of normalized vault-relative public directories")
+      end
       enabled = fetch(raw, "enabled") if raw.key?("enabled") || raw.key?(:enabled)
       unless enabled.nil? || enabled == true || enabled == false
         error("invalid_i18n_config", "website.i18n.enabled must be a YAML boolean")
@@ -520,6 +529,9 @@ module JekyllObsidian
         [entry.path, [entry, parsed]] if @content_policy.publish?(entry.path, parsed.properties)
       end.to_h
 
+      @shared_languages = default_public.filter_map do |path, (_entry, parsed)|
+        [path, parsed.properties.fetch("lang", "und")] if shared_path?(path)
+      end.to_h
       configured_roots = @locales.reject { |locale| locale == @default_locale }.map { |locale| "#{TRANSLATIONS_ROOT}/#{locale}/" }
       @entries.each do |entry|
         next unless entry.path.to_s.start_with?("#{TRANSLATIONS_ROOT}/")
@@ -540,6 +552,10 @@ module JekyllObsidian
         @entries.select { |entry| entry.path.to_s.start_with?(prefix) }.each do |entry|
           logical_path = entry.path.to_s.delete_prefix(prefix)
           next if logical_path == LOCALE_MANIFEST
+          if shared_path?(logical_path)
+            error("shared_translation_conflict", "shared content must have only one source; remove its translation copy", entry.path)
+            next
+          end
           unless valid_logical_path?(logical_path)
             error("invalid_translation_path", "translation paths must be normalized vault-relative POSIX paths", entry.path)
             next
@@ -747,6 +763,7 @@ module JekyllObsidian
       kind = website.fetch("kind")
       note_id = website["id"]
       authored_page = kind == "note" || (kind == "home" && note_id)
+      shared = authored_page && @shared_languages.key?(note_id)
       actual = !authored_page || locale == @default_locale || @actual_by_locale.fetch(locale).include?(note_id)
       default_route = kind == "note" ? default_routes.fetch(note_id) : page.route
       localizations = @locales.map do |candidate|
@@ -758,10 +775,10 @@ module JekyllObsidian
           "hreflang" => locale_data.fetch("hreflang"),
           "dir" => locale_data.fetch("dir"),
           "href" => @url_builder.href(prefixed_route(default_route, candidate)),
-          "fallback" => !candidate_actual
+          "fallback" => !candidate_actual && !shared
         }
       end
-      alternates = if actual
+      alternates = if actual && !shared
         localizations.reject { |item| item.fetch("fallback") }.map do |item|
           item.merge("href" => absolute_for(item.fetch("href")))
         end.then do |items|
@@ -825,9 +842,10 @@ module JekyllObsidian
         "hreflang" => locale_data.fetch("hreflang"),
         "dir" => locale_data.fetch("dir"),
         "messages" => locale_data.fetch("messages"),
-        "content_lang" => actual ? locale : @default_locale,
-        "content_dir" => content_locale_data.fetch("dir"),
-        "fallback" => !actual,
+        "content_lang" => shared ? @shared_languages.fetch(note_id) : actual ? locale : @default_locale,
+        "content_dir" => shared ? shared_content_direction(@shared_languages.fetch(note_id)) : content_locale_data.fetch("dir"),
+        "shared" => !!shared,
+        "fallback" => !actual && !shared,
         "localizations" => localizations
       }
       if website["comments"]
@@ -1065,7 +1083,7 @@ module JekyllObsidian
       body = pages.reject do |page|
         page.data.dig("website", "kind") == "redirect" ||
           page.route.end_with?("/404.html") ||
-          page.data.dig("website", "i18n", "fallback")
+          Robots.noindex?(page.data.dig("website", "robots"))
       end.sort_by(&:route).map do |page|
         website = page.data.fetch("website")
         alternates = Array(website["alternates"]).map do |alternate|
@@ -1127,6 +1145,38 @@ module JekyllObsidian
       path.split("/", -1).none? { |segment| segment.empty? || segment == "." || segment == ".." }
     rescue EncodingError
       false
+    end
+
+    def valid_shared_directory?(path)
+      return false unless valid_logical_path?(path)
+      return false if path.match?(/\A[A-Za-z]:/)
+
+      path.split("/").none? { |part| part.start_with?(".", "_") }
+    end
+
+    def shared_path?(path)
+      @shared_directories.any? { |directory| path.start_with?("#{directory}/") }
+    end
+
+    def shared_content_direction(language)
+      configured = @locale_data.find { |code, _data| code.casecmp?(language) }
+      return configured.last.fetch("dir") if configured
+
+      # These lists cover common scripts and languages, not a complete CLDR
+      # mapping. Unknown values use the browser's content-based auto direction.
+      parts = language.downcase.split("-")
+      # Variants such as 1901 are not scripts; extension/private-use subtags
+      # (after a singleton) must not affect the body's writing direction.
+      script = parts.drop(1).take_while { |part| part.length > 1 }.find { |part| part.match?(/\A[a-z]{4}\z/) }
+      if script
+        return "rtl" if %w[arab hebr thaa nkoo adlm syrc].include?(script)
+        return "ltr" if %w[latn cyrl grek hans hant jpan kore deva].include?(script)
+        return "auto"
+      end
+      return "rtl" if %w[ar he fa ur ps dv yi].include?(parts.first)
+      return "ltr" if %w[en zh ja ko de fr es it pt ru uk el hi vi th id ms tr nl pl sv da no fi cs].include?(parts.first)
+
+      "auto"
     end
 
     def localize_page_copy!(data, kind, messages)

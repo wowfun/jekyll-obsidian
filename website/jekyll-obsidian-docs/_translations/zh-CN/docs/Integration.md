@@ -62,6 +62,10 @@ bundle exec jekyll-obsidian dev
 
 ## 更新
 
+**未发布版本迁移提示：**`source`、`published` 和 `lang` 现在有明确的 frontmatter 类型，不再接受任意自定义属性值。`source` 必须是不含用户名、密码的完整 HTTP(S) URL；文本形式的来源说明请改用其他属性，如 `source_name`。`published` 表示发布日期；公开状态使用 `publish: true` 或 `publish: false`。`lang` 必须是 BCP 47 风格的语言标识，如 `en` 或 `zh-CN`。旧值不符合类型时，构建会以 `invalid_property` 报错；升级不会自动改写笔记。这些变化适用于下一个发行版本，不适用于当前已发布的 0.3.1 gem。
+
+`source_title` 也已成为明确的字符串属性。数字标签需要加引号（`source_title: "123"`），数组或映射应改为所需的纯文本标签，否则构建会返回 `invalid_property`。
+
 将工作流中的 `uses: wowfun/jekyll-obsidian@v0.3.1` 改为需要的发行 tag，Action 会安装该版本对应的 gem。
 
 使用 Bundler 时，将 `Gemfile` 中 `jekyll-obsidian-site` 的版本约束改为相同发行版本，运行 `bundle update jekyll-obsidian-site`，然后将 `Gemfile`、`Gemfile.lock` 和工作流一起提交。单独运行 `bundle update` 无法升级 Gemfile 中固定的版本。本地独立安装可运行 `gem update jekyll-obsidian-site`。包更新不会改写宿主内容和配置。

@@ -9,6 +9,20 @@ require "tmpdir"
 require "jekyll_obsidian/adapter"
 
 class JekyllAdapterTest < Minitest::Test
+  def test_whitespace_source_title_falls_back_to_url_in_note_and_archive_html
+    File.write(File.join(@temporary_root, "vault", "post.md"), "---\npublish: true\ncontent_type: post\ndate: 2026-10-25\nsource_url: https://example.test/original\nsource_title: \" \\t\\n \"\n---\nBody")
+    install_project_layout
+    %w[minimal docs].each do |theme|
+      build_site("website" => website_config.merge("theme" => theme, "home" => { "layout" => "archive" })).process
+      document = Nokogiri::HTML(File.read(File.join(destination, "post/index.html")))
+      assert_equal "https://example.test/original", document.at_css(".note-source-url a").text
+      if theme == "minimal"
+        home = Nokogiri::HTML(File.read(File.join(destination, "index.html")))
+        assert_equal "https://example.test/original", home.at_css(".archive-source-url").text
+      end
+    end
+  end
+
   def test_generated_and_projected_routes_are_resolved_under_the_destination
     site = build_site
     page = JekyllObsidian::Adapter::GeneratedPage.allocate
@@ -740,6 +754,7 @@ class JekyllAdapterTest < Minitest::Test
       date_basis: observed
       tags: [source/openai, topics/agents]
       source_url: https://example.test/original
+      source_title: "<Guide> [agents]"
       repo_url: https://github.com/example/project
       zero: 0
       enabled: false
@@ -793,11 +808,18 @@ class JekyllAdapterTest < Minitest::Test
       refute_includes document.to_html, "hidden-marker"
       refute_includes document.to_html, "expanded-secret-marker"
       assert_equal 1, document.css(".note-source-url").length
+      assert_equal "<Guide> [agents]", document.at_css(".note-source-url a").text
+      assert_equal "https://example.test/original", document.at_css(".note-source-url a")["href"]
+      assert_nil document.at_css(".note-source-url guide")
+      if theme == "minimal"
+        home = Nokogiri::HTML(File.read(File.join(destination, "index.html")))
+        assert_equal "<Guide> [agents]", home.at_css(".archive-card-footer .archive-source-url").text
+      end
       assert_equal "First observed 2026-10-10", document.at_css(".note-meta time").text.strip
       order = document.css("article *")
       assert_operator order.index(document.at_css(".note-source-url")), :<, order.index(fields)
       assert_operator order.index(fields), :<, order.index(document.at_css(".note-content"))
-      %w[title date date_basis source_url tags publish].each { |key| assert_nil fields.at_css("[data-property-name='#{key}']") }
+      %w[title date date_basis source_url source_title tags publish].each { |key| assert_nil fields.at_css("[data-property-name='#{key}']") }
     end
   end
 

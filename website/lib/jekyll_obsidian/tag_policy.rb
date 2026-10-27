@@ -29,8 +29,10 @@ module JekyllObsidian
       end
       aliases = maps.fetch("tag_aliases")
       aliases.each do |tag, replacement|
-        if tag == replacement || aliases.key?(replacement) || tag.split("/").first != replacement.split("/").first
-          errors << "tag_aliases must be flattened replacements within one namespace"
+        same_namespace = tag.split("/").first == replacement.split("/").first
+        introduces_namespace = !tag.include?("/") && replacement.include?("/")
+        if tag == replacement || aliases.key?(replacement) || !(same_namespace || introduces_namespace)
+          errors << "tag_aliases must be flattened replacements within one namespace or from a bare tag into a namespace"
         end
       end
       hidden = raw.fetch("hidden_tags", [])

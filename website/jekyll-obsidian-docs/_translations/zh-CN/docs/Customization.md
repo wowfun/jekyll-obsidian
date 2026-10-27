@@ -31,6 +31,7 @@ website:
   content:
     publish_by_default: []
     default_type: doc
+    directory_tags: {}
     directories:
       post: []
       doc: []
@@ -348,7 +349,9 @@ website:
 - `permalink`、`image` 和 `cssclasses`
 - `created` 和 `updated`
 - `content_type`、`date`、`date_basis`、`pinned`、`nav_order`、`nav_exclude`、`tab` 和 `tabs`
-- `comments`、`github_markdown`、`related` 和 `source_url`
+- `comments`、`github_markdown`、`related`、`source_url`、`source`、`source_title`、`published` 和 `lang`
+
+`lang` 用于声明 `website.i18n.shared_directories` 中笔记的正文语言，不改变界面语言，详见 [[Localization#在不同语言界面中共用正文|共享正文]]。
 
 其他顶层属性可以使用标量或一层标量列表。自定义属性名必须是经过规范化的单行文本，且不能带首尾空白。两个主题默认在标签和原文链接下方、正文上方显示展开的属性区。标签使用原始字段名，字段保留书写顺序。不支持嵌套列表或映射。
 
@@ -388,7 +391,7 @@ related:
 
 `aliases`、`tags`、`author`、`categories`、`cssclasses` 和 `tabs` 是字符串数组，`subtitle` 是字符串。`publish`、`pinned`、`nav_exclude` 和 `comments` 使用 YAML 布尔值。`tab` 是前文说明的封闭映射。`github_markdown` 只接受 [[Portfolio|作品集]]中说明的 URL 或映射形式，并且只能用于作品集项目页。日期使用 ISO 8601。笔记标题依次取自 `title`、第一个一级标题和文件名。
 
-`updated` 可选，只有作者明确提供时才会出现在页面元数据中；编译器不会从 Git 推导更新时间。文章发布时间依次使用 `date`、`created` 和第一次 Git 提交时间。Atom 条目优先使用显式 `updated`；未提供时，文章沿用其发布时间。没有 `updated` 的非文章笔记不会进入订阅源。
+`updated` 可选，只有作者明确提供时才会出现在页面元数据中；编译器不会从 Git 推导更新时间。文章发布时间依次使用 `date`、`published`、`created` 和第一次 Git 提交时间。Atom 条目优先使用显式 `updated`；未提供时，文章沿用其发布时间。没有 `updated` 的非文章笔记不会进入订阅源。
 
 Minimal Home 会在文章标题下显示 `subtitle`，然后使用 `description` 或编译器生成的正文摘录作为摘要。存在 `author` 时，摘要页脚会列出作者。`author` 和 `categories` 会与 `tags` 一起进入 Home 的 Topics 区域。条目可以是普通字符串，也可以是指向公开笔记的 Wiki 链接：
 
@@ -410,7 +413,7 @@ Wiki 链接条目必须使用 YAML 双引号字符串。可见标签优先使用
 
 ## 内容与导航
 
-显式的 `content_type: post | doc | page` 优先于目录默认值。文章发布时间依次使用 `date`、`created` 和第一次 Git 提交时间。生产构建会拒绝没有确定日期的文章。在 Minimal Home 和 Blog 中，设置了 `pinned: true` 的文章排在普通文章之前，两组内部都保持时间倒序。置顶只影响卡片展示，不改变 Atom Feed 的时间顺序以及上一篇、下一篇文章序列。
+显式的 `content_type: post | doc | page` 优先于目录默认值。文章发布时间依次使用 `date`、`published`、`created` 和第一次 Git 提交时间。生产构建会拒绝没有确定日期的文章。在 Minimal Home 和 Blog 中，设置了 `pinned: true` 的文章排在普通文章之前，两组内部都保持时间倒序。置顶只影响卡片展示，不改变 Atom Feed 的时间顺序以及上一篇、下一篇文章序列。
 
 Docs 导航沿用内容目录结构。`nav_order` 对同级文档排序，`nav_exclude: true` 只移除当前笔记链接，子页面仍然可以访问。所有层级都可以没有 `index.md`。物理 `index.md` 不存在时，同级且文件名精确为 `README.md` 的公开笔记会成为文件夹索引。已有的 `index.md` 即使未发布也会保留该位置，此时 `README.md` 仍是普通笔记。公开的根索引始终拥有 `/`，因此该笔记使用其他 `permalink` 会被拒绝。没有公开索引的文件夹会打开依次按 `nav_order`、标题和路径排序的第一个可见子页面。
 
@@ -504,3 +507,30 @@ Minimal 归档首页可设置 `website.home.hide_tab_sources: true`（默认 fal
 语言目录的 `_locale.yml` 支持 `hidden_tags`，使用完整标签 ID 的唯一列表，例如 `topics/research`。别名通过 `tag_aliases` 解析后去重，各语言必须表示同一个规范标签集合。单语言站点也可在内容根目录的 `_locale.yml` 中设置 `hidden_tags`、`tag_aliases` 和 `tag_labels`，无需开启 i18n；两种模式均拒绝未知清单键。隐藏标签仍显示在文章和收藏条目中，但默认不出现在归档、栏目、收藏和导出的候选项中。筛选标题下方的按钮仅展开本组的隐藏选项：“主题”使用“显示隐藏主题”，其他筛选项使用“显示隐藏标签”。“来源”可同时提供标签展开与独立栏目展开按钮，两者分别控制。收起后仍保留已选隐藏标签，便于取消筛选。
 
 URL 使用 `include_tabs=1` 和可重复的 `show_hidden` 参数保存展开状态，后者取值为筛选组名称，例如 `show_hidden=source&show_hidden=topic`。明确选择独立栏目来源的链接自动展开。导出弹窗继承各组状态，内部调整独立于页面。未明确选择来源时，导出标题使用“全部（不含独立栏目来源）”说明默认范围，不逐一列出所有剩余来源。静态 HTML 首屏始终使用默认范围；JavaScript 加载后才应用 URL 筛选并显示已选隐藏标签。无 JavaScript 时，条目及计数保持默认范围，不显示展开按钮。文案键为 `include_tab_sources`、`hide_tab_sources`、`show_hidden_topics`、`hide_hidden_topics`、`show_hidden_tags`、`hide_hidden_tags`、`all_without_tab_sources`。
+
+## 来源元数据与目录标签
+
+Obsidian Web Clipper 笔记可以保留 `published`、`source` 和用引号包围的作者双链。`published` 接受 ISO-8601 日期或日期时间；文章日期依次使用 `date`、`published`、`created`、第一次 Git 提交时间。`source` 与 `source_url` 一样接受不含凭据的 HTTP(S) URL；两者都有时，原文链接优先使用 `source_url`。这些字段不会再重复显示为自定义属性。作者双链没有公开目标时显示原有名称，并产生警告。
+
+通过目录配置发布剪藏，无需逐篇添加发布字段：
+
+```yaml
+website:
+  content:
+    publish_by_default: [clippings]
+    directories:
+      post: [clippings]
+      doc: [docs]
+    directory_tags:
+      clippings: [source/clippings]
+```
+
+`directory_tags` 默认为 `{}`。键是相对于内容根目录的规范目录路径，`.` 表示整个内容目录；标签会追加到该目录及其后代。嵌套规则累加并去重，不会改写磁盘上的 Markdown，也不会自行授权发布。`publish: false` 仍可排除草稿；栏目首页保留 `content_type: page`。
+
+标签必须是非空白字符串，仅含空白的值会被拒绝。有效标签保留手写拼写，包括内部空格。
+
+目录规则（`publish_by_default`、`directories` 和 `directory_tags`）在所有平台上都按源路径区分大小写。配置应与目录的实际拼写一致：`clippings` 不会选中 `Clippings`。大小写折叠仅用于拒绝有歧义的路径冲突，不会扩大发布规则的范围。
+
+语言清单的 `tag_aliases` 支持把无前缀标签映射到命名空间，例如 `agents: topics/agents`。已有命名空间的标签只允许在同一命名空间内替换；拒绝别名链和循环。共享笔记省略 `lang` 时仍使用 `und` 和自动文本方向。
+
+可选的 `source_title` 用于文章头部、归档卡片、收藏和 Markdown 导出中的原文链接标题。首尾 Unicode 空白和字节顺序标记（`U+FEFF`）会被移除；省略或移除后为空时显示 URL。这项规范化不会改写 Markdown 原稿。它是纯文本，不执行 HTML，也不替代站内笔记标题；没有原文 URL 时不会单独生成链接。

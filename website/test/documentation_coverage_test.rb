@@ -86,6 +86,17 @@ class DocumentationCoverageTest < Minitest::Test
     end
   end
 
+  def test_localization_guides_list_every_structural_property
+    ["docs/Localization.md", "_translations/zh-CN/docs/Localization.md"].each do |relative_path|
+      document = File.read(File.join(DOCS_ROOT, relative_path), encoding: "UTF-8")
+      paragraph = document.split(/\r?\n\s*\r?\n/).find { |text| text.start_with?("Structural properties", "结构属性") }
+      refute_nil paragraph, "missing structural-property reference in #{relative_path}"
+      documented = paragraph.scan(/`([^`]+)`/).flatten
+      missing = JekyllObsidian::LocalizedCompiler::STRUCTURAL_PROPERTIES - documented
+      assert_empty missing, "#{relative_path} is missing structural properties: #{missing.join(', ')}"
+    end
+  end
+
   def test_every_feature_key_is_in_the_theme_reference
     document = File.read(File.join(DOCS_ROOT, "docs", "Customization.md"))
     canonical_heading = "## Site themes"

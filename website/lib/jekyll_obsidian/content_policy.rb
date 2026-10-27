@@ -9,6 +9,7 @@ module JekyllObsidian
     DEFAULT_SETTINGS = DeepFreeze.call(
       "publish_by_default" => [],
       "default_type" => "page",
+      "directory_tags" => {},
       "directories" => { "post" => ["blog"], "doc" => ["docs"] }
     )
     Resolution = ImmutableRecord.define(:policy, :diagnostics)
@@ -28,7 +29,7 @@ module JekyllObsidian
           return DEFAULT_SETTINGS
         end
         raw ||= {}
-        unknown = raw.keys.map(&:to_s) - %w[publish_by_default default_type directories]
+        unknown = raw.keys.map(&:to_s) - %w[publish_by_default default_type directories directory_tags]
         unknown.sort.each do |key|
           diagnostics << diagnostic("invalid_content_config", "unknown content setting #{key.inspect}")
         end
@@ -43,6 +44,7 @@ module JekyllObsidian
         end
 
         publish_by_default = normalize_publish_directories(raw, diagnostics)
+        directory_tags = normalize_directory_tags(raw, diagnostics)
         directories = normalize_content_directories(raw, diagnostics)
         directories.fetch("post").product(directories.fetch("doc")).each do |post_directory, doc_directory|
           next unless directory_overlaps?(post_directory, doc_directory)
@@ -56,6 +58,7 @@ module JekyllObsidian
         DeepFreeze.call(
           "publish_by_default" => publish_by_default,
           "default_type" => default_type,
+          "directory_tags" => directory_tags,
           "directories" => directories
         )
       end
@@ -112,6 +115,24 @@ module JekyllObsidian
         end
       end
 
+      def normalize_directory_tags(raw, diagnostics)
+        return {} unless raw.key?("directory_tags") || raw.key?(:directory_tags)
+
+        values = fetch(raw, "directory_tags")
+        unless values.is_a?(Hash)
+          diagnostics << diagnostic("invalid_directory_tags", "content.directory_tags must map directories to arrays of tags")
+          return {}
+        end
+        values.each_with_object({}) do |(directory, tags), result|
+          path = normalize_directory(directory, "content.directory_tags", diagnostics, allow_root: true)
+          unless tags.is_a?(Array) && tags.all? { |tag| FrontMatter.valid_output_text?(tag) && !OutputText.strip(tag).empty? }
+            diagnostics << diagnostic("invalid_directory_tags", "content.directory_tags values must be arrays of non-blank tags")
+            next
+          end
+          result[path] = tags.uniq if path
+        end
+      end
+
       def normalize_directory(value, setting, diagnostics, allow_root:)
         unless FrontMatter.valid_output_text?(value)
           diagnostics << diagnostic("invalid_content_directory", "#{setting} entries must be strings")
@@ -164,6 +185,7 @@ module JekyllObsidian
       @publish_by_default = settings.fetch("publish_by_default")
       @directories = settings.fetch("directories")
       @default_type = settings.fetch("default_type")
+      @directory_tags = settings.fetch("directory_tags")
       freeze
     end
 
@@ -183,6 +205,13 @@ module JekyllObsidian
         return type if configured.any? { |prefix| directory == prefix || directory.start_with?("#{prefix}/") }
       end
       @default_type
+    end
+
+    def tags_for(path, authored)
+      inherited = @directory_tags.flat_map do |directory, tags|
+        inside_directory?(path, directory) ? tags : []
+      end
+      (Array(authored) + inherited).uniq
     end
 
     private

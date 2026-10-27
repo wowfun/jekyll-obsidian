@@ -51,7 +51,7 @@ export function renderArchiveLedger(root: HTMLElement, cards: ArchiveCard[], dat
       const li = document.createElement("li"); li.append(link); tags.append(li);
     }
     footer.append(tags);
-    if (card.source_url) { const original = textElement("a", card.source_url, "archive-source-url"); original.href = archiveUrl(card.source_url, true).href; original.rel = "noopener noreferrer"; footer.append(original); }
+    if (card.source_url) { const original = textElement("a", card.source_title || card.source_url, "archive-source-url"); original.href = archiveUrl(card.source_url, true).href; original.rel = "noopener noreferrer"; footer.append(original); }
     if (card.date_basis === "observed") footer.append(textElement("small", root.dataset.observedLabel || "First observed"));
     if (card.unavailable) { row.dataset.favoriteUnavailable = ""; footer.append(textElement("small", ui.removed || "This article is no longer published. Your saved summary and original link are kept.")); }
     content.append(footer); row.append(content); ol!.append(row);

@@ -68,6 +68,10 @@ An existing Jekyll `_config.yml` and its plugins are not loaded by this tool.
 
 ## Update
 
+**Unreleased migration note:** `source`, `published`, and `lang` now have defined frontmatter types instead of accepting arbitrary custom-property values. `source` must be an absolute HTTP(S) URL without credentials; rename free-text source descriptions to another property, such as `source_name`. `published` is a publication date; use `publish: true` or `publish: false` to control visibility. `lang` must be a BCP 47-style language tag, such as `en` or `zh-CN`. Invalid legacy values now stop the build with `invalid_property`; upgrades do not rewrite your notes. This applies to the next release, not the currently published 0.3.1 gem.
+
+`source_title` is also a defined string property. Quote numeric labels (`source_title: "123"`) and replace array or mapping values with the intended plain-text label; otherwise the build reports `invalid_property`.
+
 Change `uses: wowfun/jekyll-obsidian@v0.3.1` in the workflow to the desired release tag. The Action installs that release's exact gem version.
 
 For Bundler, change the `jekyll-obsidian-site` version constraint in `Gemfile` to the same release, run `bundle update jekyll-obsidian-site`, and commit `Gemfile`, `Gemfile.lock`, and the workflow together. Running `bundle update` alone cannot upgrade an exact Gemfile pin. For a standalone local installation, use `gem update jekyll-obsidian-site`. Package updates do not rewrite host content or configuration.

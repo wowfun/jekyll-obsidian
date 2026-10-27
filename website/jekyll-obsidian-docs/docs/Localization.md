@@ -95,7 +95,7 @@ A translation can replace the body and the translatable properties `title`, `sub
 
 A translated Portfolio wrapper may select its own `github_markdown` file or provide a local body. The remote property does not carry into a physical translation that supplies its own content. When the translated wrapper is absent, the ordinary fallback page uses the default-language project and its imported body. See [[Portfolio#Import a GitHub Markdown file|Portfolio]] for the source contract.
 
-Structural properties belong to the default note. This includes `permalink`, `content_type`, `date`, `date_basis`, `created`, `updated`, `pinned`, `nav_order`, `nav_exclude`, `aliases`, `comments`, and `tabs`. Omit these properties from the translation; if present, they must exactly match the default value. Always omit `tab.id`, `tab.order`, `tab.topics`, and `tab.layout` from a translation because any attempt to set them is rejected. A post without `date` or `created` inherits the default note's Git-derived publication date. `updated` is never derived from Git; omit it unless the default note declares an explicit update date. Committing only a translation therefore changes neither post chronology nor the Blog order.
+Structural properties belong to the default note. This includes `permalink`, `content_type`, `date`, `published`, `date_basis`, `created`, `updated`, `pinned`, `nav_order`, `nav_exclude`, `aliases`, `comments`, `tabs`, `source_url`, `source`, `source_title`, and `lang`. Omit these properties from the translation; if present, they must exactly match the default value. Always omit `tab.id`, `tab.order`, `tab.topics`, and `tab.layout` from a translation because any attempt to set them is rejected. Post dates use `date`, then `published`, then `created`. When all three are absent, the post inherits the default note's Git-derived publication date. `updated` is never derived from Git; omit it unless the default note declares an explicit update date. Committing only a translation therefore changes neither post chronology nor the Blog order.
 
 ## Understand localized URLs and resources
 
@@ -119,11 +119,27 @@ Wikilinks, embeds, backlinks, and source actions resolve in the current locale f
 
 Binary attachments remain shared in the default content tree. Do not put locale-specific images, PDFs, Canvas files, or other binary assets under `_translations/`. A translated note can continue to reference a shared attachment from the default tree.
 
+## Share one body across languages
+
+Use `website.i18n.shared_directories: [clippings]` for content maintained in one language or containing mixed languages. The default is an empty array. Entries are normalized, vault-relative directories; each covers its descendants, including its folder index. `clippings` does not match `clippings-extra`. Absolute paths, traversal segments, trailing separators, and hidden or compiler-owned directories are rejected.
+
+Directory matching is case-sensitive on every platform, including Windows. Match the source directory's exact spelling: use `Clippings` for `Clippings/item.md`. A path outside the configured shared directories follows the ordinary translation and fallback rules.
+
+Keep these notes only in the default content tree. A translation copy under `_translations/<locale>/` is an error, even with `publish: false`. Each locale still gets its own page, navigation, search, archive, and localized internal links. Titles and authored bodies stay the same, source actions point to the single original, and neither the page nor the language menu reports a missing translation.
+
+Shared notes may declare `lang: zh-CN` (a BCP 47-style tag) for the original body. Without it, the body uses `und` and automatic text direction. A configured locale's direction takes precedence; recognized language/script directions are used otherwise, with `auto` for unknown languages. The surrounding interface keeps its selected locale. The `lang` property is metadata and does not appear in the custom-properties block.
+
+Direction recognition is best-effort, not a complete language registry. Four-letter script subtags such as `Latn` can select a direction; variants such as `1901` in `de-1901`, extensions, and private-use subtags do not override it. Outside shared directories (or with multilingual output disabled), `lang` remains validated metadata; the site's locale determines the body language and direction.
+
+All shared copies use the default page as canonical. Non-default copies carry `noindex` and are omitted from the sitemap. Shared pages do not emit translation alternates. This setting does not change ordinary missing-translation behavior.
+
 ## Handle missing translations
 
 When a note has no translation, the build still succeeds and the compiler creates its locale-prefixed URL. A missing translation is not a warning or an error. The page briefly shows a localized missing-translation notice and displays the default-language content. The authored content retains the default language and text direction, including when the surrounding locale is right-to-left.
 
 A fallback page has a canonical link to the default page and a `noindex` directive. It is omitted from the sitemap and from reciprocal `hreflang` groups. The language switcher can still link to it, which keeps the localized navigation complete while making the SEO boundary explicit.
+
+Both single-language and multilingual sitemaps exclude all pages with a `noindex` robots token, including Favorites. Matching ignores case and recognizes comma- or whitespace-separated directives such as `noindex, nofollow`.
 
 ## Switch languages and publish SEO metadata
 

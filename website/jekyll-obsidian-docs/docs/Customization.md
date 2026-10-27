@@ -38,6 +38,7 @@ website:
   content:
     publish_by_default: []
     default_type: doc
+    directory_tags: {}
     directories:
       post: []
       doc: []
@@ -410,7 +411,9 @@ The compiler reserves these note properties for publication behavior and validat
 - `permalink`, `image`, and `cssclasses`
 - `created` and `updated`
 - `content_type`, `date`, `date_basis`, `pinned`, `nav_order`, `nav_exclude`, `tab`, and `tabs`
-- `comments`, `github_markdown`, `related`, and `source_url`
+- `comments`, `github_markdown`, `related`, `source_url`, `source`, `source_title`, `published`, and `lang`
+
+`lang` declares the authored body language of notes in `website.i18n.shared_directories`; see [[Localization#Share one body across languages|shared content]]. It does not select the interface language.
 
 Other top-level properties may contain scalar values or flat scalar lists. Custom property names must be normalized, single-line text without leading or trailing whitespace. Both themes display these fields by default in an expanded property block below tags and the original source link, above the body. Labels use the original field names and fields retain their authored order. Nested lists and mappings are not supported.
 
@@ -450,7 +453,7 @@ related:
 
 `aliases`, `tags`, `author`, `categories`, `cssclasses`, and `tabs` are string arrays; `subtitle` is a string. `publish`, `pinned`, `nav_exclude`, and `comments` use YAML booleans. `tab` is the closed mapping documented above. `github_markdown` accepts only the URL or mapping documented in [[Portfolio|Portfolio]], and only on a Portfolio project wrapper. Dates use ISO 8601. A note title comes from `title`, its first level-one heading, or its filename, in that order.
 
-`updated` is optional and appears in page metadata only when the author supplies it; the compiler never infers an update date from Git. A post's publication time uses `date`, then `created`, then its first Git commit. Atom entries use explicit `updated` when present and otherwise use that publication time for posts. A non-post note without `updated` is omitted from the feed.
+`updated` is optional and appears in page metadata only when the author supplies it; the compiler never infers an update date from Git. A post's publication time uses `date`, then `published`, then `created`, then its first Git commit. Atom entries use explicit `updated` when present and otherwise use that publication time for posts. A non-post note without `updated` is omitted from the feed.
 
 Minimal Home shows `subtitle` below the article title, then uses `description` or a compiler-generated body excerpt for the summary. When `author` is present, the summary footer lists its values. Both `author` and `categories` join `tags` in the Home Topics area. Their entries may be ordinary strings or wiki links to public notes:
 
@@ -472,7 +475,7 @@ Author and category wiki links now use the same UTF-8 percent-encoded fragments 
 
 ## Content and navigation
 
-An explicit `content_type: post | doc | page` wins over directory defaults. Post publication dates use `date`, then `created`, then the first Git commit. A production build rejects a post with no deterministic date. On Minimal Home and Blog, posts with `pinned: true` appear before unpinned posts; both groups retain reverse-chronological order. Pinning affects card presentation only, not Atom feed chronology or the previous and next post sequence.
+An explicit `content_type: post | doc | page` wins over directory defaults. Post publication dates use `date`, then `published`, then `created`, then the first Git commit. A production build rejects a post with no deterministic date. On Minimal Home and Blog, posts with `pinned: true` appear before unpinned posts; both groups retain reverse-chronological order. Pinning affects card presentation only, not Atom feed chronology or the previous and next post sequence.
 
 Docs navigation follows vault directories. `nav_order` sorts sibling documents and `nav_exclude: true` removes only that note link; children remain reachable. `index.md` is optional at every level. When no physical `index.md` exists, a published exact `README.md` becomes the folder index. An existing `index.md` reserves that role even when unpublished, leaving `README.md` as an ordinary note. A published root index always owns `/`, so a different `permalink` on that note is rejected. A folder without a public selected index links to its first visible child after `nav_order`, title, and path sorting.
 
@@ -521,3 +524,30 @@ This option requires a facet named `source` in `website.blog.facets`; its prefix
 Locale manifests accept `hidden_tags`, a unique list of complete tag IDs such as `topics/research`. Aliases are resolved through `tag_aliases`, then deduplicated; locales must describe the same canonical set. Single-language sites can also set `hidden_tags`, `tag_aliases` and `tag_labels` in the vault-root `_locale.yml` without enabling i18n. Both modes reject unknown manifest keys. Hidden tags stay on articles and saved entries but are omitted from default archive, collection, Favorites and export choices. Each button reveals hidden choices only within its own facet: “Show hidden topics” for Topics and “Show hidden tags” for other facets. Sources can offer both this disclosure and “Include tab sources”; the controls operate independently. Selected hidden choices remain visible when collapsed.
 
 Disclosure state uses `include_tabs=1` and repeated `show_hidden` parameters naming the expanded facets, for example `show_hidden=source&show_hidden=topic`. Explicit source links automatically include tab sources. Export inherits each facet's state but its controls are independent of the page. With no explicit source selection, exported headings describe the scope as “All (excluding tab sources)” rather than listing every remaining source. Static HTML always starts with the default scope; JavaScript applies URL selections and reveals selected hidden options after loading. Without JavaScript, entries and counts retain that default and the disclosure buttons remain absent. Customize labels with `include_tab_sources`, `hide_tab_sources`, `show_hidden_topics`, `hide_hidden_topics`, `show_hidden_tags`, `hide_hidden_tags` and `all_without_tab_sources`.
+
+## Source metadata and directory tags
+
+Obsidian Web Clipper notes can keep `published`, `source`, and quoted author wiki links. `published` accepts an ISO-8601 date or date-time; post chronology uses `date`, `published`, `created`, then Git first commit time. `source` accepts the same credential-free HTTP(S) URLs as `source_url`; when both exist, `source_url` supplies the original-source link. These recognized fields do not also appear as custom properties. Unresolved author wiki links display the authored name and produce a warning.
+
+Use directory policy to publish a clipping collection without adding publication fields to every note:
+
+```yaml
+website:
+  content:
+    publish_by_default: [clippings]
+    directories:
+      post: [clippings]
+      doc: [docs]
+    directory_tags:
+      clippings: [source/clippings]
+```
+
+`directory_tags` defaults to `{}`. Each normalized source-relative directory (or `.` for the whole content root) adds its tags to that directory and all descendants. Nested rules accumulate and duplicate tags collapse. It neither publishes a note nor changes the Markdown on disk. `publish: false` still excludes drafts; a section index can keep `content_type: page`.
+
+Tags must be non-blank strings; whitespace-only values are rejected. Non-blank tag names retain their authored spelling, including internal spaces.
+
+Directory rules (`publish_by_default`, `directories`, and `directory_tags`) match source paths case-sensitively on every platform. Use the directory's exact spelling: `clippings` does not select `Clippings`. Case-folded collision checks reject ambiguous paths; they do not expand publication rules.
+
+Locale `tag_aliases` may map a bare tag into a namespace, for example `agents: topics/agents`. Existing namespaced tags can only be replaced within the same namespace; alias chains and cycles are rejected. Shared notes without `lang` retain `und` and automatic text direction.
+
+Optional `source_title` labels the original-source link in article headers, archive cards, favorites and Markdown exports. Surrounding Unicode whitespace and byte-order marks (`U+FEFF`) are trimmed; omitting it or supplying a string empty after trimming shows the URL. This normalization does not rewrite the source Markdown. It is plain text, never HTML, and does not replace the note title. A title without a source URL does not create a link.
