@@ -98,6 +98,14 @@ class DocumentationCoverageTest < Minitest::Test
     end
   end
 
+  def test_documentation_has_no_live_github_markdown_inputs
+    Dir.glob("**/*.[mM][dD]", File::FNM_DOTMATCH, base: DOCS_ROOT).sort.each do |relative_path|
+      parsed = JekyllObsidian::FrontMatter.parse(relative_path, File.binread(File.join(DOCS_ROOT, relative_path)))
+      refute parsed.properties.key?("github_markdown"),
+        "#{relative_path}: keep documentation content local; imported Markdown belongs in manifest-backed test fixtures"
+    end
+  end
+
   def test_every_feature_key_is_in_the_theme_reference
     document = File.read(File.join(DOCS_ROOT, "docs", "Customization.md"))
     canonical_heading = "## Site themes"

@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 480" role="img" aria-labelledby="title desc">
+  <title id="title">Research folio map</title>
+  <desc id="desc">Six note cards connected by violet and teal lines on a pale background.</desc>
+  <rect width="960" height="480" rx="32" fill="#F7F8FC"/>
+  <g fill="none" stroke-linecap="round" stroke-width="4">
+    <path d="M230 238 C330 140 390 130 480 156" stroke="#6E5BD4"/>
+    <path d="M230 238 C340 260 380 310 488 332" stroke="#2B8A8A"/>
+    <path d="M480 156 C600 124 660 158 746 216" stroke="#2B8A8A"/>
+    <path d="M488 332 C610 340 674 286 746 216" stroke="#6E5BD4"/>
+  </g>
+  <g fill="#FFFFFF" stroke="#D9DDED" stroke-width="2">
+    <rect x="86" y="176" width="170" height="124" rx="16"/>
+    <rect x="394" y="90" width="180" height="132" rx="16"/>
+    <rect x="397" y="282" width="182" height="112" rx="16"/>
+    <rect x="694" y="154" width="180" height="124" rx="16"/>
+  </g>
+  <g font-family="system-ui, sans-serif" fill="#202333">
+    <text x="112" y="216" font-size="17" font-weight="700">FIELD NOTE</text>
+    <text x="112" y="250" font-size="25" font-family="serif">Question</text>
+    <text x="112" y="276" font-size="14" fill="#5E6678">source and context</text>
+    <text x="420" y="132" font-size="17" font-weight="700">LINK</text>
+    <text x="420" y="168" font-size="25" font-family="serif">Architecture</text>
+    <text x="420" y="194" font-size="14" fill="#5E6678">a typed relation</text>
+    <text x="423" y="325" font-size="17" font-weight="700">EMBED</text>
+    <text x="423" y="361" font-size="25" font-family="serif">Evidence</text>
+    <text x="720" y="196" font-size="17" font-weight="700">SYNTHESIS</text>
+    <text x="720" y="232" font-size="25" font-family="serif">Published note</text>
+    <text x="720" y="258" font-size="14" fill="#5E6678">one stable route</text>
+  </g>
+  <g fill="#6E5BD4">
+    <circle cx="230" cy="238" r="7"/>
+    <circle cx="480" cy="156" r="7"/>
+    <circle cx="746" cy="216" r="7"/>
+  </g>
+  <g fill="#2B8A8A">
+    <circle cx="488" cy="332" r="7"/>
+  </g>
+</svg>

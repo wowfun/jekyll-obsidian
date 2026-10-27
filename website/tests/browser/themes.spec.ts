@@ -5,6 +5,7 @@ type Theme = "minimal" | "docs";
 
 const themes = ["minimal", "docs"] as const satisfies readonly Theme[];
 const site = (theme: Theme, route = "/") => `/__site__/${theme}${route}`;
+const importedSite = (theme: Theme, route = "/") => `/__site__/${theme}-imported${route}`;
 const localizedDocs = (route = "/") => `/__site__/docs-i18n${route}`;
 const localizedMinimal = (route = "/") => `/__site__/minimal-i18n${route}`;
 
@@ -751,7 +752,7 @@ test("Minimal recent post cards expose one article link across the whole card", 
 });
 
 test("Minimal Portfolio filters one-column projects and keeps repository links independent", async ({ page }) => {
-  await page.goto(site("minimal", "/portfolio/"));
+  await page.goto(importedSite("minimal", "/portfolio/"));
 
   await expect(page.getByRole("heading", { level: 1, name: "Portfolio" })).toHaveCount(0);
   const projectsHeading = page.getByRole("heading", { level: 1, name: "Projects" });
@@ -768,7 +769,7 @@ test("Minimal Portfolio filters one-column projects and keeps repository links i
   await expect(card.locator(".minimal-portfolio-card__summary"))
     .toHaveText("Publish any Markdown folder as a complete site. Nothing to install or build locally.");
   const projectLink = card.getByRole("link", { name: "Jekyll Obsidian", exact: true });
-  await expect(projectLink).toHaveAttribute("href", site("minimal", "/portfolio/jekyll-obsidian/"));
+  await expect(projectLink).toHaveAttribute("href", importedSite("minimal", "/portfolio/jekyll-obsidian/"));
   const repositoryLink = card.getByRole("link", { name: "Open Jekyll Obsidian on GitHub" });
   await expect(repositoryLink).toHaveAttribute("href", "https://github.com/wowfun/jekyll-obsidian");
   await expect(repositoryLink.locator("svg[aria-hidden='true']")).toBeVisible();
@@ -798,10 +799,10 @@ test("Minimal Portfolio filters one-column projects and keeps repository links i
   await expect(filter.getByRole("link", { name: /TypeScript/ })).toHaveAttribute("aria-current", "page");
   await expect(grid.locator("[data-filter-item]:visible")).toHaveCount(1);
   await filter.getByRole("link", { name: /^All\b/ }).click();
-  await expect(page).toHaveURL(site("minimal", "/portfolio/"));
+  await expect(page).toHaveURL(importedSite("minimal", "/portfolio/"));
 
   const image = card.locator(".minimal-portfolio-card__media img");
-  await expect(image).toHaveAttribute("src", /\/__site__\/minimal\/assets\/vault\/assets\/research-folio\.svg$/);
+  await expect(image).toHaveAttribute("src", /\/__site__\/minimal-imported\/assets\/vault\/assets\/research-folio\.svg$/);
   await expect(image).toHaveAttribute("alt", "");
   await expect(image).toHaveAttribute("loading", "lazy");
   await expect(image).toHaveAttribute("decoding", "async");
@@ -837,12 +838,12 @@ test("Minimal Portfolio filters one-column projects and keeps repository links i
   expect(await card.evaluate((element) => getComputedStyle(element).boxShadow)).not.toBe("none");
   const summaryBox = (await card.locator(".minimal-portfolio-card__summary").boundingBox())!;
   await page.mouse.click(summaryBox.x + summaryBox.width / 2, summaryBox.y + summaryBox.height / 2);
-  await expect(page).toHaveURL(site("minimal", "/portfolio/jekyll-obsidian/"));
+  await expect(page).toHaveURL(importedSite("minimal", "/portfolio/jekyll-obsidian/"));
   await page.goBack();
-  await expect(page).toHaveURL(site("minimal", "/portfolio/"));
+  await expect(page).toHaveURL(importedSite("minimal", "/portfolio/"));
   await projectLink.focus();
   await page.keyboard.press("Enter");
-  await expect(page).toHaveURL(site("minimal", "/portfolio/jekyll-obsidian/"));
+  await expect(page).toHaveURL(importedSite("minimal", "/portfolio/jekyll-obsidian/"));
   await expect(page.getByRole("heading", { level: 1, name: "Imported Jekyll Obsidian" })).toBeVisible();
   const detailDescription = page.locator(".note-header .note-description");
   const detailTopics = page.locator(".note-header .minimal-portfolio-card__topics");
@@ -857,7 +858,7 @@ test("Minimal Portfolio filters one-column projects and keeps repository links i
   const detailTopicLinks = detailTopics.getByRole("link");
   await expect(detailTopicLinks).toHaveCount(6);
   await expect(detailTopicLinks.getByText("Ruby", { exact: true }))
-    .toHaveAttribute("href", site("minimal", "/portfolio/?topic=ruby"));
+    .toHaveAttribute("href", importedSite("minimal", "/portfolio/?topic=ruby"));
   const detailTopicHeights = await detailTopicLinks.evaluateAll((links) =>
     links.map((link) => link.getBoundingClientRect().height)
   );
@@ -888,7 +889,7 @@ test("Minimal Portfolio filters one-column projects and keeps repository links i
   );
   await detailTopicLinks.getByText("Ruby", { exact: true }).focus();
   await page.keyboard.press("Enter");
-  await expect(page).toHaveURL(site("minimal", "/portfolio/?topic=ruby"));
+  await expect(page).toHaveURL(importedSite("minimal", "/portfolio/?topic=ruby"));
   await expect(page.getByRole("navigation", { name: "Filter by topic" })
     .getByRole("link", { name: /Ruby/ })).toHaveAttribute("aria-current", "page");
 });
@@ -899,7 +900,7 @@ test("Mermaid HTML labels render and stay inside each theme reading column", asy
   }
 
   for (const theme of themes) {
-    await page.goto(site(theme, "/portfolio/jekyll-obsidian/"));
+    await page.goto(importedSite(theme, "/portfolio/jekyll-obsidian/"));
     const content = page.locator(".note-content");
     const figure = content.locator(":scope > .mermaid-diagram");
     await expect(figure).toBeVisible();
@@ -1472,7 +1473,7 @@ test("Minimal navigation and Blog filters keep primary labels legible in every c
     expect(Number.parseFloat(await contextCount.evaluate((element) => getComputedStyle(element).fontSize)))
       .toBeLessThan(Number.parseFloat(await contextLabel.evaluate((element) => getComputedStyle(element).fontSize)));
 
-    await page.goto(site("minimal", "/portfolio/"));
+    await page.goto(importedSite("minimal", "/portfolio/"));
     const portfolioTopic = page.locator(".minimal-portfolio-card__topics li").first();
     const portfolioSummary = page.locator(".minimal-portfolio-card__summary").first();
     await expect(portfolioTopic).toHaveCSS("color", result.ink);
@@ -1814,7 +1815,7 @@ test("compact Portfolio graphs keep node labels clear of their live status", asy
   if (testInfo.project.name === "mobile-chromium") {
     await page.setViewportSize({ width: 320, height: 900 });
   }
-  await page.goto(site("minimal", "/portfolio/jekyll-obsidian/"));
+  await page.goto(importedSite("minimal", "/portfolio/jekyll-obsidian/"));
 
   let view = page.locator("[data-context-panel] [data-graph-view]");
   if (testInfo.project.name === "mobile-chromium") {
@@ -2261,7 +2262,7 @@ test("localized docs language navigation and fallback metadata remain correct", 
   await expect(related.getByRole("link", { name: "本地化", exact: true }))
     .toHaveAttribute("href", localizedDocs("/zh-CN/docs/Localization/"));
 
-  await page.goto(localizedDocs("/zh-CN/portfolio/jekyll-obsidian/"));
+  await page.goto("/__site__/docs-imported-i18n/zh-CN/portfolio/jekyll-obsidian/");
   await expect(page.getByRole("heading", { level: 1, name: "导入的 Jekyll Obsidian" })).toBeVisible();
   await expect(page.getByRole("link", { name: "查看导入的 Markdown" })).toHaveAttribute(
     "href",
@@ -2354,16 +2355,16 @@ test("Blog details link their explicitly related project", async ({ page }, test
     "/blog/One%20vault%2C%20three%20readings/",
     "/blog/%E4%BB%8E%E7%AC%94%E8%AE%B0%E5%88%B0%E5%8F%91%E5%B8%83/"
   ]) {
-    await page.goto(site("minimal", route));
+    await page.goto(importedSite("minimal", route));
     const project = page
       .getByRole("navigation", { name: "Related articles" })
       .getByRole("link", { name: "Jekyll Obsidian", exact: true });
-    await expect(project).toHaveAttribute("href", site("minimal", "/portfolio/jekyll-obsidian/"));
+    await expect(project).toHaveAttribute("href", importedSite("minimal", "/portfolio/jekyll-obsidian/"));
 
     await project.focus();
     await expect(project).toBeFocused();
     await page.keyboard.press("Enter");
-    await expect(page).toHaveURL(site("minimal", "/portfolio/jekyll-obsidian/"));
+    await expect(page).toHaveURL(importedSite("minimal", "/portfolio/jekyll-obsidian/"));
   }
 });
 

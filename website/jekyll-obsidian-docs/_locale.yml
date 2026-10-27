@@ -2,6 +2,8 @@ name: English
 hreflang: en
 dir: ltr
 messages:
+  portfolio: Showcase
+  projects: Showcase
   archive_requires_js: "The first page is shown. Enable JavaScript to browse all entries."
   archive_module_unavailable: "Archive controls could not be loaded. Reload the page to try again."
   favorites_module_unavailable: "Favorites could not be loaded. Reload the page to try again."

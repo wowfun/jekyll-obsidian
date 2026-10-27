@@ -8,6 +8,8 @@ description: 发布项目页面，并将公开的 GitHub README 作为项目正�
 
 Minimal 可以将内容目录中的一个文件夹变成作品集标签页、集合页和项目网格。是否存在作品集、哪些页面属于作品集，都由编译器判断；模板和浏览器代码不会检查源目录。
 
+本文档站将该标签页和集合命名为英文 **Showcase**、中文 **案例集**，通过 locale 清单中的 `portfolio` 和 `projects` 消息自定义文案；`/portfolio/` 路径和 Portfolio 配置键保持不变。使用 locale 消息需要设置 `website.i18n.enabled: true`，也可以只启用一种语言。
+
 ## 让 Minimal 自动检测作品集
 
 未配置作品集时，Minimal 会检查内容根目录下的 `portfolio` 文件夹。只要其中存在至少一篇已发布且没有设置 `nav_exclude: true` 的 Markdown 项目，作品集就会出现。
