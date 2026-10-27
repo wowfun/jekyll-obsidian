@@ -18,7 +18,7 @@ A host repository needs content, `.github/jekyll-obsidian.yml`, and a Pages work
 
 If your repository already has a `Gemfile` or `Gemfile.lock`, complete [[Integration#Use Bundler|Use Bundler]] first. The Action requires both files and a locked builder version matching its release.
 
-Copy [the configuration example](https://github.com/wowfun/jekyll-obsidian/blob/v0.3.1/examples/jekyll-obsidian.yml) to `.github/jekyll-obsidian.yml` and [the Pages workflow](https://github.com/wowfun/jekyll-obsidian/blob/v0.3.1/examples/pages.yml) to `.github/workflows/pages.yml`.
+Copy [the configuration example](https://github.com/wowfun/jekyll-obsidian/blob/v0.3.2/examples/jekyll-obsidian.yml) to `.github/jekyll-obsidian.yml` and [the Pages workflow](https://github.com/wowfun/jekyll-obsidian/blob/v0.3.2/examples/pages.yml) to `.github/workflows/pages.yml`.
 
 ```yaml
 title: My Site
@@ -51,7 +51,7 @@ For a project with a Gemfile:
 
 ```ruby
 source "https://rubygems.org"
-gem "jekyll-obsidian-site", "0.3.1"
+gem "jekyll-obsidian-site", "0.3.2"
 ```
 
 ```sh
@@ -68,7 +68,13 @@ An existing Jekyll `_config.yml` and its plugins are not loaded by this tool.
 
 ## Update
 
-Change `uses: wowfun/jekyll-obsidian@v0.3.1` in the workflow to the desired release tag. The Action installs that release's exact gem version.
+**Upgrading to 0.3.2:** `source`, `published`, and `lang` now have defined frontmatter types instead of accepting arbitrary custom-property values. `source` must be an absolute HTTP(S) URL without credentials; rename free-text source descriptions to another property, such as `source_name`. `published` is a publication date; use `publish: true` or `publish: false` to control visibility. `lang` must be a BCP 47-style language tag, such as `en` or `zh-CN`. Invalid legacy values now stop the build with `invalid_property`; upgrades do not rewrite your notes. These changes take effect in 0.3.2.
+
+`source_title` is also a defined string property. Quote numeric labels (`source_title: "123"`) and replace array or mapping values with the intended plain-text label; otherwise the build reports `invalid_property`.
+
+Move Markdown image dimensions out of the destination: change `![Diagram](image.png|640x360)` to `![Diagram|640x360](image.png)`. A pipe in a Markdown destination is now part of the filename, so the old form can fail with `missing_embed` or select a literal matching filename. Wiki embeds such as `![[image.png|640x360]]` retain their size syntax. No compatibility fallback or automatic source rewrite is applied.
+
+Change `uses: wowfun/jekyll-obsidian@v0.3.2` in the workflow to the desired release tag. The Action installs that release's exact gem version.
 
 For Bundler, change the `jekyll-obsidian-site` version constraint in `Gemfile` to the same release, run `bundle update jekyll-obsidian-site`, and commit `Gemfile`, `Gemfile.lock`, and the workflow together. Running `bundle update` alone cannot upgrade an exact Gemfile pin. For a standalone local installation, use `gem update jekyll-obsidian-site`. Package updates do not rewrite host content or configuration.
 

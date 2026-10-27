@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 const assetsRoot = path.join(projectRoot, ".jekyll-obsidian-cache", "assets");
 const siteRoots = Object.fromEntries(
-  ["minimal-navigation", "docs-navigation", "minimal", "docs", "docs-i18n", "minimal-i18n", "minimal-properties", "docs-properties", "minimal-media", "docs-media", "minimal-archive", "minimal-export", "minimal-governance", "minimal-back-to-top", "docs-back-to-top"].map((theme) => [
+  ["minimal-navigation", "docs-navigation", "minimal", "docs", "docs-i18n", "minimal-i18n", "minimal-imported", "docs-imported", "docs-imported-i18n", "minimal-properties", "docs-properties", "minimal-media", "docs-media", "minimal-archive", "minimal-export", "minimal-governance", "minimal-back-to-top", "docs-back-to-top"].map((theme) => [
     theme,
     path.join(projectRoot, "..", ".jekyll-obsidian-cache", `site-browser-${theme}`)
   ])

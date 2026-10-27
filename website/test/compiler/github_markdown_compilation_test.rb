@@ -7,6 +7,22 @@ require "test_helper"
 class GitHubMarkdownCompilationTest < Minitest::Test
   COMMIT = "0123456789abcdef0123456789abcdef01234567"
 
+  def test_reading_time_uses_imported_body_instead_of_wrapper_metadata
+    @transport = transport_for(
+      { ["acme/widget", "main"] => COMMIT },
+      { ["acme/widget", COMMIT, "README.md"] => "word " * 401 }
+    )
+    result = compile_site(note("portfolio/widget.md", <<~MARKDOWN))
+      ---
+      publish: true
+      description: #{'metadata ' * 1000}
+      github_markdown: https://github.com/acme/widget/blob/main/README.md
+      ---
+    MARKDOWN
+    assert result.success?, result.diagnostics.map(&:message).join("\n")
+    assert_equal 3, page(result, "/portfolio/widget/").data.dig("website", "reading_time_minutes")
+  end
+
   def setup
     @temporary_root = Dir.mktmpdir("github-markdown-compilation")
     @transport = JekyllObsidian::GitHubMarkdown::MemoryTransport.new(commits: {}, files: {})

@@ -30,6 +30,7 @@ class DocumentationCoverageTest < Minitest::Test
     "i18n" => ["Localization.md", "Enable localization", "`website.i18n`"],
     "comments" => ["Comments.md", "Configure the site", "`website.comments`"],
     "contacts" => ["Customization.md", "Site identity", "`website.contacts`"],
+    "footer" => ["Customization.md", "Site identity", "`website.footer.links`"],
     "navigation" => ["Customization.md", "Minimal navigation", "`website.navigation`"],
     "analytics" => ["Analytics.md", "Configuration and security", "`website.analytics`"],
     "search" => ["Customization.md", "Output limits", "`website.search.mode`"],
@@ -83,6 +84,25 @@ class DocumentationCoverageTest < Minitest::Test
 
     JekyllObsidian::FrontMatter::SUPPORTED.each do |property|
       assert_includes document, "`#{property}`", "missing page property #{property}"
+    end
+  end
+
+  def test_localization_guides_list_every_structural_property
+    ["docs/Localization.md", "_translations/zh-CN/docs/Localization.md"].each do |relative_path|
+      document = File.read(File.join(DOCS_ROOT, relative_path), encoding: "UTF-8")
+      paragraph = document.split(/\r?\n\s*\r?\n/).find { |text| text.start_with?("Structural properties", "结构属性") }
+      refute_nil paragraph, "missing structural-property reference in #{relative_path}"
+      documented = paragraph.scan(/`([^`]+)`/).flatten
+      missing = JekyllObsidian::LocalizedCompiler::STRUCTURAL_PROPERTIES - documented
+      assert_empty missing, "#{relative_path} is missing structural properties: #{missing.join(', ')}"
+    end
+  end
+
+  def test_documentation_has_no_live_github_markdown_inputs
+    Dir.glob("**/*.[mM][dD]", File::FNM_DOTMATCH, base: DOCS_ROOT).sort.each do |relative_path|
+      parsed = JekyllObsidian::FrontMatter.parse(relative_path, File.binread(File.join(DOCS_ROOT, relative_path)))
+      refute parsed.properties.key?("github_markdown"),
+        "#{relative_path}: keep documentation content local; imported Markdown belongs in manifest-backed test fixtures"
     end
   end
 

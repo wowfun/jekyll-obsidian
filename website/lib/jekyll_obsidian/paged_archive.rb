@@ -161,7 +161,7 @@ module JekyllObsidian
 
     def record(card, config)
       date = card["published_at"]
-      card.slice("id", "title", "url", "markdown_url", "summary", "source_url", "date_basis").merge(
+      card.slice("id", "title", "url", "markdown_url", "summary", "source_url", "source_title", "date_basis").merge(
         "published_at" => date, "facets" => facet_values(card["tags"], config)
       ).merge(calendar_fields(date))
     end

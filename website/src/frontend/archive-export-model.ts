@@ -33,7 +33,7 @@ export function exportState(data: ArchiveManifest, filters: URLSearchParams, sta
   state.query.range = ranges.length ? [Math.min(...ranges.map(range => range[0])), Math.max(...ranges.map(range => range[1]))] : [0, 0];
   return state;
 }
-function escape(value: string): string { return value.replace(/[\r\n]+/g, " ").replace(/[\\`*_[\]{}<>#!|~]/g, "\\$&"); }
+function escape(value: string): string { return value.replace(/[\t\r\n\u2028\u2029]+/g, " ").replace(/[\\`*_[\]{}<>#!|~]/g, "\\$&"); }
 export interface ExportLabels { dates: string; source: string; topic: string; all: string; allWithoutTabs: string; entries: string; date: string; original: string; article: string }
 export interface ExportSnapshot { site: string; locale: string; start: string; end: string; filters: URLSearchParams; cards: ArchiveCard[] }
 export function exportMarkdownParts(snapshot: ExportSnapshot, data: ArchiveManifest, bodies: Map<string, string>, labels: ExportLabels): string[] {
@@ -53,7 +53,7 @@ export function exportMarkdownParts(snapshot: ExportSnapshot, data: ArchiveManif
     const body = bodies.get(card.id); if (body === undefined) throw new Error("Incomplete export");
     const metadata = [`${labels.date}: ${card.display_date || ""}`,
       ...Object.entries(card.facets).map(([name, ids]) => `${facetName(name)}: ${facetValues(name, ids)}`),
-      ...(card.source_url ? [`${labels.original}: ${link(card.source_url)}`] : []), `${labels.article}: ${link(card.url)}`].join("  \n");
+      ...(card.source_url ? [`${labels.original}: ${card.source_title ? `[${escape(card.source_title)}](${link(card.source_url)})` : link(card.source_url)}`] : []), `${labels.article}: ${link(card.url)}`].join("  \n");
     parts.push("\n\n---\n\n", metadata, "\n\n", body.replace(/\r\n?/g, "\n").trimEnd());
   }
   parts.push("\n"); return parts;

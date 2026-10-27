@@ -10,38 +10,10 @@ require "uri"
 
 module JekyllObsidian
   class VaultCompiler
-    COMMONMARK_OPTIONS = {
-      parse: {
-        smart: false,
-        relaxed_tasklist_matching: true,
-        relaxed_autolinks: true,
-        sourcepos_chars: true
-      },
-      render: {
-        unsafe: true,
-        hardbreaks: true,
-        tasklist_classes: true,
-        escaped_char_spans: true,
-        sourcepos: true
-      },
-      extension: {
-        strikethrough: true,
-        table: true,
-        autolink: true,
-        tasklist: true,
-        footnotes: true,
-        math_dollars: true,
-        math_code: true,
-        math_latex: true,
-        wikilinks_title_after_pipe: true,
-        highlight: true,
-        cjk_friendly_emphasis: true
-      }
-    }.freeze
     COMMONMARK_PLUGINS = { syntax_highlighter: { theme: "" } }.freeze
     REMOTE_COMMONMARK_OPTIONS = {
-      parse: COMMONMARK_OPTIONS.fetch(:parse),
-      render: COMMONMARK_OPTIONS.fetch(:render).merge(unsafe: false),
+      parse: MarkdownOptions::LOCAL.fetch(:parse),
+      render: MarkdownOptions::LOCAL.fetch(:render).merge(unsafe: false),
       extension: {
         strikethrough: true,
         table: true,
@@ -55,7 +27,7 @@ module JekyllObsidian
     NOTE_EXTENSION = ".md"
     TRANSLATIONS_DIRECTORY = "_translations/"
     THEMES = BuiltInThemes::IDS
-    FEATURE_KEYS = %w[search tags feed graph relations previews outline favorites].freeze
+    FEATURE_KEYS = %w[search tags feed graph relations previews outline favorites reading_time].freeze
     COMMENT_KEYS = %w[enabled repository repository_id category category_id].freeze
     ANALYTICS_PROVIDERS = %w[cloudflare google].freeze
     CONTACT_KEYS = %w[label url].freeze
@@ -94,11 +66,11 @@ module JekyllObsidian
     THEME_FEATURE_DEFAULTS = {
       "minimal" => {
         "search" => true, "tags" => true, "feed" => true,
-        "graph" => true, "relations" => true, "previews" => true, "outline" => true, "favorites" => false
+        "graph" => true, "relations" => true, "previews" => true, "outline" => true, "favorites" => false, "reading_time" => true
       },
       "docs" => {
         "search" => true, "tags" => false, "feed" => false,
-        "graph" => true, "relations" => true, "previews" => true, "outline" => true, "favorites" => false
+        "graph" => true, "relations" => true, "previews" => true, "outline" => true, "favorites" => false, "reading_time" => true
       },
     }.transform_values(&:freeze).freeze
     MutableNote = Struct.new(
@@ -175,7 +147,7 @@ module JekyllObsidian
     ExpansionLimitExceeded = Class.new(StandardError)
     private_constant :ExpansionLimitExceeded
 
-    def initialize(request, html_publication: nil, include_html_projection: true, tag_policy_resolved: false, frontmatter_cache: nil)
+    def initialize(request, html_publication: nil, include_html_projection: true, tag_policy_resolved: false, frontmatter_cache: nil, footer_links: nil, footer_locale: nil)
       @request = request
       @owns_frontmatter_cache = frontmatter_cache.nil?
       @frontmatter_cache = frontmatter_cache || FrontMatter::Cache.new
@@ -204,6 +176,8 @@ module JekyllObsidian
       @comments = disabled_comments_config
       @analytics = disabled_analytics_config
       @contacts = []
+      @footer_links = footer_links
+      @footer_locale = footer_locale || @config.lang
       @navigation_config = default_navigation_config
     end
 
@@ -296,7 +270,7 @@ module JekyllObsidian
         content: @content,
         comments: @comments,
         analytics: @analytics,
-        contacts: @contacts,
+        footer: { "contacts" => @contacts, "links" => FooterLinks.present(@footer_links, @footer_locale) },
         navigation: navigation,
         home: @home_config,
         blog: @blog_config,
@@ -371,6 +345,7 @@ module JekyllObsidian
       resolve_comments_config
       resolve_analytics_config
       resolve_contacts_config
+      resolve_footer_config
       resolve_navigation_config
       resolve_output_config
       @url_builder = UrlBuilder.new(origin: @config.url, baseurl: @config.baseurl)
@@ -615,6 +590,15 @@ module JekyllObsidian
 
     def disabled_analytics_config
       AnalyticsConfig.new(provider: "", identifier: "", load: false)
+    end
+
+    def resolve_footer_config
+      return unless @footer_links.nil?
+
+      @footer_links = DeepFreeze.call(FooterLinks.resolve(@config.footer))
+    rescue FooterLinks::Invalid => exception
+      @footer_links = []
+      error("invalid_footer", exception.message)
     end
 
     def resolve_contacts_config
@@ -867,10 +851,13 @@ module JekyllObsidian
               path
             )
           end
+          properties = parsed.properties
+          tags = @content_policy.tags_for(path, properties["tags"])
+          properties = properties.merge("tags" => tags) unless tags == Array(properties["tags"])
           @notes[path] = MutableNote.new(
             id: path,
             entry: entry,
-            properties: parsed.properties,
+            properties: properties,
             frontmatter_links: parsed.property_links,
             body: external_document ? external_document.markdown : parsed.body,
             occurrences: [],
@@ -933,7 +920,7 @@ module JekyllObsidian
         if note.content_type == "post" && note.published_at.nil?
           error_or_warning(
             "missing_post_date",
-            "published posts require date, created, or Git first commit time",
+            "published posts require date, published, created, or Git first commit time",
             note.id,
             nil,
             fatal: production?
@@ -957,7 +944,7 @@ module JekyllObsidian
     def published_at(note)
       return nil unless note.content_type == "post"
 
-      note.properties["date"] || note.properties["created"] || note.entry.first_committed_at
+      note.properties["date"] || note.properties["published"] || note.properties["created"] || note.entry.first_committed_at
     end
 
     def effective_content_type(note)
@@ -999,7 +986,7 @@ module JekyllObsidian
         merged_tags = (Array(note.properties["tags"]) + prepared.tags).uniq.sort
         note.properties = note.properties.merge("tags" => merged_tags)
         markdown = (note.external_document ? note.body : prepared.markdown).dup.force_encoding(Encoding::UTF_8)
-        options = note.external_document ? REMOTE_COMMONMARK_OPTIONS : COMMONMARK_OPTIONS
+        options = note.external_document ? REMOTE_COMMONMARK_OPTIONS : MarkdownOptions::LOCAL
         note.document = Commonmarker.parse(markdown, options: options)
         if note.external_document
           rewrite_github_markdown_urls(note)
@@ -1179,19 +1166,22 @@ module JekyllObsidian
           end
 
           display = plain_node_text(node)
-          occurrence_target = raw_url
+          options = {}
           if node.type == :image && (dimension = display.match(/\A(.*)\|(\d+(?:x\d+)?)\z/m))
             display = dimension[1]
-            occurrence_target = "#{raw_url}|#{dimension[2]}"
+            width, height = dimension[2].split("x", 2)
+            options["width"] = width.to_i
+            options["height"] = height.to_i if height
           end
 
           occurrence = Occurrence.new(
             index: note.occurrences.length,
             source_id: note.id,
-            raw_target: occurrence_target,
+            raw_target: raw_url,
             display: display,
             kind: node.type == :image ? :embed : :link,
             syntax: node.type == :image ? :markdown_image : :markdown_link,
+            options: options,
             source_span: source_span(node.source_position)
           )
           note.occurrences << occurrence
@@ -1328,14 +1318,17 @@ module JekyllObsidian
 
     def resolve_occurrence(note, occurrence)
       begin
-        target_text, fragment, options = split_target(occurrence.raw_target, occurrence.kind)
+        target_text, fragment, options = split_target(
+          occurrence.raw_target, occurrence.kind,
+          parse_size: !%i[markdown_image markdown_link].include?(occurrence.syntax)
+        )
       rescue ExternalMedia::Invalid => exception
         occurrence.unresolved = true
         error("invalid_pdf_options", exception.message, note.id, occurrence.source_span)
         return
       end
       occurrence.fragment = fragment
-      occurrence.options = options
+      occurrence.options = (occurrence.options || {}).merge(options)
 
       if target_text.empty?
         if occurrence.property == "related"
@@ -1592,7 +1585,7 @@ module JekyllObsidian
 
     def render_authored_documents
       @notes.values.sort_by(&:id).each do |note|
-        options = note.external_document ? REMOTE_COMMONMARK_OPTIONS : COMMONMARK_OPTIONS
+        options = note.external_document ? REMOTE_COMMONMARK_OPTIONS : MarkdownOptions::LOCAL
         html = note.document.to_html(options: options, plugins: { syntax_highlighter: nil })
         fragment = Nokogiri::HTML5.fragment(html)
         bind_occurrence_nodes(note, fragment)
@@ -1931,7 +1924,7 @@ module JekyllObsidian
 
     def annotate_code_blocks(note, fragment)
       blocks = fragment.css("pre[data-sourcepos]").group_by { |node| node["data-sourcepos"] }
-      options = note.external_document ? REMOTE_COMMONMARK_OPTIONS : COMMONMARK_OPTIONS
+      options = note.external_document ? REMOTE_COMMONMARK_OPTIONS : MarkdownOptions::LOCAL
       note.document.walk.each do |source|
         next unless source.type == :code_block
 
@@ -1981,9 +1974,11 @@ module JekyllObsidian
           markdown_source: PublishedMarkdown.content(
             title: note.title,
             body: note.body,
-            has_h1: note.has_h1
+            has_h1: note.has_h1,
+            image_urls: published_markdown_image_urls(note)
           ),
           authored_text: note.authored_text,
+          reading_time_minutes: ReadingTime.minutes(fragment),
           preview: note.preview,
           outline: note.outline.reject { |heading| heading.fetch("id") == presentation["hidden_title_id"] },
           updated: note.updated,
@@ -1998,6 +1993,7 @@ module JekyllObsidian
           feature_flags: note.feature_flags,
           content_security: content_security_needs(fragment),
           image_url: published_image_url(note),
+          source_url: note.properties["source_url"] || note.properties["source"],
           source_links: published_source_links(note),
           topics: published_topics(note),
           related: published_related_cards(note),
@@ -2454,7 +2450,7 @@ module JekyllObsidian
     end
 
     def sitemap_xml(pages)
-      urls = pages.reject { |page| %w[404 redirect].include?(page.data.dig("website", "kind")) }
+      urls = pages.reject { |page| %w[404 redirect].include?(page.data.dig("website", "kind")) || Robots.noindex?(page.data.dig("website", "robots")) }
         .map(&:route).sort
       body = urls.map { |route| "  <url><loc>#{h(@url_builder.absolute_url(route))}</loc></url>" }.join("\n")
       %(<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n#{body}\n</urlset>\n)
@@ -2644,9 +2640,11 @@ module JekyllObsidian
       [nil, matches.length > 1]
     end
 
-    def split_target(raw, kind)
+    def split_target(raw, kind, parse_size: true)
       text = raw.to_s.strip
-      target_and_fragment, size_option = text.split("|", 2)
+      # A pipe inside a Markdown destination is part of the URL. Its image
+      # dimensions come from alt text, separately from wiki embed options.
+      target_and_fragment, size_option = parse_size ? text.split("|", 2) : [text, nil]
       target, fragment = target_and_fragment.split("#", 2)
       options = {}
       if size_option&.match?(/\A\d+(?:x\d+)?\z/)
@@ -2719,6 +2717,16 @@ module JekyllObsidian
 
     def token_url(note, index)
       "https://obsidian.invalid/ref/#{note.scanner.token_namespace}/#{index}"
+    end
+
+    def published_markdown_image_urls(note)
+      note.occurrences.each_with_object({}) do |occurrence, urls|
+        next unless occurrence.syntax == :markdown_image && %i[attachment projected_file].include?(occurrence.resolved_type)
+        next unless MediaPolicy.kind(occurrence.target_path) == :image
+
+        route = @html_routes_by_source.fetch(occurrence.target_path) { @url_builder.attachment_route(occurrence.target_path) }
+        urls[occurrence.raw_target] = @url_builder.absolute_url(route) || @url_builder.href(route)
+      end
     end
 
     def source_span(position)

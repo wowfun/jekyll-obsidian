@@ -21,6 +21,7 @@ export function favoriteCard(value: unknown): ArchiveCard {
   if (typeof card.id !== "string" || !card.id || typeof card.title !== "string" || typeof card.url !== "string" || typeof card.markdown_url !== "string" || !card.facets || typeof card.facets !== "object" || Array.isArray(card.facets)) throw new Error("Invalid favorite");
   archiveUrl(card.url); archiveUrl(card.markdown_url);
   if (card.source_url) archiveUrl(card.source_url, true);
+  if (card.source_title != null && typeof card.source_title !== "string") throw new Error("Invalid favorite source title");
   for (const ids of Object.values(card.facets)) if (!Array.isArray(ids) || !ids.every(id => typeof id === "string")) throw new Error("Invalid favorite facets");
   if (card.display_date !== null && (typeof card.display_date !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(card.display_date))) throw new Error("Invalid favorite date");
   if (card.display_date !== null) {
@@ -33,7 +34,7 @@ export function favoriteCard(value: unknown): ArchiveCard {
   return { id: card.id, title: card.title, url: card.url, markdown_url: card.markdown_url,
     published_at: card.published_at, display_date: card.display_date, year: card.display_date?.slice(0, 4) || "Undated",
     month: card.display_date?.slice(0, 7) || null, facets: structuredClone(card.facets), summary: card.summary ?? null,
-    source_url: card.source_url ?? null, date_basis: card.date_basis ?? null, favorite_labels: { ...card.favorite_labels } };
+    source_url: card.source_url ?? null, source_title: card.source_title?.trim() || null, date_basis: card.date_basis ?? null, favorite_labels: { ...card.favorite_labels } };
 }
 export function readFavoriteCollection(): FavoriteCollection {
   const key = favoritesKey(), raw = localStorage.getItem(key);
@@ -180,7 +181,7 @@ export async function toggleFavorite(card: ArchiveCard, locale = document.docume
 export function sameFavoriteCard(a: ArchiveCard | undefined, b: ArchiveCard | undefined): boolean {
   if (a === b) return true;
   if (!a || !b) return false;
-  const fields = ["id", "title", "url", "markdown_url", "published_at", "display_date", "year", "month", "summary", "source_url", "date_basis"] as const;
+  const fields = ["id", "title", "url", "markdown_url", "published_at", "display_date", "year", "month", "summary", "source_url", "source_title", "date_basis"] as const;
   if (fields.some(key => a[key] !== b[key])) return false;
   const names = Object.keys(a.facets);
   if (names.length !== Object.keys(b.facets).length || names.some(name => !Object.hasOwn(b.facets, name) || a.facets[name]!.length !== b.facets[name]!.length || a.facets[name]!.some((id, i) => id !== b.facets[name]![i]))) return false;

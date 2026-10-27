@@ -5,6 +5,12 @@ lang: en
 website:
   source: website/jekyll-obsidian-docs
   theme: minimal
+  footer:
+    links:
+      - label: Example Garden
+        url: https://example.test/garden/
+        locale_urls:
+          zh-CN: https://example.test/garden/zh-CN/
   html:
     slides/jekyll-obsidian: /slides/jekyll-obsidian/
   contacts:

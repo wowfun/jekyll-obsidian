@@ -12,7 +12,7 @@ description: 通过 RubyGems 或 GitHub Actions 安装发布工具，内容和�
 
 如果仓库已有 `Gemfile` 或 `Gemfile.lock`，请先完成 [[Integration#使用 Bundler|Bundler 配置]]。Action 要求两份文件齐全，且锁定的构建工具版本与其发行版本一致。
 
-将[配置示例](https://github.com/wowfun/jekyll-obsidian/blob/v0.3.1/examples/jekyll-obsidian.yml)复制到 `.github/jekyll-obsidian.yml`，将 [Pages 工作流](https://github.com/wowfun/jekyll-obsidian/blob/v0.3.1/examples/pages.yml)复制到 `.github/workflows/pages.yml`。
+将[配置示例](https://github.com/wowfun/jekyll-obsidian/blob/v0.3.2/examples/jekyll-obsidian.yml)复制到 `.github/jekyll-obsidian.yml`，将 [Pages 工作流](https://github.com/wowfun/jekyll-obsidian/blob/v0.3.2/examples/pages.yml)复制到 `.github/workflows/pages.yml`。
 
 ```yaml
 title: My Site
@@ -45,7 +45,7 @@ jekyll-obsidian dev
 
 ```ruby
 source "https://rubygems.org"
-gem "jekyll-obsidian-site", "0.3.1"
+gem "jekyll-obsidian-site", "0.3.2"
 ```
 
 ```sh
@@ -62,7 +62,13 @@ bundle exec jekyll-obsidian dev
 
 ## 更新
 
-将工作流中的 `uses: wowfun/jekyll-obsidian@v0.3.1` 改为需要的发行 tag，Action 会安装该版本对应的 gem。
+**升级到 0.3.2：**`source`、`published` 和 `lang` 现在有明确的 frontmatter 类型，不再接受任意自定义属性值。`source` 必须是不含用户名、密码的完整 HTTP(S) URL；文本形式的来源说明请改用其他属性，如 `source_name`。`published` 表示发布日期；公开状态使用 `publish: true` 或 `publish: false`。`lang` 必须是 BCP 47 风格的语言标识，如 `en` 或 `zh-CN`。旧值不符合类型时，构建会以 `invalid_property` 报错；升级不会自动改写笔记。这些变化从 0.3.2 开始生效。
+
+`source_title` 也已成为明确的字符串属性。数字标签需要加引号（`source_title: "123"`），数组或映射应改为所需的纯文本标签，否则构建会返回 `invalid_property`。
+
+Markdown 图片尺寸应从目标地址移到替代文本：将 `![示意图](image.png|640x360)` 改为 `![示意图|640x360](image.png)`。Markdown 目标中的管道符现在属于文件名，旧写法可能触发 `missing_embed`，或指向字面匹配的文件名。Wiki 嵌入 `![[image.png|640x360]]` 的尺寸语法保持不变。不会提供兼容回退或自动改写原稿。
+
+将工作流中的 `uses: wowfun/jekyll-obsidian@v0.3.2` 改为需要的发行 tag，Action 会安装该版本对应的 gem。
 
 使用 Bundler 时，将 `Gemfile` 中 `jekyll-obsidian-site` 的版本约束改为相同发行版本，运行 `bundle update jekyll-obsidian-site`，然后将 `Gemfile`、`Gemfile.lock` 和工作流一起提交。单独运行 `bundle update` 无法升级 Gemfile 中固定的版本。本地独立安装可运行 `gem update jekyll-obsidian-site`。包更新不会改写宿主内容和配置。
 

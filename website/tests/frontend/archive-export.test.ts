@@ -71,4 +71,21 @@ it('preserves full Markdown and metadata in stable order, requiring every body',
   expect(exportFilename(snapshot)).toBe('feedgarden-zh-CN-2025-12-28_2026-01-03.md');
   expect(() => exportMarkdownParts(snapshot, data, new Map([['a', body]]), labels)).toThrow('Incomplete export');
   expect(exportMarkdownParts({ ...snapshot, site: '~~Garden~~' }, data, new Map([['a', body], ['b', body]]), labels)[0]).toContain('\\~\\~Garden\\~\\~');
+  cards[0]!.source_title = 'Original [guide] <title>\ncontinued';
+  const titled = exportMarkdownParts(snapshot, data, new Map([['a', body], ['b', body]]), labels).join('');
+  expect(titled).toContain('原文: [Original \\[guide\\] \\<title\\> continued](<https://source.test/a>)');
+  expect(titled).toContain('原文: <https://source.test/b>');
+  for (const separator of ['\t', '\u2028', '\u2029']) {
+    cards[0]!.source_title = `Original${separator}title`;
+    const exported = exportMarkdownParts(snapshot, data, new Map([['a', body], ['b', body]]), labels).join('');
+    expect(exported).toContain('原文: [Original title](<https://source.test/a>)');
+    expect(exported).toContain(body.trimEnd());
+  }
+  // The compiler and favorite-storage boundary normalize whitespace titles.
+  cards[0]!.source_title = '';
+  cards[1]!.source_title = null;
+  const untitled = exportMarkdownParts(snapshot, data, new Map([['a', body], ['b', body]]), labels).join('');
+  expect(untitled).toContain('原文: <https://source.test/a>');
+  expect(untitled).toContain('原文: <https://source.test/b>');
+  expect(untitled).not.toContain('原文: [');
 });

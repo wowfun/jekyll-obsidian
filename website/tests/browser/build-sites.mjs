@@ -14,18 +14,18 @@ const environment = {
   JEKYLL_OBSIDIAN_GITHUB_MARKDOWN_MANIFEST_IN: ".jekyll-obsidian-cache/github-markdown-browser.json",
 };
 
-function build(host, theme, name, config) {
-  const code = `require "jekyll_obsidian/runtime"; runtime = JekyllObsidian::Runtime.new(root: ARGV[0], config_path: ARGV[1], assets_root: ARGV[2], destination_name: ARGV[3]); runtime.build(theme: ARGV[4], url: "http://127.0.0.1:4173", baseurl: ARGV[5], quiet: true)`;
+function build(host, theme, name, config, { url = "http://127.0.0.1:4173", baseurl = `/__site__/${name}` } = {}) {
+  const code = `require "jekyll_obsidian/runtime"; runtime = JekyllObsidian::Runtime.new(root: ARGV[0], config_path: ARGV[1], assets_root: ARGV[2], destination_name: ARGV[3]); runtime.build(theme: ARGV[4], url: ARGV[6], baseurl: ARGV[5], quiet: true)`;
   const result = spawnSync("ruby", ["-S", "bundle", "exec", "ruby", "-e", code, host, config,
-    path.join(projectRoot, ".jekyll-obsidian-cache/assets"), `site-browser-${name}`, theme, `/__site__/${name}`], {
+    path.join(projectRoot, ".jekyll-obsidian-cache/assets"), `site-browser-${name}`, theme, baseurl, url], {
     cwd: projectRoot, env: environment, stdio: "inherit",
   });
   if (result.error) throw result.error;
   if (result.status !== 0) throw new Error(`browser fixture build exited with ${result.status ?? result.signal}`);
 }
 
-async function buildFixtureSites(host, suffix, config) {
-  for (const theme of ["minimal", "docs"]) {
+async function buildFixtureSites(host, suffix, config, themes = ["minimal", "docs"]) {
+  for (const theme of themes) {
     const name = `${theme}-${suffix}`;
     build(host, theme, name, config);
     const destination = path.join(workspaceRoot, `.jekyll-obsidian-cache/site-browser-${name}`);
@@ -35,11 +35,14 @@ async function buildFixtureSites(host, suffix, config) {
 }
 
 await mkdir(path.join(workspaceRoot, ".jekyll-obsidian-cache"), { recursive: true });
-await copyFile(path.join(projectRoot, "tests/browser/fixtures/github-markdown-default.json"),
-  path.join(workspaceRoot, ".jekyll-obsidian-cache/github-markdown-browser.json"));
+await writeFile(path.join(workspaceRoot, ".jekyll-obsidian-cache/github-markdown-browser.json"),
+  JSON.stringify({ version: 1, documents: [] }));
 for (const theme of ["minimal", "docs"]) {
   build(workspaceRoot, theme, theme, path.join(projectRoot, "scripts/example-config.yml"));
 }
+build(workspaceRoot, "minimal", "showcase", path.join(workspaceRoot, ".github/jekyll-obsidian.yml"), {
+  url: "https://sinputer.top", baseurl: "/jekyll-obsidian"
+});
 
 const fixtureHost = await mkdtemp(path.join(tmpdir(), "jekyll-obsidian-browser-"));
 try {
@@ -48,11 +51,30 @@ try {
   await mkdir(path.join(fixtureHost, ".github"));
   await copyFile(path.join(projectRoot, "tests/browser/fixtures/i18n-host.yml"), path.join(fixtureHost, ".github/jekyll-obsidian.yml"));
   await mkdir(path.join(fixtureHost, ".jekyll-obsidian-cache"));
-  await copyFile(path.join(projectRoot, "tests/browser/fixtures/github-markdown-i18n.json"),
-    path.join(fixtureHost, ".jekyll-obsidian-cache/github-markdown-browser.json"));
+  await writeFile(path.join(fixtureHost, ".jekyll-obsidian-cache/github-markdown-browser.json"),
+    JSON.stringify({ version: 1, documents: [] }));
   await buildFixtureSites(fixtureHost, "i18n", path.join(fixtureHost, ".github/jekyll-obsidian.yml"));
 } finally {
   await rm(fixtureHost, { force: true, recursive: true });
+}
+
+// Imported README coverage lives outside the published documentation content.
+const importedHost = await mkdtemp(path.join(tmpdir(), "jekyll-obsidian-imported-"));
+try {
+  await cp(path.join(projectRoot, "tests/browser/fixtures/imported-project"), importedHost, { recursive: true });
+  await mkdir(path.join(importedHost, ".jekyll-obsidian-cache"));
+  await copyFile(path.join(importedHost, "github-markdown-default.json"),
+    path.join(importedHost, ".jekyll-obsidian-cache/github-markdown-browser.json"));
+  await buildFixtureSites(importedHost, "imported", path.join(importedHost, "host.yml"));
+  await copyFile(path.join(projectRoot, "jekyll-obsidian-docs/_locale.yml"),
+    path.join(importedHost, "vault/_locale.yml"));
+  await copyFile(path.join(projectRoot, "jekyll-obsidian-docs/_translations/zh-CN/_locale.yml"),
+    path.join(importedHost, "vault/_translations/zh-CN/_locale.yml"));
+  await copyFile(path.join(importedHost, "github-markdown-i18n.json"),
+    path.join(importedHost, ".jekyll-obsidian-cache/github-markdown-browser.json"));
+  await buildFixtureSites(importedHost, "imported-i18n", path.join(importedHost, "i18n-host.yml"), ["docs"]);
+} finally {
+  await rm(importedHost, { force: true, recursive: true });
 }
 
 const scrollHost = await mkdtemp(path.join(tmpdir(), "jekyll-obsidian-back-to-top-"));
@@ -61,7 +83,7 @@ try {
   await writeFile(path.join(scrollHost, ".jekyll-obsidian-cache/github-markdown-browser.json"),
     JSON.stringify({ version: 1, documents: [] }));
   await writeFile(path.join(scrollHost, "host.yml"),
-    "title: Back to top fixture\nwebsite:\n  source: vault\n  repository: example/scroll\n  i18n:\n    enabled: true\n    locales: [en, zh-CN]\n");
+    "title: Back to top fixture\nwebsite:\n  source: vault\n  repository: example/scroll\n  i18n:\n    enabled: true\n    locales: [en, zh-CN, ar, fa]\n");
   const longBody = Array.from({ length: 60 }, (_, i) => `## Section ${i + 1}\n\nA paragraph to exercise scrolling through a complete page of published content.\n`).join("\n");
   for (const [prefix, locale, title] of [["", "en", "Long page"], ["_translations/zh-CN/", "zh-CN", "长页面"]]) {
     const root = path.join(scrollHost, `vault/${prefix}`);
@@ -74,6 +96,17 @@ try {
     await writeFile(path.join(root, "docs/short.md"), "---\npublish: true\ncontent_type: doc\n---\n# Short page\n\nShort content.\n");
     await writeFile(path.join(root, "posts/story.md"), `---\npublish: true\ncontent_type: post\ndate: 2026-10-20\n---\n# ${title}\n\n${longBody}`);
   }
+  for (const [locale, manifest] of [
+    ["ar", "name: العربية\ndir: rtl\nmessages:\n  reading_time: 'حوالي {minutes} دقائق للقراءة'\n"],
+    ["fa", "name: فارسی\ndir: rtl\n"]
+  ]) {
+    const root = path.join(scrollHost, `vault/_translations/${locale}`);
+    await mkdir(root, { recursive: true });
+    await writeFile(path.join(root, "_locale.yml"), manifest);
+  }
+  const arabicDocs = path.join(scrollHost, "vault/_translations/ar/docs");
+  await mkdir(arabicDocs, { recursive: true });
+  await writeFile(path.join(arabicDocs, "long.md"), `---\npublish: true\ncontent_type: doc\n---\n# صفحة طويلة\n\n${"كلمة ".repeat(900)}`);
   await buildFixtureSites(scrollHost, "back-to-top", path.join(scrollHost, "host.yml"));
 } finally {
   await rm(scrollHost, { force: true, recursive: true });
@@ -144,8 +177,9 @@ try {
     ["b", "Middle", "2026-10-09", "dsh", "tools"],
     ["c", "Oldest", "2025-12-31", "hn", "agents"]
   ]) {
+    const sourceTitle = id === "a" ? `source_title: " Source [A] <em>original</em> "\n` : "";
     await writeFile(path.join(archiveHost, `vault/items/${id}.md`),
-      `---\npublish: true\ncontent_type: post\ntitle: ${title}\ndescription: Description of ${title}\nsource_url: https://example.com/${id}\ndate: ${date}\ntags: [source/${source}, topics/${topic}]\n---\nFirst paragraph of ${title}.\n\nSecond paragraph with a [link](https://example.com/${id}).\n`);
+      `---\npublish: true\ncontent_type: post\ntitle: ${title}\ndescription: Description of ${title}\nsource_url: https://example.com/${id}\n${sourceTitle}date: ${date}\ntags: [source/${source}, topics/${topic}]\n---\nFirst paragraph of ${title}.\n\nSecond paragraph with a [link](https://example.com/${id}).\n`);
   }
   build(archiveHost, "minimal", "minimal-archive", path.join(archiveHost, "host.yml"));
   const destination = path.join(workspaceRoot, ".jekyll-obsidian-cache/site-browser-minimal-archive");

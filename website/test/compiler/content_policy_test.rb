@@ -39,6 +39,32 @@ class ContentPolicyTest < Minitest::Test
     refute resolution.policy.publish?("draft.md", "publish" => false)
   end
 
+  def test_directory_rules_match_exact_snapshot_case_on_every_platform
+    policy = JekyllObsidian::ContentPolicy.resolve(
+      "publish_by_default" => ["clippings"], "directories" => { "post" => ["clippings"] },
+      "directory_tags" => { "clippings" => ["source/clippings"] }
+    ).policy
+    {
+      "clippings/item.md" => [true, "post", ["source/clippings"]],
+      "clippings/nested/item.md" => [true, "post", ["source/clippings"]],
+      "Clippings/item.md" => [false, "page", []],
+      "clippings-extra/item.md" => [false, "page", []]
+    }.each do |path, expected|
+      assert_equal expected, [policy.publish?(path, {}), policy.classify(path, {}), policy.tags_for(path, [])], path
+    end
+  end
+
+  def test_directory_tags_reject_blank_values_without_rewriting_authored_tag_names
+    [" ", "\t", "\u00a0", "\u3000", "\ufeff"].each do |tag|
+      result = JekyllObsidian::ContentPolicy.resolve("directory_tags" => { "clippings" => [tag] })
+      assert result.diagnostics.any? { |item| item.code == "invalid_directory_tags" }, tag.inspect
+      assert_empty result.policy.tags_for("clippings/item.md", [])
+    end
+    result = JekyllObsidian::ContentPolicy.resolve("directory_tags" => { "clippings" => ["Machine learning"] })
+    assert_empty result.diagnostics
+    assert_equal ["Machine learning"], result.policy.tags_for("clippings/item.md", [])
+  end
+
   def test_content_classification_uses_the_same_normalized_configuration
     resolution = JekyllObsidian::ContentPolicy.resolve(
       "default_type" => "page",

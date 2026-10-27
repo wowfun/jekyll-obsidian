@@ -13,6 +13,8 @@ updated: 2026-08-22
 
 Minimal can turn a source folder into a Portfolio tab, index, and project grid. The compiler decides whether the collection exists and which pages belong to it. Templates and browser code do not inspect the source directory.
 
+This documentation site calls that tab and collection **Showcase** in English and **案例集** in Chinese. It customizes the `portfolio` and `projects` messages in its locale manifests; `/portfolio/` and the Portfolio configuration keys stay the same. Locale messages require `website.i18n.enabled: true` and can also be used with a single enabled language.
+
 ## Let Minimal detect the collection
 
 With no Portfolio configuration, Minimal checks the source-relative `portfolio` folder. The collection appears when that folder contains at least one published Markdown project that is not excluded with `nav_exclude: true`.

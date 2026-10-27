@@ -2,6 +2,7 @@ name: 简体中文
 hreflang: zh-Hans
 dir: ltr
 messages:
+  reading_time: "约 {minutes} 分钟阅读"
   archive_requires_js: "当前显示第一页。启用 JavaScript 后可浏览全部条目。"
   archive_module_unavailable: "归档控件未能加载，请刷新页面重试。"
   favorites_module_unavailable: "收藏功能未能加载，请刷新页面重试。"
@@ -94,6 +95,7 @@ messages:
   page_label: "第 {page} / {pages} 页"
   first_observed: 首次发现于
   contact: 联系方式
+  footer_sites: 站点
   graph: 关系图
   feed: 订阅
   search: 搜索
@@ -181,8 +183,8 @@ messages:
   home: 首页
   blog: 博客
   docs: 文档
-  portfolio: 作品集
-  projects: 项目
+  portfolio: 案例集
+  projects: 案例集
   recent_posts: 最新文章
   related_articles: 相关文章
   view_all: 查看全部

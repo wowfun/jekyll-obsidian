@@ -4,6 +4,7 @@ import { archiveState } from "../../src/frontend/archive-query";
 import { favoriteCard, favoriteRecoveryCopies, clearFavoriteRecovery, restoreFavoriteRecovery, favoritesKey, readFavorites, readFavoriteCollection, toggleFavorite, updateFavoriteSnapshots } from "../../src/frontend/favorites-store";
 import { favoriteButton, initialiseFavorites, refreshFavoriteButtons } from "../../src/frontend/favorite-controls";
 import { favoriteManifest, loadFavoriteArchive, reconcileFavoriteArchive, selectFavorites } from "../../src/frontend/favorite-archive";
+import { renderArchiveLedger } from "../../src/frontend/archive-ledger";
 
 const card = (id: string, date = "2026-10-10", source = "hn"): ArchiveCard => ({ id, title: "Title " + id, url: "/garden/items/" + id + "/", markdown_url: "/garden/items/" + id + ".md", published_at: date + "T12:00:00+08:00", display_date: date, year: date.slice(0, 4), month: date.slice(0, 7), facets: { source: [source], topic: ["agents"] }, source_url: "https://example.test/" + id, summary: "Summary " + id });
 let dispose = () => {};
@@ -24,6 +25,24 @@ beforeEach(() => {
   document.body.innerHTML = '<div data-favorites-ui data-save="Save" data-remove="Remove favorite" data-saved="Saved"></div><p data-favorite-status></p>';
 });
 afterEach(() => { dispose(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
+
+it("preserves source titles and refreshes snapshots when only that title changes", async () => {
+  await toggleFavorite({ ...card("a"), source_title: "Original title" });
+  expect(readFavorites().get("a")!.snapshots.en!.source_title).toBe("Original title");
+  await updateFavoriteSnapshots([{ ...card("a"), source_title: "Updated title" }]);
+  expect(readFavorites().get("a")!.snapshots.en!.source_title).toBe("Updated title");
+  expect(() => favoriteCard({ ...card("a"), source_title: [] })).toThrow("Invalid favorite source title");
+});
+
+it.each(["   ", "\n", "\t", "\u00a0", "\u2028", "\u2029", "\ufeff", " \ufeff\u00a0 "])("normalizes blank source titles in saved snapshots: %j", async (source_title) => {
+  await toggleFavorite({ ...card("a"), source_title });
+  const saved = readFavorites().get("a")!.snapshots.en!;
+  expect(saved.source_title).toBeNull();
+  const root = document.createElement("main"); root.innerHTML = '<div data-filter-list></div>';
+  document.body.append(root);
+  renderArchiveLedger(root, [saved], { ...favoriteManifest([saved]), ledger_group_by: "year" });
+  expect(root.querySelector(".archive-source-url")!.textContent).toBe(saved.source_url);
+});
 
 it("shares identity across languages, preserves snapshots, and isolates sites", async () => {
   await toggleFavorite(card("a")); document.documentElement.lang = "zh-CN";

@@ -1,0 +1,8 @@
+title: Imported project fixture
+lang: en
+website:
+  source: vault
+  contacts: []
+  i18n:
+    enabled: true
+    locales: [en, zh-CN]

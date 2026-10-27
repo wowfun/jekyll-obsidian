@@ -482,15 +482,119 @@
   }
 
   .site-footer__inner {
-    display: flex;
-    align-items: center;
-    justify-content: center;
     inline-size: min(100%, calc(var(--article-width) + var(--rail-width) + 3.5rem));
     margin-inline: auto;
     padding: 0.85rem var(--page-gutter);
+  }
+
+  .site-footer__main {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: start;
+    justify-content: center;
+    gap: 1rem clamp(3rem, 7vw, 6rem);
+    padding-block: 0.65rem 1rem;
+  }
+
+  .site-footer__section {
+    min-inline-size: 0;
+    max-inline-size: 100%;
+  }
+
+  .site-footer__heading {
+    margin: 0 0 0.3rem;
+    color: var(--ink);
+    font-size: 0.8rem;
+    font-weight: 650;
+  }
+
+  .site-footer__contacts,
+  .site-footer__links {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    margin: 0;
+    padding: 0;
+    gap: 0 1.25rem;
+    list-style: none;
+  }
+
+  .site-footer__contacts {
+    gap: 0 0.35rem;
+  }
+
+  .site-footer__links li {
+    min-inline-size: 0;
+    max-inline-size: 100%;
+  }
+
+  .site-footer__links a,
+  .site-contact {
+    display: inline-flex;
+    align-items: center;
+    min-block-size: 44px;
+    color: inherit;
+    font-size: 0.85rem;
+    overflow-wrap: anywhere;
+    text-decoration: none;
+  }
+
+  .site-contact--icon {
+    justify-content: center;
+    inline-size: 44px;
+  }
+
+  .site-contact--text {
+    padding-inline: 0.5rem;
+  }
+
+  .site-contact__icon {
+    inline-size: 1.35rem;
+    block-size: 1.35rem;
+    fill: none;
+    stroke: currentColor;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    stroke-width: 1.6;
+  }
+
+  .site-contact__icon--brand {
+    fill: currentColor;
+    stroke: none;
+  }
+
+  .site-footer__links a:hover,
+  .site-contact:hover {
+    color: var(--ink);
+  }
+
+  .site-footer a:focus-visible {
+    outline: 2px solid var(--ink);
+    outline-offset: 3px;
+    border-radius: 2px;
+  }
+
+  .site-footer__credit {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: center;
     gap: 0.35rem;
     font-size: 0.74rem;
     text-align: center;
+  }
+
+  @media (max-width: 640px) {
+    .site-footer__main {
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+    }
+
+    .site-footer__contacts,
+    .site-footer__links {
+      justify-content: center;
+    }
   }
 
   .site-footer__github {
@@ -597,6 +701,13 @@
     font-weight: 670;
     letter-spacing: 0.11em;
     text-transform: uppercase;
+  }
+
+  .note-reading-time {
+    font-size: 0.75rem;
+    font-weight: 500;
+    letter-spacing: normal;
+    text-transform: none;
   }
 
   .note-title,
@@ -2731,7 +2842,7 @@
   }
 
   .site-footer {
-    margin-block-end: 5.5rem;
+    margin-block-end: calc(5.5rem + var(--back-to-top-size) + env(safe-area-inset-bottom, 0px));
   }
 }
 

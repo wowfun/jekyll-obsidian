@@ -9,6 +9,7 @@ require "uri"
 
 require_relative "../lib/jekyll_obsidian/external_media"
 require_relative "../lib/jekyll_obsidian/raw_html_manifest"
+require_relative "../lib/jekyll_obsidian/robots"
 
 class SiteUrlVerifier
   URL_ATTRIBUTES = [
@@ -114,7 +115,7 @@ class SiteUrlVerifier
       canonical = document.at_css("link[rel~='canonical']")&.[]("href")
       expected_canonical = "#{@origin}#{public_path(route)}"
       decoded_canonical = canonical && URI.decode_uri_component(canonical)
-      noindex = document.at_css("meta[name='robots']")&.[]("content").to_s.split(/[\s,]+/).include?("noindex")
+      noindex = JekyllObsidian::Robots.noindex?(document.at_css("meta[name='robots']")&.[]("content"))
       unless @origin.empty?
         if noindex
           verify_noindex_canonical(canonical, relative)

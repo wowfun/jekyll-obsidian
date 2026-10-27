@@ -128,6 +128,21 @@ class ExternalMediaTest < Minitest::Test
     assert_empty result.projected_files
   end
 
+  def test_external_image_urls_require_encoded_pipes_and_keep_alt_dimensions
+    invalid = compile(note("index.md", "---\npublish: true\n---\n![Diagram|10x20](https://example.test/a|b.png)\n"))
+    refute invalid.success?
+    assert invalid.diagnostics.any? { |item| item.code == "invalid_external_media" }
+
+    url = "https://example.test/a%7Cb.png"
+    result = compile(note("index.md", "---\npublish: true\n---\n![Diagram|10x20](#{url})\n"))
+    assert result.success?, result.diagnostics.map(&:message).join("\n")
+    image = Nokogiri::HTML5.fragment(page(result, "/").content).at_css("img")
+    assert_equal url, image["src"]
+    assert_equal "Diagram", image["alt"]
+    assert_equal "10", image["width"]
+    assert_equal "20", image["height"]
+  end
+
   def test_common_video_urls_become_canonical_lazy_players
     result = compile(note("index.md", <<~MARKDOWN))
       ---

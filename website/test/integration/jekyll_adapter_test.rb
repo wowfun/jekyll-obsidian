@@ -9,6 +9,150 @@ require "tmpdir"
 require "jekyll_obsidian/adapter"
 
 class JekyllAdapterTest < Minitest::Test
+  def test_footer_links_and_contacts_render_once_on_all_pages_in_both_themes
+    {
+      "blog/post.md" => "---\npublish: true\ncontent_type: post\ndate: 2026-10-20\n---\n# Post",
+      "_locale.yml" => "name: English\n",
+      "_translations/zh-CN/_locale.yml" => "name: 简体中文\nmessages:\n  footer_sites: 站点\n  contact: 联系方式\n"
+    }.each do |path, body|
+      target = File.join(@temporary_root, "vault", path)
+      FileUtils.mkdir_p(File.dirname(target))
+      File.write(target, body)
+    end
+    install_project_layout
+    %w[minimal docs].each do |theme|
+      configured = website_config.merge("theme" => theme,
+        "i18n" => { "enabled" => true, "locales" => %w[en zh-CN] },
+        "contacts" => [{ "label" => "GitHub", "url" => "https://github.com/example" }],
+        "footer" => { "links" => [{ "label" => "Garden & <Docs>", "url" => "https://example.test/sibling/?a=1&b=2", "locale_urls" => { "zh-CN" => "https://example.test/sibling/zh-CN/" } }] })
+      build_site("baseurl" => "/project", "website" => configured).process
+      %w[index.html blog/post/index.html blog/index.html 404.html zh-CN/index.html zh-CN/blog/post/index.html zh-CN/blog/index.html zh-CN/404.html].each do |path|
+        next if theme == "docs" && path.end_with?("blog/index.html")
+        document = Nokogiri::HTML5.parse(File.read(File.join(destination, path)))
+        assert_equal 1, document.css(".site-footer").length, path
+        assert_equal 1, document.css('a[rel="me"]').length, path
+        assert_equal 1, document.css('.site-footer__contacts a[rel="me"]').length, path
+        assert_empty document.css("main .site-contact")
+        link = document.at_css(".site-footer__links a")
+        assert_equal "Garden & <Docs>", link.text
+        assert_nil link["target"]
+        chinese = path.start_with?("zh-CN/")
+        assert_equal chinese ? "https://example.test/sibling/zh-CN/" : "https://example.test/sibling/?a=1&b=2", link["href"]
+        assert_equal chinese ? "站点" : "Sites", document.at_css("#footer-sites-title").text
+        assert_equal "https://github.com/wowfun/jekyll-obsidian", document.at_css(".site-footer__github")["href"]
+      end
+      [{}, { "footer" => { "links" => [] } }].each do |empty|
+        build_site("website" => website_config.merge("theme" => theme).merge(empty)).process
+        document = Nokogiri::HTML5.parse(File.read(File.join(destination, "index.html")))
+        assert_empty document.css(".site-footer__main, .site-footer nav")
+        assert_equal 1, document.css(".site-footer__credit").length
+      end
+    end
+  end
+
+  def test_reading_time_is_default_on_only_for_long_independent_bodies_in_both_themes
+    long = "word " * 401
+    {
+      "index.md" => ["", long],
+      "long.md" => ["", long],
+      "heading.md" => ["", "# Authored heading\n\n#{long}"],
+      "boundary.md" => ["", "word " * 400],
+      "empty.md" => ["", ""],
+      "docs/guide.md" => ["content_type: doc\n", long],
+      "blog/post.md" => ["content_type: post\ndate: 2026-10-20\n", long],
+      "collection/index.md" => ["", long]
+    }.each do |path, (properties, body)|
+      target = File.join(@temporary_root, "vault", path)
+      FileUtils.mkdir_p(File.dirname(target))
+      File.write(target, "---\npublish: true\n#{properties}---\n#{body}")
+    end
+    install_project_layout
+
+    %w[minimal docs].each do |theme|
+      [true, false].each do |enabled|
+        features = enabled ? {} : { "reading_time" => false }
+        build_site("website" => website_config.merge("theme" => theme, "features" => features)).process
+        %w[long heading docs/guide blog/post].each do |path|
+          document = Nokogiri::HTML(File.read(File.join(destination, path, "index.html")))
+          hints = document.css(".note-meta .note-reading-time")
+          assert_equal enabled ? 1 : 0, hints.length, "#{theme} #{path} enabled=#{enabled}"
+          assert_equal "About 3 min read", hints.first.text if enabled
+          assert_equal 1, document.css("h1").length
+        end
+        %w[index.html boundary/index.html empty/index.html collection/index.html 404.html].each do |path|
+          document = Nokogiri::HTML(File.read(File.join(destination, path)))
+          assert_empty document.css(".note-reading-time"), "#{theme} #{path}"
+        end
+        if theme == "minimal"
+          document = Nokogiri::HTML(File.read(File.join(destination, "blog/index.html")))
+          assert_empty document.css(".note-reading-time")
+        end
+      end
+    end
+  end
+
+  def test_reading_time_message_uses_ui_locale_and_direction_on_fallback_pages
+    File.write(File.join(@temporary_root, "vault", "long.md"), "---\npublish: true\n---\n#{'word ' * 401}")
+    {
+      "_locale.yml" => "name: English\n",
+      "_translations/zh-CN/_locale.yml" => "name: 简体中文\nmessages:\n  reading_time: '约 {minutes} 分钟阅读'\n",
+      "_translations/ar/_locale.yml" => "name: العربية\ndir: rtl\nmessages:\n  reading_time: 'حوالي {minutes} دقائق للقراءة'\n"
+    }.each do |path, body|
+      target = File.join(@temporary_root, "vault", path)
+      FileUtils.mkdir_p(File.dirname(target))
+      File.write(target, body)
+    end
+    File.write(File.join(@temporary_root, "vault", "_translations", "zh-CN", "long.md"), "---\npublish: true\n---\n#{'中' * 1201}")
+    install_project_layout
+    %w[minimal docs].each do |theme|
+      build_site("website" => website_config.merge("theme" => theme,
+        "i18n" => { "enabled" => true, "locales" => %w[en zh-CN ar] })).process
+      chinese = Nokogiri::HTML(File.read(File.join(destination, "zh-CN/long/index.html")))
+      assert_equal "约 4 分钟阅读", chinese.at_css(".note-reading-time").text
+      assert_equal "zh-CN", chinese.at_css(".note-reading-time")["lang"]
+      fallback = Nokogiri::HTML(File.read(File.join(destination, "ar/long/index.html")))
+      hint = fallback.at_css(".note-reading-time")
+      assert_equal "حوالي 3 دقائق للقراءة", hint.text
+      assert_equal "ar", hint["lang"]
+      assert_equal "rtl", hint["dir"]
+      assert_equal "en", fallback.at_css(".note-content")["lang"]
+    end
+  end
+
+  def test_reading_time_default_keeps_english_language_and_direction
+    File.write(File.join(@temporary_root, "vault", "long.md"), "---\npublish: true\n---\n#{'word ' * 401}")
+    { "_locale.yml" => "name: English\n", "_translations/ar/_locale.yml" => "name: العربية\ndir: rtl\n" }.each do |path, body|
+      target = File.join(@temporary_root, "vault", path)
+      FileUtils.mkdir_p(File.dirname(target))
+      File.write(target, body)
+    end
+    install_project_layout
+    %w[minimal docs].each do |theme|
+      [nil, { "enabled" => true, "locales" => %w[en ar] }].each do |i18n|
+        build_site("lang" => i18n ? "en" : "ar", "website" => website_config.merge("theme" => theme, "i18n" => i18n)).process
+        route = i18n ? "ar/long/index.html" : "long/index.html"
+        hint = Nokogiri::HTML(File.read(File.join(destination, route))).at_css(".note-reading-time")
+        assert_equal "About 3 min read", hint.text
+        assert_equal "en", hint["lang"]
+        assert_equal "ltr", hint["dir"]
+      end
+    end
+  end
+
+  def test_whitespace_source_title_falls_back_to_url_in_note_and_archive_html
+    File.write(File.join(@temporary_root, "vault", "post.md"), "---\npublish: true\ncontent_type: post\ndate: 2026-10-25\nsource_url: https://example.test/original\nsource_title: \" \\t\\n \"\n---\nBody")
+    install_project_layout
+    %w[minimal docs].each do |theme|
+      build_site("website" => website_config.merge("theme" => theme, "home" => { "layout" => "archive" })).process
+      document = Nokogiri::HTML(File.read(File.join(destination, "post/index.html")))
+      assert_equal "https://example.test/original", document.at_css(".note-source-url a").text
+      if theme == "minimal"
+        home = Nokogiri::HTML(File.read(File.join(destination, "index.html")))
+        assert_equal "https://example.test/original", home.at_css(".archive-source-url").text
+      end
+    end
+  end
+
   def test_generated_and_projected_routes_are_resolved_under_the_destination
     site = build_site
     page = JekyllObsidian::Adapter::GeneratedPage.allocate
@@ -571,20 +715,20 @@ class JekyllAdapterTest < Minitest::Test
     assert_includes home, 'class="minimal-post-card__subtitle">A field note'
     assert_includes home, "A concise dispatch summary from the authored body."
     assert_includes home, "Posted by Ada on"
-    assert_includes home, 'class="minimal-contacts"'
+    assert_includes home, 'class="site-footer__contacts"'
     assert_includes home, 'href="https://github.com/example"'
     assert_includes home, 'href="mailto:hello@example.test"'
     document = Nokogiri::HTML(home)
-    github = document.at_css('.minimal-contacts a[href="https://github.com/example"]')
-    assert_equal "minimal-contact minimal-contact--icon", github["class"]
+    github = document.at_css('.site-footer__contacts a[href="https://github.com/example"]')
+    assert_equal "site-contact site-contact--icon", github["class"]
     assert_equal "GitHub", github["aria-label"]
     assert_equal "GitHub", github["title"]
     assert_equal "true", github.at_css("svg")["aria-hidden"]
-    assert_includes github.at_css("svg")["class"], "minimal-contact__icon--brand"
+    assert_includes github.at_css("svg")["class"], "site-contact__icon--brand"
     assert_equal document.at_css(".site-footer__github svg path")["d"], github.at_css("svg path")["d"]
     assert_empty github.text.strip
-    community = document.at_css('.minimal-contacts a[href="https://community.example.test"]')
-    assert_equal "minimal-contact minimal-contact--text", community["class"]
+    community = document.at_css('.site-footer__contacts a[href="https://community.example.test"]')
+    assert_equal "site-contact site-contact--text", community["class"]
     assert_equal "Community", community.text.strip
     assert_nil community["aria-label"]
     assert_includes home, "Literal {{ site.secret }}."
@@ -740,6 +884,7 @@ class JekyllAdapterTest < Minitest::Test
       date_basis: observed
       tags: [source/openai, topics/agents]
       source_url: https://example.test/original
+      source_title: "<Guide> [agents]"
       repo_url: https://github.com/example/project
       zero: 0
       enabled: false
@@ -793,11 +938,18 @@ class JekyllAdapterTest < Minitest::Test
       refute_includes document.to_html, "hidden-marker"
       refute_includes document.to_html, "expanded-secret-marker"
       assert_equal 1, document.css(".note-source-url").length
+      assert_equal "<Guide> [agents]", document.at_css(".note-source-url a").text
+      assert_equal "https://example.test/original", document.at_css(".note-source-url a")["href"]
+      assert_nil document.at_css(".note-source-url guide")
+      if theme == "minimal"
+        home = Nokogiri::HTML(File.read(File.join(destination, "index.html")))
+        assert_equal "<Guide> [agents]", home.at_css(".archive-card-footer .archive-source-url").text
+      end
       assert_equal "First observed 2026-10-10", document.at_css(".note-meta time").text.strip
       order = document.css("article *")
       assert_operator order.index(document.at_css(".note-source-url")), :<, order.index(fields)
       assert_operator order.index(fields), :<, order.index(document.at_css(".note-content"))
-      %w[title date date_basis source_url tags publish].each { |key| assert_nil fields.at_css("[data-property-name='#{key}']") }
+      %w[title date date_basis source_url source_title tags publish].each { |key| assert_nil fields.at_css("[data-property-name='#{key}']") }
     end
   end
 

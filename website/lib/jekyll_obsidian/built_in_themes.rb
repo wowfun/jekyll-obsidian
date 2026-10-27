@@ -63,7 +63,7 @@ module JekyllObsidian
 
         namespaces = ALWAYS_RESERVED_NAMESPACES.dup
         namespaces << "/feed.xml" if config.features.fetch("feed")
-        pages = pages.map { |page| attach_navigation(page, config) }
+        pages = pages.map { |page| decorate_page(page, config) }
 
         ThemeOutput.new(
           pages: pages,
@@ -93,6 +93,7 @@ module JekyllObsidian
           "id" => note.id,
           "content_type" => note.content_type,
           "published_at" => ArchiveChronology.local_time(note.published_at, config.blog["utc_offset"]),
+          "reading_time_minutes" => note.reading_time_minutes,
           "route" => note.route,
           "href" => config.url_builder.href(note.route),
           "absolute_url" => config.url_builder.absolute_url(note.route),
@@ -109,7 +110,8 @@ module JekyllObsidian
           "directory_index" => note.directory_index,
           "has_h1" => note.has_h1,
           "source_links" => note.source_links,
-          "source_url" => properties["source_url"],
+          "source_url" => note.source_url,
+          "source_title" => properties["source_title"],
           "display_properties" => note.display_properties,
           "date_basis" => properties["date_basis"],
           "archive_item" => note.content_type == "post" && config.home["layout"] == "archive",
@@ -478,7 +480,8 @@ module JekyllObsidian
           "image" => note.image_url,
           "authors" => note.topics.select { |topic| topic.fetch("kind") == "author" },
           "tags" => Array(note.properties["tags"]),
-          "source_url" => note.properties["source_url"],
+          "source_url" => note.source_url,
+          "source_title" => note.properties["source_title"],
           "date_basis" => note.properties["date_basis"]
         }
       end
@@ -540,9 +543,10 @@ module JekyllObsidian
         CGI.escapeHTML(text.gsub(FrontMatter::XML_INVALID_CHARACTER, "\uFFFD"))
       end
 
-      def attach_navigation(page, config)
+      def decorate_page(page, config)
         navigation = config.navigation
         website = page.data.fetch("website").dup
+        website["footer"] = config.footer
         repository = config.site.repository.to_s
         website["repository_url"] = "https://github.com/#{repository}" if repository.match?(/\A[\w.-]+\/[\w.-]+\z/)
         active_id = if website["kind"] == "note" || website.dig("theme_data", "tab_id")
@@ -804,7 +808,6 @@ module JekyllObsidian
         {
           "recent_posts" => posts.first(config.home.fetch("recent_posts_limit")).map { |post| note_card(post, config, taxonomy) },
           "view_all_url" => config.url_builder.href("/blog/"),
-          "contacts" => config.contacts,
           "topic_summaries" => taxonomy.fetch("summaries")
         }
       end

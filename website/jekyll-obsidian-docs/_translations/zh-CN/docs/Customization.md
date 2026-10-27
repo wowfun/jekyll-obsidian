@@ -31,6 +31,7 @@ website:
   content:
     publish_by_default: []
     default_type: doc
+    directory_tags: {}
     directories:
       post: []
       doc: []
@@ -90,7 +91,34 @@ HTML 映射本身就是发布授权，不受 `website.content.publish_by_default
 
 Minimal Home 会先显示公开的根目录索引，再用编辑式列表显示最近六篇文章。索引默认为 `index.md`；物理 `index.md` 不存在时，才会使用同级且文件名精确为 `README.md` 的公开笔记。被选中的目录索引没有正文一级标题时，不会再通过文件名或 frontmatter 标题补出可见标题；解析后的标题仍用于元数据和导航。带图片的条目在宽屏中把 16:9 缩略图放在摘要旁边，在窄屏中放到摘要上方；没有图片的条目会占满宽度，不显示占位图。摘要还可以显示 `subtitle`、正文摘录、作者和发布日期。Blog 链接会打开 `/blog/` 中完整的倒序文章列表。
 
-配置 `website.contacts` 后，可以在最近文章区之后显示联系方式。每个条目都需要简短的 `label`，以及采用 `https:`、`mailto:` 或 `tel:` 的 URL。基础配置没有联系方式时，可以省略该项或使用空数组。Email、Phone、GitHub、LinkedIn、X/Twitter、Mastodon、Bluesky、Instagram、YouTube、Telegram、RSS 和 Website 链接会自动获得无障碍图标。其他服务会直接显示文本标签，因此配置保持服务中立，不需要额外的 icon 字段。
+### 页脚联系方式与站点导航
+
+配置 `website.contacts` 后，Minimal 和 Docs 的所有页面都会在页脚显示联系方式，首页最近文章区不再重复显示。每个条目都需要简短的 `label`，以及采用 `https:`、`mailto:` 或 `tel:` 的 URL。基础配置没有联系方式时，可以省略该项或使用空数组。Email、Phone、GitHub、LinkedIn、X/Twitter、Mastodon、Bluesky、Instagram、YouTube、Telegram、RSS 和 Website 链接会自动获得无障碍图标。其他服务会直接显示文本标签，因此配置保持服务中立，不需要额外的 icon 字段。
+
+`website.footer.links` 在联系方式旁增加「站点」区块，默认值为 `[]`。空区块不占位。两种主题共用页脚；移动端纵向排列区块，下方保留主题署名、许可证和年份。
+
+```yaml
+website:
+  contacts:
+    - label: GitHub
+      url: https://github.com/wowfun
+  footer:
+    links:
+      - label: Jekyll Obsidian
+        url: https://sinputer.top/jekyll-obsidian/
+        locale_urls:
+          zh-CN: https://sinputer.top/jekyll-obsidian/zh-CN/
+```
+
+每项必须包含非空 `label` 和不含用户名、密码的完整 HTTPS `url`。可选的 `locale_urls` 将语言标识映射到完整 HTTPS 地址；优先选择当前界面语言的覆盖值，没有覆盖时使用默认 `url`。链接直接使用配置地址，即使目标是同域的另一个站点，也不会追加当前站点的 `baseurl` 或语言前缀。链接在同一标签页打开。区块标题可通过 locale 消息 `footer_sites` 和 `contact` 修改；主题署名仍链接官方 GitHub 仓库。
+
+自定义 locale 消息需要设置 `website.i18n.enabled: true`，并将消息写在根目录 `_locale.yml` 或 `_translations/<locale>/_locale.yml` 的 `messages` 下。单语言站点可只在 `locales` 中列出根配置 `lang` 指定的语言，无需创建译文副本即可修改这些标题。
+
+最多配置 12 个链接，单行标签不超过 64 个字符，URL 不超过 2,048 个字符（含各语言覆盖地址）。首尾 Unicode 空白和字节顺序标记（`U+FEFF`）会被移除，制表符和换行不被接受。语言标识不区分大小写，例如 `zh-cn` 可匹配 `zh-CN`；仅大小写不同的重复键会报错。当前未启用语言的覆盖地址会保留但不使用，便于单语言和多语言构建共用配置。
+
+自定义模板通过 `page.website.footer.contacts` 读取联系方式，通过 `page.website.footer.links` 读取当前语言的导航链接。前者替代了 `page.website.theme_data.contacts`；使用旧首页数据的模板需要更新。用户配置仍使用 `website.contacts`。
+
+自定义联系方式 CSS 也需要将 `.minimal-contact` 和 `.minimal-contact__*` / `.minimal-contact--*` 改为对应的 `.site-contact` 类。旧首页容器 `.minimal-contacts` 已移除，共享 footer 的联系方式列表使用 `.site-footer__contacts`。
 
 ## 站点主题
 
@@ -103,11 +131,11 @@ jekyll-obsidian build --theme minimal --url https://example.test --baseurl ""
 
 生成站点位于 `.jekyll-obsidian-cache/site/`。主题标识只支持 `minimal` 和 `docs`。切换主题后，仍然发布的笔记会保留原 URL；请显式设置 `website.i18n.enabled: true`，以继续发布译文。
 
-`website.features` 中省略的功能会继承主题默认值。可以用显式 YAML 布尔值覆盖 `search`、`tags`、`feed`、`graph`、`relations`、`previews` 和 `outline`。
+`website.features` 中省略的功能会继承主题默认值。可以用显式 YAML 布尔值覆盖 `search`、`tags`、`feed`、`graph`、`relations`、`previews`、`outline` 和 `reading_time`。
 
 | 功能 | Minimal | Docs |
 | --- | --- | --- |
-| `search`、`previews`、`outline`、`relations`、`graph` | 开启 | 开启 |
+| `search`、`previews`、`outline`、`relations`、`graph`、`reading_time` | 开启 | 开启 |
 | `tags`、`feed` | 开启 | 关闭 |
 
 独立的 `i18n` 和 `comments` 配置在已提供但省略 `enabled` 时，使用以下默认值：
@@ -127,6 +155,24 @@ website:
     graph: false
     previews: false
 ```
+
+### 阅读时长
+
+两个主题默认在独立博客文章、文档和普通页面的顶部元信息中显示阅读时长，但仅在估算结果超过 2 分钟时显示。恰好 2 分钟时隐藏，2.1 分钟显示「约 3 分钟阅读」。首页、目录页、系统生成页及文章列表不显示。提示随 HTML 构建生成，禁用 JavaScript 也可显示。
+
+中文及其他 CJK 字符按每分钟 400 字，其余文字按每分钟 200 词估算，两者相加后向上取整。词按连续的 Unicode 字母、数字及其组合标记统计。正文标题、列表、表格、引用、行内代码和普通代码块均计入。展开后的嵌入笔记和导入的 GitHub Markdown 按实际正文统计；frontmatter、生成的操作控件与来源标签不计入。图片、公式、Mermaid 图表、音视频和嵌入附件不增加时间，正文中的图片说明正常计入。带有 `hidden`、`aria-hidden="true"` 或主题 `visually-hidden` 类的隐藏内容不计入。这是基于文字长度的粗略估算，不代表理解内容所需的时间。
+
+译文按实际显示的正文计算，包括缺少翻译时显示的默认语言内容。配置语言消息 `reading_time` 时，必须且只能包含一个 `{minutes}` 占位符，不允许其他花括号或空白消息；中文示例为 `约 {minutes} 分钟阅读`。省略时使用英文默认文案，即使界面采用其他语言，也会标记为 `lang="en" dir="ltr"`。自定义模板可读取整数 `page.website.reading_time_minutes`，没有可计数文字时为 0。关闭 `reading_time` 只隐藏内置提示，仍会计算该值，以保持自定义模板的数据契约。若要全站关闭提示：
+
+```yaml
+website:
+  features:
+    reading_time: false
+```
+
+只有 `website.i18n.enabled` 为 true 时才会加载 locale 消息。单语言站点也可启用，例如在配置根层级设置 `lang: zh-CN`，并设置 `website.i18n: {enabled: true, locales: [zh-CN]}`，再在根 `_locale.yml` 中设置 `name: 简体中文` 和 `messages.reading_time`，不需要建立翻译副本。关闭 i18n 时，仅设置 `lang` 不会选择或自定义该文案，阅读时长提示使用英文。
+
+阅读速度与 2 分钟阈值为固定值，不提供单篇覆盖设置。
 
 ## Minimal 导航
 
@@ -348,7 +394,9 @@ website:
 - `permalink`、`image` 和 `cssclasses`
 - `created` 和 `updated`
 - `content_type`、`date`、`date_basis`、`pinned`、`nav_order`、`nav_exclude`、`tab` 和 `tabs`
-- `comments`、`github_markdown`、`related` 和 `source_url`
+- `comments`、`github_markdown`、`related`、`source_url`、`source`、`source_title`、`published` 和 `lang`
+
+`lang` 用于声明 `website.i18n.shared_directories` 中笔记的正文语言，不改变界面语言，详见 [[Localization#在不同语言界面中共用正文|共享正文]]。
 
 其他顶层属性可以使用标量或一层标量列表。自定义属性名必须是经过规范化的单行文本，且不能带首尾空白。两个主题默认在标签和原文链接下方、正文上方显示展开的属性区。标签使用原始字段名，字段保留书写顺序。不支持嵌套列表或映射。
 
@@ -388,7 +436,7 @@ related:
 
 `aliases`、`tags`、`author`、`categories`、`cssclasses` 和 `tabs` 是字符串数组，`subtitle` 是字符串。`publish`、`pinned`、`nav_exclude` 和 `comments` 使用 YAML 布尔值。`tab` 是前文说明的封闭映射。`github_markdown` 只接受 [[Portfolio|作品集]]中说明的 URL 或映射形式，并且只能用于作品集项目页。日期使用 ISO 8601。笔记标题依次取自 `title`、第一个一级标题和文件名。
 
-`updated` 可选，只有作者明确提供时才会出现在页面元数据中；编译器不会从 Git 推导更新时间。文章发布时间依次使用 `date`、`created` 和第一次 Git 提交时间。Atom 条目优先使用显式 `updated`；未提供时，文章沿用其发布时间。没有 `updated` 的非文章笔记不会进入订阅源。
+`updated` 可选，只有作者明确提供时才会出现在页面元数据中；编译器不会从 Git 推导更新时间。文章发布时间依次使用 `date`、`published`、`created` 和第一次 Git 提交时间。Atom 条目优先使用显式 `updated`；未提供时，文章沿用其发布时间。没有 `updated` 的非文章笔记不会进入订阅源。
 
 Minimal Home 会在文章标题下显示 `subtitle`，然后使用 `description` 或编译器生成的正文摘录作为摘要。存在 `author` 时，摘要页脚会列出作者。`author` 和 `categories` 会与 `tags` 一起进入 Home 的 Topics 区域。条目可以是普通字符串，也可以是指向公开笔记的 Wiki 链接：
 
@@ -410,7 +458,7 @@ Wiki 链接条目必须使用 YAML 双引号字符串。可见标签优先使用
 
 ## 内容与导航
 
-显式的 `content_type: post | doc | page` 优先于目录默认值。文章发布时间依次使用 `date`、`created` 和第一次 Git 提交时间。生产构建会拒绝没有确定日期的文章。在 Minimal Home 和 Blog 中，设置了 `pinned: true` 的文章排在普通文章之前，两组内部都保持时间倒序。置顶只影响卡片展示，不改变 Atom Feed 的时间顺序以及上一篇、下一篇文章序列。
+显式的 `content_type: post | doc | page` 优先于目录默认值。文章发布时间依次使用 `date`、`published`、`created` 和第一次 Git 提交时间。生产构建会拒绝没有确定日期的文章。在 Minimal Home 和 Blog 中，设置了 `pinned: true` 的文章排在普通文章之前，两组内部都保持时间倒序。置顶只影响卡片展示，不改变 Atom Feed 的时间顺序以及上一篇、下一篇文章序列。
 
 Docs 导航沿用内容目录结构。`nav_order` 对同级文档排序，`nav_exclude: true` 只移除当前笔记链接，子页面仍然可以访问。所有层级都可以没有 `index.md`。物理 `index.md` 不存在时，同级且文件名精确为 `README.md` 的公开笔记会成为文件夹索引。已有的 `index.md` 即使未发布也会保留该位置，此时 `README.md` 仍是普通笔记。公开的根索引始终拥有 `/`，因此该笔记使用其他 `permalink` 会被拒绝。没有公开索引的文件夹会打开依次按 `nav_order`、标题和路径排序的第一个可见子页面。
 
@@ -452,7 +500,13 @@ Docs 没有根索引时会重定向到第一项导航。每个 Docs 页面都由
 否则以当前筛选下最新条目的日期为结束日，向前覆盖配置的天数。
 无日期条目不参与导出，日期之间允许没有内容。
 文件包含站点、筛选条件、条目数、文章元数据及完整的已发布 Markdown，媒体保留链接，
-顺序沿用跨全部分页的归档顺序。同时最多加载四个资源；取消或关闭面板停止导出。
+顺序沿用跨全部分页的归档顺序。
+
+本地 Markdown 图片使用真实附件发布地址：配置了 `url` 时为绝对地址，否则为带 `baseurl` 的根相对地址。行内图片、引用式图片、复制页面及各语言界面使用同一规则。发布 Markdown 会将引用式图片展开为行内形式，让共用定义的普通链接保持原目标；磁盘原稿保留手写相对路径。
+
+这项地址投影只覆盖图片文件。PDF、音频、视频、Wiki 嵌入和普通链接在导出 Markdown 中保留手写目标，即使 HTML 页面使用了附件发布地址。如果导出文件需要在站点外使用，请为这些目标填写绝对 URL。
+
+同时最多加载四个资源；取消或关闭面板停止导出。
 任一正文载入失败都不会下载不完整文件，重试复用本次任务已经取得的正文。
 若面板打开期间站点更新，下载前会刷新选择。请核对新的筛选条件和条数，再次点击**下载 Markdown**。
 进度仅计入成功载入的正文。连续修改日期时会短暂等待输入结束再计算，修改后立即禁用下载。
@@ -504,3 +558,30 @@ Minimal 归档首页可设置 `website.home.hide_tab_sources: true`（默认 fal
 语言目录的 `_locale.yml` 支持 `hidden_tags`，使用完整标签 ID 的唯一列表，例如 `topics/research`。别名通过 `tag_aliases` 解析后去重，各语言必须表示同一个规范标签集合。单语言站点也可在内容根目录的 `_locale.yml` 中设置 `hidden_tags`、`tag_aliases` 和 `tag_labels`，无需开启 i18n；两种模式均拒绝未知清单键。隐藏标签仍显示在文章和收藏条目中，但默认不出现在归档、栏目、收藏和导出的候选项中。筛选标题下方的按钮仅展开本组的隐藏选项：“主题”使用“显示隐藏主题”，其他筛选项使用“显示隐藏标签”。“来源”可同时提供标签展开与独立栏目展开按钮，两者分别控制。收起后仍保留已选隐藏标签，便于取消筛选。
 
 URL 使用 `include_tabs=1` 和可重复的 `show_hidden` 参数保存展开状态，后者取值为筛选组名称，例如 `show_hidden=source&show_hidden=topic`。明确选择独立栏目来源的链接自动展开。导出弹窗继承各组状态，内部调整独立于页面。未明确选择来源时，导出标题使用“全部（不含独立栏目来源）”说明默认范围，不逐一列出所有剩余来源。静态 HTML 首屏始终使用默认范围；JavaScript 加载后才应用 URL 筛选并显示已选隐藏标签。无 JavaScript 时，条目及计数保持默认范围，不显示展开按钮。文案键为 `include_tab_sources`、`hide_tab_sources`、`show_hidden_topics`、`hide_hidden_topics`、`show_hidden_tags`、`hide_hidden_tags`、`all_without_tab_sources`。
+
+## 来源元数据与目录标签
+
+Obsidian Web Clipper 笔记可以保留 `published`、`source` 和用引号包围的作者双链。`published` 接受 ISO-8601 日期或日期时间；文章日期依次使用 `date`、`published`、`created`、第一次 Git 提交时间。`source` 与 `source_url` 一样接受不含凭据的 HTTP(S) URL；两者都有时，原文链接优先使用 `source_url`。这些字段不会再重复显示为自定义属性。作者双链没有公开目标时显示原有名称，并产生警告。
+
+通过目录配置发布剪藏，无需逐篇添加发布字段：
+
+```yaml
+website:
+  content:
+    publish_by_default: [clippings]
+    directories:
+      post: [clippings]
+      doc: [docs]
+    directory_tags:
+      clippings: [source/clippings]
+```
+
+`directory_tags` 默认为 `{}`。键是相对于内容根目录的规范目录路径，`.` 表示整个内容目录；标签会追加到该目录及其后代。嵌套规则累加并去重，不会改写磁盘上的 Markdown，也不会自行授权发布。`publish: false` 仍可排除草稿；栏目首页保留 `content_type: page`。
+
+标签必须是非空白字符串，仅含空白的值会被拒绝。有效标签保留手写拼写，包括内部空格。
+
+目录规则（`publish_by_default`、`directories` 和 `directory_tags`）在所有平台上都按源路径区分大小写。配置应与目录的实际拼写一致：`clippings` 不会选中 `Clippings`。大小写折叠仅用于拒绝有歧义的路径冲突，不会扩大发布规则的范围。
+
+语言清单的 `tag_aliases` 支持把无前缀标签映射到命名空间，例如 `agents: topics/agents`。已有命名空间的标签只允许在同一命名空间内替换；拒绝别名链和循环。共享笔记省略 `lang` 时仍使用 `und` 和自动文本方向。
+
+可选的 `source_title` 用于文章头部、归档卡片、收藏和 Markdown 导出中的原文链接标题。首尾 Unicode 空白和字节顺序标记（`U+FEFF`）会被移除；省略或移除后为空时显示 URL。这项规范化不会改写 Markdown 原稿。它是纯文本，不执行 HTML，也不替代站内笔记标题；没有原文 URL 时不会单独生成链接。

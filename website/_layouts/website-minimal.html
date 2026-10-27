@@ -9,7 +9,7 @@
     {% if page.website.kind == 'home' and page.website.id %}{% assign is_authored_home = true %}{% endif %}
     {% assign has_home_modules = false %}
     {% if is_authored_home %}
-      {% if page.website.theme_data.recent_posts.size > 0 or page.website.theme_data.contacts.size > 0 %}{% assign has_home_modules = true %}{% endif %}
+      {% if page.website.theme_data.recent_posts.size > 0 %}{% assign has_home_modules = true %}{% endif %}
     {% endif %}
     {% assign has_mobile_context = false %}
     {% if page.website.kind == 'home' %}

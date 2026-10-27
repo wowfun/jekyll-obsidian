@@ -513,7 +513,7 @@ class ThemeContractTest < Minitest::Test
     assert_equal [
       { "label" => "GitHub", "url" => "https://github.com/example", "icon" => "github" },
       { "label" => "Email", "url" => "mailto:hello@example.test", "icon" => "email" }
-    ], home.data.dig("website", "theme_data", "contacts")
+    ], home.data.dig("website", "footer", "contacts")
     assert_equal "https://example.test/assets/vault/media/cover.png", home.data.fetch("image")
     assert_equal ["authored-home"], home.data.dig("website", "cssclasses")
     assert_equal "index.md", home.data.dig("website", "local_graph", "current_id")
@@ -753,7 +753,7 @@ class ThemeContractTest < Minitest::Test
     result = compile(home, theme: "minimal", contacts: contacts)
 
     assert result.success?, result.diagnostics.map(&:message).join("\n")
-    projected = page(result, "/").data.dig("website", "theme_data", "contacts").map do |contact|
+    projected = page(result, "/").data.dig("website", "footer", "contacts").map do |contact|
       [contact.fetch("label"), contact["icon"]]
     end
     assert_equal [

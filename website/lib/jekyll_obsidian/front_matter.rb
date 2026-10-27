@@ -9,16 +9,17 @@ module JekyllObsidian
     XML_INVALID_CHARACTER = OutputText::INVALID_CHARACTER
     SUPPORTED = %w[
       publish title subtitle aliases tags author categories description permalink image cssclasses created updated
-      source_url content_type date date_basis pinned nav_order nav_exclude tab tabs comments github_markdown related
+      source_url source source_title content_type date published date_basis pinned nav_order nav_exclude tab tabs comments github_markdown related lang
     ].freeze
     JEKYLL_CONTROL_KEYS = %w[alias layout render_with_liquid].freeze
     ARRAY_PROPERTIES = %w[aliases tags author categories cssclasses].freeze
     LINK_ARRAY_PROPERTIES = %w[author categories].freeze
-    STRING_PROPERTIES = %w[title subtitle description permalink image].freeze
+    STRING_PROPERTIES = %w[title subtitle description permalink image source_title].freeze
     CONTENT_TYPES = %w[post doc page].freeze
     DATE_BASES = %w[published observed].freeze
     TAB_KEYS = %w[id label order topics layout].freeze
     TAB_ID_PATTERN = /\A[a-z][a-z0-9-]*\z/.freeze
+    LANGUAGE_PATTERN = /\A[A-Za-z]{2,8}(?:-[A-Za-z0-9]{1,8})*\z/.freeze
 
     Result = Struct.new(:properties, :property_links, :body, :diagnostics, keyword_init: true)
 
@@ -149,11 +150,17 @@ module JekyllObsidian
         end
 
         case key
-        when "source_url"
+        when "lang"
+          if value.is_a?(String) && value.match?(LANGUAGE_PATTERN)
+            properties[key] = value
+          else
+            error("invalid_property", "lang must be a BCP 47-style language tag")
+          end
+        when "source_url", "source"
           if self.class.public_url?(value)
             properties[key] = value
           else
-            error("invalid_property", "source_url must be an absolute HTTP(S) URL without credentials")
+            error("invalid_property", "#{key} must be an absolute HTTP(S) URL without credentials")
           end
         when "publish", "comments", "pinned"
           if value == true || value == false
@@ -188,7 +195,7 @@ module JekyllObsidian
           end
         when *STRING_PROPERTIES
           if self.class.valid_output_text?(value)
-            properties[key] = value
+            properties[key] = key == "source_title" ? OutputText.strip(value) : value
           else
             error("invalid_property", "#{key} must be a string containing only output-safe Unicode characters")
           end
@@ -204,7 +211,7 @@ module JekyllObsidian
           else
             error("invalid_property", "date_basis must be one of: #{DATE_BASES.join(', ')}")
           end
-        when "created", "updated", "date"
+        when "created", "updated", "date", "published"
           normalized = normalize_time(value)
           normalized ? properties[key] = normalized : error("invalid_property", "#{key} must be an ISO-8601 date or date-time")
         when "nav_order"
