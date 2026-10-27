@@ -63,7 +63,7 @@ module JekyllObsidian
 
         namespaces = ALWAYS_RESERVED_NAMESPACES.dup
         namespaces << "/feed.xml" if config.features.fetch("feed")
-        pages = pages.map { |page| attach_navigation(page, config) }
+        pages = pages.map { |page| decorate_page(page, config) }
 
         ThemeOutput.new(
           pages: pages,
@@ -543,9 +543,10 @@ module JekyllObsidian
         CGI.escapeHTML(text.gsub(FrontMatter::XML_INVALID_CHARACTER, "\uFFFD"))
       end
 
-      def attach_navigation(page, config)
+      def decorate_page(page, config)
         navigation = config.navigation
         website = page.data.fetch("website").dup
+        website["footer"] = config.footer
         repository = config.site.repository.to_s
         website["repository_url"] = "https://github.com/#{repository}" if repository.match?(/\A[\w.-]+\/[\w.-]+\z/)
         active_id = if website["kind"] == "note" || website.dig("theme_data", "tab_id")
@@ -807,7 +808,6 @@ module JekyllObsidian
         {
           "recent_posts" => posts.first(config.home.fetch("recent_posts_limit")).map { |post| note_card(post, config, taxonomy) },
           "view_all_url" => config.url_builder.href("/blog/"),
-          "contacts" => config.contacts,
           "topic_summaries" => taxonomy.fetch("summaries")
         }
       end

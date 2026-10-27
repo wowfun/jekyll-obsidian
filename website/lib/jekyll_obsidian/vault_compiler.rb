@@ -147,7 +147,7 @@ module JekyllObsidian
     ExpansionLimitExceeded = Class.new(StandardError)
     private_constant :ExpansionLimitExceeded
 
-    def initialize(request, html_publication: nil, include_html_projection: true, tag_policy_resolved: false, frontmatter_cache: nil)
+    def initialize(request, html_publication: nil, include_html_projection: true, tag_policy_resolved: false, frontmatter_cache: nil, footer_links: nil, footer_locale: nil)
       @request = request
       @owns_frontmatter_cache = frontmatter_cache.nil?
       @frontmatter_cache = frontmatter_cache || FrontMatter::Cache.new
@@ -176,6 +176,8 @@ module JekyllObsidian
       @comments = disabled_comments_config
       @analytics = disabled_analytics_config
       @contacts = []
+      @footer_links = footer_links
+      @footer_locale = footer_locale || @config.lang
       @navigation_config = default_navigation_config
     end
 
@@ -268,7 +270,7 @@ module JekyllObsidian
         content: @content,
         comments: @comments,
         analytics: @analytics,
-        contacts: @contacts,
+        footer: { "contacts" => @contacts, "links" => FooterLinks.present(@footer_links, @footer_locale) },
         navigation: navigation,
         home: @home_config,
         blog: @blog_config,
@@ -343,6 +345,7 @@ module JekyllObsidian
       resolve_comments_config
       resolve_analytics_config
       resolve_contacts_config
+      resolve_footer_config
       resolve_navigation_config
       resolve_output_config
       @url_builder = UrlBuilder.new(origin: @config.url, baseurl: @config.baseurl)
@@ -587,6 +590,15 @@ module JekyllObsidian
 
     def disabled_analytics_config
       AnalyticsConfig.new(provider: "", identifier: "", load: false)
+    end
+
+    def resolve_footer_config
+      return unless @footer_links.nil?
+
+      @footer_links = DeepFreeze.call(FooterLinks.resolve(@config.footer))
+    rescue FooterLinks::Invalid => exception
+      @footer_links = []
+      error("invalid_footer", exception.message)
     end
 
     def resolve_contacts_config

@@ -9,6 +9,47 @@ require "tmpdir"
 require "jekyll_obsidian/adapter"
 
 class JekyllAdapterTest < Minitest::Test
+  def test_footer_links_and_contacts_render_once_on_all_pages_in_both_themes
+    {
+      "blog/post.md" => "---\npublish: true\ncontent_type: post\ndate: 2026-10-20\n---\n# Post",
+      "_locale.yml" => "name: English\n",
+      "_translations/zh-CN/_locale.yml" => "name: 简体中文\nmessages:\n  footer_sites: 站点\n  contact: 联系方式\n"
+    }.each do |path, body|
+      target = File.join(@temporary_root, "vault", path)
+      FileUtils.mkdir_p(File.dirname(target))
+      File.write(target, body)
+    end
+    install_project_layout
+    %w[minimal docs].each do |theme|
+      configured = website_config.merge("theme" => theme,
+        "i18n" => { "enabled" => true, "locales" => %w[en zh-CN] },
+        "contacts" => [{ "label" => "GitHub", "url" => "https://github.com/example" }],
+        "footer" => { "links" => [{ "label" => "Garden & <Docs>", "url" => "https://example.test/sibling/?a=1&b=2", "locale_urls" => { "zh-CN" => "https://example.test/sibling/zh-CN/" } }] })
+      build_site("baseurl" => "/project", "website" => configured).process
+      %w[index.html blog/post/index.html blog/index.html 404.html zh-CN/index.html zh-CN/blog/post/index.html zh-CN/blog/index.html zh-CN/404.html].each do |path|
+        next if theme == "docs" && path.end_with?("blog/index.html")
+        document = Nokogiri::HTML5.parse(File.read(File.join(destination, path)))
+        assert_equal 1, document.css(".site-footer").length, path
+        assert_equal 1, document.css('a[rel="me"]').length, path
+        assert_equal 1, document.css('.site-footer__contacts a[rel="me"]').length, path
+        assert_empty document.css("main .site-contact")
+        link = document.at_css(".site-footer__links a")
+        assert_equal "Garden & <Docs>", link.text
+        assert_nil link["target"]
+        chinese = path.start_with?("zh-CN/")
+        assert_equal chinese ? "https://example.test/sibling/zh-CN/" : "https://example.test/sibling/?a=1&b=2", link["href"]
+        assert_equal chinese ? "站点" : "Sites", document.at_css("#footer-sites-title").text
+        assert_equal "https://github.com/wowfun/jekyll-obsidian", document.at_css(".site-footer__github")["href"]
+      end
+      [{}, { "footer" => { "links" => [] } }].each do |empty|
+        build_site("website" => website_config.merge("theme" => theme).merge(empty)).process
+        document = Nokogiri::HTML5.parse(File.read(File.join(destination, "index.html")))
+        assert_empty document.css(".site-footer__main, .site-footer nav")
+        assert_equal 1, document.css(".site-footer__credit").length
+      end
+    end
+  end
+
   def test_reading_time_is_default_on_only_for_long_independent_bodies_in_both_themes
     long = "word " * 401
     {
@@ -674,20 +715,20 @@ class JekyllAdapterTest < Minitest::Test
     assert_includes home, 'class="minimal-post-card__subtitle">A field note'
     assert_includes home, "A concise dispatch summary from the authored body."
     assert_includes home, "Posted by Ada on"
-    assert_includes home, 'class="minimal-contacts"'
+    assert_includes home, 'class="site-footer__contacts"'
     assert_includes home, 'href="https://github.com/example"'
     assert_includes home, 'href="mailto:hello@example.test"'
     document = Nokogiri::HTML(home)
-    github = document.at_css('.minimal-contacts a[href="https://github.com/example"]')
-    assert_equal "minimal-contact minimal-contact--icon", github["class"]
+    github = document.at_css('.site-footer__contacts a[href="https://github.com/example"]')
+    assert_equal "site-contact site-contact--icon", github["class"]
     assert_equal "GitHub", github["aria-label"]
     assert_equal "GitHub", github["title"]
     assert_equal "true", github.at_css("svg")["aria-hidden"]
-    assert_includes github.at_css("svg")["class"], "minimal-contact__icon--brand"
+    assert_includes github.at_css("svg")["class"], "site-contact__icon--brand"
     assert_equal document.at_css(".site-footer__github svg path")["d"], github.at_css("svg path")["d"]
     assert_empty github.text.strip
-    community = document.at_css('.minimal-contacts a[href="https://community.example.test"]')
-    assert_equal "minimal-contact minimal-contact--text", community["class"]
+    community = document.at_css('.site-footer__contacts a[href="https://community.example.test"]')
+    assert_equal "site-contact site-contact--text", community["class"]
     assert_equal "Community", community.text.strip
     assert_nil community["aria-label"]
     assert_includes home, "Literal {{ site.secret }}."

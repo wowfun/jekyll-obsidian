@@ -121,6 +121,7 @@ module JekyllObsidian
       "page_go" => "Go", "page_jump_error" => "Enter a whole number from 1 to {pages}.",
       "first_observed" => "First observed", "original" => "Original",
       "contact" => "Contact",
+      "footer_sites" => "Sites",
       "graph" => "Graph",
       "feed" => "Feed",
       "search" => "Search",
@@ -301,6 +302,13 @@ module JekyllObsidian
         return self
       end
 
+      begin
+        @footer_links = DeepFreeze.call(FooterLinks.resolve(@config.footer))
+      rescue FooterLinks::Invalid => exception
+        error("invalid_footer", exception.message)
+        return self
+      end
+
       load_manifests if @diagnostics.none? { |item| item.severity == :error }
       snapshots = build_locale_snapshots if @diagnostics.none? { |item| item.severity == :error }
       return self if @diagnostics.any? { |item| item.severity == :error }
@@ -317,7 +325,9 @@ module JekyllObsidian
           html_publication: @html_publication,
           include_html_projection: false,
           tag_policy_resolved: true,
-          frontmatter_cache: @frontmatter_cache
+          frontmatter_cache: @frontmatter_cache,
+          footer_links: @footer_links,
+          footer_locale: locale
         ).prepare
       end
       self
@@ -919,6 +929,10 @@ module JekyllObsidian
     end
 
     def localize_data(value, locale, property = nil, parent_property = nil)
+      # Cross-site links and contact addresses have explicit destinations. Even
+      # same-origin siblings must not inherit this site's baseurl/locale prefix.
+      return value if property == "footer" && parent_property == "website"
+
       case value
       when Hash
         value.to_h do |key, item|

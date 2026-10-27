@@ -661,13 +661,13 @@ test("Minimal Home combines authored content with at most six recent posts", asy
   await expect(page.locator(".blog-post-feed, .blog-pager, link[rel='next']")).toHaveCount(0);
 
   const contacts = page.getByRole("navigation", { name: "Contact" });
-  await expect(contacts.locator(".minimal-contact--icon")).toHaveCount(2);
+  await expect(contacts.locator(".site-contact--icon")).toHaveCount(2);
   const github = contacts.getByRole("link", { name: "GitHub" });
   const x = contacts.getByRole("link", { name: "X", exact: true });
   await expect(github).toHaveAttribute("href", "https://github.com/wowfun");
   await expect(x).toHaveAttribute("href", "https://x.com/wowfuna");
-  await expect(github.locator("svg")).toHaveClass(/minimal-contact__icon--brand/);
-  await expect(x.locator("svg")).toHaveClass(/minimal-contact__icon--brand/);
+  await expect(github.locator("svg")).toHaveClass(/site-contact__icon--brand/);
+  await expect(x.locator("svg")).toHaveClass(/site-contact__icon--brand/);
   await expect(x.locator("svg")).toHaveCSS("stroke", "none");
   for (const link of [github, x]) {
     await expect(link).toHaveCSS("border-top-width", "0px");
@@ -676,7 +676,7 @@ test("Minimal Home combines authored content with at most six recent posts", asy
     const box = await link.boundingBox();
     expect(Math.abs(box!.width - box!.height)).toBeLessThanOrEqual(1);
   }
-  expect((await new AxeBuilder({ page }).include(".minimal-contacts").analyze()).violations).toEqual([]);
+  expect((await new AxeBuilder({ page }).include(".site-footer__contacts").analyze()).violations).toEqual([]);
 
   if (testInfo.project.name === "desktop-chromium") {
     const firstTitle = cards.getByRole("heading", { level: 3 }).first();
@@ -2232,7 +2232,7 @@ test("feed discovery stays out of primary navigation", async ({ page }, testInfo
 
 test("localized docs language navigation and fallback metadata remain correct", async ({ page }) => {
   await page.goto(localizedDocs());
-  await expect(page.locator(".minimal-contacts, a[href='https://github.com/wowfun'], a[href='https://x.com/wowfuna']"))
+  await expect(page.locator(".site-footer__contacts, a[href='https://github.com/wowfun'], a[href='https://x.com/wowfuna']"))
     .toHaveCount(0);
 
   await page.goto(localizedDocs("/zh-CN/"));

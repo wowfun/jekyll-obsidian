@@ -30,6 +30,7 @@ class DocumentationCoverageTest < Minitest::Test
     "i18n" => ["Localization.md", "Enable localization", "`website.i18n`"],
     "comments" => ["Comments.md", "Configure the site", "`website.comments`"],
     "contacts" => ["Customization.md", "Site identity", "`website.contacts`"],
+    "footer" => ["Customization.md", "Site identity", "`website.footer.links`"],
     "navigation" => ["Customization.md", "Minimal navigation", "`website.navigation`"],
     "analytics" => ["Analytics.md", "Configuration and security", "`website.analytics`"],
     "search" => ["Customization.md", "Output limits", "`website.search.mode`"],

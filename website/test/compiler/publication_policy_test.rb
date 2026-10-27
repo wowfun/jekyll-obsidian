@@ -29,4 +29,15 @@ class PublicationPolicyTest < Minitest::Test
     end
   end
 
+  def test_only_the_site_footer_is_exempt_from_url_localization
+    request = JekyllObsidian::BuildRequest.new(snapshot: JekyllObsidian::Snapshot.new(entries: []),
+      config: JekyllObsidian::BuildConfig.new(**DEFAULT_CONFIG.merge(i18n: { "enabled" => true, "locales" => %w[en zh-CN] })))
+    compiler = JekyllObsidian::LocalizedCompiler.new(request)
+    footer = { "url" => "https://example.test/sibling/" }
+    data = { "footer" => footer, "website" => { "footer" => footer, "theme_data" => { "footer" => footer } } }
+    localized = compiler.send(:localize_data, data, "zh-CN")
+    assert_equal "https://example.test/sibling/", localized.dig("website", "footer", "url")
+    assert_equal "https://example.test/zh-CN/sibling/", localized.dig("footer", "url")
+    assert_equal "https://example.test/zh-CN/sibling/", localized.dig("website", "theme_data", "footer", "url")
+  end
 end

@@ -17,7 +17,7 @@ Liquid::Template.register_filter(JekyllObsidian::TemplateFilters)
 module JekyllObsidian
   module Adapter
     BUNDLED_FEATURE_IDS = %w[search graph previews math mermaid].freeze
-    CONFIG_KEYS = %w[source syntax_profile theme repository edit_branch content features html i18n comments analytics contacts navigation search feed home blog properties].freeze
+    CONFIG_KEYS = %w[source syntax_profile theme repository edit_branch content features html i18n comments analytics contacts footer navigation search feed home blog properties].freeze
     GIT_FIRST_COMMIT_CACHE_VERSION = 1
     GITHUB_MARKDOWN_MANIFEST_INPUT = "JEKYLL_OBSIDIAN_GITHUB_MARKDOWN_MANIFEST_IN"
     GITHUB_MARKDOWN_MANIFEST_OUTPUT = "JEKYLL_OBSIDIAN_GITHUB_MARKDOWN_MANIFEST_OUT"
@@ -186,6 +186,7 @@ module JekyllObsidian
         "comments" => configured["comments"],
         "analytics" => configured["analytics"],
         "contacts" => configured["contacts"],
+        "footer" => configured["footer"],
         "navigation" => configured["navigation"],
         "search" => configured["search"],
         "feed" => configured["feed"],
@@ -425,6 +426,7 @@ module JekyllObsidian
           comments: website.fetch("comments"),
           analytics: website.fetch("analytics"),
           contacts: website.fetch("contacts"),
+          footer: website.fetch("footer"),
           navigation: website.fetch("navigation"),
           search: website.fetch("search"),
           feed: website.fetch("feed"),

@@ -1,6 +1,30 @@
 <footer class="site-footer">
   {% assign ui = page.website.i18n.messages %}
+  {% assign footer = page.website.footer %}
   <div class="site-footer__inner">
+    {% if footer.contacts.size > 0 or footer.links.size > 0 %}
+    <div class="site-footer__main">
+      {% if footer.contacts.size > 0 %}
+      <nav class="site-footer__section" aria-labelledby="footer-contact-title">
+        <h2 id="footer-contact-title" class="site-footer__heading">{{ ui.contact | default: 'Contact' | escape }}</h2>
+        <ul class="site-footer__contacts">
+          {% for contact in footer.contacts %}
+          <li>{% if contact.icon %}<a class="site-contact site-contact--icon" href="{{ contact.url | escape }}" rel="me" aria-label="{{ contact.label | escape }}" title="{{ contact.label | escape }}">{% include website/contact-icon.html icon=contact.icon %}</a>{% else %}<a class="site-contact site-contact--text" href="{{ contact.url | escape }}" rel="me">{{ contact.label | escape }}</a>{% endif %}</li>
+          {% endfor %}
+        </ul>
+      </nav>
+      {% endif %}
+      {% if footer.links.size > 0 %}
+      <nav class="site-footer__section" aria-labelledby="footer-sites-title">
+        <h2 id="footer-sites-title" class="site-footer__heading">{{ ui.footer_sites | default: 'Sites' | escape }}</h2>
+        <ul class="site-footer__links">
+          {% for link in footer.links %}<li><a href="{{ link.url | escape }}">{{ link.label | escape }}</a></li>{% endfor %}
+        </ul>
+      </nav>
+      {% endif %}
+    </div>
+    {% endif %}
+    <div class="site-footer__credit">
     <span>{{ ui.built_by | default: 'Built by' | escape }}</span>
     <a class="site-footer__github" href="https://github.com/wowfun/jekyll-obsidian" aria-label="{{ ui.project_on_github | default: 'Jekyll Obsidian on GitHub' | escape }}">
       {% include website/github-icon.html %}
@@ -10,5 +34,6 @@
     <span>MIT License</span>
     <span aria-hidden="true">·</span>
     <time datetime="{{ site.time | date: "%Y" }}">{{ site.time | date: "%Y" }}</time>
+    </div>
   </div>
 </footer>

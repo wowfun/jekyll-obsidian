@@ -91,7 +91,34 @@ HTML 映射本身就是发布授权，不受 `website.content.publish_by_default
 
 Minimal Home 会先显示公开的根目录索引，再用编辑式列表显示最近六篇文章。索引默认为 `index.md`；物理 `index.md` 不存在时，才会使用同级且文件名精确为 `README.md` 的公开笔记。被选中的目录索引没有正文一级标题时，不会再通过文件名或 frontmatter 标题补出可见标题；解析后的标题仍用于元数据和导航。带图片的条目在宽屏中把 16:9 缩略图放在摘要旁边，在窄屏中放到摘要上方；没有图片的条目会占满宽度，不显示占位图。摘要还可以显示 `subtitle`、正文摘录、作者和发布日期。Blog 链接会打开 `/blog/` 中完整的倒序文章列表。
 
-配置 `website.contacts` 后，可以在最近文章区之后显示联系方式。每个条目都需要简短的 `label`，以及采用 `https:`、`mailto:` 或 `tel:` 的 URL。基础配置没有联系方式时，可以省略该项或使用空数组。Email、Phone、GitHub、LinkedIn、X/Twitter、Mastodon、Bluesky、Instagram、YouTube、Telegram、RSS 和 Website 链接会自动获得无障碍图标。其他服务会直接显示文本标签，因此配置保持服务中立，不需要额外的 icon 字段。
+### 页脚联系方式与站点导航
+
+配置 `website.contacts` 后，Minimal 和 Docs 的所有页面都会在页脚显示联系方式，首页最近文章区不再重复显示。每个条目都需要简短的 `label`，以及采用 `https:`、`mailto:` 或 `tel:` 的 URL。基础配置没有联系方式时，可以省略该项或使用空数组。Email、Phone、GitHub、LinkedIn、X/Twitter、Mastodon、Bluesky、Instagram、YouTube、Telegram、RSS 和 Website 链接会自动获得无障碍图标。其他服务会直接显示文本标签，因此配置保持服务中立，不需要额外的 icon 字段。
+
+`website.footer.links` 在联系方式旁增加「站点」区块，默认值为 `[]`。空区块不占位。两种主题共用页脚；移动端纵向排列区块，下方保留主题署名、许可证和年份。
+
+```yaml
+website:
+  contacts:
+    - label: GitHub
+      url: https://github.com/wowfun
+  footer:
+    links:
+      - label: Jekyll Obsidian
+        url: https://sinputer.top/jekyll-obsidian/
+        locale_urls:
+          zh-CN: https://sinputer.top/jekyll-obsidian/zh-CN/
+```
+
+每项必须包含非空 `label` 和不含用户名、密码的完整 HTTPS `url`。可选的 `locale_urls` 将语言标识映射到完整 HTTPS 地址；优先选择当前界面语言的覆盖值，没有覆盖时使用默认 `url`。链接直接使用配置地址，即使目标是同域的另一个站点，也不会追加当前站点的 `baseurl` 或语言前缀。链接在同一标签页打开。区块标题可通过 locale 消息 `footer_sites` 和 `contact` 修改；主题署名仍链接官方 GitHub 仓库。
+
+自定义 locale 消息需要设置 `website.i18n.enabled: true`，并将消息写在根目录 `_locale.yml` 或 `_translations/<locale>/_locale.yml` 的 `messages` 下。单语言站点可只在 `locales` 中列出根配置 `lang` 指定的语言，无需创建译文副本即可修改这些标题。
+
+最多配置 12 个链接，单行标签不超过 64 个字符，URL 不超过 2,048 个字符（含各语言覆盖地址）。首尾 Unicode 空白和字节顺序标记（`U+FEFF`）会被移除，制表符和换行不被接受。语言标识不区分大小写，例如 `zh-cn` 可匹配 `zh-CN`；仅大小写不同的重复键会报错。当前未启用语言的覆盖地址会保留但不使用，便于单语言和多语言构建共用配置。
+
+自定义模板通过 `page.website.footer.contacts` 读取联系方式，通过 `page.website.footer.links` 读取当前语言的导航链接。前者替代了 `page.website.theme_data.contacts`；使用旧首页数据的模板需要更新。用户配置仍使用 `website.contacts`。
+
+自定义联系方式 CSS 也需要将 `.minimal-contact` 和 `.minimal-contact__*` / `.minimal-contact--*` 改为对应的 `.site-contact` 类。旧首页容器 `.minimal-contacts` 已移除，共享 footer 的联系方式列表使用 `.site-footer__contacts`。
 
 ## 站点主题
 

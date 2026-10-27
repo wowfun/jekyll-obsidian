@@ -95,6 +95,7 @@ messages:
   page_label: "第 {page} / {pages} 页"
   first_observed: 首次发现于
   contact: 联系方式
+  footer_sites: 站点
   graph: 关系图
   feed: 订阅
   search: 搜索

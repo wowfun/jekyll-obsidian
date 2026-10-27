@@ -98,7 +98,34 @@ Keep `title`, `description`, `lang`, `url`, and `baseurl` at the YAML root. Put 
 
 Minimal Home renders the public root directory index, followed by the six most recent posts as editorial rows. The index is `index.md`, or the exact sibling `README.md` when no physical `index.md` exists. A selected directory index without an authored level-one heading does not render a substitute heading from its filename or frontmatter title; the resolved title remains available to metadata and navigation. A row with an image places a 16:9 thumbnail beside its summary on wide screens and above it on narrow screens; a row without an image uses the full width with no placeholder. Each summary can also show `subtitle`, a body excerpt, authors, and its publication date. The Blog link opens the complete reverse-chronological list at `/blog/`.
 
-Add `website.contacts` to place contact links after the recent-post section. Each entry requires a short `label` and an `https:`, `mailto:`, or `tel:` URL; use an empty list or omit it when the base configuration does not define contacts. Email, phone, GitHub, LinkedIn, X/Twitter, Mastodon, Bluesky, Instagram, YouTube, Telegram, RSS, and Website links receive an accessible icon automatically. Other providers keep their label as text, so the configuration stays provider-neutral and needs no icon field.
+### Footer contacts and site navigation
+
+Add `website.contacts` to place contact links in the footer on every page, in both Minimal and Docs. Each entry requires a short `label` and an `https:`, `mailto:`, or `tel:` URL; use an empty list or omit it when the base configuration does not define contacts. Email, phone, GitHub, LinkedIn, X/Twitter, Mastodon, Bluesky, Instagram, YouTube, Telegram, RSS, and Website links receive an accessible icon automatically. Other providers keep their label as text, so the configuration stays provider-neutral and needs no icon field. Home does not repeat these links below recent posts.
+
+`website.footer.links` adds a Sites section alongside contacts. It defaults to `[]`; empty sections take no space. Both themes share the footer, with stacked sections on mobile and the project credit, license, and year below.
+
+```yaml
+website:
+  contacts:
+    - label: GitHub
+      url: https://github.com/wowfun
+  footer:
+    links:
+      - label: Jekyll Obsidian
+        url: https://sinputer.top/jekyll-obsidian/
+        locale_urls:
+          zh-CN: https://sinputer.top/jekyll-obsidian/zh-CN/
+```
+
+Every link requires a non-empty `label` and an absolute HTTPS `url` without credentials. Optional `locale_urls` maps language identifiers to full HTTPS addresses; the current UI language selects its override, falling back to `url` when none exists. Addresses are used exactly as configured, including links to another site on the same domain: the current site's `baseurl` and language prefix are never added. Links open in the same tab. Customize the section headings with the `footer_sites` and `contact` locale messages. The theme credit continues to link to the official GitHub repository.
+
+Custom locale messages require `website.i18n.enabled: true`. Put them under `messages` in the root `_locale.yml` or `_translations/<locale>/_locale.yml`. A single-language site can list only its root `lang` in `locales` to customize these headings without creating translation copies.
+
+Configure at most 12 links, with single-line labels up to 64 characters and URLs up to 2,048 characters (including locale overrides). Surrounding Unicode whitespace and byte-order marks (`U+FEFF`) are trimmed; tabs and line breaks are rejected. Locale keys match without case sensitivity, so `zh-cn` matches `zh-CN`; duplicate keys differing only in case are rejected. Overrides for languages not currently enabled are retained but unused, so the same configuration can serve single-language and multilingual builds.
+
+Custom templates read contacts from `page.website.footer.contacts` and the selected navigation links from `page.website.footer.links`. The former replaces `page.website.theme_data.contacts`; update templates that used the old home-only data. The authored contact configuration remains `website.contacts`.
+
+Custom contact CSS must also move from `.minimal-contact` and `.minimal-contact__*` / `.minimal-contact--*` to the corresponding `.site-contact` classes. The old `.minimal-contacts` home container is gone; the shared footer's contact list uses `.site-footer__contacts`.
 
 ## Site themes
 
