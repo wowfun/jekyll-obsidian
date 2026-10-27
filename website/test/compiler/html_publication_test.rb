@@ -98,6 +98,8 @@ class HtmlPublicationTest < Minitest::Test
     image = Nokogiri::HTML5.fragment(page(result, "/").content).at_css('img[alt="Cover"]')
     refute_nil image
     assert_equal "/talks/runtime/assets/cover.svg", image["src"]
+    markdown = result.generated_files.find { |file| file.route == "/index.md" }.content
+    assert_includes markdown, "![Cover](https://example.test/talks/runtime/assets/cover.svg)"
     cover_files = result.projected_files.select { |file| file.source_path == "slides/runtime/assets/cover.svg" }
     assert_equal ["/talks/runtime/assets/cover.svg"], cover_files.map(&:route)
   end

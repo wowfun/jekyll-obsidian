@@ -10,38 +10,10 @@ require "uri"
 
 module JekyllObsidian
   class VaultCompiler
-    COMMONMARK_OPTIONS = {
-      parse: {
-        smart: false,
-        relaxed_tasklist_matching: true,
-        relaxed_autolinks: true,
-        sourcepos_chars: true
-      },
-      render: {
-        unsafe: true,
-        hardbreaks: true,
-        tasklist_classes: true,
-        escaped_char_spans: true,
-        sourcepos: true
-      },
-      extension: {
-        strikethrough: true,
-        table: true,
-        autolink: true,
-        tasklist: true,
-        footnotes: true,
-        math_dollars: true,
-        math_code: true,
-        math_latex: true,
-        wikilinks_title_after_pipe: true,
-        highlight: true,
-        cjk_friendly_emphasis: true
-      }
-    }.freeze
     COMMONMARK_PLUGINS = { syntax_highlighter: { theme: "" } }.freeze
     REMOTE_COMMONMARK_OPTIONS = {
-      parse: COMMONMARK_OPTIONS.fetch(:parse),
-      render: COMMONMARK_OPTIONS.fetch(:render).merge(unsafe: false),
+      parse: MarkdownOptions::LOCAL.fetch(:parse),
+      render: MarkdownOptions::LOCAL.fetch(:render).merge(unsafe: false),
       extension: {
         strikethrough: true,
         table: true,
@@ -1002,7 +974,7 @@ module JekyllObsidian
         merged_tags = (Array(note.properties["tags"]) + prepared.tags).uniq.sort
         note.properties = note.properties.merge("tags" => merged_tags)
         markdown = (note.external_document ? note.body : prepared.markdown).dup.force_encoding(Encoding::UTF_8)
-        options = note.external_document ? REMOTE_COMMONMARK_OPTIONS : COMMONMARK_OPTIONS
+        options = note.external_document ? REMOTE_COMMONMARK_OPTIONS : MarkdownOptions::LOCAL
         note.document = Commonmarker.parse(markdown, options: options)
         if note.external_document
           rewrite_github_markdown_urls(note)
@@ -1182,19 +1154,22 @@ module JekyllObsidian
           end
 
           display = plain_node_text(node)
-          occurrence_target = raw_url
+          options = {}
           if node.type == :image && (dimension = display.match(/\A(.*)\|(\d+(?:x\d+)?)\z/m))
             display = dimension[1]
-            occurrence_target = "#{raw_url}|#{dimension[2]}"
+            width, height = dimension[2].split("x", 2)
+            options["width"] = width.to_i
+            options["height"] = height.to_i if height
           end
 
           occurrence = Occurrence.new(
             index: note.occurrences.length,
             source_id: note.id,
-            raw_target: occurrence_target,
+            raw_target: raw_url,
             display: display,
             kind: node.type == :image ? :embed : :link,
             syntax: node.type == :image ? :markdown_image : :markdown_link,
+            options: options,
             source_span: source_span(node.source_position)
           )
           note.occurrences << occurrence
@@ -1331,14 +1306,17 @@ module JekyllObsidian
 
     def resolve_occurrence(note, occurrence)
       begin
-        target_text, fragment, options = split_target(occurrence.raw_target, occurrence.kind)
+        target_text, fragment, options = split_target(
+          occurrence.raw_target, occurrence.kind,
+          parse_size: !%i[markdown_image markdown_link].include?(occurrence.syntax)
+        )
       rescue ExternalMedia::Invalid => exception
         occurrence.unresolved = true
         error("invalid_pdf_options", exception.message, note.id, occurrence.source_span)
         return
       end
       occurrence.fragment = fragment
-      occurrence.options = options
+      occurrence.options = (occurrence.options || {}).merge(options)
 
       if target_text.empty?
         if occurrence.property == "related"
@@ -1595,7 +1573,7 @@ module JekyllObsidian
 
     def render_authored_documents
       @notes.values.sort_by(&:id).each do |note|
-        options = note.external_document ? REMOTE_COMMONMARK_OPTIONS : COMMONMARK_OPTIONS
+        options = note.external_document ? REMOTE_COMMONMARK_OPTIONS : MarkdownOptions::LOCAL
         html = note.document.to_html(options: options, plugins: { syntax_highlighter: nil })
         fragment = Nokogiri::HTML5.fragment(html)
         bind_occurrence_nodes(note, fragment)
@@ -1934,7 +1912,7 @@ module JekyllObsidian
 
     def annotate_code_blocks(note, fragment)
       blocks = fragment.css("pre[data-sourcepos]").group_by { |node| node["data-sourcepos"] }
-      options = note.external_document ? REMOTE_COMMONMARK_OPTIONS : COMMONMARK_OPTIONS
+      options = note.external_document ? REMOTE_COMMONMARK_OPTIONS : MarkdownOptions::LOCAL
       note.document.walk.each do |source|
         next unless source.type == :code_block
 
@@ -1984,7 +1962,8 @@ module JekyllObsidian
           markdown_source: PublishedMarkdown.content(
             title: note.title,
             body: note.body,
-            has_h1: note.has_h1
+            has_h1: note.has_h1,
+            image_urls: published_markdown_image_urls(note)
           ),
           authored_text: note.authored_text,
           preview: note.preview,
@@ -2648,9 +2627,11 @@ module JekyllObsidian
       [nil, matches.length > 1]
     end
 
-    def split_target(raw, kind)
+    def split_target(raw, kind, parse_size: true)
       text = raw.to_s.strip
-      target_and_fragment, size_option = text.split("|", 2)
+      # A pipe inside a Markdown destination is part of the URL. Its image
+      # dimensions come from alt text, separately from wiki embed options.
+      target_and_fragment, size_option = parse_size ? text.split("|", 2) : [text, nil]
       target, fragment = target_and_fragment.split("#", 2)
       options = {}
       if size_option&.match?(/\A\d+(?:x\d+)?\z/)
@@ -2723,6 +2704,16 @@ module JekyllObsidian
 
     def token_url(note, index)
       "https://obsidian.invalid/ref/#{note.scanner.token_namespace}/#{index}"
+    end
+
+    def published_markdown_image_urls(note)
+      note.occurrences.each_with_object({}) do |occurrence, urls|
+        next unless occurrence.syntax == :markdown_image && %i[attachment projected_file].include?(occurrence.resolved_type)
+        next unless MediaPolicy.kind(occurrence.target_path) == :image
+
+        route = @html_routes_by_source.fetch(occurrence.target_path) { @url_builder.attachment_route(occurrence.target_path) }
+        urls[occurrence.raw_target] = @url_builder.absolute_url(route) || @url_builder.href(route)
+      end
     end
 
     def source_span(position)

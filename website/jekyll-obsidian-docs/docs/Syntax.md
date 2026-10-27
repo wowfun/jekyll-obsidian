@@ -71,7 +71,11 @@ Mermaid and MathJax load only on pages that use them.
 
 ## Media
 
-An image embed can include its width or width and height:
+An image embed can include its width or width and height.
+
+For Markdown images, put dimensions in the alt text, for example `![Diagram|640x360](diagram.png)`. A literal `|` inside a Markdown destination is part of the filename or URL, not a size separator; `%7C` is also accepted. Inline and reference images use the same published attachment address in HTML and exported Markdown. Filesystem restrictions still apply: Windows does not allow literal pipes in filenames.
+
+In external media URLs, encode a literal pipe as `%7C`, for example `![Diagram|640](https://example.test/a%7Cb.png)`. An unencoded pipe fails URL validation.
 
 ![[assets/research-folio.svg|640]]
 

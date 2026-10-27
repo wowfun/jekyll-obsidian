@@ -72,6 +72,8 @@ An existing Jekyll `_config.yml` and its plugins are not loaded by this tool.
 
 `source_title` is also a defined string property. Quote numeric labels (`source_title: "123"`) and replace array or mapping values with the intended plain-text label; otherwise the build reports `invalid_property`.
 
+Move Markdown image dimensions out of the destination: change `![Diagram](image.png|640x360)` to `![Diagram|640x360](image.png)`. A pipe in a Markdown destination is now part of the filename, so the old form can fail with `missing_embed` or select a literal matching filename. Wiki embeds such as `![[image.png|640x360]]` retain their size syntax. No compatibility fallback or automatic source rewrite is applied.
+
 Change `uses: wowfun/jekyll-obsidian@v0.3.1` in the workflow to the desired release tag. The Action installs that release's exact gem version.
 
 For Bundler, change the `jekyll-obsidian-site` version constraint in `Gemfile` to the same release, run `bundle update jekyll-obsidian-site`, and commit `Gemfile`, `Gemfile.lock`, and the workflow together. Running `bundle update` alone cannot upgrade an exact Gemfile pin. For a standalone local installation, use `gem update jekyll-obsidian-site`. Package updates do not rewrite host content or configuration.

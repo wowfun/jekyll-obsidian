@@ -383,6 +383,11 @@ defaults to that day; otherwise the range ends on the latest matching entry and 
 up to the configured limit. Undated entries are excluded; gaps between dates are allowed.
 The file contains the site, conditions, count, article metadata and complete published
 Markdown, including media links. It uses the archive's order across every page.
+
+Local Markdown images in these resources use their actual published attachment address: an absolute URL when `url` is configured, otherwise a root-relative URL including `baseurl`. Inline and reference-style images share this behavior, as do Copy page and every interface language. Reference images become inline images in the published Markdown so ordinary links sharing a definition keep their destination. Original Markdown files retain their authored relative paths.
+
+This URL projection covers image files only. PDF, audio, video, wiki embeds, and ordinary links keep their authored destinations in exported Markdown, even when the HTML page uses a published attachment URL. Use absolute URLs for those destinations when the exported file must work outside the site.
+
 Up to four resources load concurrently. Cancel or close stops the download; any failed
 body prevents an incomplete file and retry reuses successfully loaded bodies from that task.
 If the site changes while the panel is open, its selection refreshes before downloading.

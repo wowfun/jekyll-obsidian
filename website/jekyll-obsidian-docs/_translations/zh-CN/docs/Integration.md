@@ -66,6 +66,8 @@ bundle exec jekyll-obsidian dev
 
 `source_title` 也已成为明确的字符串属性。数字标签需要加引号（`source_title: "123"`），数组或映射应改为所需的纯文本标签，否则构建会返回 `invalid_property`。
 
+Markdown 图片尺寸应从目标地址移到替代文本：将 `![示意图](image.png|640x360)` 改为 `![示意图|640x360](image.png)`。Markdown 目标中的管道符现在属于文件名，旧写法可能触发 `missing_embed`，或指向字面匹配的文件名。Wiki 嵌入 `![[image.png|640x360]]` 的尺寸语法保持不变。不会提供兼容回退或自动改写原稿。
+
 将工作流中的 `uses: wowfun/jekyll-obsidian@v0.3.1` 改为需要的发行 tag，Action 会安装该版本对应的 gem。
 
 使用 Bundler 时，将 `Gemfile` 中 `jekyll-obsidian-site` 的版本约束改为相同发行版本，运行 `bundle update jekyll-obsidian-site`，然后将 `Gemfile`、`Gemfile.lock` 和工作流一起提交。单独运行 `bundle update` 无法升级 Gemfile 中固定的版本。本地独立安装可运行 `gem update jekyll-obsidian-site`。包更新不会改写宿主内容和配置。
