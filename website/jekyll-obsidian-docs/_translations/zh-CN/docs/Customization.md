@@ -104,11 +104,11 @@ jekyll-obsidian build --theme minimal --url https://example.test --baseurl ""
 
 生成站点位于 `.jekyll-obsidian-cache/site/`。主题标识只支持 `minimal` 和 `docs`。切换主题后，仍然发布的笔记会保留原 URL；请显式设置 `website.i18n.enabled: true`，以继续发布译文。
 
-`website.features` 中省略的功能会继承主题默认值。可以用显式 YAML 布尔值覆盖 `search`、`tags`、`feed`、`graph`、`relations`、`previews` 和 `outline`。
+`website.features` 中省略的功能会继承主题默认值。可以用显式 YAML 布尔值覆盖 `search`、`tags`、`feed`、`graph`、`relations`、`previews`、`outline` 和 `reading_time`。
 
 | 功能 | Minimal | Docs |
 | --- | --- | --- |
-| `search`、`previews`、`outline`、`relations`、`graph` | 开启 | 开启 |
+| `search`、`previews`、`outline`、`relations`、`graph`、`reading_time` | 开启 | 开启 |
 | `tags`、`feed` | 开启 | 关闭 |
 
 独立的 `i18n` 和 `comments` 配置在已提供但省略 `enabled` 时，使用以下默认值：
@@ -128,6 +128,24 @@ website:
     graph: false
     previews: false
 ```
+
+### 阅读时长
+
+两个主题默认在独立博客文章、文档和普通页面的顶部元信息中显示阅读时长，但仅在估算结果超过 2 分钟时显示。恰好 2 分钟时隐藏，2.1 分钟显示「约 3 分钟阅读」。首页、目录页、系统生成页及文章列表不显示。提示随 HTML 构建生成，禁用 JavaScript 也可显示。
+
+中文及其他 CJK 字符按每分钟 400 字，其余文字按每分钟 200 词估算，两者相加后向上取整。词按连续的 Unicode 字母、数字及其组合标记统计。正文标题、列表、表格、引用、行内代码和普通代码块均计入。展开后的嵌入笔记和导入的 GitHub Markdown 按实际正文统计；frontmatter、生成的操作控件与来源标签不计入。图片、公式、Mermaid 图表、音视频和嵌入附件不增加时间，正文中的图片说明正常计入。带有 `hidden`、`aria-hidden="true"` 或主题 `visually-hidden` 类的隐藏内容不计入。这是基于文字长度的粗略估算，不代表理解内容所需的时间。
+
+译文按实际显示的正文计算，包括缺少翻译时显示的默认语言内容。配置语言消息 `reading_time` 时，必须且只能包含一个 `{minutes}` 占位符，不允许其他花括号或空白消息；中文示例为 `约 {minutes} 分钟阅读`。省略时使用英文默认文案，即使界面采用其他语言，也会标记为 `lang="en" dir="ltr"`。自定义模板可读取整数 `page.website.reading_time_minutes`，没有可计数文字时为 0。关闭 `reading_time` 只隐藏内置提示，仍会计算该值，以保持自定义模板的数据契约。若要全站关闭提示：
+
+```yaml
+website:
+  features:
+    reading_time: false
+```
+
+只有 `website.i18n.enabled` 为 true 时才会加载 locale 消息。单语言站点也可启用，例如在配置根层级设置 `lang: zh-CN`，并设置 `website.i18n: {enabled: true, locales: [zh-CN]}`，再在根 `_locale.yml` 中设置 `name: 简体中文` 和 `messages.reading_time`，不需要建立翻译副本。关闭 i18n 时，仅设置 `lang` 不会选择或自定义该文案，阅读时长提示使用英文。
+
+阅读速度与 2 分钟阈值为固定值，不提供单篇覆盖设置。
 
 ## Minimal 导航
 

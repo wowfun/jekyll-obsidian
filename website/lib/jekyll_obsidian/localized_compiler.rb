@@ -144,6 +144,7 @@ module JekyllObsidian
       "posted_by" => "Posted by",
       "on" => "on",
       "updated" => "Updated",
+      "reading_time" => "About {minutes} min read",
       "edit" => "Edit",
       "history" => "History",
       "view_source" => "View source",
@@ -248,6 +249,14 @@ module JekyllObsidian
       "open_discussions" => "Open discussions on GitHub",
       "open_comments_repository" => "Open the comments repository on GitHub"
     }.freeze
+
+    MESSAGE_PLACEHOLDERS = DeepFreeze.call({
+      "ledger_date" => { required: %w[month day], optional: %w[year] },
+      "ledger_date_year" => { required: %w[month day year] },
+      "ledger_entry" => { required: %w[count] },
+      "ledger_entries" => { required: %w[count] },
+      "reading_time" => { required: %w[minutes], unique: true }
+    })
 
     def self.compile(request)
       new(request).compile
@@ -489,16 +498,19 @@ module JekyllObsidian
             error("invalid_locale_message", "message #{key.inspect} must contain exactly #{count} non-empty pipe-separated names", path)
           end
         end
-        { "ledger_date" => %w[month day], "ledger_date_year" => %w[month day year],
-          "ledger_entry" => %w[count], "ledger_entries" => %w[count] }.each do |key, required|
+        MESSAGE_PLACEHOLDERS.each do |key, contract|
           next unless messages.key?(key) && valid_text?(messages[key])
 
           format = messages.fetch(key)
-          allowed = key.start_with?("ledger_date") ? %w[month day year] : %w[count]
+          required = contract.fetch(:required)
+          allowed = required + contract.fetch(:optional, [])
           tokens = format.scan(/\{([^{}]*)\}/).flatten
           remainder = format.gsub(/\{(?:#{allowed.join('|')})\}/, "")
           if (required - tokens).any? || remainder.match?(/[{}]/)
             error("invalid_locale_message", "message #{key.inspect} requires #{required.map { |token| "{#{token}}" }.join(', ')}; allowed placeholders: #{allowed.join(', ')}", path)
+          elsif contract[:unique] && tokens.uniq.length != tokens.length
+            duplicates = tokens.tally.select { |_token, count| count > 1 }.keys
+            error("invalid_locale_message", "message #{key.inspect} must use each placeholder once; duplicate placeholders: #{duplicates.join(', ')}", path)
           end
         end
         @locale_data[locale] = {
@@ -506,6 +518,7 @@ module JekyllObsidian
           "name" => name,
           "hreflang" => hreflang,
           "dir" => direction,
+          "reading_time_language" => messages.key?("reading_time") ? { "lang" => locale, "dir" => direction } : { "lang" => "en", "dir" => "ltr" },
           **policy.policy,
           "messages" => MESSAGE_DEFAULTS.merge(messages.select { |key, value| MESSAGE_DEFAULTS.key?(key) && valid_text?(value) })
         }
@@ -842,6 +855,7 @@ module JekyllObsidian
         "hreflang" => locale_data.fetch("hreflang"),
         "dir" => locale_data.fetch("dir"),
         "messages" => locale_data.fetch("messages"),
+        "reading_time_language" => locale_data.fetch("reading_time_language"),
         "content_lang" => shared ? @shared_languages.fetch(note_id) : actual ? locale : @default_locale,
         "content_dir" => shared ? shared_content_direction(@shared_languages.fetch(note_id)) : content_locale_data.fetch("dir"),
         "shared" => !!shared,

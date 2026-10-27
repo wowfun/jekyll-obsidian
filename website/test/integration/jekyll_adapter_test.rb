@@ -9,6 +9,95 @@ require "tmpdir"
 require "jekyll_obsidian/adapter"
 
 class JekyllAdapterTest < Minitest::Test
+  def test_reading_time_is_default_on_only_for_long_independent_bodies_in_both_themes
+    long = "word " * 401
+    {
+      "index.md" => ["", long],
+      "long.md" => ["", long],
+      "heading.md" => ["", "# Authored heading\n\n#{long}"],
+      "boundary.md" => ["", "word " * 400],
+      "empty.md" => ["", ""],
+      "docs/guide.md" => ["content_type: doc\n", long],
+      "blog/post.md" => ["content_type: post\ndate: 2026-10-20\n", long],
+      "collection/index.md" => ["", long]
+    }.each do |path, (properties, body)|
+      target = File.join(@temporary_root, "vault", path)
+      FileUtils.mkdir_p(File.dirname(target))
+      File.write(target, "---\npublish: true\n#{properties}---\n#{body}")
+    end
+    install_project_layout
+
+    %w[minimal docs].each do |theme|
+      [true, false].each do |enabled|
+        features = enabled ? {} : { "reading_time" => false }
+        build_site("website" => website_config.merge("theme" => theme, "features" => features)).process
+        %w[long heading docs/guide blog/post].each do |path|
+          document = Nokogiri::HTML(File.read(File.join(destination, path, "index.html")))
+          hints = document.css(".note-meta .note-reading-time")
+          assert_equal enabled ? 1 : 0, hints.length, "#{theme} #{path} enabled=#{enabled}"
+          assert_equal "About 3 min read", hints.first.text if enabled
+          assert_equal 1, document.css("h1").length
+        end
+        %w[index.html boundary/index.html empty/index.html collection/index.html 404.html].each do |path|
+          document = Nokogiri::HTML(File.read(File.join(destination, path)))
+          assert_empty document.css(".note-reading-time"), "#{theme} #{path}"
+        end
+        if theme == "minimal"
+          document = Nokogiri::HTML(File.read(File.join(destination, "blog/index.html")))
+          assert_empty document.css(".note-reading-time")
+        end
+      end
+    end
+  end
+
+  def test_reading_time_message_uses_ui_locale_and_direction_on_fallback_pages
+    File.write(File.join(@temporary_root, "vault", "long.md"), "---\npublish: true\n---\n#{'word ' * 401}")
+    {
+      "_locale.yml" => "name: English\n",
+      "_translations/zh-CN/_locale.yml" => "name: 简体中文\nmessages:\n  reading_time: '约 {minutes} 分钟阅读'\n",
+      "_translations/ar/_locale.yml" => "name: العربية\ndir: rtl\nmessages:\n  reading_time: 'حوالي {minutes} دقائق للقراءة'\n"
+    }.each do |path, body|
+      target = File.join(@temporary_root, "vault", path)
+      FileUtils.mkdir_p(File.dirname(target))
+      File.write(target, body)
+    end
+    File.write(File.join(@temporary_root, "vault", "_translations", "zh-CN", "long.md"), "---\npublish: true\n---\n#{'中' * 1201}")
+    install_project_layout
+    %w[minimal docs].each do |theme|
+      build_site("website" => website_config.merge("theme" => theme,
+        "i18n" => { "enabled" => true, "locales" => %w[en zh-CN ar] })).process
+      chinese = Nokogiri::HTML(File.read(File.join(destination, "zh-CN/long/index.html")))
+      assert_equal "约 4 分钟阅读", chinese.at_css(".note-reading-time").text
+      assert_equal "zh-CN", chinese.at_css(".note-reading-time")["lang"]
+      fallback = Nokogiri::HTML(File.read(File.join(destination, "ar/long/index.html")))
+      hint = fallback.at_css(".note-reading-time")
+      assert_equal "حوالي 3 دقائق للقراءة", hint.text
+      assert_equal "ar", hint["lang"]
+      assert_equal "rtl", hint["dir"]
+      assert_equal "en", fallback.at_css(".note-content")["lang"]
+    end
+  end
+
+  def test_reading_time_default_keeps_english_language_and_direction
+    File.write(File.join(@temporary_root, "vault", "long.md"), "---\npublish: true\n---\n#{'word ' * 401}")
+    { "_locale.yml" => "name: English\n", "_translations/ar/_locale.yml" => "name: العربية\ndir: rtl\n" }.each do |path, body|
+      target = File.join(@temporary_root, "vault", path)
+      FileUtils.mkdir_p(File.dirname(target))
+      File.write(target, body)
+    end
+    install_project_layout
+    %w[minimal docs].each do |theme|
+      [nil, { "enabled" => true, "locales" => %w[en ar] }].each do |i18n|
+        build_site("lang" => i18n ? "en" : "ar", "website" => website_config.merge("theme" => theme, "i18n" => i18n)).process
+        route = i18n ? "ar/long/index.html" : "long/index.html"
+        hint = Nokogiri::HTML(File.read(File.join(destination, route))).at_css(".note-reading-time")
+        assert_equal "About 3 min read", hint.text
+        assert_equal "en", hint["lang"]
+        assert_equal "ltr", hint["dir"]
+      end
+    end
+  end
+
   def test_whitespace_source_title_falls_back_to_url_in_note_and_archive_html
     File.write(File.join(@temporary_root, "vault", "post.md"), "---\npublish: true\ncontent_type: post\ndate: 2026-10-25\nsource_url: https://example.test/original\nsource_title: \" \\t\\n \"\n---\nBody")
     install_project_layout

@@ -23,6 +23,10 @@
           <span class="note-meta__topics" aria-label="{{ ui.topics | default: 'Topics' | escape }}" lang="{{ page.website.i18n.locale | default: site.lang | default: 'en' | escape }}" dir="{{ page.website.i18n.dir | default: 'ltr' | escape }}">{% for topic in page.website.topic_links %}<a class="tag-chip" href="{{ blog_url | escape }}?topic={{ topic.anchor | url_encode }}" lang="{{ page.website.i18n.content_lang | default: page.website.i18n.locale | default: site.lang | default: 'en' | escape }}" dir="{{ page.website.i18n.content_dir | default: page.website.i18n.dir | default: 'ltr' | escape }}">{{ topic.name | escape }}</a>{% endfor %}</span>
         {% endif %}
         {% if page.website.updated %}<time datetime="{{ page.website.updated | escape }}">{{ ui.updated | default: 'Updated' | escape }} {{ page.website.updated | date: "%Y-%m-%d" }}</time>{% endif %}
+        {% if page.website.features.reading_time and page.website.directory_index != true and page.website.reading_time_minutes > 2 %}
+          {% assign reading_time_label = ui.reading_time | default: 'About {minutes} min read' | replace: '{minutes}', page.website.reading_time_minutes %}
+          <span class="note-reading-time" lang="{{ page.website.i18n.reading_time_language.lang | default: 'en' | escape }}" dir="{{ page.website.i18n.reading_time_language.dir | default: 'ltr' | escape }}">{{ reading_time_label | escape }}</span>
+        {% endif %}
         {% if page.website.features.tags and page.website.archive_item != true %}
           {% unless page.website.theme == 'minimal' and page.website.content_type == 'post' %}
             {% if page.website.theme == 'minimal' %}{% assign tags_url = page.website.routes.blog %}{% unless tags_url %}{% assign tags_url = '/blog/' | relative_url %}{% endunless %}{% else %}{% assign tags_url = page.website.routes.tags %}{% unless tags_url %}{% assign tags_url = '/tags/' | relative_url %}{% endunless %}{% endif %}

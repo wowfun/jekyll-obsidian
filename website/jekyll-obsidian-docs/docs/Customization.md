@@ -111,11 +111,11 @@ jekyll-obsidian build --theme minimal --url https://example.test --baseurl ""
 
 The built site is written to `.jekyll-obsidian-cache/site/`. Supported theme identifiers are `minimal` and `docs`. Notes that remain published keep their URLs when switching themes; set `website.i18n.enabled: true` explicitly to retain translations.
 
-Feature keys omitted from `website.features` inherit the theme defaults. Explicit YAML booleans can override `search`, `tags`, `feed`, `graph`, `relations`, `previews`, and `outline`.
+Feature keys omitted from `website.features` inherit the theme defaults. Explicit YAML booleans can override `search`, `tags`, `feed`, `graph`, `relations`, `previews`, `outline`, and `reading_time`.
 
 | Feature | Minimal | Docs |
 | --- | --- | --- |
-| `search`, `previews`, `outline`, `relations`, `graph` | on | on |
+| `search`, `previews`, `outline`, `relations`, `graph`, `reading_time` | on | on |
 | `tags`, `feed` | on | off |
 
 The separate `i18n` and `comments` mappings have their own defaults when present without `enabled`:
@@ -135,6 +135,24 @@ website:
     graph: false
     previews: false
 ```
+
+### Reading time
+
+Both themes show an estimated reading time in the metadata at the top of independent posts, documentation pages, and ordinary pages when the estimate exceeds two minutes. Exactly two minutes stays hidden; 2.1 minutes displays **About 3 min read**. Home pages, directory indexes, system pages, and article lists do not show this hint. It is built into the HTML and works without JavaScript.
+
+The estimate uses 400 Chinese or other CJK characters per minute and 200 words per minute for other text, adding the two before rounding up. Other words are continuous Unicode letter/number sequences, including combining marks. Headings, lists, tables, quotations, inline code, and ordinary code blocks count. Expanded note embeds and imported GitHub Markdown count as part of the displayed body; frontmatter and generated controls or source labels do not. Images, formulas, Mermaid diagrams, media, and embedded attachments add no time; authored captions count as text. Hidden markup is excluded using `hidden`, `aria-hidden="true"`, and the theme's `visually-hidden` class. This is a text-length estimate, not a measure of comprehension time.
+
+Translations use the body actually displayed, including default-language fallback content. A supplied `reading_time` locale message must contain exactly one `{minutes}` placeholder and no other braces; blank messages are rejected. A Chinese message can be `约 {minutes} 分钟阅读`. Omitting the message uses the English default, marked `lang="en" dir="ltr"` even in another interface language. Custom templates can read the integer `page.website.reading_time_minutes` (zero for no countable text). The estimate is computed even when `reading_time` is disabled; this flag controls the built-in hint, so custom templates retain the same data contract. To hide the hint throughout the site:
+
+```yaml
+website:
+  features:
+    reading_time: false
+```
+
+Locale messages are loaded only when `website.i18n.enabled` is true. A single-language site can opt in with root-level `lang: en` and `website.i18n: {enabled: true, locales: [en]}`, then set `messages.reading_time` in the root `_locale.yml` (with `name: English`). No translation copies are required. With i18n disabled, `lang` alone does not select or customize this message; the hint uses English.
+
+The reading speeds and two-minute threshold are fixed; there is no per-page override.
 
 ## Minimal navigation
 

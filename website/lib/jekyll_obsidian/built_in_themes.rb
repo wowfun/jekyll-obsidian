@@ -93,6 +93,7 @@ module JekyllObsidian
           "id" => note.id,
           "content_type" => note.content_type,
           "published_at" => ArchiveChronology.local_time(note.published_at, config.blog["utc_offset"]),
+          "reading_time_minutes" => note.reading_time_minutes,
           "route" => note.route,
           "href" => config.url_builder.href(note.route),
           "absolute_url" => config.url_builder.absolute_url(note.route),

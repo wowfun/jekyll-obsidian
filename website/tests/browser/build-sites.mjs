@@ -61,7 +61,7 @@ try {
   await writeFile(path.join(scrollHost, ".jekyll-obsidian-cache/github-markdown-browser.json"),
     JSON.stringify({ version: 1, documents: [] }));
   await writeFile(path.join(scrollHost, "host.yml"),
-    "title: Back to top fixture\nwebsite:\n  source: vault\n  repository: example/scroll\n  i18n:\n    enabled: true\n    locales: [en, zh-CN]\n");
+    "title: Back to top fixture\nwebsite:\n  source: vault\n  repository: example/scroll\n  i18n:\n    enabled: true\n    locales: [en, zh-CN, ar, fa]\n");
   const longBody = Array.from({ length: 60 }, (_, i) => `## Section ${i + 1}\n\nA paragraph to exercise scrolling through a complete page of published content.\n`).join("\n");
   for (const [prefix, locale, title] of [["", "en", "Long page"], ["_translations/zh-CN/", "zh-CN", "长页面"]]) {
     const root = path.join(scrollHost, `vault/${prefix}`);
@@ -74,6 +74,17 @@ try {
     await writeFile(path.join(root, "docs/short.md"), "---\npublish: true\ncontent_type: doc\n---\n# Short page\n\nShort content.\n");
     await writeFile(path.join(root, "posts/story.md"), `---\npublish: true\ncontent_type: post\ndate: 2026-10-20\n---\n# ${title}\n\n${longBody}`);
   }
+  for (const [locale, manifest] of [
+    ["ar", "name: العربية\ndir: rtl\nmessages:\n  reading_time: 'حوالي {minutes} دقائق للقراءة'\n"],
+    ["fa", "name: فارسی\ndir: rtl\n"]
+  ]) {
+    const root = path.join(scrollHost, `vault/_translations/${locale}`);
+    await mkdir(root, { recursive: true });
+    await writeFile(path.join(root, "_locale.yml"), manifest);
+  }
+  const arabicDocs = path.join(scrollHost, "vault/_translations/ar/docs");
+  await mkdir(arabicDocs, { recursive: true });
+  await writeFile(path.join(arabicDocs, "long.md"), `---\npublish: true\ncontent_type: doc\n---\n# صفحة طويلة\n\n${"كلمة ".repeat(900)}`);
   await buildFixtureSites(scrollHost, "back-to-top", path.join(scrollHost, "host.yml"));
 } finally {
   await rm(scrollHost, { force: true, recursive: true });

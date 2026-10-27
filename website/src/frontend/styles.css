@@ -599,6 +599,13 @@
     text-transform: uppercase;
   }
 
+  .note-reading-time {
+    font-size: 0.75rem;
+    font-weight: 500;
+    letter-spacing: normal;
+    text-transform: none;
+  }
+
   .note-title,
   .note-content h1,
   .note-content h2,

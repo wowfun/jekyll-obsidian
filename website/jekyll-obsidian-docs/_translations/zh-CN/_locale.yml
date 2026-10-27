@@ -2,6 +2,7 @@ name: 简体中文
 hreflang: zh-Hans
 dir: ltr
 messages:
+  reading_time: "约 {minutes} 分钟阅读"
   archive_requires_js: "当前显示第一页。启用 JavaScript 后可浏览全部条目。"
   archive_module_unavailable: "归档控件未能加载，请刷新页面重试。"
   favorites_module_unavailable: "收藏功能未能加载，请刷新页面重试。"

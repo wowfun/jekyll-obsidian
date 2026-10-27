@@ -27,7 +27,7 @@ module JekyllObsidian
     NOTE_EXTENSION = ".md"
     TRANSLATIONS_DIRECTORY = "_translations/"
     THEMES = BuiltInThemes::IDS
-    FEATURE_KEYS = %w[search tags feed graph relations previews outline favorites].freeze
+    FEATURE_KEYS = %w[search tags feed graph relations previews outline favorites reading_time].freeze
     COMMENT_KEYS = %w[enabled repository repository_id category category_id].freeze
     ANALYTICS_PROVIDERS = %w[cloudflare google].freeze
     CONTACT_KEYS = %w[label url].freeze
@@ -66,11 +66,11 @@ module JekyllObsidian
     THEME_FEATURE_DEFAULTS = {
       "minimal" => {
         "search" => true, "tags" => true, "feed" => true,
-        "graph" => true, "relations" => true, "previews" => true, "outline" => true, "favorites" => false
+        "graph" => true, "relations" => true, "previews" => true, "outline" => true, "favorites" => false, "reading_time" => true
       },
       "docs" => {
         "search" => true, "tags" => false, "feed" => false,
-        "graph" => true, "relations" => true, "previews" => true, "outline" => true, "favorites" => false
+        "graph" => true, "relations" => true, "previews" => true, "outline" => true, "favorites" => false, "reading_time" => true
       },
     }.transform_values(&:freeze).freeze
     MutableNote = Struct.new(
@@ -1966,6 +1966,7 @@ module JekyllObsidian
             image_urls: published_markdown_image_urls(note)
           ),
           authored_text: note.authored_text,
+          reading_time_minutes: ReadingTime.minutes(fragment),
           preview: note.preview,
           outline: note.outline.reject { |heading| heading.fetch("id") == presentation["hidden_title_id"] },
           updated: note.updated,

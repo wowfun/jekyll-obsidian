@@ -116,6 +116,7 @@ module JekyllObsidian
     :display_properties,
     :markdown_source,
     :authored_text,
+    :reading_time_minutes,
     :preview,
     :outline,
     :updated,
