@@ -1,6 +1,16 @@
 import { describe, it, expect } from 'vitest';
 import { matchArchive, archiveState, type ArchiveManifest } from '../../src/frontend/archive-query';
 describe('paged archive queries', () => {
+  it('bounds adversarial URL selections before any posting requests', () => {
+    const manifest = { total: 1, prefixes: { source: 'source/', topic: 'topics/', category: 'category/' }, aliases: {}, years: {}, months: {}, days: {} } as unknown as ArchiveManifest;
+    const input = new URLSearchParams();
+    for (const name of Object.keys(manifest.prefixes)) for (let i = 0; i < 1_000; i++) input.append(name, String(i));
+    const state = archiveState(manifest, input.toString());
+    expect(state.keys.length).toBeLessThanOrEqual(32);
+    expect(state.parameters.getAll('source').length).toBeLessThanOrEqual(16);
+    expect(state.limited).toBe(true);
+    expect(archiveState(manifest, state.parameters.toString()).parameters.toString()).toBe(state.parameters.toString());
+  });
   it('ORs within facets, ANDs across facets and chronology; unknown is empty', () => {
     const bitmaps = { 'source/a': new Uint8Array([0b0011]), 'source/b': new Uint8Array([0b1100]), 'topic/x': new Uint8Array([0b1010]) };
     expect(matchArchive(4, 50, { groups: [['source/a', 'source/b'], ['topic/x']], range: [0, 4], page: 1 }, bitmaps).ordinals).toEqual([1, 3]);

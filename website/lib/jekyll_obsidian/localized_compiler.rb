@@ -189,6 +189,7 @@ module JekyllObsidian
       "search_result_many" => "{count} notes found.",
       "search_top_results" => "Showing {count} of {total} matches.",
       "search_limited" => "Some notes or text are outside the search index.",
+      "archive_selection_limit" => "Some filters were removed: choose up to 16 values per facet and 32 in total.",
       "close_browse" => "Close browse menu",
       "close_context" => "Close page context",
       "outgoing_links" => "Outgoing links",

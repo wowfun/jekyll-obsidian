@@ -167,6 +167,7 @@ messages:
   search_result_many: 找到 {count} 篇笔记。
   search_top_results: 共 {total} 条匹配，显示前 {count} 条。
   search_limited: 部分笔记或正文未进入搜索索引。
+  archive_selection_limit: 已移除超出上限的筛选值：每类最多选 16 项，合计最多选 32 项。
   close_browse: 关闭浏览菜单
   close_context: 关闭页面上下文
   outgoing_links: 出站链接

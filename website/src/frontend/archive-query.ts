@@ -29,6 +29,8 @@ export interface ArchiveQuery { groups: string[][]; excluded?: string[]; range: 
 export type ArchiveQueryMode = "page" | "all" | "first";
 export interface ArchiveMatches { ordinals: number[]; count: number; page: number; pages: number }
 export const ARCHIVE_POSTING_CACHE_LIMIT = 20;
+export const ARCHIVE_FACET_SELECTION_LIMIT = 16;
+export const ARCHIVE_SELECTION_LIMIT = 32;
 export const TAB_SOURCES_POSTING_KEY = "$tab_sources";
 
 export function archivePageNumber(value: string): number | undefined {
@@ -84,11 +86,14 @@ export function decodeBitmap(encoded: string, total: number): Uint8Array {
   return bytes;
 }
 
-export function archiveState(manifest: ArchiveCollection, search: string): { parameters: URLSearchParams; query: ArchiveQuery; keys: string[] } {
+export function archiveState(manifest: ArchiveCollection, search: string): { parameters: URLSearchParams; query: ArchiveQuery; keys: string[]; limited: boolean } {
   const input = new URLSearchParams(search), parameters = new URLSearchParams();
   const groups: string[][] = [], keys: string[] = [];
+  let limited = false;
   for (const [name, prefix] of Object.entries(manifest.prefixes)) {
-    const ids = [...new Set(input.getAll(name).filter(Boolean).map(id => canonicalFacetId(id, prefix, manifest.aliases)))].sort();
+    const requested = [...new Set(input.getAll(name).filter(Boolean).map(id => canonicalFacetId(id, prefix, manifest.aliases)))].sort();
+    const ids = requested.slice(0, Math.min(ARCHIVE_FACET_SELECTION_LIMIT, ARCHIVE_SELECTION_LIMIT - keys.length));
+    limited ||= ids.length < requested.length;
     groups.push(ids.map((id) => `${name}/${id}`));
     for (const id of ids) { parameters.append(name, id); keys.push(`${name}/${id}`); }
   }
@@ -106,5 +111,5 @@ export function archiveState(manifest: ArchiveCollection, search: string): { par
   else if (year) { parameters.set("year", year); range = Object.hasOwn(manifest.years, year) ? manifest.years[year]! : [0, 0]; }
   const page = archivePageNumber(input.get("page") || "1") || 1;
   if (page > 1) parameters.set("page", String(page));
-  return { parameters, query: { groups, range, page, ...(excluded.length ? { excluded } : {}) }, keys };
+  return { parameters, query: { groups, range, page, ...(excluded.length ? { excluded } : {}) }, keys, limited };
 }

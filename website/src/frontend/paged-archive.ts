@@ -96,6 +96,7 @@ export function initialisePagedArchive(root: HTMLElement): () => void {
         const refreshFailed = saved ? saved.refreshFailed : !deploymentVerified;
         empty.hidden = result.count !== 0;
         status.textContent = refreshFailed ? saved ? favoritesUI().refreshError || "Could not refresh articles. Your saved summaries are shown. Retry to continue." : status.dataset.refreshError || "Could not check for updates. Previously loaded entries remain available. Retry to check again." : "";
+        if (state.limited) status.textContent += (status.textContent ? ' ' : '') + (status.dataset.selectionLimit || 'Some filters were removed: choose up to 16 values per facet and 32 in total.');
         retry.hidden = !refreshFailed; root.removeAttribute("aria-busy");
       } catch {
         if (alive && turn === epoch) { status.textContent = status.dataset.unavailable || "Entries could not be loaded."; retry.hidden = false; root.removeAttribute("aria-busy"); reading.refresh(); }
