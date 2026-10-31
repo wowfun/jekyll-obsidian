@@ -1523,26 +1523,34 @@ module JekyllObsidian
     end
 
     def find_fragment_anchor(note, raw_fragment)
-      anchors = note.anchors || []
+      @fragment_anchor_indexes ||= {}
+      index = @fragment_anchor_indexes[note.id] ||= begin
+        headings, blocks, chains = {}, {}, {}
+        Array(note.anchors).each do |anchor|
+          if anchor.kind == :block
+            blocks[anchor.id] ||= anchor
+          elsif anchor.kind == :heading
+            headings[anchor.id] ||= anchor
+            chain = anchor.chain.map { |label| @url_builder.slug(label) }
+            (1..chain.length).each { |length| chains[chain.last(length)] ||= anchor }
+          end
+        end
+        { headings: headings, blocks: blocks, chains: chains }
+      end
       fragment = safe_decode(raw_fragment).unicode_normalize(:nfc)
       if fragment.start_with?("^")
         identifier = fragment.delete_prefix("^")
-        return anchors.find { |anchor| anchor.kind == :block && anchor.id == identifier }
+        return index.fetch(:blocks)[identifier]
       end
 
       direct = fragment
-      by_id = anchors.find { |anchor| anchor.kind == :heading && anchor.id == direct }
+      by_id = index.fetch(:headings)[direct]
       return by_id if by_id
 
       chain = fragment.split("#").map(&:strip).reject(&:empty?).map { |label| @url_builder.slug(label) }
       return nil if chain.empty?
 
-      anchors.find do |anchor|
-        next false unless anchor.kind == :heading
-
-        anchor_chain = anchor.chain.map { |label| @url_builder.slug(label) }
-        anchor_chain.last(chain.length) == chain
-      end
+      index.fetch(:chains)[chain]
     end
 
     def detect_embed_cycles
@@ -1592,9 +1600,7 @@ module JekyllObsidian
         normalize_document(note, fragment)
         note.base_fragment = fragment
 
-        authored = fragment.dup
-        authored.css("website-embed").remove
-        note.authored_text = visible_text(authored)
+        note.authored_text = visible_text(fragment)
         note.preview = truncate(note.properties["description"] || note.authored_text, 240)
         note.feature_flags = {
           "math" => !fragment.css("[data-math-style], .math, math").empty?,
@@ -1810,8 +1816,12 @@ module JekyllObsidian
     def assign_heading_ids(note, fragment)
       headings = note.anchors.select { |anchor| anchor.kind == :heading }
       source_headings = note.document.select { |node| node.type == :heading }
+      rendered = {}
+      fragment.css("h1[data-sourcepos], h2[data-sourcepos], h3[data-sourcepos], h4[data-sourcepos], h5[data-sourcepos], h6[data-sourcepos]").each do |heading|
+        rendered[[heading.name, heading["data-sourcepos"]]] ||= heading
+      end
       headings.zip(source_headings).each do |anchor, source|
-        heading = fragment.at_css("h#{anchor.level}[data-sourcepos='#{sourcepos_value(source.source_position)}']")
+        heading = rendered[["h#{anchor.level}", sourcepos_value(source.source_position)]]
         next unless heading
 
         heading["id"] = anchor.id
@@ -2269,37 +2279,21 @@ module JekyllObsidian
     end
 
     def rewrite_fragment_ids(fragment, prefix)
-      mapping = {}
-      fragment.css("[id]").each do |node|
-        old = node["id"]
-        mapping[old] = "#{prefix}#{old}"
-        node["id"] = mapping[old]
-      end
-      fragment.css("*").select { |node| node["href"] || node["xlink:href"] }.each do |node|
-        %w[href xlink:href].each do |attribute|
-          next unless node[attribute]&.start_with?("#")
-
-          old = node[attribute].delete_prefix("#")
-          node[attribute] = "##{mapping.fetch(old, "#{prefix}#{old}")}"
-        end
-      end
-      %w[for list form aria-activedescendant aria-details aria-errormessage].each do |attribute|
-        fragment.css("[#{attribute}]").each do |node|
-          old = node[attribute]
-          node[attribute] = mapping.fetch(old, "#{prefix}#{old}")
-        end
-      end
-      %w[aria-labelledby aria-describedby aria-controls aria-owns headers itemref].each do |attribute|
-        fragment.css("[#{attribute}]").each do |node|
-          node[attribute] = node[attribute].split.map { |old| mapping.fetch(old, "#{prefix}#{old}") }.join(" ")
-        end
-      end
-      %w[style clip-path fill filter mask marker-start marker-mid marker-end stroke].each do |attribute|
-        fragment.css("[#{attribute}]").each do |node|
-          node[attribute] = node[attribute].gsub(/url\(\s*(['"]?)#([^)'"\s]+)\1\s*\)/) do
-            quote = Regexp.last_match(1)
-            old = Regexp.last_match(2)
-            "url(#{quote}##{mapping.fetch(old, "#{prefix}#{old}")}#{quote})"
+      fragment.css("*").each do |node|
+        node.attribute_nodes.each do |attribute|
+          name = attribute.namespace&.prefix ? "#{attribute.namespace.prefix}:#{attribute.name}" : attribute.name
+          value = attribute.value
+          case name
+          when "id", "for", "list", "form", "aria-activedescendant", "aria-details", "aria-errormessage"
+            node[name] = "#{prefix}#{value}"
+          when "href", "xlink:href"
+            node[name] = "##{prefix}#{value.delete_prefix('#')}" if value.start_with?("#")
+          when "aria-labelledby", "aria-describedby", "aria-controls", "aria-owns", "headers", "itemref"
+            node[name] = value.split.map { |id| "#{prefix}#{id}" }.join(" ")
+          when "style", "clip-path", "fill", "filter", "mask", "marker-start", "marker-mid", "marker-end", "stroke"
+            node[name] = value.gsub(/url\(\s*(['"]?)#([^)'"\s]+)\1\s*\)/) do
+              "url(#{Regexp.last_match(1)}##{prefix}#{Regexp.last_match(2)}#{Regexp.last_match(1)})"
+            end
           end
         end
       end
