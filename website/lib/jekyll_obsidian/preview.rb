@@ -12,7 +12,7 @@ module JekyllObsidian
       @runtime = runtime
       @host, @port, @baseurl, @theme = host, port, baseurl.delete_suffix("/"), theme
       @output, @warnings = output, warnings
-      @events = Queue.new
+      @events = SizedQueue.new(1)
       @stopping = false
     end
 
@@ -28,7 +28,7 @@ module JekyllObsidian
       previous_signals = %w[INT TERM].to_h { |signal| [signal, Signal.trap(signal) { @stopping = true }] }
       config_listener = Listen.to(File.dirname(@runtime.config_path)) do |modified, added, removed|
         if (modified + added + removed).include?(@runtime.config_path)
-          @events << :config
+          mark_dirty
         end
       end.tap(&:start)
       refresh_content_listener
@@ -63,11 +63,19 @@ module JekyllObsidian
 
     private
 
+    def mark_dirty
+      # A pending rebuild already covers every change observed before it starts.
+      # Never block a filesystem listener while a slow build is in progress.
+      @events.push(:changed, true)
+    rescue ThreadError
+      nil
+    end
+
     def refresh_content_listener
       source_root = @runtime.source_root
       return if source_root == @watched_root
 
-      next_listener = Listen.to(source_root, ignore: CONTENT_IGNORE) { @events << :content }.tap(&:start)
+      next_listener = Listen.to(source_root, ignore: CONTENT_IGNORE) { mark_dirty }.tap(&:start)
       @content_listener&.stop
       @content_listener = next_listener
       @watched_root = source_root
