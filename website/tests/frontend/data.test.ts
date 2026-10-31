@@ -54,6 +54,7 @@ describe("versioned data contracts", () => {
   });
 
   it("fails closed on unknown schema versions and malformed records", () => {
+    expect(() => parseSearchPayload({ schema_version: 1, documents: Array(5_001).fill({ id: 'a', title: 'A', url: '/', aliases: [], tags: [], text: '' }) })).toThrow(/schema/);
     expect(() => parseCatalogPayload({ schema_version: 2, notes: [] })).toThrow(/schema/);
     expect(() =>
       parseSearchPayload({

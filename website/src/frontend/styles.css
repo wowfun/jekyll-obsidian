@@ -2185,6 +2185,12 @@
     font-size: 0.66rem;
   }
 
+  .search-result__excerpt {
+    color: var(--graphite);
+    font-size: 0.8rem;
+    line-height: 1.5;
+  }
+
   .mermaid-diagram {
     position: relative;
     padding: 1rem;

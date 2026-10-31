@@ -4,6 +4,40 @@ import { activateSearch, disposeSearch } from "../../src/frontend/search";
 describe("website search", () => {
   afterEach(() => { vi.useRealTimers(); });
 
+  it('debounces typing and keeps only one query in flight while newer text replaces the pending query', async () => {
+    vi.useFakeTimers();
+    let worker!: LatestWorker;
+    class LatestWorker extends EventTarget {
+      postMessage = vi.fn(); terminate = vi.fn();
+      constructor() { super(); worker = this; }
+    }
+    vi.stubGlobal('Worker', LatestWorker);
+    document.body.innerHTML = '<dialog><input data-search-input><p data-search-status></p><ol data-search-results></ol></dialog>';
+    const dialog = document.querySelector('dialog')!;
+    const pending = activateSearch(dialog);
+    worker.dispatchEvent(new MessageEvent('message', { data: { type: 'ready' } }));
+    await pending;
+    const input = dialog.querySelector('input')!;
+    for (const value of ['a', 'ab', 'abc']) { input.value = value; input.dispatchEvent(new Event('input')); }
+    expect(worker.postMessage).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(120);
+    const first = worker.postMessage.mock.calls.at(-1)![0];
+    expect(first.query).toBe('abc');
+    for (const value of ['next', 'latest']) { input.value = value; input.dispatchEvent(new Event('input')); }
+    await vi.advanceTimersByTimeAsync(120);
+    expect(worker.postMessage).toHaveBeenCalledTimes(2);
+    worker.dispatchEvent(new MessageEvent('message', { data: { type: 'results', id: first.id, total: 0, limited: false, results: [] } }));
+    const next = worker.postMessage.mock.calls.at(-1)![0];
+    expect(next.query).toBe('latest');
+    worker.dispatchEvent(new MessageEvent('message', { data: { type: 'results', id: next.id, total: 30, limited: true,
+      results: [{ title: 'Match', url: '/match/', tags: [], excerpt: '<script>plain text</script>' }] } }));
+    expect(dialog.querySelector('[data-search-status]')!.textContent).toContain('1 of 30');
+    expect(dialog.querySelector('[data-search-status]')!.textContent).toContain('outside the search index');
+    expect(dialog.querySelector('script')).toBeNull();
+    expect(dialog.querySelector('.search-result__excerpt')!.textContent).toBe('<script>plain text</script>');
+    disposeSearch(dialog);
+  });
+
   it("settles readiness when the initial worker message throws synchronously", async () => {
     class ThrowingWorker extends EventTarget {
       postMessage() { throw new Error("Cannot send initialization"); }
@@ -119,6 +153,7 @@ describe("website search", () => {
     const input = dialog.querySelector('input')!;
     input.value = 'test';
     input.dispatchEvent(new Event('input'));
+    await vi.advanceTimersByTimeAsync(120);
     expect(workers[1]!.postMessage.mock.calls.filter(([message]) => message.type === 'query')).toHaveLength(1);
     expect(workers[0]!.postMessage.mock.calls.filter(([message]) => message.type === 'query')).toHaveLength(0);
   });

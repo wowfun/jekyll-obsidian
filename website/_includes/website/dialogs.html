@@ -1,14 +1,14 @@
 {% assign ui = page.website.i18n.messages %}
 {% if page.website.theme_data.archive %}{% include website/archive-export.html %}{% endif %}
 {% if page.website.features.search %}
-  <dialog class="website-dialog" data-dialog="search" aria-labelledby="search-dialog-title"{% if ui.search_loading %} data-search-loading="{{ ui.search_loading | escape }}"{% endif %}{% if ui.search_prompt %} data-search-prompt="{{ ui.search_prompt | escape }}"{% endif %}{% if ui.search_retry %} data-search-retry="{{ ui.search_retry | escape }}"{% endif %}{% if ui.search_unavailable %} data-search-unavailable="{{ ui.search_unavailable | escape }}"{% endif %}{% if ui.search_no_results %} data-search-no-results="{{ ui.search_no_results | escape }}"{% endif %}{% if ui.search_result_one %} data-search-result-one="{{ ui.search_result_one | escape }}"{% endif %}{% if ui.search_result_many %} data-search-result-many="{{ ui.search_result_many | escape }}"{% endif %}>
+  <dialog class="website-dialog" data-dialog="search" aria-labelledby="search-dialog-title"{% if ui.search_loading %} data-search-loading="{{ ui.search_loading | escape }}"{% endif %}{% if ui.search_prompt %} data-search-prompt="{{ ui.search_prompt | escape }}"{% endif %}{% if ui.search_retry %} data-search-retry="{{ ui.search_retry | escape }}"{% endif %}{% if ui.search_unavailable %} data-search-unavailable="{{ ui.search_unavailable | escape }}"{% endif %}{% if ui.search_no_results %} data-search-no-results="{{ ui.search_no_results | escape }}"{% endif %}{% if ui.search_top_results %} data-search-top-results="{{ ui.search_top_results | escape }}"{% endif %}{% if ui.search_limited %} data-search-limited="{{ ui.search_limited | escape }}"{% endif %}{% if ui.search_result_one %} data-search-result-one="{{ ui.search_result_one | escape }}"{% endif %}{% if ui.search_result_many %} data-search-result-many="{{ ui.search_result_many | escape }}"{% endif %}>
     <div class="website-dialog__sheet">
       <header class="website-dialog__header">
         <h2 class="website-dialog__title" id="search-dialog-title">{{ ui.search_title | default: 'Search this site' | escape }}</h2>
         <button class="website-dialog__close" type="button" data-dialog-close aria-label="{{ ui.close_search | default: 'Close search' | escape }}">&times;</button>
       </header>
       <div class="website-dialog__body">
-        <label class="search-box"><span aria-hidden="true">⌕</span><span class="visually-hidden">{{ ui.search_pages | default: 'Search pages' | escape }}</span><input type="search" inputmode="search" autocomplete="off" placeholder="{{ ui.search_placeholder | default: 'Title, tag, or phrase' | escape }}" data-search-input autofocus><kbd>Ctrl/⌘ K</kbd></label>
+        <label class="search-box"><span aria-hidden="true">⌕</span><span class="visually-hidden">{{ ui.search_pages | default: 'Search pages' | escape }}</span><input type="search" inputmode="search" autocomplete="off" placeholder="{{ ui.search_placeholder | default: 'Title, tag, or phrase' | escape }}" data-search-input maxlength="256" autofocus><kbd>Ctrl/⌘ K</kbd></label>
         {% if page.website.navigation.size > 0 %}
           <nav class="search-navigation" aria-label="{{ ui.primary_navigation | default: 'Primary navigation' | escape }}" data-search-navigation>
             <ul class="search-navigation__list">

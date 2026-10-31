@@ -27,6 +27,7 @@ export interface SearchDocument {
 
 export interface SearchPayload {
   schema_version: 1;
+  truncated?: boolean;
   documents: SearchDocument[];
 }
 

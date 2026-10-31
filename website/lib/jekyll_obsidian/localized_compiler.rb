@@ -187,6 +187,8 @@ module JekyllObsidian
       "search_no_results" => "No notes found for “{query}”.",
       "search_result_one" => "{count} note found.",
       "search_result_many" => "{count} notes found.",
+      "search_top_results" => "Showing {count} of {total} matches.",
+      "search_limited" => "Some notes or text are outside the search index.",
       "close_browse" => "Close browse menu",
       "close_context" => "Close page context",
       "outgoing_links" => "Outgoing links",

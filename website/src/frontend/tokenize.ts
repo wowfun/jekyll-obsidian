@@ -11,31 +11,39 @@ function isCjk(value: string): boolean {
  * same terms in every browser.
  */
 export function websiteTokenizer(input: string): string[] {
+  return boundedWebsiteTokenizer(input, Infinity);
+}
+
+export function boundedWebsiteTokenizer(input: string, maximum: number): string[] {
   const normalized = input.normalize("NFKC").toLocaleLowerCase("und");
-  const output: string[] = [];
+  const output = new Set<string>();
+  const add = (term: string) => { if (output.size < maximum) output.add(term); };
 
   for (const match of normalized.matchAll(WORD_RUN)) {
     const run = match[0];
     let latin = "";
-    let cjk: string[] = [];
+    let cjk = "";
 
     const flushLatin = () => {
-      if (latin) output.push(latin);
+      if (latin) add(latin);
       latin = "";
     };
     const flushCjk = () => {
       if (cjk.length === 0) return;
-      output.push(...cjk);
-      for (let index = 0; index + 1 < cjk.length; index += 1) {
-        output.push(`${cjk[index]}${cjk[index + 1]}`);
+      for (const character of cjk) { add(character); if (output.size >= maximum) break; }
+      let previous = '';
+      for (const character of cjk) {
+        if (previous) add(previous + character);
+        previous = character;
+        if (output.size >= maximum) break;
       }
-      cjk = [];
+      cjk = '';
     };
 
-    for (const character of Array.from(run)) {
+    for (const character of run) {
       if (isCjk(character)) {
         flushLatin();
-        cjk.push(character);
+        cjk += character;
       } else {
         flushCjk();
         latin += character;
@@ -43,7 +51,8 @@ export function websiteTokenizer(input: string): string[] {
     }
     flushLatin();
     flushCjk();
+    if (output.size >= maximum) break;
   }
 
-  return [...new Set(output)];
+  return [...output];
 }

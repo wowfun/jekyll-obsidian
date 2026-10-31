@@ -34,6 +34,12 @@ function resultLink(result: SearchWorkerResult): HTMLLIElement {
   } else {
     link.append(title);
   }
+  if (result.excerpt) {
+    const excerpt = document.createElement('span');
+    excerpt.className = 'search-result__excerpt';
+    excerpt.textContent = result.excerpt;
+    link.append(excerpt);
+  }
   item.append(link);
   return item;
 }
@@ -139,23 +145,42 @@ async function initialiseSearch(dialog: HTMLDialogElement): Promise<void> {
   dialog.dataset.searchReady = "true";
 
   let latestQueryId = 0;
+  let inFlight = false;
+  let pendingQuery: SearchWorkerRequest | undefined;
+  let queryTimer: ReturnType<typeof setTimeout> | undefined;
+  const sendPending = () => {
+    if (inFlight || !pendingQuery) return;
+    inFlight = true;
+    try { active.worker.postMessage(pendingQuery); pendingQuery = undefined; }
+    catch { fail(); }
+  };
+  listeners.signal.addEventListener('abort', () => { clearTimeout(queryTimer); pendingQuery = undefined; }, { once: true });
   active.worker.addEventListener("message", (event: MessageEvent<SearchWorkerResponse>) => {
     const message = event.data;
-    if (message.type !== "results" || message.id !== latestQueryId) return;
+    if (message.type !== "results") return;
+    inFlight = false;
+    if (!queryTimer) sendPending();
+    if (message.id !== latestQueryId) return;
     results.replaceChildren(...message.results.map(resultLink));
     status.textContent = message.results.length === 0
       ? formatMessage(dialog.dataset.searchNoResults || "No notes found for “{query}”.", { query: input.value.trim() })
       : formatMessage(
-          message.results.length === 1
+          message.total > message.results.length
+            ? dialog.dataset.searchTopResults || 'Showing {count} of {total} matches.'
+            : message.results.length === 1
             ? dialog.dataset.searchResultOne || "{count} note found."
             : dialog.dataset.searchResultMany || "{count} notes found.",
-          { count: message.results.length }
+          { count: message.results.length, total: message.total }
         );
+    if (message.limited) status.textContent += ' ' + (dialog.dataset.searchLimited || 'Some notes or text are outside the search index.');
   }, { signal: listeners.signal });
 
-  const query = () => {
+  const query = (debounce = false) => {
+    clearTimeout(queryTimer);
+    queryTimer = undefined;
+    pendingQuery = undefined;
     latestQueryId = ++active.nextQueryId;
-    const value = input.value.trim();
+    const value = input.value.trim().slice(0, 256);
     const foldedValue = value.normalize("NFKC").toLocaleLowerCase();
     let visibleNavigationItems = 0;
     navigationItems.forEach((item) => {
@@ -169,11 +194,12 @@ async function initialiseSearch(dialog: HTMLDialogElement): Promise<void> {
       status.textContent = dialog.dataset.searchPrompt || "Type a title, tag, or phrase.";
       return;
     }
-    try { active.worker.postMessage({ type: "query", id: latestQueryId, query: value } satisfies SearchWorkerRequest); }
-    catch { fail(); }
+    pendingQuery = { type: 'query', id: latestQueryId, query: value };
+    if (debounce) queryTimer = setTimeout(() => { queryTimer = undefined; sendPending(); }, 120);
+    else sendPending();
   };
 
-  input.addEventListener("input", query, { signal: listeners.signal });
+  input.addEventListener("input", () => query(true), { signal: listeners.signal });
   dialog.addEventListener("keydown", (event) => {
     const links = Array.from(
       dialog.querySelectorAll<HTMLAnchorElement>("[data-search-navigation] a[href], [data-search-results] a[href]")

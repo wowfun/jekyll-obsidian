@@ -7,6 +7,7 @@ import type {
   SearchDocument,
   SearchPayload
 } from "./types";
+import { boundedText } from "./response";
 
 type UnknownRecord = Record<string, unknown>;
 
@@ -88,6 +89,7 @@ export function parseSearchPayload(value: unknown): SearchPayload {
     !isRecord(value) ||
     value.schema_version !== 1 ||
     !Array.isArray(value.documents) ||
+    value.documents.length > 5_000 ||
     !value.documents.every(isSearchDocument)
   ) {
     throw new TypeError("search.v1.json does not match schema version 1");
@@ -109,7 +111,7 @@ export function parseGraphPayload(value: unknown): GraphPayload {
   return value as unknown as GraphPayload;
 }
 
-export async function fetchJson(url: string, signal?: AbortSignal): Promise<unknown> {
+export async function fetchJson(url: string, signal?: AbortSignal, maximumBytes?: number): Promise<unknown> {
   const response = await fetch(url, {
     credentials: "same-origin",
     headers: { Accept: "application/json" },
@@ -118,5 +120,5 @@ export async function fetchJson(url: string, signal?: AbortSignal): Promise<unkn
   if (!response.ok) {
     throw new Error(`Unable to load ${url}: ${response.status}`);
   }
-  return response.json() as Promise<unknown>;
+  return maximumBytes === undefined ? response.json() as Promise<unknown> : JSON.parse(await boundedText(response, maximumBytes, signal)) as unknown;
 }

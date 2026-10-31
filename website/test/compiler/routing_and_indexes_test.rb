@@ -190,6 +190,7 @@ class RoutingAndIndexesTest < Minitest::Test
     result = compile(
       note("index.md", "---\npublish: true\naliases: [Start]\ntags: [garden, cjk/中文]\ndescription: Intro\nupdated: 2026-07-30\n---\n# Home\nAuthored words."),
       note("other.md", "---\npublish: true\nupdated: 2026-07-29\n---\n# Other\n![[index]]"),
+      search: { "mode" => "full" },
       theme: "minimal"
     )
 

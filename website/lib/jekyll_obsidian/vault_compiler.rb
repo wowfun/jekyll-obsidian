@@ -380,7 +380,7 @@ module JekyllObsidian
       end
       @hidden_property_names = Set.new(@properties_config.fetch("hidden")).freeze
       @search_config = output_options("search", @config.search, {
-        "mode" => "full", "max_entries" => nil, "excerpt_length" => 240, "content_types" => []
+        "mode" => "summary", "max_entries" => nil, "excerpt_length" => 240, "content_types" => []
       })
       @feed_config = output_options("feed", @config.feed, { "max_entries" => nil })
       @home_config = output_options("home", @config.home, { "recent_posts_limit" => 6, "layout" => "recent", "hide_tab_sources" => false })
@@ -395,7 +395,7 @@ module JekyllObsidian
       validate_output_option(@blog_config, "blog", "facets", { "source" => "source/", "topic" => "topics/" }) do |value|
         value.is_a?(Hash) && !value.empty? && value.all? { |key, prefix| key.is_a?(String) && key.match?(/\A[a-z][a-z0-9_-]*\z/) && !%w[page year month day include_tabs show_hidden].include?(key) && prefix.is_a?(String) && prefix.match?(/\A[a-z][a-z0-9_-]*\/\z/) } && value.values.uniq.length == value.length
       end
-      validate_output_option(@search_config, "search", "mode", "full") { |value| %w[full summary].include?(value) }
+      validate_output_option(@search_config, "search", "mode", "summary") { |value| %w[full summary].include?(value) }
       if @home_config["hide_tab_sources"] && !@blog_config.fetch("facets").key?("source")
         error("invalid_output_config", "home.hide_tab_sources requires a source facet in blog.facets")
       end
@@ -2402,21 +2402,33 @@ module JekyllObsidian
       notes = model.notes
       types = @search_config.fetch("content_types")
       notes = notes.select { |note| types.include?(note.content_type) } unless types.empty?
-      if (limit = @search_config.fetch("max_entries"))
-        notes = notes.sort_by { |note| [note.published_at || note.updated || "", note.id] }.reverse.first(limit)
+      total = notes.size
+      limit = [@search_config.fetch("max_entries") || 5_000, 5_000].min
+      notes = notes.sort_by { |note| [note.published_at || note.updated || "", note.id] }.reverse.first(limit)
+      # Reserve envelope and per-document space for localized URL prefixes.
+      bytes = 1_024
+      documents = notes.filter_map do |note|
+        document = {
+          "id" => note.id,
+          "title" => note.title[0, 512],
+          "url" => @url_builder.href(note.route),
+          "aliases" => Array(note.properties["aliases"]).first(32).map { |value| value[0, 128] },
+          "tags" => Array(note.properties["tags"]).first(32).map { |value| value[0, 128] },
+          "text" => @search_config.fetch("mode") == "summary" ? note.preview.to_s[0, [@search_config.fetch("excerpt_length"), 2_000].min] : note.authored_text
+        }
+        size = JSON.generate(document).bytesize + 256
+        next if bytes + size > 8_388_608
+
+        bytes += size
+        document
       end
+      truncated = documents.size < total
+      warning("search_budget", "Search indexes #{documents.size} of #{total} eligible notes; narrow content_types or max_entries to choose the searchable subset") if truncated
       {
         "schema_version" => 1,
-        "documents" => notes.map do |note|
-          {
-            "id" => note.id,
-            "title" => note.title,
-            "url" => @url_builder.href(note.route),
-            "aliases" => Array(note.properties["aliases"]),
-            "tags" => Array(note.properties["tags"]),
-            "text" => @search_config.fetch("mode") == "summary" ? note.preview.to_s[0, @search_config.fetch("excerpt_length")] : note.authored_text
-          }
-        end
+        "documents" => documents,
+        "total_documents" => total,
+        "truncated" => truncated
       }
     end
 

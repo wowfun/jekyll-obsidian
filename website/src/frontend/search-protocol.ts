@@ -2,6 +2,7 @@ export interface SearchWorkerResult {
   title: string;
   url: string;
   tags: string[];
+  excerpt?: string;
 }
 
 export type SearchWorkerRequest =
@@ -10,5 +11,5 @@ export type SearchWorkerRequest =
 
 export type SearchWorkerResponse =
   | { type: "ready" }
-  | { type: "results"; id: number; results: SearchWorkerResult[] }
+  | { type: "results"; id: number; results: SearchWorkerResult[]; total: number; limited: boolean }
   | { type: "error"; message: string };

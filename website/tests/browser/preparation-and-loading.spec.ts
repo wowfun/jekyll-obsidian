@@ -166,7 +166,8 @@ for (const theme of ["minimal", "docs"]) {
     await expect(dialog.locator('[data-search-status]')).toContainText('Edit your query');
     await input.fill('two');
     await expect(dialog).toHaveAttribute('data-search-ready', 'true');
-    await expect(dialog.locator('[data-search-results] a').first()).toHaveText('two');
+    await expect(dialog.locator('[data-search-results] a strong').first()).toHaveText('two');
+    await expect(dialog.locator('[data-search-results] a .search-result__excerpt').first()).not.toBeEmpty();
     await expect(input).toBeFocused();
     expect(requests).toBe(2);
   });
