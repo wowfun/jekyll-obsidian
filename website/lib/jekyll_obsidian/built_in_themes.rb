@@ -3,6 +3,7 @@
 require "cgi/escape"
 require "date"
 require_relative "archive_chronology"
+require_relative "graph_budget"
 
 module JekyllObsidian
   # The only internal theme seam. Each built-in adapter consumes the same
@@ -354,20 +355,31 @@ module JekyllObsidian
           neighbour_ids = neighbours_by_note[note.id].keys.reject { |id| id == note.id }
           next if neighbour_ids.empty?
 
-          node_ids = [note.id, *neighbour_ids].sort
+          selected = neighbour_ids.sort_by { |id| [-model.graph_degrees.fetch(id), id] }.first(GraphBudget::LOCAL_NODES - 1)
+          node_ids = [note.id, *selected].sort
           nodes = node_ids.map do |id|
             target = model.notes_by_id.fetch(id)
             {
               "id" => id,
-              "title" => target.title,
+              "title" => target.title[0, GraphBudget::TITLE_LENGTH],
               "url" => config.url_builder.href(target.route),
               "degree" => model.graph_degrees.fetch(id)
             }
           end
-          edges = edges_by_note[note.id].sort_by do |edge|
+          selected_ids = node_ids.to_h { |id| [id, true] }
+          edges = edges_by_note[note.id].select { |edge| selected_ids[edge.fetch("source")] && selected_ids[edge.fetch("target")] }.sort_by do |edge|
             [edge.fetch("source"), edge.fetch("target"), edge.fetch("kind")]
+          end.first(GraphBudget::LOCAL_EDGES)
+          graph = { "current_id" => note.id, "nodes" => nodes, "edges" => edges,
+            "total_nodes" => neighbour_ids.size + 1,
+            "truncated" => selected.size < neighbour_ids.size || edges.size < edges_by_note[note.id].size }
+          while JSON.generate(graph).bytesize > GraphBudget::LOCAL_BYTES && nodes.size > 1
+            removed = nodes.reverse.find { |node| node.fetch("id") != note.id }
+            nodes.delete(removed)
+            edges.reject! { |edge| edge.fetch("source") == removed.fetch("id") || edge.fetch("target") == removed.fetch("id") }
+            graph["truncated"] = true
           end
-          graphs[note.id] = { "current_id" => note.id, "nodes" => nodes, "edges" => edges }
+          graphs[note.id] = graph if nodes.size > 1
         end
       end
 

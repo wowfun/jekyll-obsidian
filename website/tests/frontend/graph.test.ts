@@ -21,6 +21,23 @@ function graphMarkup(): string {
 }
 
 describe("interactive graphs", () => {
+  it("uses native links with one graph Tab stop and no inert current-node stop", async () => {
+    const { initialiseGraphs } = await import('../../src/frontend/graph');
+    initialiseGraphs();
+    const view = document.querySelector('[data-graph-view]')!;
+    expect(view.querySelectorAll('.graph-node[tabindex="0"]')).toHaveLength(1);
+    expect(view.querySelector('.graph-node--current')?.getAttribute('tabindex')).toBe('-1');
+    expect(view.querySelector('.graph-node:not(.graph-node--current)')?.getAttribute('href')).toBe('/b/');
+  });
+
+  it("rejects oversized embedded local graphs before creating SVG or simulations", async () => {
+    const template = document.querySelector<HTMLTemplateElement>('[data-local-graph-data]')!;
+    for (let i = 0; i < 1_000; i++) template.content.append(template.content.firstElementChild!.cloneNode(true));
+    const { initialiseGraphs } = await import('../../src/frontend/graph');
+    initialiseGraphs();
+    expect(document.querySelector('[data-graph-view] svg')).toBeNull();
+    expect(document.querySelector('[data-graph-view]')?.getAttribute('data-graph-error')).toBe('true');
+  });
   beforeEach(async () => {
     vi.resetModules();
     document.body.innerHTML = graphMarkup();
@@ -48,6 +65,39 @@ describe("interactive graphs", () => {
   afterEach(() => {
     window.dispatchEvent(new Event("pagehide"));
     vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+
+  it("pauses hidden or offscreen simulations and measures labels outside the tick loop", async () => {
+    vi.spyOn(window, 'matchMedia').mockReturnValue({ matches: false } as MediaQueryList);
+    let intersect!: (entries: Array<{ isIntersecting: boolean }>) => void;
+    const disconnect = vi.fn();
+    vi.stubGlobal('IntersectionObserver', class {
+      constructor(callback: typeof intersect) { intersect = callback; }
+      observe() {} disconnect = disconnect;
+    });
+    const measure = vi.fn(() => 30);
+    Object.defineProperty(SVGElement.prototype, 'getComputedTextLength', { configurable: true, value: measure });
+    const hidden = vi.spyOn(document, 'hidden', 'get').mockReturnValue(false);
+    const { initialiseGraphs } = await import('../../src/frontend/graph');
+    initialiseGraphs();
+    const view = document.querySelector<HTMLElement>('[data-graph-view]')!;
+    expect(view.dataset.graphPaused).toBe('true');
+    intersect([{ isIntersecting: true }]);
+    expect(view.dataset.graphPaused).toBe('false');
+    await new Promise(resolve => setTimeout(resolve, 100));
+    const measured = measure.mock.calls.length;
+    await new Promise(resolve => setTimeout(resolve, 100));
+    expect(measure).toHaveBeenCalledTimes(measured);
+    hidden.mockReturnValue(true); document.dispatchEvent(new Event('visibilitychange'));
+    expect(view.dataset.graphPaused).toBe('true');
+    hidden.mockReturnValue(false); document.dispatchEvent(new Event('visibilitychange'));
+    expect(view.dataset.graphPaused).toBe('false');
+    intersect([{ isIntersecting: false }]);
+    expect(view.dataset.graphPaused).toBe('true');
+    window.dispatchEvent(new Event('pagehide'));
+    expect(disconnect).toHaveBeenCalledOnce();
+    Reflect.deleteProperty(SVGElement.prototype, 'getComputedTextLength');
   });
 
   it("renders local data immediately, keeps the current note centred, and sizes area by global degree", async () => {

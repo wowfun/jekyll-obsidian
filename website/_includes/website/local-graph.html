@@ -20,7 +20,9 @@
     {% for node in local_graph.nodes %}<i data-graph-node data-node-id="{{ node.id | escape }}" data-node-title="{{ node.title | escape }}" data-node-url="{{ node.url | escape }}" data-node-degree="{{ node.degree }}"></i>{% endfor %}
     {% for edge in local_graph.edges %}<i data-graph-edge data-edge-source="{{ edge.source | escape }}" data-edge-target="{{ edge.target | escape }}" data-edge-kind="{{ edge.kind | escape }}" data-edge-count="{{ edge.count }}"></i>{% endfor %}
   </template>
-  <div class="local-graph__fallback" data-graph-fallback>
+  {% if local_graph.truncated %}<p class="local-graph__hint">{{ ui.graph_limited | default: 'Showing nearby notes. Use search to find other connections.' | escape }}</p>{% endif %}
+  <details class="local-graph__fallback" data-graph-fallback>
+    <summary>{{ ui.graph_linked_notes | default: 'Linked notes' | escape }}</summary>
     <ul class="relation-list">{% for node in local_graph.nodes %}{% unless node.id == local_graph.current_id %}<li><a href="{{ node.url | escape }}">{{ node.title | escape }}</a></li>{% endunless %}{% endfor %}</ul>
-  </div>
+  </details>
 </section>

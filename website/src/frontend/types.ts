@@ -48,6 +48,7 @@ export interface GraphEdge {
 
 export interface GraphPayload {
   schema_version: 1;
+  truncated?: boolean;
   nodes: GraphNode[];
   edges: GraphEdge[];
 }

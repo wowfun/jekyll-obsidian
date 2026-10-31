@@ -2383,12 +2383,16 @@ module JekyllObsidian
     end
 
     def graph_payload(model)
-      {
+      summary = { "schema_version" => 1, "nodes" => [], "edges" => [], "truncated" => true,
+        "total_nodes" => model.notes.length, "total_edges" => model.graph_edges.length }
+      return summary if model.notes.length > GraphBudget::GLOBAL_NODES || model.graph_edges.length > GraphBudget::GLOBAL_EDGES
+
+      payload = {
         "schema_version" => 1,
         "nodes" => model.notes.map do |note|
           {
             "id" => note.id,
-            "title" => note.title,
+            "title" => note.title[0, GraphBudget::TITLE_LENGTH],
             "url" => @url_builder.href(note.route),
             "tags" => Array(note.properties["tags"]),
             "degree" => model.graph_degrees.fetch(note.id)
@@ -2396,6 +2400,7 @@ module JekyllObsidian
         end,
         "edges" => model.graph_edges
       }
+      JSON.generate(payload).bytesize <= GraphBudget::GLOBAL_BYTES ? payload : summary
     end
 
     def search_payload(model)

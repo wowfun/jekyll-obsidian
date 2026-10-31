@@ -28,6 +28,7 @@ interface VisualNode extends GraphNode, SimulationNodeDatum {
   labelSide?: -1 | 0 | 1;
   labelHeight?: number;
   labelWidth?: number;
+  labelVisible?: boolean;
 }
 
 interface VisualEdge extends SimulationLinkDatum<VisualNode> {
@@ -43,6 +44,8 @@ let graphIdentity = 0;
 let globalGraphPromise: Promise<GraphPayload> | null = null;
 const COMPLETE_GRAPH_MAX_NODES = 250;
 const COMPLETE_GRAPH_MAX_EDGES = 1_000;
+const LOCAL_GRAPH_MAX_NODES = 32;
+const LOCAL_GRAPH_MAX_EDGES = 64;
 
 function reducedMotion(): boolean {
   return matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -66,6 +69,12 @@ function localGraphPayload(section: HTMLElement): LocalGraphPayload {
   const view = section.querySelector<HTMLElement>("[data-graph-view]");
   const currentId = view?.dataset.currentNoteId;
   if (!template || !currentId) throw new TypeError("Local graph data is unavailable");
+  if (template.content.childElementCount > LOCAL_GRAPH_MAX_NODES + LOCAL_GRAPH_MAX_EDGES ||
+      template.innerHTML.length > 131_072 ||
+      template.content.querySelectorAll('[data-graph-node]').length > LOCAL_GRAPH_MAX_NODES ||
+      template.content.querySelectorAll('[data-graph-edge]').length > LOCAL_GRAPH_MAX_EDGES) {
+    throw new RangeError("Local graph exceeds its budget");
+  }
 
   const nodes: GraphNode[] = [...template.content.querySelectorAll<HTMLElement>("[data-graph-node]")].map((item) => {
     const id = item.dataset.nodeId;
@@ -91,7 +100,7 @@ function localGraphPayload(section: HTMLElement): LocalGraphPayload {
 }
 
 function loadGlobalGraph(): Promise<GraphPayload> {
-  globalGraphPromise ??= fetchJson(requireSiteUrl("graph"))
+  globalGraphPromise ??= fetchJson(requireSiteUrl("graph"), undefined, 524_288)
     .then(parseGraphPayload)
     .catch((error: unknown) => {
       globalGraphPromise = null;
@@ -150,6 +159,7 @@ function renderGraph(container: HTMLElement, payload: GraphPayload | LocalGraphP
   const current = nodes.find((node) => node.id === currentId);
   let centreX = width / 2;
   let centreY = height / 2;
+  const currentIndex = current ? nodes.indexOf(current) : -1;
 
   nodes.forEach((node, index) => {
     if (node === current) {
@@ -160,7 +170,7 @@ function renderGraph(container: HTMLElement, payload: GraphPayload | LocalGraphP
       node.labelSide = 0;
       return;
     }
-    const offset = current ? index - (nodes.indexOf(current) < index ? 1 : 0) : index;
+    const offset = current ? index - (currentIndex < index ? 1 : 0) : index;
     const count = Math.max(nodes.length - (current ? 1 : 0), 1);
     const angle = (offset / count) * Math.PI * 2 - Math.PI / 2;
     const radius = Math.max(58, Math.min(width, height) * (mode === "compact" ? 0.31 : 0.36));
@@ -192,33 +202,54 @@ function renderGraph(container: HTMLElement, payload: GraphPayload | LocalGraphP
     .attr("stroke-width", (edge) => Math.min(1 + Math.log2(edge.count), 4));
 
   const isLocal = mode !== "global";
+  const actionable = nodes.filter(node => !(isLocal && node.id === currentId));
+  const labelled = new Set([...nodes].sort((a, b) => b.degree - a.degree || a.id.localeCompare(b.id)).slice(0, 6));
+  container.dataset.graphDense = String(nodes.length > 12);
   const nodeGroups = viewport.append("g")
     .attr("class", "graph-nodes")
-    .selectAll<SVGGElement, VisualNode>("g")
+    .selectAll<SVGAElement, VisualNode>("a")
     .data(nodes)
-    .join("g")
-    .attr("class", (node) => `graph-node${node.id === currentId ? " graph-node--current" : ""}`)
+    .join(enter => enter.append<SVGAElement>("a"))
+    .attr("class", (node) => `graph-node${node.id === currentId ? " graph-node--current" : ""}${labelled.has(node) ? " graph-node--labelled" : ""}`)
     .attr("data-node-id", (node) => node.id)
     .attr("data-node-url", (node) => node.url)
     .attr("role", (node) => isLocal && node.id === currentId ? "img" : "link")
-    .attr("tabindex", 0)
+    .attr("href", node => isLocal && node.id === currentId ? null : node.url)
+    .attr("tabindex", node => node === actionable[0] ? 0 : -1)
     .attr("aria-current", (node) => node.id === currentId ? "page" : null)
     .attr("aria-label", (node) => (container.dataset.graphNodeLabel || "{title}, {count} relations")
       .replace("{title}", node.title)
       .replace("{count}", String(node.degree)))
     .on("click", (event: MouseEvent, node) => {
-      if (event.defaultPrevented || node.dragged || (isLocal && node.id === currentId)) return;
-      window.location.assign(node.url);
+      if (node.dragged || (isLocal && node.id === currentId)) event.preventDefault();
     })
     .on("keydown", (event: KeyboardEvent, node) => {
-      if ((event.key === "Enter" || event.key === " ") && !(isLocal && node.id === currentId)) {
-        event.preventDefault();
-        window.location.assign(node.url);
-      }
+      if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End'].includes(event.key) || !actionable.length) return;
+      event.preventDefault();
+      const index = actionable.indexOf(node);
+      const next = event.key === 'Home' ? 0 : event.key === 'End' ? actionable.length - 1
+        : (index + (event.key === 'ArrowLeft' || event.key === 'ArrowUp' ? -1 : 1) + actionable.length) % actionable.length;
+      nodeGroups.filter(item => item === actionable[next]).node()?.focus();
     });
 
   nodeGroups.append("circle").attr("r", (node) => nodeRadius(node.degree, mode));
-  const nodeLabels = nodeGroups.append("text").text((node) => node.title);
+  nodeGroups.append('title').text(node => node.title);
+  const labelText = (node: VisualNode) => {
+    const limit = mode === 'compact' ? 28 : 40;
+    return node.title.length > limit ? `${node.title.slice(0, limit - 1)}…` : node.title;
+  };
+  const nodeLabels = nodeGroups.append("text").text(labelText);
+  const measureLabels = () => nodeLabels.each(function measureLabel(node) {
+    this.textContent = labelText(node);
+    const measure = () => typeof this.getComputedTextLength === 'function' ? this.getComputedTextLength() : (this.textContent?.length || 0) * 6;
+    node.labelWidth = measure();
+    if (mode === 'compact' && node.labelWidth > width - 12) {
+      this.textContent = this.textContent.slice(0, Math.max(1, Math.floor(this.textContent.length * (width - 12) / node.labelWidth) - 2)) + '…';
+      node.labelWidth = measure();
+    }
+    node.labelHeight = this.getBoundingClientRect().height || 12;
+  });
+  measureLabels();
 
   const adjacency = new Map<string, Set<string>>();
   for (const node of nodes) adjacency.set(node.id, new Set([node.id]));
@@ -226,7 +257,10 @@ function renderGraph(container: HTMLElement, payload: GraphPayload | LocalGraphP
     adjacency.get(nodeId(edge.source))?.add(nodeId(edge.target));
     adjacency.get(nodeId(edge.target))?.add(nodeId(edge.source));
   }
+  let activeNode: VisualNode | undefined;
   const highlight = (active?: VisualNode) => {
+    activeNode = active;
+    nodeLabels.attr('visibility', node => node === active || node.labelVisible !== false ? null : 'hidden');
     const related = active ? adjacency.get(active.id) : undefined;
     nodeGroups.classed("graph-node--dimmed", (node) => Boolean(related && !related.has(node.id)));
     links.classed("graph-edge--dimmed", (edge) => Boolean(
@@ -235,7 +269,10 @@ function renderGraph(container: HTMLElement, payload: GraphPayload | LocalGraphP
   };
   nodeGroups.on("pointerenter.highlight", (_event, node) => highlight(node));
   nodeGroups.on("pointerleave.highlight", () => highlight());
-  nodeGroups.on("focus.highlight", (_event, node) => highlight(node));
+  nodeGroups.on("focus.highlight", (_event, node) => {
+    nodeGroups.attr('tabindex', item => item === node && actionable.includes(item) ? 0 : -1);
+    highlight(node);
+  });
   nodeGroups.on("blur.highlight", () => highlight());
 
   const simulation: Simulation<VisualNode, VisualEdge> = forceSimulation(nodes)
@@ -246,16 +283,23 @@ function renderGraph(container: HTMLElement, payload: GraphPayload | LocalGraphP
     .force("charge", forceManyBody().strength(mode === "compact" ? -115 : -220))
     .force("collision", forceCollide<VisualNode>().radius((node) => nodeRadius(node.degree, mode) + (mode === "compact" ? 12 : 20)))
     .force("center", forceCenter(centreX, centreY));
+  let disposed = false;
+  let inView = mode !== 'compact' || typeof IntersectionObserver === 'undefined';
+  const updateActivity = () => {
+    const paused = disposed || reducedMotion() || document.hidden || !inView;
+    container.dataset.graphPaused = String(paused);
+    if (paused) simulation.stop();
+    else if (simulation.alpha() > simulation.alphaMin()) simulation.restart();
+  };
+  const intersectionObserver = mode === 'compact' && typeof IntersectionObserver !== 'undefined'
+    ? new IntersectionObserver(entries => { inView = entries.some(entry => entry.isIntersecting); updateActivity(); }) : undefined;
+  intersectionObserver?.observe(canvas);
+  document.addEventListener('visibilitychange', updateActivity);
+  updateActivity();
 
   const position = () => {
     let compactCurrentLabelX = 0;
     if (mode === "compact") {
-      nodeLabels.each(function measureLabel(node) {
-        node.labelWidth = typeof this.getComputedTextLength === "function"
-          ? this.getComputedTextLength()
-          : node.title.length * 5.5;
-        node.labelHeight = this.getBoundingClientRect().height;
-      });
       for (const node of nodes) {
         const radius = nodeRadius(node.degree, mode);
         const x = node.x ?? width / 2;
@@ -273,7 +317,7 @@ function renderGraph(container: HTMLElement, payload: GraphPayload | LocalGraphP
         const boundedX = minimumX <= maximumX
           ? Math.max(minimumX, Math.min(maximumX, x))
           : width / 2;
-        const labelClearance = radius + 16;
+        const labelClearance = radius + 4 + (node.labelHeight ?? 12) + 2;
         const boundedY = Math.max(labelClearance, Math.min(height - labelClearance, y));
         if (boundedX !== x) node.vx = 0;
         if (boundedY !== y) node.vy = 0;
@@ -336,9 +380,7 @@ function renderGraph(container: HTMLElement, payload: GraphPayload | LocalGraphP
           .attr("x", direction * (distance + (node.labelWidth ?? 0) / 2))
           .attr("y", "0.32em");
       } else {
-        const labelWidth = typeof this.getComputedTextLength === "function"
-          ? this.getComputedTextLength()
-          : node.title.length * 6;
+        const labelWidth = node.labelWidth ?? 0;
         const outwardEdge = x + direction * (distance + labelWidth);
         if (outwardEdge < 4 || outwardEdge > width - 4) direction *= -1;
         label
@@ -347,24 +389,45 @@ function renderGraph(container: HTMLElement, payload: GraphPayload | LocalGraphP
           .attr("y", "0.32em");
       }
     });
+    if (mode === 'compact') {
+      // Cull colliding labels using cached metrics and model coordinates. No
+      // synchronous layout reads are needed as the simulation moves nodes.
+      const placed: Array<{ left: number; right: number; top: number; bottom: number }> = [];
+      const candidates = nodes.length > 12 ? nodes.filter(node => labelled.has(node)) : nodes;
+      const priority = [activeNode, current, ...candidates].filter((node, i, all): node is VisualNode => Boolean(node) && all.indexOf(node) === i);
+      const labels = new Map<VisualNode, SVGTextElement>();
+      nodeLabels.each(function (node) { labels.set(node, this); });
+      for (const node of priority) {
+        const label = labels.get(node)!;
+        const x = (node.x ?? centreX) + Number(label.getAttribute('x'));
+        const rawY = label.getAttribute('y') || '0';
+        const y = (node.y ?? centreY) + parseFloat(rawY) * (rawY.endsWith('em') ? 11 : 1);
+        const halfWidth = (node.labelWidth ?? 0) / 2 + 2;
+        const height = node.labelHeight ?? 12;
+        const rect = { left: x - halfWidth, right: x + halfWidth, top: y - height, bottom: y + height * 0.3 };
+        node.labelVisible = !placed.some(other => rect.left < other.right && rect.right > other.left && rect.top < other.bottom && rect.bottom > other.top);
+        if (node.labelVisible) placed.push(rect);
+        label.setAttribute('visibility', node.labelVisible ? 'visible' : 'hidden');
+      }
+    }
   };
   position();
 
-  const dragBehaviour = drag<SVGGElement, VisualNode>()
+  const dragBehaviour = drag<SVGAElement, VisualNode>()
     .touchable(() => mode !== "compact")
-    .filter((event: MouseEvent, node) => !event.ctrlKey && !event.button && node.id !== currentId)
+    .filter((event: MouseEvent, node) => !event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey && !event.button && node.id !== currentId)
     .clickDistance(4)
-    .on("start", (event: D3DragEvent<SVGGElement, VisualNode, VisualNode>, node) => {
+    .on("start", (event: D3DragEvent<SVGAElement, VisualNode, VisualNode>, node) => {
       event.sourceEvent?.stopPropagation();
       const coordinates = event.sourceEvent ? pointerCoordinates(event.sourceEvent) : null;
       node.dragStartX = coordinates?.[0] ?? event.x;
       node.dragStartY = coordinates?.[1] ?? event.y;
       node.dragged = false;
-      if (!event.active && !reducedMotion()) simulation.alphaTarget(0.2).restart();
+      if (!event.active) { simulation.alphaTarget(0.2); updateActivity(); }
       node.fx = node.x;
       node.fy = node.y;
     })
-    .on("drag", (event: D3DragEvent<SVGGElement, VisualNode, VisualNode>, node) => {
+    .on("drag", (event: D3DragEvent<SVGAElement, VisualNode, VisualNode>, node) => {
       const coordinates = event.sourceEvent ? pointerCoordinates(event.sourceEvent) : null;
       const x = coordinates?.[0] ?? event.x;
       const y = coordinates?.[1] ?? event.y;
@@ -377,7 +440,7 @@ function renderGraph(container: HTMLElement, payload: GraphPayload | LocalGraphP
         position();
       }
     })
-    .on("end", (event: D3DragEvent<SVGGElement, VisualNode, VisualNode>, node) => {
+    .on("end", (event: D3DragEvent<SVGAElement, VisualNode, VisualNode>, node) => {
       if (!event.active) simulation.alphaTarget(0);
       setTimeout(() => { node.dragged = false; }, 0);
     });
@@ -426,12 +489,16 @@ function renderGraph(container: HTMLElement, payload: GraphPayload | LocalGraphP
       svg.attr("viewBox", `0 0 ${width} ${height}`);
       zoomBehaviour.extent([[0, 0], [width, height]]);
       simulation.force("center", forceCenter(centreX, centreY));
-      if (reducedMotion()) simulation.stop();
-      else simulation.alpha(0.35).restart();
+      measureLabels();
+      simulation.alpha(0.35);
+      updateActivity();
       position();
     });
   });
   resizeObserver.observe(canvas);
+  void document.fonts?.ready.then(() => {
+    if (!disposed) { measureLabels(); position(); }
+  });
 
   if (reducedMotion()) {
     simulation.stop();
@@ -446,7 +513,10 @@ function renderGraph(container: HTMLElement, payload: GraphPayload | LocalGraphP
   container.dataset.graphReady = "true";
 
   const dispose = () => {
+    disposed = true;
     simulation.stop();
+    intersectionObserver?.disconnect();
+    document.removeEventListener('visibilitychange', updateActivity);
     resizeObserver.disconnect();
     cancelAnimationFrame(resizeFrame);
     container.dataset.graphDisposed = "true";
@@ -487,8 +557,6 @@ export function initialiseGraphs(): void {
     const compact = section.querySelector<HTMLElement>("[data-graph-view]");
     if (!compact) throw new TypeError("Local graph view is unavailable");
     renderGraph(compact, localPayload, localPayload.current_id);
-    const fallback = section.querySelector<HTMLElement>("[data-graph-fallback]");
-    if (fallback) fallback.hidden = true;
   } catch {
     const compact = section.querySelector<HTMLElement>("[data-graph-view]");
     if (compact) showFailure(compact);
@@ -518,7 +586,7 @@ export function initialiseGraphs(): void {
     void loadGlobalGraph()
       .then((payload) => {
         if (!dialog.open || openGeneration !== globalOpenGeneration) return;
-        if (payload.nodes.length > COMPLETE_GRAPH_MAX_NODES || payload.edges.length > COMPLETE_GRAPH_MAX_EDGES) {
+        if (payload.truncated || payload.nodes.length > COMPLETE_GRAPH_MAX_NODES || payload.edges.length > COMPLETE_GRAPH_MAX_EDGES) {
           showBoundedFallback(view);
         } else {
           renderGraph(view, payload, localPayload.current_id);

@@ -222,6 +222,8 @@ module JekyllObsidian
       "close_full_graph" => "Close full graph",
       "close_local_graph" => "Close local graph",
       "graph_loading" => "Loading graph…",
+      "graph_limited" => "Showing nearby notes. Use search to find other connections.",
+      "graph_linked_notes" => "Linked notes",
       "graph_unavailable" => "The interactive graph could not be loaded. Use the linked notes below.",
       "graph_too_large" => "This complete graph is too large to render interactively. Use local graphs or search instead.",
       "graph_summary" => "{notes} notes and {relations} relations.",

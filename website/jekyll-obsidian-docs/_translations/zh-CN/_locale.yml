@@ -200,6 +200,8 @@ messages:
   close_full_graph: 关闭完整关系图
   close_local_graph: 关闭局部关系图
   graph_loading: 正在载入关系图…
+  graph_limited: 仅显示部分邻近笔记，可通过搜索查找其他关联。
+  graph_linked_notes: 关联笔记列表
   graph_unavailable: 无法载入交互式关系图，请使用下方的关联笔记列表。
   graph_too_large: 完整关系图规模过大，无法交互渲染；请改用局部关系图或搜索。
   graph_summary: 共 {notes} 篇笔记、{relations} 条关系。

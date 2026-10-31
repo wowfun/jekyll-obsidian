@@ -1834,7 +1834,7 @@ test("compact Portfolio graphs keep node labels clear of their live status", asy
     await page.waitForTimeout(400);
     const geometry = await view.evaluate((container) => {
       const status = container.querySelector<HTMLElement>("[data-graph-status]");
-      const labels = [...container.querySelectorAll<SVGTextElement>(".graph-node text")];
+      const labels = [...container.querySelectorAll<SVGTextElement>(".graph-node text")].filter(label => getComputedStyle(label).visibility !== 'hidden' && getComputedStyle(label).opacity !== '0');
       const canvas = container.querySelector<HTMLElement>("[data-graph-canvas]");
       const svg = canvas?.querySelector<SVGSVGElement>("svg");
       if (!status || !canvas || !svg) {
@@ -1907,7 +1907,7 @@ test("desktop compact graphs keep every visible label separate and inside the ca
     const geometry = await view.evaluate((container) => {
       const canvas = container.querySelector<HTMLElement>("[data-graph-canvas]");
       const status = container.querySelector<HTMLElement>("[data-graph-status]");
-      const labels = [...container.querySelectorAll<SVGTextElement>(".graph-node text")];
+      const labels = [...container.querySelectorAll<SVGTextElement>(".graph-node text")].filter(label => getComputedStyle(label).visibility !== 'hidden' && getComputedStyle(label).opacity !== '0');
       if (!canvas || !status) {
         return { labelCount: labels.length, clipped: ["missing graph surface"], intersections: [], statusIntersections: [] };
       }
@@ -1943,7 +1943,9 @@ test("desktop compact graphs keep every visible label separate and inside the ca
       };
     });
 
-    expect(geometry.labelCount).toBe(expectedNodeCount);
+    expect(geometry.labelCount).toBeGreaterThan(0);
+    expect(geometry.labelCount).toBeLessThanOrEqual(expectedNodeCount);
+    await expect(view.locator('.graph-node')).toHaveCount(expectedNodeCount);
     expect(geometry.clipped, direction).toEqual([]);
     expect(geometry.intersections, direction).toEqual([]);
     expect(geometry.statusIntersections, direction).toEqual([]);
@@ -2043,7 +2045,7 @@ test("graph nodes have no frame and darken only on interaction", async ({ page }
   await expect(targetCircle).toHaveCSS("stroke", "none");
   const quiet = await targetCircle.evaluate((element) => getComputedStyle(element).fill);
   expect(await currentCircle.evaluate((element) => getComputedStyle(element).fill)).toBe(quiet);
-  await target.hover();
+  await targetCircle.hover();
   await expect.poll(() => targetCircle.evaluate((element) => getComputedStyle(element).fill)).not.toBe(quiet);
   await page.mouse.move(0, 0);
   await target.focus();

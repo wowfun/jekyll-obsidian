@@ -2371,7 +2371,6 @@
 
   .graph-node {
     cursor: pointer;
-    outline: none;
     transition: opacity 140ms ease;
   }
 
@@ -2399,9 +2398,10 @@
   }
 
   .graph-node text {
+    pointer-events: none;
     fill: var(--ink);
     font-family: var(--font-ui);
-    font-size: 10px;
+    font-size: 11px;
     paint-order: stroke;
     stroke: var(--surface);
     stroke-width: 3px;
@@ -2415,8 +2415,12 @@
     inset-inline-end: 0.55rem;
     margin: 0;
     color: var(--graphite);
-    font-size: 0.58rem;
+    font-size: 0.75rem;
     pointer-events: none;
+  }
+
+  .graph-view[data-graph-dense="true"] .graph-node:not(.graph-node--labelled, .graph-node--current, :hover, :focus) text {
+    opacity: 0;
   }
 
   .graph-view--compact .graph-status {
