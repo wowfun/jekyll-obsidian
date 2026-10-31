@@ -43,7 +43,7 @@ jekyll-obsidian dev
 
 `init` creates the configuration and Pages workflow. It creates a public welcome note only if the content directory is missing or empty. Repeating the same initialization leaves matching files unchanged; a conflict is reported before any files are written. For an existing configuration or workflow, edit the files directly using the examples above.
 
-All configuration entries are editable, including `source` and `theme`. Changes take effect on the next build. See [[Customization|Customization]] for publication defaults and features.
+All configuration entries are editable, including `source` and `theme`. Changes take effect on the next build. See [[Publishing|Publishing content]] for publication rules and [[Customization|Customization]] for theme and feature settings.
 
 ## Use Bundler
 
@@ -90,6 +90,8 @@ jekyll-obsidian clean
 ```
 
 The built site is `.jekyll-obsidian-cache/site/`. `clean` removes the tool's cached state and output while retaining notes, configuration, installed dependencies, and unrelated `_site/` directories. The installed gem is read-only during use.
+
+Builds create an isolated Jekyll source under the host's `.jekyll-obsidian-cache/runtime/` using package-owned templates. The host's existing `_config.yml` and plugins do not participate. Use the `jekyll-obsidian` commands to build the site.
 
 ## Troubleshooting
 

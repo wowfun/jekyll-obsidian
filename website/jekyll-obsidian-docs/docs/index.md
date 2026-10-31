@@ -13,7 +13,11 @@ updated: 2026-08-07
 
 The handbook follows the same directory tree you see in any Markdown editor, including Obsidian. Start with [[Integration|Host Integration]] to publish through GitHub Actions without a local build, or [[Getting Started]] to publish the first note.
 
-- [[Syntax]] and [[Customization]] cover authoring, themes, Blog, navigation, contacts, Search, Graph, tags, feeds, source actions, and site configuration.
+- [[Publishing|Publishing content]] covers publication rules, page structure, note properties, source metadata, and standalone HTML.
+- [[Syntax]] covers Markdown, wiki links, embeds, and media.
+- [[Reading|Reading and navigation]] covers the header, search, reading-time hints, graphs, and link previews.
+- [[Customization]] covers site identity, themes, navigation, the footer, property display, and output limits.
+- [[Archives|Archives and favorites]] covers article filters, daily grouping, inline reading, Markdown exports, and local favorites.
 - [[Portfolio]] covers automatic project collections and public GitHub Markdown bodies.
 - [[Comments]] covers GitHub Discussions setup, thread identity, privacy, and troubleshooting.
 - [[Analytics]] covers optional Cloudflare and Google traffic measurement.

@@ -33,7 +33,10 @@ This working starter is also the manual for `jekyll-obsidian`. Write ordinary Ma
 - [[Integration|Host Integration]] covers installing the gem and adding a Pages workflow to another repository.
 - [[Getting Started]] covers GitHub Actions publishing, the publication boundary, and optional local preview.
 - [[Syntax]] lists the Obsidian-flavored Markdown supported in v1.
+- [[Publishing|Publishing content]] explains publication rules, page structure, and note properties.
+- [[Reading|Reading and navigation]] explains search, graphs, and reading controls.
 - [[Customization]] explains type, color, navigation, and repository links.
+- [[Archives|Archives and favorites]] explains archive filters, exports, and local favorites.
 - [[Portfolio]] explains automatic project collections and imported GitHub Markdown bodies.
 - [[Comments]] explains GitHub Discussions setup and comment-thread behavior.
 - [[Analytics]] explains optional Cloudflare and Google traffic measurement.
@@ -45,8 +48,8 @@ This working starter is also the manual for `jekyll-obsidian`. Write ordinary Ma
 ## Feature map
 
 - Start with [[Integration|Host Integration]], [[Getting Started]], and [[Deployment]] for the no-local-build GitHub Actions path, optional preview, root or project `baseurl`, and custom domains.
-- Use [[Customization]] for Minimal and Docs, pages, posts, documentation, Blog, navigation, contacts, tags, Atom feeds, and generated system routes. [[Portfolio]] owns project collections, external GitHub bodies, and the View imported Markdown action.
-- Read [[Syntax]] and [[Customization]] for OFM, media, Search, previews, outlines, relations, local and complete Graph views, Copy page, View as Markdown, and source actions.
+- Use [[Publishing|Publishing content]] for pages, posts, documentation, dates, and source metadata; use [[Customization]] for Minimal and Docs, navigation, contacts, and feature settings. [[Portfolio]] covers project collections and external GitHub bodies.
+- Read [[Syntax]] for OFM, media, and Markdown resources, [[Reading|Reading and navigation]] for search, previews, and graphs, and [[Archives|Archives and favorites]] for filters, inline reading, exports, and saved articles.
 - Add locale overlays, Giscus, or optional traffic measurement through [[Localization]], [[Comments]], and [[Analytics]]. The compiler also emits canonical metadata, a sitemap, a 404 page, and locale-partitioned search and graph resources.
 
 ## A useful constraint

@@ -63,4 +63,4 @@ Both options make third-party network requests from the visitor's browser. Jekyl
 | Google misses Docs page changes | Enable both page-load and browser-history events in the GA4 web stream's Enhanced Measurement settings. |
 | Google counts a page twice | Remove separately installed analytics snippets or tag-manager page-view rules. Jekyll Obsidian initializes its client once. |
 
-See [[Customization#Analytics|Customization]] for the configuration's place in the complete site file and [[Deployment|Deployment]] for production builds.
+See [[Customization|Customization]] for other site settings and [[Deployment|Deployment]] for production builds.

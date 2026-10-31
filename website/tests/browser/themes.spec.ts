@@ -1655,7 +1655,7 @@ test("Minimal Docs keeps its three-column context and active top-level scope", a
   await expect(page.locator(".minimal-context")).toBeVisible();
   await expect(page.getByRole("navigation", { name: "Primary navigation" })
     .getByRole("link", { name: "Docs" })).toHaveAttribute("aria-current", "page");
-  await expect(page.getByRole("navigation", { name: "Documentation sequence" })).toContainText("Syntax");
+  await expect(page.getByRole("navigation", { name: "Documentation sequence" })).toContainText("Publishing Content");
 });
 
 test("documentation sidebars expose the complete index by default", async ({ page }, testInfo) => {

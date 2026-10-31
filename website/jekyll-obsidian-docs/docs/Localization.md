@@ -161,3 +161,13 @@ Dates use a deterministic ISO representation in every locale. This avoids Englis
 | Locale route collides | Rename the conflicting note or permalink. Locale feeds, assets, and system pages reserve their destination paths. |
 
 Keep locale tags and relative note paths stable after publication. Changing either one changes localized public URLs, while moving or renaming a note can also change its comment-thread identity.
+
+
+## Tag labels and aliases
+
+Locale manifests may provide `tag_labels` and flattened `tag_aliases` keyed by complete
+stable tags. Labels can differ across languages; IDs remain shared.
+
+Locale `tag_aliases` may map a bare tag into a namespace, for example `agents: topics/agents`. Existing namespaced tags can only be replaced within the same namespace; alias chains and cycles are rejected.
+
+See [[Archives#Archive visibility|Archives and favorites]] for hidden tags and archive filters.

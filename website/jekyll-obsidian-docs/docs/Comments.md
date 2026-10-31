@@ -106,7 +106,7 @@ The build and the first page view do not create an empty Discussion. Giscus crea
 
 Local development never connects to Giscus. It renders a publication-only notice and a link to the configured Discussions page.
 
-Production and CI output load the Giscus client on eligible posts only when all provider values are present. The iframe loads lazily near the comment section, follows the site's light or dark color scheme, and receives later scheme changes without a reload.
+Production and CI output load the Giscus client on eligible posts only when all provider values are present. The client is requested when the page initializes. Reactions are enabled, and the input appears above existing comments. The iframe loads lazily near the comment section, follows the site's light or dark color scheme, and receives later scheme changes without a reload.
 
 If Discussions is disabled, the Giscus App is not installed, or the external client is unavailable, the site itself continues normally. The comment section changes to a non-fatal unavailable state and retains its server-rendered GitHub link. These runtime failures do not affect other page features or future builds.
 

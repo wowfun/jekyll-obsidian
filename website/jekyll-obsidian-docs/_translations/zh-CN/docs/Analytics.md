@@ -58,4 +58,4 @@ Google Analytics 可能使用 `_ga` 等 Cookie 和标识符来区分访客。启
 | Google 漏掉 Docs 页面切换 | 在 GA4 网站数据流的 Enhanced Measurement 中开启页面载入和浏览器历史记录事件。 |
 | Google 重复统计页面 | 删除另行安装的统计代码或标签管理器页面浏览规则。Jekyll Obsidian 只初始化一次客户端。 |
 
-完整配置文件中的放置位置请参阅 [[Customization#流量统计|自定义]]，生产构建说明请参阅 [[Deployment|部署]]。
+其他站点设置见 [[Customization|自定义]]，生产构建说明见 [[Deployment|部署]]。

@@ -56,7 +56,7 @@ Edit `.github/jekyll-obsidian.yml`. Site identity fields (`title`, `description`
 
 By default, only notes whose frontmatter has the YAML boolean `publish: true` enter the site. To publish folders recursively, list content-relative paths under `website.content.publish_by_default`; `.` selects the whole content tree. Use `publish: false` to exclude a note. Quoted strings such as `"true"` are not booleans. Obsidian's `.obsidian/` and `.trash/` directories are excluded.
 
-A home page is optional: without one, the site can open a section or another public note. At least one public note is required. See [Customization](website/jekyll-obsidian-docs/docs/Customization.md#content-and-navigation) for index selection and navigation.
+A home page is optional: without one, the site can open a section or another public note. At least one public note is required. See [Publishing content](website/jekyll-obsidian-docs/docs/Publishing.md#content-and-navigation) for index selection and navigation.
 
 Switching themes preserves the URLs of notes that remain published. For multilingual sites, set `website.i18n.enabled: true` explicitly to keep translations enabled across theme changes. See [Localization](website/jekyll-obsidian-docs/docs/Localization.md).
 
@@ -84,7 +84,10 @@ For another host, run `jekyll-obsidian build --url https://example.com --baseurl
 - [Host Integration](website/jekyll-obsidian-docs/docs/Integration.md): installation, Bundler, and upgrades.
 - [Getting Started](website/jekyll-obsidian-docs/docs/Getting%20Started.md): publishing and authoring.
 - [Syntax](website/jekyll-obsidian-docs/docs/Syntax.md): Obsidian-flavored Markdown and media embeds.
-- [Customization](website/jekyll-obsidian-docs/docs/Customization.md): themes, navigation, archive tabs, recommendations, and trusted HTML slides.
+- [Publishing content](website/jekyll-obsidian-docs/docs/Publishing.md): publication rules, note properties, recommendations, and trusted HTML slides.
+- [Reading and navigation](website/jekyll-obsidian-docs/docs/Reading.md): header navigation, search, reading-time hints, graphs, and previews.
+- [Customization](website/jekyll-obsidian-docs/docs/Customization.md): site identity, themes, navigation, footer links, and output limits.
+- [Archives and favorites](website/jekyll-obsidian-docs/docs/Archives.md): archive tabs, filters, inline reading, Markdown exports, and saved articles.
 - [Portfolio](website/jekyll-obsidian-docs/docs/Portfolio.md): project collections and public GitHub Markdown bodies.
 - [Analytics](website/jekyll-obsidian-docs/docs/Analytics.md): optional Cloudflare or Google traffic measurement.
 - [Comments](website/jekyll-obsidian-docs/docs/Comments.md): GitHub Discussions setup and privacy.

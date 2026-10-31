@@ -20,7 +20,10 @@ description: 从同一个 Markdown 文件夹发布通用站点或文档手册。
 - [[Integration|宿主集成]]介绍如何安装 gem 并为其他仓库添加 Pages 工作流。
 - [[Getting Started|快速开始]]介绍 GitHub Actions 发布方式、写作边界和可选本地预览。
 - [[Syntax|语法]]列出 v1 支持的 Obsidian 风格 Markdown。
+- [[Publishing|内容发布]]介绍发布范围、页面组织与笔记属性。
+- [[Reading|阅读与导航]]介绍搜索、图谱与阅读操作。
 - [[Customization|自定义]]介绍主题、导航与仓库链接。
+- [[Archives|归档与收藏]]介绍归档筛选、导出与本地收藏。
 - [[Portfolio|作品集]]介绍自动项目集合和外部 GitHub Markdown 正文。
 - [[Comments|评论]]介绍 GitHub Discussions 配置与讨论串行为。
 - [[Analytics|流量统计]]介绍可选的 Cloudflare 与 Google 访问统计。
@@ -30,8 +33,8 @@ description: 从同一个 Markdown 文件夹发布通用站点或文档手册。
 ## 功能索引
 
 - [[Integration|宿主集成]]、[[Getting Started|快速开始]]和 [[Deployment|部署]]介绍无需本地构建的 GitHub Actions 路径、可选预览、根路径或项目 `baseurl`，以及自定义域名。
-- [[Customization|自定义]]介绍 Minimal 与 Docs、页面、文章、文档、Blog、导航、联系方式、标签、Atom 订阅源和生成的系统路由。[[Portfolio|作品集]]负责项目集合、外部 GitHub 正文和查看导入的 Markdown 操作。
-- [[Syntax|语法]]和 [[Customization|自定义]]介绍 OFM、媒体、Search、预览、大纲、关系、局部与完整 Graph、Copy page、View as Markdown 和源码操作。
+- [[Publishing|内容发布]]介绍页面、文章、文档、日期和来源信息；[[Customization|自定义]]介绍 Minimal 与 Docs、导航、联系方式和功能设置。[[Portfolio|作品集]]介绍项目集合与外部 GitHub 正文。
+- [[Syntax|语法]]介绍 OFM、媒体和 Markdown 资源；[[Reading|阅读与导航]]介绍搜索、预览与图谱；[[Archives|归档与收藏]]介绍筛选、平铺阅读、导出与收藏。
 - [[Localization|本地化]]、[[Comments|评论]]和 [[Analytics|流量统计]]介绍语言覆盖层、Giscus 与可选流量统计。编译器还会生成 canonical 元数据、站点地图、404 页面，以及按语言分区的 Search 与 Graph 资源。
 
 开发者文档尚未翻译时，会保留中文 URL，并明确提示当前显示的是英文原文。普通用户指南均提供中文版本。

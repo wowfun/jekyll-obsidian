@@ -56,7 +56,7 @@ My first public note.
 
 默认只发布 frontmatter 中包含 YAML 布尔值 `publish: true` 的笔记。若要递归发布文件夹，可在 `website.content.publish_by_default` 中列出相对于内容目录的路径；`.` 表示整个内容目录树。使用 `publish: false` 排除某篇笔记。`"true"` 等带引号的字符串不是布尔值。Obsidian 的 `.obsidian/` 和 `.trash/` 目录不会被发布。
 
-首页不是必需的：未提供首页时，站点可以打开某个栏目或另一篇公开笔记。站点至少需要一篇公开笔记。索引页选择与导航规则见[自定义](website/jekyll-obsidian-docs/_translations/zh-CN/docs/Customization.md#内容与导航)。
+首页不是必需的：未提供首页时，站点可以打开某个栏目或另一篇公开笔记。站点至少需要一篇公开笔记。索引页选择与导航规则见[内容发布](website/jekyll-obsidian-docs/_translations/zh-CN/docs/Publishing.md#内容与导航)。
 
 切换主题不会改变仍然公开的笔记 URL。多语言站点应显式设置 `website.i18n.enabled: true`，以便切换主题后继续启用翻译。详见[本地化](website/jekyll-obsidian-docs/_translations/zh-CN/docs/Localization.md)。
 
@@ -84,7 +84,10 @@ jekyll-obsidian dev
 - [宿主集成](website/jekyll-obsidian-docs/_translations/zh-CN/docs/Integration.md)：安装、Bundler 和升级。
 - [快速开始](website/jekyll-obsidian-docs/_translations/zh-CN/docs/Getting%20Started.md)：发布和写作。
 - [语法](website/jekyll-obsidian-docs/_translations/zh-CN/docs/Syntax.md)：Obsidian 风格 Markdown 和媒体嵌入。
-- [自定义](website/jekyll-obsidian-docs/_translations/zh-CN/docs/Customization.md)：主题、导航、归档栏目、推荐内容和受信任的 HTML 幻灯片。
+- [内容发布](website/jekyll-obsidian-docs/_translations/zh-CN/docs/Publishing.md)：发布规则、笔记属性、推荐内容和受信任的 HTML 幻灯片。
+- [阅读与导航](website/jekyll-obsidian-docs/_translations/zh-CN/docs/Reading.md)：标题栏、搜索、阅读时长、图谱和预览。
+- [自定义](website/jekyll-obsidian-docs/_translations/zh-CN/docs/Customization.md)：站点信息、主题、导航、页脚链接和输出限制。
+- [归档与收藏](website/jekyll-obsidian-docs/_translations/zh-CN/docs/Archives.md)：归档栏目、筛选、平铺阅读、Markdown 导出和本地收藏。
 - [项目集](website/jekyll-obsidian-docs/_translations/zh-CN/docs/Portfolio.md)：项目集合和公开的 GitHub Markdown 正文。
 - [访问统计](website/jekyll-obsidian-docs/_translations/zh-CN/docs/Analytics.md)：可选的 Cloudflare 或 Google 流量统计。
 - [评论](website/jekyll-obsidian-docs/_translations/zh-CN/docs/Comments.md)：GitHub Discussions 设置与隐私。

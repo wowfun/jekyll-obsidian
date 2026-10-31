@@ -37,7 +37,7 @@ jekyll-obsidian dev
 
 `init` 创建配置和 Pages 工作流，只在内容目录不存在或为空时添加公开的欢迎页。重复执行相同初始化会保留已匹配的文件；遇到冲突会在写入前报错。已有配置或工作流时，请参考上面的示例直接编辑。
 
-所有配置项都可以直接编辑，包括 `source` 和 `theme`，修改会在下一次构建时生效。发布默认值和功能配置见 [[Customization|自定义]]。
+所有配置项都可以直接编辑，包括 `source` 和 `theme`，修改会在下一次构建时生效。发布规则见 [[Publishing|内容发布]]，主题和功能配置见 [[Customization|自定义]]。
 
 ## 使用 Bundler
 
@@ -84,6 +84,8 @@ jekyll-obsidian clean
 ```
 
 生成站点位于 `.jekyll-obsidian-cache/site/`。`clean` 清理本工具的缓存和输出，保留笔记、配置、已安装依赖和其他工具的 `_site/` 目录。使用过程中不会写入已安装的 gem。
+
+构建在宿主的 `.jekyll-obsidian-cache/runtime/` 中创建隔离的 Jekyll source，只使用包内模板；宿主已有的 `_config.yml` 和插件不会参与。请通过 `jekyll-obsidian` 命令构建站点。
 
 ## 排查问题
 
