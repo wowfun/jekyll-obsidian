@@ -36,8 +36,8 @@
 
       <div class="minimal-reading-column" data-docs-main>
         {% if page.website.kind == 'blog-index' %}{% include website/archive-day-ui.html %}{% endif %}
+        {% if page.website.i18n.fallback %}<aside class="translation-fallback" role="status">{{ ui.translation_missing | default: 'This page is not translated yet. The default-language version is shown.' | escape }}</aside>{% endif %}
         <article class="minimal-entry{% if page.website.compact_collection %} minimal-entry--compact-collection{% endif %}{% if page.website.cssclasses %} {{ page.website.cssclasses | join: ' ' }}{% endif %}">
-          {% if page.website.i18n.fallback %}<aside class="translation-fallback" role="status">{{ ui.translation_missing | default: 'This page is not translated yet. The default-language version is shown.' | escape }}</aside>{% endif %}
           {% unless page.website.theme_data.archive %}{% unless page.website.has_h1 %}{% include website/page-actions.html %}{% endunless %}{% endunless %}
           {% include website/note-header.html %}
           {% include website/note-source.html %}

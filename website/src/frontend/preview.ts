@@ -1,6 +1,7 @@
 import { fetchJson, parseCatalogPayload } from "./data";
 import type { CatalogNote } from "./types";
 import { requireSiteUrl } from "./urls";
+import { boundedText } from "./response";
 
 const ALLOWED_ELEMENTS = new Set([
   "ABBR", "B", "BLOCKQUOTE", "BR", "CODE", "DD", "DEL", "DL", "DT", "EM",
@@ -24,19 +25,9 @@ const FOCUSABLE_SELECTOR = [
   "[tabindex]:not([tabindex='-1'])"
 ].join(",");
 
-let notesPromise: Promise<Map<string, CatalogNote>> | null = null;
-const noteBodies = new Map<string, Promise<DocumentFragment>>();
-
-function catalog(): Promise<Map<string, CatalogNote>> {
-  notesPromise ??= fetchJson(requireSiteUrl("preview"))
-    .then(parseCatalogPayload)
-    .then((payload) => new Map(payload.notes.map((note) => [note.id, note])))
-    .catch((error: unknown) => {
-      notesPromise = null;
-      throw error;
-    });
-  return notesPromise;
-}
+const BODY_MAX_BYTES = 1_048_576;
+const CACHE_MAX_BYTES = 2_097_152;
+const CACHE_MAX_ENTRIES = 20;
 
 function sanitizedNode(source: Node): Node | null {
   if (source.nodeType === Node.TEXT_NODE) return document.createTextNode(source.textContent || "");
@@ -99,23 +90,6 @@ function sanitizedBody(html: string): DocumentFragment {
   return result;
 }
 
-function loadNoteBody(url: string): Promise<DocumentFragment> {
-  let request = noteBodies.get(url);
-  if (request) return request;
-  request = fetch(url, {
-    credentials: "same-origin",
-    headers: { Accept: "text/html" }
-  }).then((response) => {
-    if (!response.ok) throw new Error(`Unable to load ${url}: ${response.status}`);
-    return response.text();
-  }).then(sanitizedBody).catch((error: unknown) => {
-    noteBodies.delete(url);
-    throw error;
-  });
-  noteBodies.set(url, request);
-  return request;
-}
-
 function makePreview(note: CatalogNote): { preview: HTMLElement; body: HTMLElement } {
   const preview = document.createElement("aside");
   preview.className = "note-preview";
@@ -145,18 +119,20 @@ function makePreview(note: CatalogNote): { preview: HTMLElement; body: HTMLEleme
 
   const body = document.createElement("div");
   body.className = "note-preview__body";
-  body.tabIndex = 0;
+  body.tabIndex = -1;
+  titleLink.tabIndex = -1;
   body.setAttribute("aria-label", `${note.title} preview`);
   const fallback = document.createElement("p");
   fallback.className = "note-preview__fallback";
   fallback.textContent = note.preview;
   body.append(fallback);
   body.addEventListener("wheel", (event) => {
-    event.stopPropagation();
     if (event.deltaY === 0) return;
-    event.preventDefault();
     const unit = event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? body.clientHeight : 1;
     const maximum = Math.max(0, body.scrollHeight - body.clientHeight);
+    if ((event.deltaY < 0 && body.scrollTop <= 0) || (event.deltaY > 0 && body.scrollTop >= maximum)) return;
+    event.stopPropagation();
+    event.preventDefault();
     body.scrollTop = Math.min(maximum, Math.max(0, body.scrollTop + event.deltaY * unit));
   }, { passive: false });
   preview.append(header, body);
@@ -188,6 +164,41 @@ export function initialisePreviews(): void {
   const controlledDocument = document as Document & { [previewController]?: () => void };
   controlledDocument[previewController]?.();
 
+  const lifetime = new AbortController();
+  let notesPromise: Promise<Map<string, CatalogNote>> | null = null;
+  const noteBodies = new Map<string, { body: DocumentFragment; bytes: number }>();
+  let cacheBytes = 0;
+  let bodyRequest: AbortController | undefined;
+  const catalog = () => notesPromise ??= fetchJson(requireSiteUrl("preview"), lifetime.signal, 8_388_608)
+    .then(parseCatalogPayload)
+    .then(payload => new Map(payload.notes.map(note => [note.id, note])))
+    .catch((error: unknown) => { notesPromise = null; throw error; });
+  const loadNoteBody = async (url: string, signal: AbortSignal): Promise<DocumentFragment> => {
+    const cached = noteBodies.get(url);
+    if (cached) {
+      noteBodies.delete(url);
+      noteBodies.set(url, cached);
+      return cached.body;
+    }
+    const response = await fetch(url, { credentials: "same-origin", headers: { Accept: "text/html" }, signal });
+    if (!response.ok) throw new Error(`Unable to load ${url}: ${response.status}`);
+    const html = await boundedText(response, BODY_MAX_BYTES, signal);
+    signal.throwIfAborted();
+    const body = sanitizedBody(html);
+    // Include DOM overhead, not only text bytes, in the retained-body budget.
+    const bytes = new TextEncoder().encode(html).length + body.querySelectorAll('*').length * 256;
+    if (bytes <= CACHE_MAX_BYTES) {
+      while (noteBodies.size >= CACHE_MAX_ENTRIES || cacheBytes + bytes > CACHE_MAX_BYTES) {
+        const oldest = noteBodies.keys().next().value!;
+        cacheBytes -= noteBodies.get(oldest)!.bytes;
+        noteBodies.delete(oldest);
+      }
+      noteBodies.set(url, { body, bytes });
+      cacheBytes += bytes;
+    }
+    return body;
+  };
+
   let activeAnchor: HTMLElement | null = null;
   let activePreview: HTMLElement | null = null;
   let activeBody: HTMLElement | null = null;
@@ -206,6 +217,7 @@ export function initialisePreviews(): void {
     cancelShow();
     cancelHide();
     requestVersion += 1;
+    bodyRequest?.abort();
     activePreview?.remove();
     activePreview = null;
     activeBody = null;
@@ -220,11 +232,14 @@ export function initialisePreviews(): void {
     hideTimer = window.setTimeout(close, 100);
   };
 
-  const show = async (anchor: HTMLElement) => {
+  const show = async (anchor: HTMLElement, expanded = true) => {
     cancelShow();
     const noteId = anchor.dataset.noteId;
     cancelHide();
-    if (!noteId || (activeAnchor === anchor && activePreview)) return;
+    if (!noteId || (activeAnchor === anchor && activePreview && (!expanded || activeBody?.dataset.previewExpanded))) return;
+    bodyRequest?.abort();
+    bodyRequest = new AbortController();
+    const signal = bodyRequest.signal;
     const version = ++requestVersion;
     activeAnchor = anchor;
     try {
@@ -241,14 +256,17 @@ export function initialisePreviews(): void {
       activePreview = preview;
       activeBody = body;
 
+      if (!expanded) return;
+      body.dataset.previewExpanded = "true";
+
       try {
-        const content = await loadNoteBody(note.url);
+        const content = await loadNoteBody(note.url, signal);
         if (activeAnchor !== anchor || activePreview !== preview || requestVersion !== version) return;
         body.replaceChildren(content.cloneNode(true));
         body.dataset.previewBodyReady = "true";
         placePreview(preview, anchor);
       } catch {
-        body.dataset.previewBodyError = "true";
+        if (!signal.aborted) body.dataset.previewBodyError = "true";
       }
     } catch {
       if (requestVersion === version) activeAnchor = null;
@@ -285,7 +303,10 @@ export function initialisePreviews(): void {
     const target = event.target;
     if (!(target instanceof Element)) return;
     const anchor = target.closest<HTMLElement>(".website-link[data-note-id]");
-    if (anchor) void show(anchor);
+    if (anchor) {
+      anchor.setAttribute("aria-keyshortcuts", "Alt+ArrowDown");
+      void show(anchor, false);
+    }
   };
   const handleFocusOut = (event: FocusEvent) => {
     const target = event.target;
@@ -293,6 +314,14 @@ export function initialisePreviews(): void {
     hide(event.relatedTarget);
   };
   const handleKeydown = (event: KeyboardEvent) => {
+    const anchor = event.target instanceof Element ? event.target.closest<HTMLElement>(".website-link[data-note-id]") : null;
+    if (anchor && event.altKey && event.key === "ArrowDown") {
+      event.preventDefault();
+      void show(anchor).then(() => {
+        if (activeAnchor === anchor) activePreview?.querySelector<HTMLElement>('a')?.focus();
+      });
+      return;
+    }
     if (!activePreview || !activeAnchor) return;
     if (event.key === "Escape") {
       if (activePreview.contains(document.activeElement)) activeAnchor.focus();
@@ -300,16 +329,13 @@ export function initialisePreviews(): void {
       return;
     }
     if (event.key !== "Tab" || event.altKey || event.ctrlKey || event.metaKey) return;
-    if (!event.shiftKey && event.target === activeAnchor && activeBody) {
-      event.preventDefault();
-      cancelHide();
-      const firstPreviewControl = activePreview.querySelector<HTMLElement>(FOCUSABLE_SELECTOR);
-      (firstPreviewControl || activeBody).focus();
+    if (event.target === activeAnchor) {
+      close();
       return;
     }
     if (!(event.target instanceof Node) || !activePreview.contains(event.target)) return;
     event.preventDefault();
-    const previewControls = [...activePreview.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)];
+    const previewControls = [...activePreview.querySelectorAll<HTMLElement>('a, .note-preview__body')];
     const controlIndex = event.target instanceof HTMLElement ? previewControls.indexOf(event.target) : -1;
     const adjacentControl = previewControls[controlIndex + (event.shiftKey ? -1 : 1)];
     if (adjacentControl) {
@@ -348,6 +374,10 @@ export function initialisePreviews(): void {
     window.removeEventListener("scroll", reposition, true);
     window.removeEventListener("pagehide", handlePageHide);
     close();
+    lifetime.abort();
+    notesPromise = null;
+    noteBodies.clear();
+    cacheBytes = 0;
     if (controlledDocument[previewController] === cleanup) delete controlledDocument[previewController];
   }
   function handlePageHide(event: PageTransitionEvent) {

@@ -125,7 +125,8 @@ for (const theme of themes) {
       }
       const main = page.locator("#main-content");
       await expect(main).toBeFocused();
-      await expect(main).toHaveCSS("outline-style", "none");
+      await expect(main).toHaveCSS("outline-style", "solid");
+      await expect(main).toHaveCSS("outline-width", "2px");
       await expect(main).not.toHaveCSS("box-shadow", "none");
       if (method === "back-to-top") await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(0);
       await page.screenshot({ path: testInfo.outputPath(`${theme}-${scheme}-${method}-focus.png`) });
@@ -151,13 +152,8 @@ for (const theme of themes) {
     await page.goto(`/__site__/${theme}-i18n/zh-CN/docs/Architecture/`);
     const notice = page.locator(".translation-fallback");
     await expect(notice).toBeVisible();
-    // Keep the transient notice visible while checking responsive geometry.
-    await notice.evaluate((element) => {
-      for (const animation of element.getAnimations()) {
-        animation.pause();
-        animation.currentTime = 0;
-      }
-    });
+    await expect(notice).toHaveCSS('position', 'static');
+    await expect(notice).toHaveCSS('animation-name', 'none');
     const button = page.locator("[data-back-to-top]");
     for (const width of [360, 320, 412]) {
       await page.setViewportSize({ width, height: 800 });
@@ -167,7 +163,8 @@ for (const theme of themes) {
       const noticeBox = (await notice.boundingBox())!;
       const buttonBox = (await button.boundingBox())!;
       expect(noticeBox.x).toBeGreaterThanOrEqual(0);
-      expect(noticeBox.x + noticeBox.width).toBeLessThanOrEqual(buttonBox.x - 8);
+      expect(noticeBox.x + noticeBox.width).toBeLessThanOrEqual(width);
+      expect(noticeBox.y + noticeBox.height).toBeLessThan(buttonBox.y);
       const toolbarBox = (await page.locator(".mobile-toolbar").boundingBox())!;
       expect(noticeBox.y + noticeBox.height).toBeLessThan(toolbarBox.y);
     }

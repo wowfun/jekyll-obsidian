@@ -38,6 +38,10 @@ function anchor(id: string): HTMLAnchorElement {
   return element;
 }
 
+function expand(link: HTMLAnchorElement) {
+  link.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, cancelable: true, altKey: true, key: "ArrowDown" }));
+}
+
 describe("note previews", () => {
   beforeEach(() => {
     vi.resetModules();
@@ -70,7 +74,7 @@ describe("note previews", () => {
     const { initialisePreviews } = await import("../../src/frontend/preview");
     initialisePreviews();
 
-    link.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
+    expand(link);
     await vi.waitFor(() => expect(document.querySelector("[data-preview-body-ready]")).not.toBeNull());
 
     const preview = document.querySelector<HTMLElement>("[data-note-preview]")!;
@@ -87,7 +91,8 @@ describe("note previews", () => {
     expect(preview.querySelector("pre code")?.className).toBe("language-js");
 
     link.focus();
-    link.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, cancelable: true, key: "Tab" }));
+    expand(link);
+    await vi.waitFor(() => expect(document.activeElement).toBe(preview.querySelector('a')));
     const titleLink = preview.querySelector<HTMLAnchorElement>(".note-preview__title-link")!;
     expect(document.activeElement).toBe(titleLink);
     titleLink.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, cancelable: true, key: "Tab" }));
@@ -114,9 +119,11 @@ describe("note previews", () => {
     const { initialisePreviews } = await import("../../src/frontend/preview");
     initialisePreviews();
 
-    alpha.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
+    expand(alpha);
     await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledWith("/a/", expect.any(Object)));
-    beta.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
+    const alphaSignal = (fetchMock.mock.calls.find(([url]) => url === '/a/') as unknown as [string, RequestInit])[1].signal!;
+    expand(beta);
+    expect(alphaSignal.aborted).toBe(true);
     await vi.waitFor(() => expect(document.querySelector("[data-note-preview]")?.textContent).toContain("Beta body."));
     resolveAlpha?.(new Response('<div class="note-content"><p>Alpha body.</p></div>', { status: 200 }));
     await Promise.resolve();
@@ -126,9 +133,9 @@ describe("note previews", () => {
 
     beta.dispatchEvent(new FocusEvent("focusout", { bubbles: true }));
     await new Promise((resolve) => setTimeout(resolve, 120));
-    alpha.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
+    expand(alpha);
     await vi.waitFor(() => expect(document.querySelector("[data-note-preview]")?.textContent).toContain("Alpha body."));
-    expect(fetchMock.mock.calls.filter(([url]) => String(url).endsWith("/a/"))).toHaveLength(1);
+    expect(fetchMock.mock.calls.filter(([url]) => String(url).endsWith("/a/"))).toHaveLength(2);
   });
 
   it("stays open across the anchor and card, contains wheel events, and leaves touch clicks alone", async () => {
@@ -165,9 +172,102 @@ describe("note previews", () => {
     expect(wheel.defaultPrevented).toBe(true);
     expect(body.scrollTop).toBe(300);
 
+    body.scrollTop = 800;
+    const boundary = new WheelEvent("wheel", { bubbles: true, cancelable: true, deltaY: 100 });
+    body.dispatchEvent(boundary);
+    expect(boundary.defaultPrevented).toBe(false);
+    expect(outerWheel).toHaveBeenCalledOnce();
+
     const touchClick = new MouseEvent("click", { bubbles: true, cancelable: true });
     link.dispatchEvent(touchClick);
     expect(touchClick.defaultPrevented).toBe(false);
+  });
+
+  it("keeps ordinary keyboard focus on the page and only fetches bodies after explicit expansion", async () => {
+    const fetchMock = vi.fn(async () => new Response(catalog([{ id: 'a.md', title: 'A', url: '/a/' }])));
+    vi.stubGlobal('fetch', fetchMock);
+    const link = anchor('a.md');
+    const { initialisePreviews } = await import('../../src/frontend/preview');
+    initialisePreviews(); link.focus();
+    await vi.waitFor(() => expect(document.querySelector('[data-note-preview]')).not.toBeNull());
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const tab = new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true });
+    link.dispatchEvent(tab);
+    expect(tab.defaultPrevented).toBe(false);
+    expect(document.querySelector('[data-note-preview]')).toBeNull();
+  });
+
+  it("keeps the catalog and body cache usable after tabbing out of an expanded preview", async () => {
+    let catalogSignal: AbortSignal | undefined;
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, options?: RequestInit) => {
+      if (String(input).includes('catalog')) {
+        catalogSignal = options?.signal as AbortSignal;
+        return new Response(catalog([{ id: 'a.md', title: 'A', url: '/a/' }]));
+      }
+      return new Response('<div class="note-content"><p>Body</p></div>');
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const link = anchor('a.md');
+    const { initialisePreviews } = await import('../../src/frontend/preview');
+    initialisePreviews(); expand(link);
+    await vi.waitFor(() => expect(document.querySelector('[data-preview-body-ready]')).not.toBeNull());
+    document.querySelector('.note-preview__body')!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true }));
+    expect(document.querySelector('[data-note-preview]')).toBeNull();
+    expect(catalogSignal?.aborted).toBe(false);
+    expand(link);
+    await vi.waitFor(() => expect(document.querySelector('[data-preview-body-ready]')).not.toBeNull());
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("aborts a pending catalog download when the page controller is disposed", async () => {
+    let signal: AbortSignal | undefined;
+    vi.stubGlobal('fetch', vi.fn((_input: RequestInfo | URL, options?: RequestInit) => {
+      signal = options?.signal as AbortSignal;
+      return new Promise<Response>((_resolve, reject) => signal!.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')), { once: true }));
+    }));
+    const link = anchor('a.md');
+    const { initialisePreviews } = await import('../../src/frontend/preview');
+    initialisePreviews(); link.focus();
+    await vi.waitFor(() => expect(signal).toBeDefined());
+    window.dispatchEvent(new Event('pagehide'));
+    expect(signal!.aborted).toBe(true);
+    await Promise.resolve();
+    expect(document.querySelector('[data-note-preview]')).toBeNull();
+  });
+
+  it.each([['entry count', 25, 20], ['byte weight', 4, 750_000]] as const)("evicts by %s and clears cached bodies on navigation", async (_name, count, bytes) => {
+    const notes = Array.from({ length: count }, (_, id) => ({ id: `${id}.md`, title: String(id), url: `/${id}/` }));
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => new Response(String(input).includes('catalog')
+      ? catalog(notes) : `<div class="note-content"><p>${'a'.repeat(bytes)}</p></div>`));
+    vi.stubGlobal('fetch', fetchMock);
+    const links = notes.map(note => anchor(note.id));
+    const { initialisePreviews } = await import('../../src/frontend/preview');
+    initialisePreviews();
+    for (const link of links) {
+      expand(link);
+      await vi.waitFor(() => expect(document.querySelector('.note-preview__title')?.textContent).toBe(link.dataset.noteId!.replace('.md', '')));
+      await vi.waitFor(() => expect(document.querySelector('[data-preview-body-ready]')).not.toBeNull());
+    }
+    expand(links[0]!);
+    await vi.waitFor(() => expect(fetchMock.mock.calls.filter(([url]) => url === '/0/')).toHaveLength(2));
+    await vi.waitFor(() => expect(document.querySelector('[data-preview-body-ready]')).not.toBeNull());
+    initialisePreviews(); expand(links[0]!);
+    await vi.waitFor(() => expect(fetchMock.mock.calls.filter(([url]) => url === '/0/')).toHaveLength(3));
+  });
+
+  it("retries a failed body request", async () => {
+    let attempts = 0;
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      if (String(input).includes('catalog')) return new Response(catalog([{ id: 'a.md', title: 'A', url: '/a/' }]));
+      return ++attempts === 1 ? new Response('', { status: 503 }) : new Response('<div class="note-content"><p>Recovered</p></div>');
+    }));
+    const link = anchor('a.md');
+    const { initialisePreviews } = await import('../../src/frontend/preview');
+    initialisePreviews(); expand(link);
+    await vi.waitFor(() => expect(document.querySelector('[data-preview-body-error]')).not.toBeNull());
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+    expand(link);
+    await vi.waitFor(() => expect(document.querySelector('[data-preview-body-ready]')?.textContent).toBe('Recovered'));
   });
 
   it("keeps the preview controller live across a persisted pagehide", async () => {

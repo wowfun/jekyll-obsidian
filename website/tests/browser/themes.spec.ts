@@ -1378,7 +1378,6 @@ test("Minimal chronology fits twelve separated month entries under Linux fallbac
   expect(forcedCurrentStyle.outlineWidth).toBeGreaterThanOrEqual(2);
   expect(forcedCurrentStyle.outlineOffset).toBeLessThanOrEqual(-2);
   expect(forcedUnselectedStyle.outlineStyle).toBe("none");
-  expect(forcedUnselectedStyle.outlineWidth).toBe(0);
 
   const forcedGeometry = (await monthLinks.nth(1).boundingBox())!;
   // Forced colors restores the native scrollbar width, including its reserved
@@ -1775,7 +1774,7 @@ test("search loads on demand and finds CJK content", async ({ page }) => {
   await expect(dialog.getByRole("link", { name: "CJK Showcase" })).toBeVisible();
 });
 
-test("search input focus does not add a focus frame", async ({ page }) => {
+test("search input uses a visible container focus outline", async ({ page }) => {
   await page.goto(site("docs"));
   await page.keyboard.press("ControlOrMeta+k");
   const box = page.locator(".search-box");
@@ -1787,6 +1786,8 @@ test("search input focus does not add a focus frame", async ({ page }) => {
   await expect(box).toHaveCSS("box-shadow", "none");
   await expect(input).toHaveCSS("outline-style", "none");
   await expect(input).toHaveCSS("box-shadow", "none");
+  await expect(box).toHaveCSS('outline-style', 'solid');
+  await expect(box).toHaveCSS('outline-width', '2px');
 });
 
 test("Minimal previews use catalog text without injecting active content", async ({ page }, testInfo) => {
@@ -1796,6 +1797,8 @@ test("Minimal previews use catalog text without injecting active content", async
   const preview = page.locator("[data-note-preview]");
   await expect(preview).toContainText("CJK Showcase");
   await expect(preview.locator(".note-preview__title-link")).toHaveAttribute("href", /\/docs\/%E4%B8%AD%E6%96%87%E7%A4%BA%E4%BE%8B\/$/);
+  await expect(preview.locator('[data-preview-body-ready]')).toHaveCount(0);
+  await page.keyboard.press('Alt+ArrowDown');
   expect((await preview.locator(".note-preview__body").boundingBox())!.height).toBeLessThanOrEqual(240);
   await expect(preview.locator(".note-preview__body")).toHaveAttribute("data-preview-body-ready", "true");
   await expect(preview).toContainText("中文、日文和拉丁字母可以写在同一个知识库里");
@@ -2292,7 +2295,8 @@ test("localized docs language navigation and fallback metadata remain correct", 
     expect(toolbarBox).not.toBeNull();
     expect(noticeBox!.y + noticeBox!.height).toBeLessThanOrEqual(toolbarBox!.y);
   }
-  await expect(fallbackNotice).toBeHidden({ timeout: 7_000 });
+  await expect(fallbackNotice).toHaveCSS('animation-name', 'none');
+  await expect(fallbackNotice).toBeVisible();
   await expect(page.locator(".note-content")).toHaveAttribute("lang", "en");
   await expect(page.locator('meta[name="robots"]')).toHaveAttribute("content", "noindex");
   await expect(page.locator('link[rel="alternate"][hreflang]')).toHaveCount(0);

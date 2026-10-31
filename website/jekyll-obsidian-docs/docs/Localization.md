@@ -137,7 +137,7 @@ All shared copies use the default page as canonical. Non-default copies carry `n
 
 When a note has no translation, the build still succeeds and the compiler creates its locale-prefixed URL. A missing translation is not a warning or an error. The page briefly shows a localized missing-translation notice and displays the default-language content. The authored content retains the default language and text direction, including when the surrounding locale is right-to-left.
 
-A fallback page has a canonical link to the default page and a `noindex` directive. It is omitted from the sitemap and from reciprocal `hreflang` groups. The language switcher can still link to it, which keeps the localized navigation complete while making the SEO boundary explicit.
+A fallback page has a canonical link to the default page and a `noindex` directive. It is omitted from the sitemap and from reciprocal `hreflang` groups. The language switcher can still link to it, which keeps the localized navigation complete while making the SEO boundary explicit. An inline notice remains above the content to explain that the translation is missing.
 
 Both single-language and multilingual sitemaps exclude all pages with a `noindex` robots token, including Favorites. Matching ignores case and recognizes comma- or whitespace-separated directives such as `noindex, nofollow`.
 

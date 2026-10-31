@@ -144,21 +144,11 @@
     text-underline-offset: 0.2em;
   }
 
-  button,
-  a,
-  input,
-  summary,
-  [tabindex]:not([tabindex="-1"]) {
-    outline: 0;
-  }
-
   :focus-visible {
+    outline: 2px solid var(--teal);
+    outline-offset: 3px;
     border-radius: 0.2rem;
     box-shadow: var(--focus-ring);
-  }
-
-  #main-content:focus-visible {
-    outline: 0;
   }
 
   button {
@@ -463,38 +453,14 @@
   }
 
   .translation-fallback {
-    position: fixed;
-    z-index: 40;
-    inset-inline: 1rem;
-    inset-block-end: calc(1rem + env(safe-area-inset-bottom, 0px));
-    inline-size: fit-content;
-    max-inline-size: min(32rem, calc(100% - 2rem));
     padding: 0.8rem 1rem;
     border-inline-start: 3px solid var(--violet);
     border-radius: 0.25rem;
-    margin-inline: auto;
+    margin-block-end: 1.5rem;
     background: color-mix(in srgb, var(--violet) 8%, var(--surface));
-    box-shadow: var(--shadow);
     color: var(--ink);
     font-family: var(--font-ui);
     font-size: 0.78rem;
-    pointer-events: none;
-    animation: translation-fallback-notice 5s ease-in forwards;
-  }
-
-  @keyframes translation-fallback-notice {
-    0%,
-    90% {
-      visibility: visible;
-      opacity: 1;
-      transform: translateY(0);
-    }
-
-    100% {
-      visibility: hidden;
-      opacity: 0;
-      transform: translateY(0.4rem);
-    }
   }
 
   .site-footer {
@@ -1845,7 +1811,7 @@
     font-size: 0.78rem;
     line-height: 1.58;
     overflow: auto;
-    overscroll-behavior: contain;
+    overscroll-behavior: auto;
     scrollbar-width: thin;
   }
 
@@ -2108,6 +2074,11 @@
   .search-box input:focus-visible {
     border-radius: 0;
     box-shadow: none;
+  }
+
+  .search-box:focus-within {
+    outline: 2px solid var(--teal);
+    outline-offset: 3px;
   }
 
   .search-box kbd {
@@ -2725,17 +2696,6 @@
     bottom: calc(1rem + env(safe-area-inset-bottom, 0px) + 4rem);
   }
 
-  .translation-fallback {
-    inset-block-end: calc(max(0.7rem, env(safe-area-inset-bottom)) + 4rem);
-  }
-
-  body:has(.back-to-top:not([hidden])) .translation-fallback {
-    inset-inline: auto;
-    left: calc(1rem + env(safe-area-inset-left, 0px));
-    right: calc(1rem + env(safe-area-inset-right, 0px) + var(--back-to-top-size) + 0.75rem);
-    max-inline-size: min(32rem, calc(100% - 2rem - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px) - var(--back-to-top-size) - 0.75rem));
-  }
-
   .site-header__inner {
     min-block-size: 3.6rem;
     gap: 0.4rem;
@@ -2920,14 +2880,11 @@
     animation-iteration-count: 1 !important;
   }
 
-  .translation-fallback {
-    animation-timing-function: steps(1, end);
-  }
 }
 
 @media (forced-colors: active) {
-  #main-content:focus-visible,
-  .back-to-top:focus-visible {
+  :focus-visible,
+  .search-box:focus-within {
     outline: 2px solid ButtonText;
     outline-offset: 3px;
     box-shadow: none;
