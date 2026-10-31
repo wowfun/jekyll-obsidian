@@ -2015,11 +2015,15 @@ class JekyllAdapterTest < Minitest::Test
     calls = []
     capture = lambda do |*command|
       calls << command
-      if command.include?("rev-parse")
-        ["abc123\n", "", status]
-      else
-        ["\x1e2026-07-30T00:00:00Z\nvault/index.md\n", "", status]
-      end
+      raise "history must be streamed" if command.include?("log")
+      ["abc123\n", "", status]
+    end
+    wait = Object.new
+    wait.define_singleton_method(:value) { status }
+    stream = lambda do |*command, **_options, &block|
+      calls << command
+      output = command.include?("log") ? "\x1e2026-07-30T00:00:00Z\0\nvault/index.md\0" : "vault/index.md\0"
+      block.call(StringIO.new, StringIO.new(output), wait)
     end
     layout = JekyllObsidian::WorkspaceLayout.resolve(site: build_site, source: "vault")
     FileUtils.mkdir_p(layout.application_cache_root)
@@ -2038,16 +2042,18 @@ class JekyllAdapterTest < Minitest::Test
     create_test_symlink(canary, predictable_temporary)
 
     with_replaced_singleton_method(Open3, :capture3, capture) do
-      first = JekyllObsidian::Adapter.send(:git_first_commit_time_map, layout)
-      second = JekyllObsidian::Adapter.send(:git_first_commit_time_map, layout)
-      assert_equal first, second
-      assert_equal({ "index.md" => "2026-07-30T00:00:00Z" }, first)
+      with_replaced_singleton_method(Open3, :popen2, stream) do
+        first = JekyllObsidian::Adapter.send(:git_first_commit_time_map, layout)
+        second = JekyllObsidian::Adapter.send(:git_first_commit_time_map, layout)
+        assert_equal first, second
+        assert_equal({ "index.md" => "2026-07-30T00:00:00Z" }, first)
+      end
     end
 
     assert_equal 1, calls.count { |command| command.include?("log") }
     assert calls.all? { |command| command[2] == @temporary_root }
     cache = JSON.parse(File.read(cache_path))
-    assert_equal 1, cache.fetch("version")
+    assert_equal 2, cache.fetch("version")
     assert_equal({ "index.md" => "2026-07-30T00:00:00Z" }, cache.fetch("first_committed_at"))
     refute cache.key?("times")
     assert_equal "preserve me", File.read(canary)

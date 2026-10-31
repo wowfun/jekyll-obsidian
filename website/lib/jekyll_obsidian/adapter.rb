@@ -11,6 +11,7 @@ require "jekyll"
 require_relative "../jekyll_obsidian"
 require_relative "workspace_layout"
 require_relative "template_filters"
+require_relative "git_history"
 
 Liquid::Template.register_filter(JekyllObsidian::TemplateFilters)
 
@@ -18,7 +19,7 @@ module JekyllObsidian
   module Adapter
     BUNDLED_FEATURE_IDS = %w[search graph previews math mermaid].freeze
     CONFIG_KEYS = %w[source syntax_profile theme repository edit_branch content features html i18n comments analytics contacts footer navigation search feed home blog properties].freeze
-    GIT_FIRST_COMMIT_CACHE_VERSION = 1
+    GIT_FIRST_COMMIT_CACHE_VERSION = 2
     GITHUB_MARKDOWN_MANIFEST_INPUT = "JEKYLL_OBSIDIAN_GITHUB_MARKDOWN_MANIFEST_IN"
     GITHUB_MARKDOWN_MANIFEST_OUTPUT = "JEKYLL_OBSIDIAN_GITHUB_MARKDOWN_MANIFEST_OUT"
     IGNORED_CONTENT_DIRECTORIES = %w[.obsidian .trash].freeze
@@ -299,37 +300,15 @@ module JekyllObsidian
       if cached_bytes
         cached = JSON.parse(cached_bytes)
         cached_times = cached["first_committed_at"]
-        if cached["version"] == GIT_FIRST_COMMIT_CACHE_VERSION && cached["head"] == head &&
+        valid_cache = cached["version"] == GIT_FIRST_COMMIT_CACHE_VERSION &&
             cached["source"] == source && cached_times.is_a?(Hash) &&
             cached_times.all? { |path, time| path.is_a?(String) && time.is_a?(String) }
-          return cached_times
-        end
+        return cached_times if valid_cache && cached["head"] == head
       end
 
-      command = [
-        "git", "-C", layout.workspace_root, "-c", "core.quotePath=false",
-        "log", "--format=%x1e%aI", "--name-only", "--", source
-      ]
-      stdout, _stderr, status = Open3.capture3(*command)
-      return {} unless status.success?
-
-      result = {}
-      current_time = nil
-      stdout.each_line do |line|
-        stripped = line.strip
-        next if stripped.empty?
-        if stripped.start_with?("\x1e")
-          # Git 2.45+ emits Z for UTC while older versions emit +00:00.
-          current_time = stripped.delete_prefix("\x1e").sub(/\+00:00\z/, "Z")
-          next
-        end
-        next unless current_time
-        prefix = "#{source}/"
-        next unless stripped.start_with?(prefix)
-
-        relative = stripped.delete_prefix(prefix).unicode_normalize(:nfc)
-        result[relative] = current_time
-      end
+      result = GitHistory.read(root: layout.workspace_root, source: source, head: head,
+        cached_head: valid_cache ? cached["head"] : nil, cached_times: valid_cache ? cached_times : nil)
+      return {} unless result
       FileUtils.mkdir_p(File.dirname(cache_path))
       temporary = Tempfile.create(["jekyll-obsidian-git-times.", ".tmp"], File.dirname(cache_path))
       temporary_path = temporary.path
