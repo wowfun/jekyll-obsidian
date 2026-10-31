@@ -2,7 +2,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { initialiseDocsNavigation, sameContentSecurityPolicy } from "../../src/frontend/docs-navigation";
+import { initialisePageNavigation, sameContentSecurityPolicy } from "../../src/frontend/page-navigation";
 
 function fetchedDocument(policy?: string): Document {
   return new DOMParser().parseFromString(
@@ -32,7 +32,7 @@ describe("documentation page controls", () => {
 
   afterEach(() => {
     document.body.replaceChildren();
-    initialiseDocsNavigation();
+    initialisePageNavigation();
     document.head.replaceChildren();
     document.body.className = "";
     document.documentElement.lang = originalLanguage;
@@ -40,6 +40,29 @@ describe("documentation page controls", () => {
     window.history.replaceState(null, "", originalUrl);
     vi.restoreAllMocks();
     vi.unstubAllGlobals();
+  });
+
+  for (const changed of ['policy', 'assets', 'locale', 'status', 'actions-added', 'actions-removed', 'none']) it(`handles destination ${changed} without leaving stale content`, async () => {
+    document.documentElement.lang = 'en';
+    document.head.innerHTML = '<meta data-page-csp content="default-src self"><script type="application/json" data-website-asset src="/theme.js"></script><script type="application/json" src="/analytics.js"></script>';
+    document.body.className = 'theme-minimal';
+    document.body.innerHTML = '<nav data-priority-navigation><a href="/two/">Two</a></nav><main class="minimal-shell" tabindex="-1">One</main>';
+    if (changed === 'actions-removed') document.body.insertAdjacentHTML('afterbegin', '<div data-page-header-actions></div>');
+    const source = `<html lang="${changed === 'locale' ? 'zh-CN' : 'en'}"><head><meta data-page-csp content="${changed === 'policy' ? 'default-src none' : 'default-src self'}"><script type="application/json" data-website-asset src="/${changed === 'assets' ? 'new-theme' : 'theme'}.js"></script></head><body class="theme-minimal">${changed === 'actions-added' ? '<div data-page-header-actions></div>' : ''}<main class="minimal-shell" tabindex="-1">Two</main></body></html>`;
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(source, { status: changed === 'status' ? 503 : 200, headers: { 'Content-Type': 'text/html' } })));
+    const assign = vi.spyOn(window.location, 'assign').mockImplementation(() => {});
+    vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
+    initialisePageNavigation();
+    document.querySelector<HTMLAnchorElement>('a')!.click();
+    await vi.waitFor(() => {
+      if (changed === 'none') {
+        expect(document.querySelector('main')?.textContent).toBe('Two');
+        expect(assign).not.toHaveBeenCalled();
+      } else {
+        expect(assign).toHaveBeenCalledWith(new URL('/two/', originalUrl).href);
+        expect(document.querySelector('main')?.textContent).toBe('One');
+      }
+    });
   });
 
   it("ignores a superseded request even when cancellation rejects with a generic error", async () => {
@@ -53,20 +76,20 @@ describe("documentation page controls", () => {
       .mockImplementationOnce(() => new Promise((resolve) => { resolveLast = resolve; })));
     const assign = vi.spyOn(window.location, "assign").mockImplementation(() => {});
     vi.spyOn(window, "scrollTo").mockImplementation(() => {});
-    initialiseDocsNavigation();
+    initialisePageNavigation();
     document.querySelector<HTMLAnchorElement>('a[href="/two/"]')!.click();
     document.querySelector<HTMLAnchorElement>('a[href="/three/"]')!.click();
     rejectFirst(new TypeError("Network cancelled"));
     await Promise.resolve();
     expect(assign).not.toHaveBeenCalled();
     expect(document.activeElement).not.toBe(document.querySelector("main"));
-    resolveLast(new Response('<html><head><meta data-page-csp content="default-src self"></head><body class="theme-docs"><main data-docs-main tabindex="-1">Three</main></body></html>', { headers: { "Content-Type": "text/html" } }));
+    resolveLast(new Response('<html><head><meta data-page-csp content="default-src self"></head><body class="theme-docs"><nav data-docs-navigation></nav><main data-docs-main tabindex="-1">Three</main></body></html>', { headers: { "Content-Type": "text/html" } }));
     await vi.waitFor(() => expect(document.querySelector("main")?.textContent).toBe("Three"));
     expect(document.activeElement).toBe(document.querySelector("main"));
     expect(assign).not.toHaveBeenCalled();
   });
 
-  it("refreshes localized button labels when a same-origin document link changes language", async () => {
+  it("uses a full navigation when a destination changes the locale of global controls", async () => {
     document.head.innerHTML = '<meta data-page-csp content="frame-src \'self\'">';
     document.documentElement.lang = "en";
     document.body.className = "theme-docs";
@@ -79,6 +102,7 @@ describe("documentation page controls", () => {
     const source = `<!doctype html><html lang="zh-CN"><head>
       <meta data-page-csp content="frame-src 'self'">
       </head><body class="theme-docs">
+      <nav data-docs-navigation></nav>
       <main id="main-content" data-docs-main tabindex="-1">中文内容</main>
       <button data-back-to-top aria-label="回到顶部" title="回到顶部" hidden></button>
       </body></html>`;
@@ -86,17 +110,14 @@ describe("documentation page controls", () => {
       headers: { "Content-Type": "text/html" }
     })));
     vi.spyOn(window, "scrollTo").mockImplementation(() => {});
-    initialiseDocsNavigation();
+    const assign = vi.spyOn(window.location, "assign").mockImplementation(() => {});
+    initialisePageNavigation();
     document.querySelector<HTMLAnchorElement>("a")!.click();
 
     await vi.waitFor(() => {
-      expect(document.documentElement.lang).toBe("zh-CN");
-      expect(document.querySelector("[data-docs-main]")?.textContent).toBe("中文内容");
-      expect(document.activeElement).toBe(document.querySelector("[data-docs-main]"));
-      expect(document.querySelectorAll("[data-back-to-top]")).toHaveLength(1);
-      const button = document.querySelector("[data-back-to-top]")!;
-      expect(button.getAttribute("aria-label")).toBe("回到顶部");
-      expect(button.getAttribute("title")).toBe("回到顶部");
+      expect(assign).toHaveBeenCalledWith(new URL('/zh-CN/docs/next/', originalUrl).href);
+      expect(document.documentElement.lang).toBe("en");
+      expect(document.querySelector("[data-docs-main]")?.textContent).toBe("English document");
     });
   });
 });

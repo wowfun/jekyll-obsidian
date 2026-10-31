@@ -15,8 +15,8 @@ import { initialiseAutoHideScrollbars } from "./scrollbars";
 import { initialiseBackToTop } from "./back-to-top";
 import { initialiseImageViewer, initialiseMediaViewerControls } from "./media-viewer";
 import { disposeAll } from "./cleanup";
+import { BEFORE_PAGE_CHANGE_EVENT, PAGE_CHANGE_EVENT } from "./page-navigation-events";
 
-const DOCS_PAGE_CHANGE_EVENT = "website:docs-page-change";
 let pageFeatureGeneration = 0;
 let cleanupPageFeatures: () => void = () => {};
 let graphModule: Promise<typeof import("./graph")> | null = null;
@@ -28,6 +28,7 @@ function initialisePageFeatures(): void {
   cleanupPageFeatures = () => disposeAll(cleanups);
   try {
     initialiseDialogs();
+    cleanups.push(initialiseAutoHideScrollbars());
     cleanups.push(initialiseOutline());
     cleanups.push(initialiseRecommendations());
     cleanups.push(initialiseComments());
@@ -134,22 +135,26 @@ export function initialiseWebsite(): void {
   initialiseLanguageSwitcher();
   initialisePriorityNavigation();
   initialiseAnalytics();
-  initialiseAutoHideScrollbars();
   initialisePageFeatures();
-  document.addEventListener(DOCS_PAGE_CHANGE_EVENT, initialisePageFeatures);
+  document.addEventListener(PAGE_CHANGE_EVENT, initialisePageFeatures);
+  document.addEventListener(BEFORE_PAGE_CHANGE_EVENT, () => {
+    // Dispose against the old DOM, even if the commit fails before page-change.
+    pageFeatureGeneration += 1;
+    try { cleanupPageFeatures(); } catch (error) { console.error(error); }
+  });
 
-  if (document.querySelector("[data-docs-navigation]")) {
-    void import("./docs-navigation")
-      .then(({ initialiseDocsNavigation }) => initialiseDocsNavigation())
+  if (document.querySelector("[data-priority-navigation], [data-docs-navigation]")) {
+    void import("./page-navigation")
+      .then(({ initialisePageNavigation }) => initialisePageNavigation())
       .catch(() => {
-        document.documentElement.dataset.docsNavigationError = "true";
+        document.documentElement.dataset.pageNavigationError = "true";
       });
   }
 
   if (readSiteUrl("search")) {
     let searchPromise: Promise<typeof import("./search")> | null = null;
     let cleanupSearch = () => {};
-    document.addEventListener(DOCS_PAGE_CHANGE_EVENT, () => {
+    document.addEventListener(BEFORE_PAGE_CHANGE_EVENT, () => {
       cleanupSearch();
       cleanupSearch = () => {};
     });

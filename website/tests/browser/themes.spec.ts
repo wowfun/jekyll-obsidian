@@ -1,5 +1,6 @@
 import { test, expect } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
+import { PAGE_CHANGE_EVENT } from "../../src/frontend/page-navigation-events";
 
 type Theme = "minimal" | "docs";
 
@@ -1356,6 +1357,7 @@ test("Minimal chronology fits twelve separated month entries under Linux fallbac
   expect(selectedBackground).not.toBe(unselectedBackground);
 
   const selectedGeometry = (await monthLinks.nth(1).boundingBox())!;
+  const selectedContainer = (await chronology.boundingBox())!;
   await page.emulateMedia({ forcedColors: "active" });
   const forcedCurrentStyle = await monthLinks.nth(1).evaluate((link) => {
     const style = getComputedStyle(link);
@@ -1379,7 +1381,10 @@ test("Minimal chronology fits twelve separated month entries under Linux fallbac
   expect(forcedUnselectedStyle.outlineWidth).toBe(0);
 
   const forcedGeometry = (await monthLinks.nth(1).boundingBox())!;
-  expect(forcedGeometry.x).toBeCloseTo(selectedGeometry.x, 0);
+  // Forced colors restores the native scrollbar width, including its reserved
+  // page gutter. Compare the cell inside its rail, independent of that gutter.
+  const forcedContainer = (await chronology.boundingBox())!;
+  expect(forcedGeometry.x - forcedContainer.x).toBeCloseTo(selectedGeometry.x - selectedContainer.x, 0);
   expect(forcedGeometry.y).toBeCloseTo(selectedGeometry.y, 0);
   expect(forcedGeometry.width).toBeCloseTo(selectedGeometry.width, 0);
   expect(forcedGeometry.height).toBeCloseTo(selectedGeometry.height, 0);
@@ -2063,12 +2068,12 @@ test("Analytics initializes each provider once across Docs history events", asyn
     await expect(script).toHaveCount(1);
     await expect.poll(() => requests[provider]).toBe(1);
 
-    await page.evaluate(() => {
+    await page.evaluate((pageChangeEvent) => {
       history.pushState({}, "", `${location.pathname}?view=next`);
-      document.dispatchEvent(new CustomEvent("website:docs-page-change"));
+      document.dispatchEvent(new CustomEvent(pageChangeEvent));
       dispatchEvent(new PopStateEvent("popstate"));
       location.hash = "fragment-only";
-    });
+    }, PAGE_CHANGE_EVENT);
 
     await expect(script).toHaveCount(1);
     expect(requests[provider]).toBe(1);

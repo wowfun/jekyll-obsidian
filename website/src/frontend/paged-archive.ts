@@ -12,6 +12,7 @@ import { initialiseArchiveDays } from "./archive-days";
 import { withCleanup } from "./cleanup";
 
 export function initialisePagedArchive(root: HTMLElement): () => void {
+  const pathname = window.location.pathname;
   return withCleanup(addCleanup => {
     const client = createArchiveClient(root.dataset.archiveUrl!);
     addCleanup(() => client.dispose());
@@ -41,10 +42,13 @@ export function initialisePagedArchive(root: HTMLElement): () => void {
     let currentData: ArchiveCollection | undefined;
     let current: ArchiveMatches = { ordinals: [], count: 0, page: 1, pages: 1 };
     async function refresh(revalidate = false): Promise<void> {
+      if (window.location.pathname !== pathname) return;
       const search = window.location.search;
       if (pendingSearch === search) return;
       pendingSearch = search;
-      const turn = ++epoch; status.textContent = status.dataset.loading || "Loading…"; retry.hidden = true;
+      const turn = ++epoch;
+      const stale = () => !alive || turn !== epoch || window.location.pathname !== pathname;
+      status.textContent = status.dataset.loading || "Loading…"; retry.hidden = true;
       root.setAttribute("aria-busy", "true"); prev.disabled = true; next.disabled = true;
       try {
         if (revalidate && !discovery) {
@@ -60,17 +64,17 @@ export function initialisePagedArchive(root: HTMLElement): () => void {
         // Failed discovery keeps favorites snapshots authoritative. The ordinary
         // archive can still query its last successfully loaded generation.
         await discovery;
-        if (!alive || turn !== epoch) return;
+        if (stale()) return;
         let saved: Awaited<ReturnType<typeof loadFavoriteArchive>> | undefined;
         if (favorites) saved = await refreshFavoriteArchive(deploymentVerified ? client : snapshotsOnly, controller.signal, savedArchive);
         const data = saved?.manifest || await client.manifest(controller.signal);
-        if (!alive || turn !== epoch) return;
+        if (stale()) return;
         if (saved) savedArchive = saved;
         const state = archiveState(data, window.location.search);
         const result = saved ? selectFavorites(saved.cards, data, state) : await client.select(state, "page", controller.signal);
-        if (!alive || turn !== epoch) return;
+        if (stale()) return;
         const cards = saved ? result.ordinals.map(ordinal => saved.cards[ordinal]!) : await client.cards(result.ordinals, controller.signal);
-        if (!alive || turn !== epoch) return;
+        if (stale()) return;
         if (saved && renderedFavoriteManifest !== data) { empty.replaceChildren(...emptyContent.map(node => node.cloneNode(true))); renderFavoriteFilters(root, data); renderedFavoriteManifest = data; }
         days.replace(() => renderArchiveLedger(root, cards, data, saved ? new Set(saved.snapshots.keys()) : undefined));
         reading.refresh();

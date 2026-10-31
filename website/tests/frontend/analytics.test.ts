@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { initialiseAnalytics } from "../../src/frontend/analytics";
 import { initialiseWebsite } from "../../src/frontend/main";
+import { PAGE_CHANGE_EVENT } from "../../src/frontend/page-navigation-events";
 
 function installAnalytics(provider: string, identifier: string): void {
   const meta = document.createElement("meta");
@@ -100,7 +101,7 @@ describe("website analytics", () => {
     expect(script).not.toBeNull();
     expect(() => script!.dispatchEvent(new Event("error"))).not.toThrow();
 
-    document.dispatchEvent(new CustomEvent("website:docs-page-change"));
+    document.dispatchEvent(new CustomEvent(PAGE_CHANGE_EVENT));
     initialiseWebsite();
 
     expect(document.querySelectorAll("script[data-website-analytics]")).toHaveLength(1);

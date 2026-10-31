@@ -28,16 +28,16 @@
 {% if page.website.features.feed and site.data.website_feed_available %}<link rel="alternate" type="application/atom+xml" title="{{ site.title | escape }} · {{ page.website.i18n.messages.feed | default: 'Feed' | escape }}" href="{% if page.website.resources.feed %}{{ page.website.resources.feed | escape }}{% else %}{{ '/feed.xml' | relative_url }}{% endif %}">{% endif %}
 {% if page.website.comments.load %}<meta name="giscus:backlink" content="{{ page.website.absolute_url | escape }}" data-page-head>{% endif %}
 {% assign website_entry = include.entry %}
-{% if website_entry.archive_worker and page.website.theme_data.archive %}{% assign archive_worker = '/assets/website/' | append: website_entry.archive_worker %}<meta name="website:archive-worker" content="{{ archive_worker | relative_url }}">{% endif %}
+{% if website_entry.archive_worker and page.website.theme_data.archive %}{% assign archive_worker = '/assets/website/' | append: website_entry.archive_worker %}<meta name="website:archive-worker" content="{{ archive_worker | relative_url }}" data-page-head>{% endif %}
 {% if website_entry.color_scheme %}
   {% assign color_scheme_js = '/assets/website/' | append: website_entry.color_scheme %}
-  <script src="{{ color_scheme_js | relative_url }}"></script>
+  <script src="{{ color_scheme_js | relative_url }}" data-website-asset></script>
 {% endif %}
 {% if website_entry.css %}
   {% assign website_css = '/assets/website/' | append: website_entry.css %}
-  <link rel="stylesheet" href="{{ website_css | relative_url }}">
+  <link rel="stylesheet" href="{{ website_css | relative_url }}" data-website-asset>
 {% endif %}
 {% if website_entry.js %}
   {% assign website_js = '/assets/website/' | append: website_entry.js %}
-  <script type="module" src="{{ website_js | relative_url }}"></script>
+  <script type="module" src="{{ website_js | relative_url }}" data-website-asset></script>
 {% endif %}

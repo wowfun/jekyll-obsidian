@@ -11,22 +11,24 @@
     <nav class="site-navigation" aria-label="{{ ui.primary_navigation | default: 'Primary navigation' | escape }}" data-priority-navigation>
       <ul class="site-navigation__list" data-priority-navigation-list>
         {% for item in page.website.navigation %}
-          <li data-priority-navigation-item data-navigation-id="{{ item.id | escape }}"><a href="{{ item.url | escape }}"{% if item.id == page.website.active_navigation_id %} aria-current="page"{% endif %}>{{ item.label | escape }}</a></li>
+          <li data-priority-navigation-item data-navigation-id="{{ item.id | escape }}"><a href="{{ item.url | escape }}" data-navigation-label="{{ item.label | escape }}"{% if item.id == page.website.active_navigation_id %} aria-current="page"{% endif %}><span>{{ item.label | escape }}</span></a></li>
         {% endfor %}
       </ul>
       <details class="site-navigation__more" data-priority-navigation-more hidden>
-        <summary>{{ ui.more | default: 'More' | escape }}</summary>
+        <summary data-navigation-label="{{ ui.more | default: 'More' | escape }}"><span>{{ ui.more | default: 'More' | escape }}</span></summary>
         <ul class="site-navigation__overflow" data-priority-navigation-overflow></ul>
       </details>
     </nav>
 
     <div class="site-actions">
+      {% if include.theme == 'minimal' and page.website.theme_data.has_archive %}<div class="site-page-actions" data-page-header-actions>{% endif %}
       {% if page.website.theme_data.archive %}
         <button class="site-action archive-reading-switch" type="button" role="switch" aria-checked="false" aria-controls="archive-ledger" aria-label="{{ ui.flat_reading | default: 'Read in full' | escape }}" title="{{ ui.flat_reading_disabled | escape }}" data-enabled="{{ ui.flat_reading_enabled | escape }}" data-disabled="{{ ui.flat_reading_disabled | escape }}" data-archive-reading-toggle hidden data-loading="{{ ui.reading_loading | default: 'Loading article…' | escape }}" data-unavailable="{{ ui.reading_unavailable | default: 'Article could not be loaded.' | escape }}" data-retry="{{ ui.retry | default: 'Retry' | escape }}">
           {% include website/action-icon.html name='reading' %}
         </button>
         {% unless page.website.theme_data.favorites %}<button class="site-action" type="button" data-archive-export-open aria-label="{{ ui.export | default: 'Export' | escape }}" title="{{ ui.export | default: 'Export' | escape }}" aria-haspopup="dialog" aria-controls="archive-export-dialog" hidden>{% include website/action-icon.html name='export' %}</button>{% endunless %}
       {% endif %}
+      {% if include.theme == 'minimal' and page.website.theme_data.has_archive %}</div>{% endif %}
       {% if page.website.features.search %}
         <button class="site-action" type="button" data-search-open aria-label="{{ ui.search | default: 'Search' | escape }}" title="{{ ui.search | default: 'Search' | escape }} (Ctrl/⌘ K)" aria-keyshortcuts="Control+k Meta+k">
           {% include website/action-icon.html name='search' %}

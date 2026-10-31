@@ -3,6 +3,31 @@
 require "test_helper"
 
 class ThemeContractTest < Minitest::Test
+  def test_header_archive_space_follows_generated_pages_across_the_site
+    home = note("index.md", "---\npublish: true\n---\n# Home")
+    ordinary = note("plain.md", "---\npublish: true\ncontent_type: page\n---\n# Plain")
+    post = note("blog/post.md", "---\npublish: true\ncontent_type: post\ndate: 2026-10-01\n---\n# Post")
+    archive_tab = note("library/index.md", "---\npublish: true\ncontent_type: page\ntab:\n  id: library\n  layout: archive\n---\n# Library")
+    cases = [
+      ["plain site", [], {}, false],
+      ["static blog", [post], {}, false],
+      ["pagination without posts", [], { blog: { "page_size" => 10 } }, false],
+      ["paged blog", [post], { blog: { "page_size" => 10 } }, true],
+      ["empty archive home", [], { home: { "layout" => "archive" } }, true],
+      ["empty archive tab", [archive_tab], {}, true],
+      ["favorites only", [], { features: { "favorites" => true } }, true],
+      ["hidden favorites", [], { features: { "favorites" => true }, navigation: { "favorites" => { "visible" => false } } }, true],
+      ["docs theme", [post], { theme: "docs", blog: { "page_size" => 10 } }, false]
+    ]
+    cases.each do |label, entries, options, expected|
+      result = compile(home, ordinary, *entries, **options)
+      assert result.success?, "#{label}: #{result.diagnostics.map(&:message).join('\n')}"
+      result.pages.each do |output|
+        assert_equal expected, output.data.dig("website", "theme_data", "has_archive"), "#{label}: #{output.route}"
+      end
+    end
+  end
+
   def test_default_theme_is_minimal_and_unknown_themes_fail_closed
     home = note("index.md", "---\npublish: true\nupdated: 2026-07-30\n---\n# Home")
 

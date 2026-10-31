@@ -63,7 +63,8 @@ module JekyllObsidian
 
         namespaces = ALWAYS_RESERVED_NAMESPACES.dup
         namespaces << "/feed.xml" if config.features.fetch("feed")
-        pages = pages.map { |page| decorate_page(page, config) }
+        has_archive = pages.any? { |page| page.data.dig("website", "theme_data", "archive") }
+        pages = pages.map { |page| decorate_page(page, config, has_archive: has_archive) }
 
         ThemeOutput.new(
           pages: pages,
@@ -543,9 +544,10 @@ module JekyllObsidian
         CGI.escapeHTML(text.gsub(FrontMatter::XML_INVALID_CHARACTER, "\uFFFD"))
       end
 
-      def decorate_page(page, config)
+      def decorate_page(page, config, has_archive:)
         navigation = config.navigation
         website = page.data.fetch("website").dup
+        website["theme_data"] = website.fetch("theme_data", {}).merge("has_archive" => has_archive)
         website["footer"] = config.footer
         repository = config.site.repository.to_s
         website["repository_url"] = "https://github.com/#{repository}" if repository.match?(/\A[\w.-]+\/[\w.-]+\z/)

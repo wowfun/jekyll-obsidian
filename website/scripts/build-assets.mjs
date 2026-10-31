@@ -19,7 +19,7 @@ const result = await esbuild.build({
     minimal: "src/frontend/entries/minimal.ts",
     docs: "src/frontend/entries/docs.ts",
     "color-scheme-bootstrap": "src/frontend/color-scheme-bootstrap.ts",
-    "docs-navigation": "src/frontend/docs-navigation.ts",
+    "page-navigation": "src/frontend/page-navigation.ts",
     search: "src/frontend/search.ts",
     "search-worker": "src/frontend/search-worker.ts",
     "archive-worker": "src/frontend/archive-worker.ts",
@@ -96,11 +96,11 @@ function assetClosure(initialOutputs, { includeDynamicImports }) {
 const themeSources = {
   minimal: {
     entry: "src/frontend/entries/minimal.ts",
-    ownedEntries: ["src/frontend/docs-navigation.ts", "src/frontend/archive-worker.ts"]
+    ownedEntries: ["src/frontend/page-navigation.ts", "src/frontend/archive-worker.ts"]
   },
   docs: {
     entry: "src/frontend/entries/docs.ts",
-    ownedEntries: ["src/frontend/docs-navigation.ts"]
+    ownedEntries: ["src/frontend/page-navigation.ts"]
   }
 };
 // Both themes ship these conditional imports and their static dependencies.

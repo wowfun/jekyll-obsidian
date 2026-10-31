@@ -1,4 +1,5 @@
 import { expect, it, vi } from "vitest";
+import { BEFORE_PAGE_CHANGE_EVENT, PAGE_CHANGE_EVENT } from "../../src/frontend/page-navigation-events";
 
 const state = vi.hoisted(() => {
   let release!: () => void;
@@ -31,8 +32,9 @@ it("loads only marked pages, discards stale imports, and cleans up each initiali
   expect(state.favoritesImport).not.toHaveBeenCalled();
 
   const navigate = (markup: string) => {
+    document.dispatchEvent(new CustomEvent(BEFORE_PAGE_CHANGE_EVENT));
     document.body.innerHTML = markup;
-    document.dispatchEvent(new CustomEvent("website:docs-page-change"));
+    document.dispatchEvent(new CustomEvent(PAGE_CHANGE_EVENT));
   };
   const marked = '<main data-paged-archive><p data-archive-status></p><p data-filter-empty hidden>No matching entries</p></main><div data-favorites-ui></div><p data-favorite-status></p>';
   navigate(marked);

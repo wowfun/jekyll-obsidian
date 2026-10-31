@@ -49,10 +49,10 @@ test("publishes independent theme and feature asset closures", async () => {
   const bootstrapSource = await readFile(path.join(assets, bootstrap), "utf8");
   assert.doesNotMatch(bootstrapSource, /\b(?:import|export)\b/, "bootstrap remains a blocking classic script");
 
-  const docsNavigation = manifest.files.find((file) => /(?:^|\/)docs-navigation-[A-Z0-9]+\.js$/.test(file));
-  assert.ok(docsNavigation, "docs navigation has a generated chunk");
-  assert.ok(manifest.entries.docs.files.includes(docsNavigation), "docs owns its navigation chunk");
-  assert.ok(manifest.entries.minimal.files.includes(docsNavigation), "minimal owns its documentation navigation chunk");
+  const pageNavigation = manifest.files.find((file) => /(?:^|\/)page-navigation-[A-Z0-9]+\.js$/.test(file));
+  assert.ok(pageNavigation, "page navigation has a generated chunk");
+  assert.ok(manifest.entries.docs.files.includes(pageNavigation), "docs owns its navigation chunk");
+  assert.ok(manifest.entries.minimal.files.includes(pageNavigation), "minimal owns its page navigation chunk");
 
   for (const [feature, descriptor] of Object.entries(manifest.features)) {
     assert.ok(descriptor.files.length > 0, `${feature} has a publishable closure`);
@@ -103,6 +103,6 @@ test("both themes keep their synchronous JavaScript within the initial-load budg
     assert.equal(summary.gzip_bytes, gzipBytes, stale);
     assert.ok(summary.bytes <= 45_000, `${theme}: ${summary.bytes} raw bytes`);
     assert.ok(summary.gzip_bytes <= 18_000, `${theme}: ${summary.gzip_bytes} gzip bytes`);
-    assert.ok(summary.dependencies.every(({ file }) => !/^(archive-filters|favorite-controls)-/.test(file)));
+    assert.ok(summary.dependencies.every(({ file }) => !/^(archive-filters|favorite-controls|page-navigation)-/.test(file)));
   }
 });

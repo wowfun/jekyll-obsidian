@@ -10,6 +10,7 @@
   }
 
   html {
+    scrollbar-gutter: stable;
     -webkit-text-size-adjust: 100%;
     font-size: 106.25%;
     text-size-adjust: 100%;
@@ -265,6 +266,27 @@
 
   .site-actions {
     flex: none;
+  }
+
+  .site-page-actions {
+    display: grid;
+    grid-template-columns: repeat(2, 2.5rem);
+    gap: 0.35rem;
+  }
+
+  .site-navigation [data-navigation-label] {
+    display: inline-grid;
+  }
+
+  .site-navigation [data-navigation-label] > span,
+  .site-navigation [data-navigation-label]::after {
+    grid-area: 1 / 1;
+  }
+
+  .site-navigation [data-navigation-label]::after {
+    content: attr(data-navigation-label);
+    font-weight: 720;
+    visibility: hidden;
   }
 
   .site-navigation__more {
@@ -2852,6 +2874,7 @@
   }
 
   .site-actions .site-action { inline-size: 2.3rem; block-size: 2.3rem; }
+  .site-page-actions { grid-template-columns: repeat(2, 2.3rem); gap: 0.1rem; }
 
   .note-title {
     font-size: clamp(2.2rem, 13vw, 3.25rem);
