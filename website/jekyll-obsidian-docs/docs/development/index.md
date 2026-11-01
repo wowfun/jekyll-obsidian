@@ -23,32 +23,32 @@ Runtime output is under the host root's `.jekyll-obsidian-cache/`. Frontend deve
 
 ## Set up the toolchain
 
-Install Ruby 4.0.x, Node.js 26.x, and Git on macOS, Linux, or WSL. From the repository root:
+Install Ruby 4.0.x, Node.js 26.x, pnpm 11.18.0, and Git on macOS, Linux, or WSL. The pnpm version is pinned in `website/package.json`; install it if needed with `npm install --global pnpm@11.18.0`. From the repository root:
 
 ```sh
 website/bin/setup
 website/bin/dev
 ```
 
-Setup installs locked Ruby and Node dependencies and builds the gem. After editing frontend sources, rerun the package command before previewing. Restart the preview after changing Ruby implementation files.
+Setup checks the pnpm version against `packageManager` before installing locked Ruby and Node dependencies and building the gem. `website/pnpm-lock.yaml` is the sole frontend lockfile; use pnpm to update dependencies. `pnpm-workspace.yaml` approves the pinned esbuild build script, disables optional fsevents builds and rejects unreviewed dependency builds. After editing frontend sources, rerun the package command before previewing. Restart the preview after changing Ruby implementation files.
 
-On native Windows, install RubyInstaller Ruby+Devkit 4.0.6, Bundler 4.0.16, Node 26 and Git globally, then open a fresh PowerShell. Use the underlying commands instead of the Unix shell wrappers:
+On native Windows, install RubyInstaller Ruby+Devkit 4.0.6, Bundler 4.0.16, Node 26, pnpm 11.18.0 and Git globally, then open a fresh PowerShell. Use the underlying commands instead of the Unix shell wrappers:
 
 ```powershell
 cd website
 gem install bundler -v 4.0.16 --no-document
 bundle install
-npm ci
-npm run build
+pnpm install --frozen-lockfile
+pnpm run build
 bundle exec ruby scripts/package.rb --skip-assets
 bundle exec rake test
-npm run test:prepared
-npm run build:browser-sites
-npx playwright install chromium
-npx playwright test
+pnpm run test:prepared
+pnpm run build:browser-sites
+pnpm exec playwright install chromium
+pnpm exec playwright test
 ```
 
-Gems use the shared Ruby installation. The lockfile includes `x64-mingw-ucrt`; npm dependencies stay under `website/node_modules`. Directory-link tests use junctions when symbolic-link privileges are unavailable. File-link tests require Windows Developer Mode or symbolic-link privileges and otherwise skip with a reason; Windows cannot create the control-character filenames covered by the POSIX audit test. Audit tests invoke Ruby directly, and preview tests terminate only their isolated child process.
+Gems use the shared Ruby installation. The lockfile includes `x64-mingw-ucrt`; pnpm links dependencies under `website/node_modules`. Directory-link tests use junctions when symbolic-link privileges are unavailable. File-link tests require Windows Developer Mode or symbolic-link privileges and otherwise skip with a reason; Windows cannot create the control-character filenames covered by the POSIX audit test. Audit tests invoke Ruby directly, and preview tests terminate only their isolated child process.
 
 ## Run the tests
 
@@ -56,12 +56,12 @@ Gems use the shared Ruby installation. The lockfile includes `x64-mingw-ucrt`; n
 website/bin/test
 ```
 
-This builds assets and the gem, runs compiler and runtime tests, installs the actual gem in an isolated host, then runs TypeScript and Node tests. The package smoke test makes package files read-only and rejects Node/npm execution during the host build.
+This builds assets and the gem, runs compiler and runtime tests, installs the actual gem in an isolated host, then runs TypeScript and Node tests. The package smoke test makes package files read-only and rejects Node and package-manager execution during the host build.
 
 For browser coverage:
 
 ```sh
-(cd website && npx playwright install --with-deps chromium)
+(cd website && pnpm exec playwright install --with-deps chromium)
 RUN_BROWSER_TESTS=1 website/bin/test
 ```
 
@@ -69,11 +69,11 @@ Do not bypass package tests when running Ruby checks separately: rebuild assets 
 
 Asset builds write `.jekyll-obsidian-cache/asset-statistics.json` inside `website/` for verification only. Each theme's synchronous JavaScript closure, including shared chunks and the color-scheme bootstrap, must stay within 45,000 raw bytes and 18,000 bytes of summed per-file gzip output. Archive and favorites entries belong to both theme manifests but load only when the page has their DOM markers. Browser navigation fixtures come from the actual compiler.
 
-The statistics record SHA-256 hashes of build inputs, the manifest, and synchronous JavaScript files. `test:prepared` verifies those hashes and recomputes sizes; stale inputs or outputs require `npm run build` before checking the budget. `--skip-assets` is appropriate only after that fresh asset build.
+The statistics record SHA-256 hashes of build inputs (including the pnpm lockfile and build policy), the manifest, and synchronous JavaScript files. `test:prepared` verifies those hashes and recomputes sizes; stale inputs or outputs require `pnpm run build` before checking the budget. `--skip-assets` is appropriate only after that fresh asset build.
 
 The project workflow runs this full suite. Downstream workflows build and verify only their host content.
 
-Visual snapshots are separate for each operating system because native font rendering differs. After an intentional UI change, review and update the Windows and Linux baselines with `npx playwright test site-visual.spec.ts theme-visual.spec.ts --update-snapshots`, then rerun without that flag. Linux baselines must also pass the Ubuntu CI browser run.
+Visual snapshots are separate for each operating system because native font rendering differs. After an intentional UI change, review and update the Windows and Linux baselines with `pnpm exec playwright test site-visual.spec.ts theme-visual.spec.ts --update-snapshots`, then rerun without that flag. Linux baselines must also pass the Ubuntu CI browser run.
 
 ## Build a production fixture
 

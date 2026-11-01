@@ -94,7 +94,7 @@ For another host, run `jekyll-obsidian build --url https://example.com --baseurl
 - [Localization](website/jekyll-obsidian-docs/docs/Localization.md): translations, fallback pages, and SEO.
 - [Deployment](website/jekyll-obsidian-docs/docs/Deployment.md): hosting, URL paths, and custom domains.
 
-For development setup and native Windows PowerShell commands, read the [Developer Guide](website/jekyll-obsidian-docs/docs/development/index.md). On macOS, Linux, or WSL, run `website/bin/test` from the repository root. It builds frontend assets and packages the gem before running the Ruby, TypeScript, frontend, and Node checks. If running Ruby tests separately from `website/`, first run `npm run build` and `bundle exec ruby scripts/package.rb --skip-assets`, then `bundle exec rake test`; the suite tests an actual installed gem.
+For development setup and native Windows PowerShell commands, read the [Developer Guide](website/jekyll-obsidian-docs/docs/development/index.md). On macOS, Linux, or WSL, run `website/bin/test` from the repository root. It builds frontend assets and packages the gem before running the Ruby, TypeScript, frontend, and Node checks. If running Ruby tests separately from `website/`, first run `pnpm run build` and `bundle exec ruby scripts/package.rb --skip-assets`, then `bundle exec rake test`; the suite tests an actual installed gem.
 
 ## License
 

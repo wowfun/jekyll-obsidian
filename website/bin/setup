@@ -15,7 +15,6 @@ cd "$PROJECT_DIR"
 command -v ruby >/dev/null 2>&1 || fail "Ruby 4.0.x is required."
 command -v bundle >/dev/null 2>&1 || fail "Bundler is required. Install it with Ruby 4.0.x."
 command -v node >/dev/null 2>&1 || fail "Node.js 26.x is required."
-command -v npm >/dev/null 2>&1 || fail "npm is required."
 
 ruby_version=$(ruby -e 'print RUBY_VERSION')
 node_version=$(node -p 'process.versions.node')
@@ -23,10 +22,15 @@ node_version=$(node -p 'process.versions.node')
 case "$ruby_version" in 4.0.*) ;; *) fail "Expected Ruby 4.0.x, found $ruby_version." ;; esac
 case "$node_version" in 26.*) ;; *) fail "Expected Node.js 26.x, found $node_version." ;; esac
 
+required_pnpm_version=$(node -p "require('./package.json').packageManager.split('@')[1].split('+')[0]")
+command -v pnpm >/dev/null 2>&1 || fail "pnpm $required_pnpm_version is required. Install it with npm install --global pnpm@$required_pnpm_version."
+pnpm_version=$(pnpm --version)
+[ "$pnpm_version" = "$required_pnpm_version" ] || fail "Expected pnpm $required_pnpm_version, found $pnpm_version."
+
 bundle config set --local path vendor/bundle
 bundle install
-npm ci
+pnpm install --frozen-lockfile
 bundle exec ruby scripts/package.rb
 
 printf '%s\n' "Setup complete. Run website/bin/dev to start the local site."
-printf '%s\n' "Browser checks are optional locally. Install Chromium with: (cd website && npx playwright install --with-deps chromium)"
+printf '%s\n' "Browser checks are optional locally. Install Chromium with: (cd website && pnpm exec playwright install --with-deps chromium)"

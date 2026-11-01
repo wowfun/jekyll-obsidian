@@ -94,7 +94,7 @@ jekyll-obsidian dev
 - [本地化](website/jekyll-obsidian-docs/_translations/zh-CN/docs/Localization.md)：翻译、回退页面和 SEO。
 - [部署](website/jekyll-obsidian-docs/_translations/zh-CN/docs/Deployment.md)：托管、URL 路径和自定义域名。
 
-开发环境设置和原生 Windows PowerShell 命令见[开发指南](website/jekyll-obsidian-docs/docs/development/index.md)。在 macOS、Linux 或 WSL 中，从仓库根目录运行 `website/bin/test`。该命令先构建前端资源并打包 gem，再执行 Ruby、TypeScript、前端和 Node 检查。若要在 `website/` 下单独运行 Ruby 测试，先运行 `npm run build` 和 `bundle exec ruby scripts/package.rb --skip-assets`，再运行 `bundle exec rake test`；测试套件会验证实际安装的 gem。
+开发环境设置和原生 Windows PowerShell 命令见[开发指南](website/jekyll-obsidian-docs/docs/development/index.md)。在 macOS、Linux 或 WSL 中，从仓库根目录运行 `website/bin/test`。该命令先构建前端资源并打包 gem，再执行 Ruby、TypeScript、前端和 Node 检查。若要在 `website/` 下单独运行 Ruby 测试，先运行 `pnpm run build` 和 `bundle exec ruby scripts/package.rb --skip-assets`，再运行 `bundle exec rake test`；测试套件会验证实际安装的 gem。
 
 ## 许可证
 

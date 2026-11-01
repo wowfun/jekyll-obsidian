@@ -12,11 +12,11 @@ unless ARGV.empty? || ARGV == ["--skip-assets"]
   abort "Usage: ruby website/scripts/package.rb [--skip-assets]"
 end
 unless ARGV == ["--skip-assets"]
-  abort "frontend build failed" unless system("npm", "run", "build", chdir: website)
+  abort "frontend build failed" unless system("pnpm", "run", "build", chdir: website)
 end
 source = File.join(website, ".jekyll-obsidian-cache", "assets")
 manifest_path = File.join(source, "manifest.json")
-abort "Missing frontend manifest. Run npm run build in website/." unless File.file?(manifest_path)
+abort "Missing frontend manifest. Run pnpm run build in website/." unless File.file?(manifest_path)
 manifest = JSON.parse(File.read(manifest_path))
 abort "Unsupported frontend manifest" unless manifest["schema_version"] == 1 && manifest["files"].is_a?(Array)
 manifest.fetch("files").each do |relative|

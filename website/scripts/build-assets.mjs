@@ -172,7 +172,7 @@ await staged.commit();
 // the gem's manifest contract. Count only statically imported JavaScript.
 const sha256 = bytes => createHash("sha256").update(bytes).digest("hex");
 const inputPaths = [...new Set([...Object.keys(result.metafile.inputs),
-  "scripts/build-assets.mjs", "scripts/cache-boundary.mjs", "package.json", "package-lock.json", "tsconfig.json"
+  "scripts/build-assets.mjs", "scripts/cache-boundary.mjs", "package.json", "pnpm-lock.yaml", "pnpm-workspace.yaml", "tsconfig.json"
 ])].sort();
 const inputs = Object.fromEntries(await Promise.all(inputPaths.map(async file =>
   [file, sha256(await readFile(path.resolve(projectRoot, file)))]
