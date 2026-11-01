@@ -72,7 +72,7 @@ website:
 
 ## 站点主题
 
-每次构建会选择一个完整展示方案。`minimal` 在通用站点外壳中提供 Home、Blog、Docs 和自定义栏目，`docs` 则提供专注的分层手册。两个主题共享 Search、Wiki 链接预览、页面大纲、笔记关系和交互式图谱。可以用命令行覆盖配置，在不修改文件的情况下比较同一份内容：
+`website.theme` 选择完整的展示方案。`minimal` 在通用站点外壳中提供 Home、Blog、Docs 和自定义栏目，`docs` 则提供专注的分层手册。两个主题共享 Search、Wiki 链接预览、页面大纲、笔记关系和交互式图谱。可以用命令行覆盖配置，在不修改文件的情况下比较同一份内容：
 
 ```sh
 jekyll-obsidian dev --theme docs

@@ -1,0 +1,4 @@
+allowBuilds:
+  esbuild@0.28.2: true
+  fsevents@2.3.3: false
+strictDepBuilds: true

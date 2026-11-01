@@ -20,7 +20,7 @@ class GemPackageTest < Minitest::Test
     assert_includes spec.files, "website/_includes/website/back-to-top.html"
     assert_includes spec.files, "LICENSE"
     refute spec.files.any? { |path| path.match?(%r{/(?:jekyll-obsidian-docs|test|tests|node_modules|vendor|src|\.jekyll-obsidian-cache)/}) }
-    refute spec.files.any? { |path| path.end_with?("package.json", "Gemfile", "Gemfile.lock") }
+    refute spec.files.any? { |path| path.end_with?("package.json", "pnpm-lock.yaml", "pnpm-workspace.yaml", "Gemfile", "Gemfile.lock") }
 
     Dir.mktmpdir("jekyll-obsidian-package") do |temporary|
       gem_home = File.join(temporary, "gems")
@@ -42,12 +42,22 @@ class GemPackageTest < Minitest::Test
       # Ruby and Git are sufficient at runtime. Any attempted Node command fails the test.
       fake_bin = File.join(temporary, "bin")
       FileUtils.mkdir_p(fake_bin)
-      %w[node npm npx].each do |name|
+      node_commands = %w[node npm npx pnpm pn pnpx pnx corepack]
+      node_commands.each do |name|
         file = File.join(fake_bin, name)
         File.write(file, "#!/bin/sh\necho 'Node must not run in an installed gem' >&2\nexit 97\n")
         FileUtils.chmod(0o755, file)
+        if Gem.win_platform?
+          File.write("#{file}.cmd", "@echo off\r\necho Node must not run in an installed gem 1>&2\r\nexit /b 97\r\n")
+        end
       end
       environment["PATH"] = "#{fake_bin}#{File::PATH_SEPARATOR}#{ENV.fetch('PATH')}"
+      # Verify the guard works on this platform before relying on the host build.
+      node_commands.each do |name|
+        _stdout, stderr, status = Open3.capture3(environment, name, "--version", chdir: host)
+        assert_equal 97, status.exitstatus, "#{name} must be intercepted by the Node tooling guard"
+        assert_includes stderr, "Node must not run in an installed gem"
+      end
       entries = Dir.glob(File.join(package, "**", "*"), File::FNM_DOTMATCH).reject { |path| %w[. ..].include?(File.basename(path)) }
       entries.each { |path| File.chmod(File.directory?(path) ? 0o555 : 0o444, path) }
       File.chmod(0o555, package)

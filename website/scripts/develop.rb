@@ -27,7 +27,7 @@ begin
   website = File.expand_path("..", __dir__)
   root = File.dirname(website)
   unless skip_assets
-    abort "frontend build failed" unless system("npm", "run", "build", chdir: website)
+    abort "frontend build failed" unless system("pnpm", "run", "build", chdir: website)
   end
   options[:config_path] = File.join(website, "scripts", "example-config.yml") if example
   runtime = JekyllObsidian::Runtime.new(root:, assets_root: File.join(website, ".jekyll-obsidian-cache", "assets"), **options)

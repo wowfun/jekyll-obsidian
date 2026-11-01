@@ -29,16 +29,16 @@ RubyGems converts the pending publisher after the first successful publication. 
 
 ## Prepare a version
 
-Keep the version in `website/lib/jekyll_obsidian/version.rb`, `website/package.json`, and `website/package-lock.json` aligned. Update the pinned Action reference in `examples/pages.yml` and the installation examples in the documentation. The initializer uses the Ruby version constant to render its workflow.
+Keep the version in `website/lib/jekyll_obsidian/version.rb` and `website/package.json` aligned. The pnpm lockfile contains dependency resolutions, not the project release version; update it when dependencies change and verify it with `pnpm install --frozen-lockfile`. Update the pinned Action reference in `examples/pages.yml` and the installation examples in the documentation. The initializer uses the Ruby version constant to render its workflow.
 
 Run the full suite before tagging:
 
 ```sh
-(cd website && npx playwright install --with-deps chromium)
+(cd website && pnpm exec playwright install --with-deps chromium)
 RUN_BROWSER_TESTS=1 website/bin/test
 ```
 
-Commit the release changes and push an immutable tag matching the version, such as `v0.3.2`. The release workflow must also be present on the default branch so GitHub can display its manual trigger.
+Commit the release changes and push an immutable tag matching the version, such as `v0.3.3`. The release workflow must also be present on the default branch so GitHub can display its manual trigger.
 
 ## Publish and verify
 
@@ -47,11 +47,11 @@ In GitHub Actions, open **Publish Ruby gem**, choose **Run workflow**, and enter
 Wait for publication to finish before announcing the Action tag. In a fresh directory with Ruby 4.0.x and Git installed, verify the public package:
 
 ```sh
-gem install jekyll-obsidian-site --version 0.3.2
-jekyll-obsidian _0.3.2_ init
-jekyll-obsidian _0.3.2_ build --url https://example.test
+gem install jekyll-obsidian-site --version 0.3.3
+jekyll-obsidian _0.3.3_ init
+jekyll-obsidian _0.3.3_ build --url https://example.test
 ```
 
-Check a downstream Pages run using `wowfun/jekyll-obsidian@v0.3.2`. The downstream build must succeed without a checked-in `website/` implementation or npm dependencies.
+Check a downstream Pages run using `wowfun/jekyll-obsidian@v0.3.3`. The downstream build must succeed without a checked-in `website/` implementation or frontend dependencies.
 
 If publication fails, fix the cause before retrying. If only the installation check fails after publication, rerun that failed job without repeating the successful publish job. Never replace an already published gem version or move a released Action tag; prepare a new version instead.

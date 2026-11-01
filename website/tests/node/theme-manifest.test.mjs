@@ -83,10 +83,12 @@ test("publishes independent theme and feature asset closures", async () => {
 test("both themes keep their synchronous JavaScript within the initial-load budget", async () => {
   const statistics = JSON.parse(await readFile(path.join(root, ".jekyll-obsidian-cache", "asset-statistics.json"), "utf8"));
   const sha256 = bytes => createHash("sha256").update(bytes).digest("hex");
-  const stale = "Asset statistics are stale; run npm run build before test:prepared.";
+  const stale = "Asset statistics are stale; run pnpm run build before test:prepared.";
   assert.ok(statistics.inputs && statistics.themes, stale);
   assert.equal(sha256(await readFile(path.join(assets, "manifest.json"))), statistics.manifest_sha256, stale);
   assert.ok(Object.hasOwn(statistics.inputs, "src/frontend/main.ts"), stale);
+  assert.ok(Object.hasOwn(statistics.inputs, "pnpm-lock.yaml"), stale);
+  assert.ok(Object.hasOwn(statistics.inputs, "pnpm-workspace.yaml"), stale);
   await Promise.all(Object.entries(statistics.inputs).map(async ([file, digest]) => {
     assert.equal(sha256(await readFile(path.resolve(root, file))), digest, `${file}: ${stale}`);
   }));

@@ -29,6 +29,9 @@ for (const theme of ["minimal", "docs"] as const) {
     await expect.poll(() => page.locator("#slide-15 .reveal").evaluateAll((elements) =>
       elements.every((element) => getComputedStyle(element).opacity === "1")))
       .toBe(true);
+    // Keep the auto-hiding controls fully visible throughout the contrast audit.
+    await page.getByRole("button", { name: "上一页" }).focus();
+    await expect(page.locator("#deckControls")).toHaveCSS("opacity", "1");
     expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
   });
 }

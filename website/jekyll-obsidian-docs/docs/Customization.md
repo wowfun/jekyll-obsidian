@@ -79,7 +79,7 @@ Custom contact CSS must also move from `.minimal-contact` and `.minimal-contact_
 
 ## Site themes
 
-Each build selects one complete presentation preset. `minimal` supports a Home page, Blog, Docs, and custom sections in one general-purpose shell. `docs` provides a focused hierarchical handbook. Search, wiki-link previews, page outlines, note relations, and the interactive graph are shared capabilities in both themes. A command-line override is useful for comparing the same content without editing configuration:
+`website.theme` selects one complete presentation preset. `minimal` supports a Home page, Blog, Docs, and custom sections in one general-purpose shell. `docs` provides a focused hierarchical handbook. Search, wiki-link previews, page outlines, note relations, and the interactive graph are shared capabilities in both themes. A command-line override is useful for comparing the same content without editing configuration:
 
 ```sh
 jekyll-obsidian dev --theme docs

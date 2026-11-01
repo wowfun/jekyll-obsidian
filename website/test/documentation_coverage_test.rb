@@ -9,7 +9,10 @@ class DocumentationCoverageTest < Minitest::Test
     "Getting Started",
     "Integration",
     "Syntax",
+    "Publishing",
+    "Reading",
     "Customization",
+    "Archives",
     "Portfolio",
     "Analytics",
     "Comments",
@@ -19,14 +22,14 @@ class DocumentationCoverageTest < Minitest::Test
 
   CONFIG_DOCUMENTATION = {
     "source" => ["Customization.md", "Site identity", "`website.source`"],
-    "syntax_profile" => ["Customization.md", "Site identity", "`website.syntax_profile`"],
+    "syntax_profile" => ["Publishing.md", "Publication defaults", "`website.syntax_profile`"],
     "theme" => ["Customization.md", "Site themes", "`website.theme`"],
     "repository" => ["Customization.md", "Site identity", "`website.repository`"],
     "edit_branch" => ["Customization.md", "Site identity", "`website.edit_branch`"],
-    "content" => ["Customization.md", "Publication defaults", "`website.content.publish_by_default`"],
+    "content" => ["Publishing.md", "Publication defaults", "`website.content.publish_by_default`"],
     "properties" => ["Customization.md", "Page properties", "`website.properties.hidden`"],
     "features" => ["Customization.md", "Site themes", "`website.features`"],
-    "html" => ["Customization.md", "Standalone HTML slides", "`website.html`"],
+    "html" => ["Publishing.md", "Standalone HTML slides", "`website.html`"],
     "i18n" => ["Localization.md", "Enable localization", "`website.i18n`"],
     "comments" => ["Comments.md", "Configure the site", "`website.comments`"],
     "contacts" => ["Customization.md", "Site identity", "`website.contacts`"],
@@ -36,7 +39,7 @@ class DocumentationCoverageTest < Minitest::Test
     "search" => ["Customization.md", "Output limits", "`website.search.mode`"],
     "feed" => ["Customization.md", "Output limits", "`website.feed.max_entries`"],
     "home" => ["Customization.md", "Output limits", "`website.home.recent_posts_limit`"],
-    "blog" => ["Customization.md", "Output limits", "`website.blog.page_size`"]
+    "blog" => ["Archives.md", "Archive settings and filters", "`website.blog.page_size`"]
   }.freeze
 
   def test_every_user_guide_has_a_simplified_chinese_source
@@ -78,7 +81,7 @@ class DocumentationCoverageTest < Minitest::Test
   end
 
   def test_every_supported_page_property_is_in_the_property_reference
-    document = File.read(File.join(DOCS_ROOT, "docs", "Customization.md"))
+    document = File.read(File.join(DOCS_ROOT, "docs", "Publishing.md"))
     canonical_heading = "## Page properties"
     assert_includes document, canonical_heading
 
