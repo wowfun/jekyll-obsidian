@@ -1,0 +1,11 @@
+<nav class="site-navigation" aria-label="{{ ui.primary_navigation | default: 'Primary navigation' | escape }}" data-site-navigation{% unless page.website.navigation_layout == 'sidebar' %} data-priority-navigation{% endunless %}>
+      <ul class="site-navigation__list" data-priority-navigation-list>
+        {% for item in page.website.navigation %}
+          <li data-priority-navigation-item data-navigation-id="{{ item.id | escape }}"><a href="{{ item.url | escape }}" data-navigation-label="{{ item.label | escape }}"{% if item.id == page.website.active_navigation_id %} aria-current="page"{% endif %}><span>{{ item.label | escape }}</span></a></li>
+        {% endfor %}
+      </ul>
+      {% unless page.website.navigation_layout == 'sidebar' %}<details class="site-navigation__more" data-priority-navigation-more hidden>
+        <summary data-navigation-label="{{ ui.more | default: 'More' | escape }}"><span>{{ ui.more | default: 'More' | escape }}</span></summary>
+        <ul class="site-navigation__overflow" data-priority-navigation-overflow></ul>
+      </details>{% endunless %}
+    </nav>

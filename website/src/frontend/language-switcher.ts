@@ -7,8 +7,9 @@ export function initialiseLanguageSwitcher(): void {
     const fitPanel = () => {
       if (!panel || !details.open) return;
       const bounds = details.getBoundingClientRect();
-      const available = getComputedStyle(details).direction === "rtl"
-        ? document.documentElement.clientWidth - bounds.left : bounds.right;
+      const rtl = getComputedStyle(details).direction === "rtl";
+      const sidebar = Boolean(details.closest(".site-sidebar__panel"));
+      const available = rtl !== sidebar ? document.documentElement.clientWidth - bounds.left : bounds.right;
       panel.style.setProperty("--language-panel-available", `${Math.max(0, available - 16)}px`);
     };
     details.addEventListener("toggle", fitPanel);

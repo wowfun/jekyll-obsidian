@@ -1,0 +1,7 @@
+<div data-sidebar-docs>
+  {% if include.show %}
+    {% if page.website.theme_data.docs_tree.size > 0 %}
+      <nav class="docs-tree" aria-label="{{ ui.documentation | default: 'Documentation' | escape }}" data-docs-navigation>{% include website/docs-tree.html nodes=page.website.theme_data.docs_tree %}</nav>
+    {% endif %}
+  {% endif %}
+</div>

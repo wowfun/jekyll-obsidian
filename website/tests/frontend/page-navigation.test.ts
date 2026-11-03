@@ -46,7 +46,7 @@ describe("documentation page controls", () => {
     document.documentElement.lang = 'en';
     document.head.innerHTML = '<meta data-page-csp content="default-src self"><script type="application/json" data-website-asset src="/theme.js"></script><script type="application/json" src="/analytics.js"></script>';
     document.body.className = 'theme-minimal';
-    document.body.innerHTML = '<nav data-priority-navigation><a href="/two/">Two</a></nav><main class="minimal-shell" tabindex="-1">One</main>';
+    document.body.innerHTML = '<nav data-site-navigation><a href="/two/">Two</a></nav><main class="minimal-shell" tabindex="-1">One</main>';
     if (changed === 'actions-removed') document.body.insertAdjacentHTML('afterbegin', '<div data-page-header-actions></div>');
     const source = `<html lang="${changed === 'locale' ? 'zh-CN' : 'en'}"><head><meta data-page-csp content="${changed === 'policy' ? 'default-src none' : 'default-src self'}"><script type="application/json" data-website-asset src="/${changed === 'assets' ? 'new-theme' : 'theme'}.js"></script></head><body class="theme-minimal">${changed === 'actions-added' ? '<div data-page-header-actions></div>' : ''}<main class="minimal-shell" tabindex="-1">Two</main></body></html>`;
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(source, { status: changed === 'status' ? 503 : 200, headers: { 'Content-Type': 'text/html' } })));

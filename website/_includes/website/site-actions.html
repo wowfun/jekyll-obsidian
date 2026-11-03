@@ -1,0 +1,13 @@
+{% unless page.website.navigation_layout == 'sidebar' %}{% include website/search-button.html %}{% endunless %}
+{% include website/language-switcher.html %}
+      <button class="site-action" type="button" data-color-scheme-toggle data-scheme-use-light="{{ ui.use_light_scheme | default: 'Use light color scheme' | escape }}" data-scheme-use-dark="{{ ui.use_dark_scheme | default: 'Use dark color scheme' | escape }}" data-scheme-light="{{ ui.light_scheme | default: 'Light' | escape }}" data-scheme-dark="{{ ui.dark_scheme | default: 'Dark' | escape }}" aria-label="{{ ui.toggle_scheme | default: 'Toggle color scheme' | escape }}">
+        {% include website/action-icon.html name='moon' class='site-action__moon' %}
+        {% include website/action-icon.html name='sun' class='site-action__sun' %}
+        <span class="visually-hidden" data-color-scheme-label>{{ ui.scheme | default: 'Scheme' | escape }}</span>
+      </button>
+      {% if page.website.repository_url %}
+        {% assign repository_label = ui.open_project_on_github | default: 'Open {title} on GitHub' | replace: '{title}', site.title %}
+        <a class="site-action site-action--github" href="{{ page.website.repository_url | escape }}" aria-label="{{ repository_label | escape }}" title="{{ repository_label | escape }}">
+          {% include website/github-icon.html %}
+        </a>
+      {% endif %}

@@ -22,7 +22,8 @@ function markCurrentLinks(url: URL): void {
     }
   }
   const docsNavigation = document.querySelector<HTMLElement>("[data-docs-navigation]");
-  if (docsNavigation) docsNavigation.dataset.docsNavigationReady = "true";
+  const readyMarker = docsNavigation?.closest<HTMLElement>("[data-sidebar-docs]") ?? docsNavigation;
+  if (readyMarker) readyMarker.dataset.docsNavigationReady = "true";
 }
 
 function scrollToLocation(url: URL): void {
@@ -47,7 +48,7 @@ function eligibleLink(event: MouseEvent): HTMLAnchorElement | null {
   const target = event.target;
   if (!(target instanceof Element)) return null;
   const link = target.closest<HTMLAnchorElement>(
-    ".site-mark, [data-priority-navigation] a[href], [data-dialog='browse'] [data-navigation-id] a[href], .docs-sidebar a[href], .minimal-docs-sidebar a[href], .docs-tree--dialog a[href]"
+    ".site-mark, [data-site-navigation] a[href], [data-dialog='browse'] [data-navigation-id] a[href], [data-docs-navigation] a[href], .docs-tree--dialog a[href]"
   );
   if (!link || link.target || link.hasAttribute("download")) return null;
   const url = new URL(link.href, window.location.href);
@@ -102,9 +103,9 @@ function syncLanguageSwitcher(source: Document): void {
   if (currentPanel && nextPanel) currentPanel.replaceChildren(...[...nextPanel.childNodes].map((node) => document.importNode(node, true)));
 }
 
-function syncHeader(source: Document): void {
-  const active = source.querySelector('.site-header [aria-current="page"]')?.closest<HTMLElement>("[data-navigation-id]")?.dataset.navigationId;
-  for (const item of document.querySelectorAll<HTMLElement>(".site-header [data-navigation-id]")) {
+function syncNavigation(source: Document): void {
+  const active = source.querySelector('[data-site-navigation] [aria-current="page"]')?.closest<HTMLElement>("[data-navigation-id]")?.dataset.navigationId;
+  for (const item of document.querySelectorAll<HTMLElement>("[data-site-navigation] [data-navigation-id]")) {
     const link = item.querySelector("a");
     if (item.dataset.navigationId === active) link?.setAttribute("aria-current", "page");
     else link?.removeAttribute("aria-current");
@@ -116,6 +117,14 @@ function syncHeader(source: Document): void {
     else delete more.dataset.hasCurrent;
   }
   replaceOptional("[data-page-header-actions]", source);
+  const tree = document.querySelector<HTMLElement>("[data-sidebar-docs]");
+  const nextTree = source.querySelector<HTMLElement>("[data-sidebar-docs]");
+  if (tree && nextTree && tree.innerHTML !== nextTree.innerHTML) {
+    const scroller = tree.closest<HTMLElement>(".site-sidebar__navigation");
+    const scrollTop = scroller?.scrollTop ?? 0;
+    tree.replaceChildren(...[...nextTree.childNodes].map(node => document.importNode(node, true)));
+    if (scroller) scroller.scrollTop = scrollTop;
+  }
 }
 
 function sameAssets(source: Document): boolean {
@@ -147,7 +156,8 @@ function commitPage(source: Document, url: URL, push: boolean): void {
     throw new TypeError("Destination requires a different page shell");
   }
   // A different site, locale, or header layout needs its own global controls.
-  if (document.documentElement.lang !== source.documentElement.lang ||
+  if (document.body.dataset.navigationLayout !== source.body.dataset.navigationLayout ||
+    document.documentElement.lang !== source.documentElement.lang ||
     document.querySelector(".site-mark")?.getAttribute("href") !== source.querySelector(".site-mark")?.getAttribute("href") ||
     Boolean(document.querySelector("[data-page-header-actions]")) !== Boolean(source.querySelector("[data-page-header-actions]"))) {
     throw new TypeError("Destination requires a different site header");
@@ -160,7 +170,7 @@ function commitPage(source: Document, url: URL, push: boolean): void {
   }
   syncPageHead(source);
   syncLanguageSwitcher(source);
-  syncHeader(source);
+  syncNavigation(source);
   document.documentElement.lang = source.documentElement.lang;
   document.documentElement.dir = source.documentElement.dir;
 
@@ -183,7 +193,7 @@ function commitPage(source: Document, url: URL, push: boolean): void {
 export function initialisePageNavigation(): void {
   const controlledDocument = document as ControlledDocument;
   controlledDocument[navigationController]?.();
-  const navigation = document.querySelector<HTMLElement>("[data-priority-navigation], [data-docs-navigation]");
+  const navigation = document.querySelector<HTMLElement>("[data-site-navigation], [data-docs-navigation]");
   if (!navigation) return;
 
   let activeRequest: AbortController | null = null;
@@ -233,7 +243,9 @@ export function initialisePageNavigation(): void {
       document.querySelector("main")?.removeAttribute("aria-busy");
       if (url.href !== current.href) history.pushState(null, "", url);
       renderedUrl = new URL(url.href);
+      closeWebsiteDialog("browse");
       scrollToLocation(url);
+      document.querySelector<HTMLElement>("main")?.focus({ preventScroll: true });
       return;
     }
     void navigate(url, true);

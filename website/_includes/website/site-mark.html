@@ -1,0 +1,4 @@
+<a class="site-mark" href="{{ home_url | escape }}" aria-label="{{ site.title | escape }} — {{ ui.home | default: 'Home' | escape }}">
+      <span class="site-mark__glyph" aria-hidden="true">{% if include.theme == 'minimal' %}¶{% else %}⌁{% endif %}</span>
+      <span class="site-mark__name">{{ site.title | escape }}</span>
+    </a>

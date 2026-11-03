@@ -78,6 +78,7 @@ class NavigationConfigurationTest < Minitest::Test
     assert_empty diagnostics
     assert_equal(
       {
+        "layout" => "top",
         "home" => { "order" => 0, "visible" => true },
         "blog" => { "order" => 10, "visible" => true },
         "docs" => { "order" => 20, "visible" => true },
@@ -663,6 +664,20 @@ class NavigationConfigurationTest < Minitest::Test
     )
 
     assert_diagnostic blank, "invalid_navigation_label", "_translations/zh-CN/_locale.yml"
+  end
+
+  def test_navigation_layout_is_validated_and_projected_in_both_themes
+    %w[minimal docs].each do |theme|
+      %w[top sidebar].each do |layout|
+        result = compile(note("index.md", "---\npublish: true\n---\n# Home"), theme: theme, navigation: { "layout" => layout })
+        assert result.success?, result.diagnostics.map(&:message).join("\n")
+        assert result.pages.all? { |entry| entry.data.dig("website", "navigation_layout") == layout }
+      end
+    end
+    [nil, false, 1, [], {}, "left", "Sidebar"].each do |layout|
+      _, diagnostics = normalized_navigation("layout" => layout)
+      assert diagnostics.any? { |item| item.code == "invalid_navigation_config" && item.message.include?("navigation.layout") }
+    end
   end
 
   private

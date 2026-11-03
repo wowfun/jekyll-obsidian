@@ -1,0 +1,5 @@
+{% if page.website.navigation_layout == 'sidebar' and include.has_context %}
+  <div class="content-toolbar">
+      <button class="site-action content-toolbar__context" type="button" data-dialog-open="context">{% if page.website.kind == 'blog-index' %}{{ ui.chronology | default: 'Chronology' | escape }}{% elsif page.website.features.outline and page.website.features.relations == false and page.website.local_graph == nil %}{{ ui.on_this_page | default: 'On this page' | escape }}{% else %}{{ ui.context | default: 'Context' | escape }}{% endif %}</button>
+  </div>
+{% endif %}

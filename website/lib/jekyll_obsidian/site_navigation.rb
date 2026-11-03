@@ -21,6 +21,7 @@ module JekyllObsidian
     )
 
     Result = ImmutableRecord.define(
+      :layout,
       :items,
       :active_by_note_id,
       :docs_tree,
@@ -74,6 +75,7 @@ module JekyllObsidian
         active = active_notes(items)
 
         Result.new(
+          layout: @settings.fetch("layout"),
           items: items,
           active_by_note_id: active,
           docs_tree: documentation.fetch("tree"),

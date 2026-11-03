@@ -23,6 +23,8 @@ Switching tabs in the header or mobile Browse sheet keeps the header in place an
 
 Every Docs page server-renders the complete documentation tree; JavaScript navigation preserves the shared shell while replacing only page-specific content and context.
 
+With [[Customization#Navigation layout|sidebar navigation]], language, color scheme and repository controls stay in the left column; Search remains visible in the topbar. On small screens, Browse opens a left drawer with the same controls and document tree. Escape or the backdrop closes it and returns focus to the menu button; selecting a page closes it and focuses the content. Opening Search closes the drawer first. Without JavaScript, navigation remains visible in the page. The sidebar keeps its scroll position during page navigation, while the active links and document tree update.
+
 ## Search
 
 Search builds its index in a Web Worker. By default it searches titles, aliases, tags, and note summaries; [[Customization#Output limits|search settings]] can enable authored full text. Queries accept up to 256 characters and wait briefly for typing to pause. Only one worker query runs at a time. The dialog shows up to 12 matches, the total matching count, and a short text excerpt.

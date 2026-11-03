@@ -1,0 +1,5 @@
+{% if page.website.features.search %}
+        <button class="site-action" type="button" data-search-open aria-label="{{ ui.search | default: 'Search' | escape }}" title="{{ ui.search | default: 'Search' | escape }} (Ctrl/⌘ K)" aria-keyshortcuts="Control+k Meta+k">
+          {% include website/action-icon.html name='search' %}
+        </button>
+      {% endif %}

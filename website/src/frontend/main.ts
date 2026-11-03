@@ -5,6 +5,7 @@ import { readSiteUrl } from "./urls";
 import { initialiseLanguageSwitcher } from "./language-switcher";
 import { initialiseRecommendations } from "./recommendations";
 import { initialiseComments } from "./comments";
+import { initialiseSidebar } from "./sidebar";
 import { initialisePriorityNavigation } from "./priority-navigation";
 import { initialisePageActions } from "./page-actions";
 import { initialisePdfPreviews } from "./pdf-preview";
@@ -134,6 +135,7 @@ export function initialiseWebsite(): void {
   initialiseColorScheme();
   initialiseLanguageSwitcher();
   initialisePriorityNavigation();
+  initialiseSidebar();
   initialiseAnalytics();
   initialisePageFeatures();
   document.addEventListener(PAGE_CHANGE_EVENT, initialisePageFeatures);
@@ -143,7 +145,7 @@ export function initialiseWebsite(): void {
     try { cleanupPageFeatures(); } catch (error) { console.error(error); }
   });
 
-  if (document.querySelector("[data-priority-navigation], [data-docs-navigation]")) {
+  if (document.querySelector("[data-site-navigation], [data-docs-navigation]")) {
     void import("./page-navigation")
       .then(({ initialisePageNavigation }) => initialisePageNavigation())
       .catch(() => {

@@ -573,6 +573,7 @@ module JekyllObsidian
         website["navigation"] = navigation.items.map do |item|
           item.slice("id", "label", "url", "order")
         end
+        website["navigation_layout"] = navigation.layout
         website["active_navigation_id"] = active_id
         routes = navigation.items.to_h { |item| [item.fetch("id"), item.fetch("url")] }
         routes["home"] ||= website.fetch("home_url")
