@@ -104,7 +104,9 @@ for (const locale of ["en", "zh-CN"]) {
   test(`favorites include tab sources and keep hidden labels even offline in ${locale}`, async ({ page }) => {
     await page.goto(root + "arxiv/");
     await expect(page.locator(status)).toHaveText(/1.*1.*1/);
-    await page.locator("[data-filter-item] [data-favorite-toggle]").click();
+    const save = page.locator("[data-filter-item] [data-favorite-toggle]");
+    await save.click();
+    await expect(save).toHaveAttribute("aria-pressed", "true");
     await page.goto(root + "favorites/");
     await expect(page.locator(status)).toHaveText(/1.*1.*1/);
     await expect(page.locator(".blog-ledger__main strong")).toHaveText(["paper"]);
