@@ -185,6 +185,10 @@ try {
   const destination = path.join(workspaceRoot, ".jekyll-obsidian-cache/site-browser-minimal-archive");
   await rm(destination, { force: true, recursive: true });
   await cp(path.join(archiveHost, ".jekyll-obsidian-cache/site-browser-minimal-archive"), destination, { recursive: true });
+  await writeFile(path.join(archiveHost, "sidebar.yml"), JSON.stringify({ ...archiveConfig,
+    website: { ...archiveConfig.website, navigation: { layout: "sidebar" } }
+  }));
+  await buildFixtureSites(archiveHost, "sidebar-archive", path.join(archiveHost, "sidebar.yml"), ["minimal"]);
   // A separate collection crosses the page-size boundary without changing the
   // compact fixture used for pagination and reading assertions.
   await mkdir(path.join(archiveHost, "vault/_translations/zh-CN/items"), { recursive: true });
@@ -253,8 +257,8 @@ try {
     source: "vault", repository: "example/navigation", contacts: [], i18n: { enabled: false }
   } }));
   await writeFile(path.join(navigationHost, "vault/index.md"), "---\npublish: true\n---\n# Home\n");
-  for (const [index, id] of ["about", "projects", "team", "contact", "examples", "community"].entries()) {
-    const title = id[0].toUpperCase() + id.slice(1);
+  for (const [index, id] of ["about", "projects", "team", "contact", "examples", "community", ...Array.from({ length: 14 }, (_, i) => `resource-${i + 1}`)].entries()) {
+    const title = id === "community" ? "Community discussions and practical examples for readers and contributors" : id[0].toUpperCase() + id.slice(1);
     await mkdir(path.join(navigationHost, `vault/${id}`));
     await writeFile(path.join(navigationHost, `vault/${id}/index.md`), `---\npublish: true\ncontent_type: page\ntab:\n  id: ${id}\n  label: ${title}\n  order: ${30 + index}\n---\n# ${title}\n`);
   }
@@ -262,6 +266,15 @@ try {
     await writeFile(path.join(navigationHost, `vault/docs/${id}.md`), `---\npublish: true\ncontent_type: doc\n---\n# ${id}\n\n[[docs/one]] [[docs/two]] [[docs/three]]\n\n` + "Paragraph for history and anchor scrolling.\n\n".repeat(45) + "## Details\nTarget section.\n");
   }
   await buildFixtureSites(navigationHost, "navigation", config);
+  const sidebarConfig = JSON.parse(await readFile(config, "utf8"));
+  sidebarConfig.website.navigation = { layout: "sidebar" };
+  sidebarConfig.website.i18n = { enabled: true, locales: ["en", "ar"] };
+  await mkdir(path.join(navigationHost, "vault/_translations/ar"), { recursive: true });
+  await writeFile(path.join(navigationHost, "vault/_locale.yml"), "name: English\n");
+  await writeFile(path.join(navigationHost, "vault/_translations/ar/_locale.yml"), "name: العربية\ndir: rtl\n");
+  await writeFile(path.join(navigationHost, "vault/_translations/ar/index.md"), "---\npublish: true\n---\n# الرئيسية\n");
+  await writeFile(config, JSON.stringify(sidebarConfig));
+  await buildFixtureSites(navigationHost, "sidebar", config);
 } finally {
   await rm(navigationHost, { force: true, recursive: true });
 }

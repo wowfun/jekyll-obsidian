@@ -1,7 +1,7 @@
 <!doctype html>
 <html class="no-js" lang="{{ page.website.i18n.locale | default: site.lang | default: 'en' | escape }}" dir="{{ page.website.i18n.dir | default: 'ltr' | escape }}" data-auto-hide-root-scrollbar>
   <head>{% assign entry = site.data.website_assets.entries.minimal %}{% include website/head.html entry=entry %}</head>
-  <body class="theme-minimal">
+  <body class="theme-minimal" data-navigation-layout="{{ page.website.navigation_layout | default: 'top' }}">
     {% assign ui = page.website.i18n.messages %}
     {% assign is_docs_page = false %}
     {% if page.website.kind == 'note' and page.website.content_type == 'doc' and page.website.theme_data.docs_tree.size > 0 %}{% assign is_docs_page = true %}{% endif %}
@@ -22,11 +22,11 @@
 
     <a class="skip-link" href="#main-content">{{ ui.skip_to_content | default: 'Skip to content' | escape }}</a>
     {% include website/back-to-top.html %}
-    {% include website/header.html theme='minimal' %}
+    {% include website/header.html theme='minimal' show_docs=is_docs_page %}
     {% include website/favorites-ui.html %}
 
     <main class="minimal-shell{% if page.website.archive_item %} minimal-shell--archive-item{% endif %}{% unless page.website.kind == 'note' %} minimal-shell--system{% endunless %}{% if is_authored_home %} minimal-shell--authored-home{% endif %}{% if is_docs_page %} minimal-shell--docs{% endif %}{% if page.website.kind == 'blog-index' %} minimal-shell--blog{% endif %}" id="main-content" tabindex="-1"{% if page.website.kind == 'blog-index' %} data-ledger-current-year="{{ page.website.theme_data.ledger_current_year }}"{% endif %}{% if page.website.kind == 'blog-index' %} data-ledger-group-by="{{ page.website.theme_data.ledger_group_by | default: 'year' | escape }}"{% endif %}{% if page.website.theme_data.favorites %} data-favorites-page data-sources-label="{{ ui.sources | escape }}" data-topics-label="{{ ui.topics | escape }}" data-all-label="{{ ui.all | escape }}"{% endif %}{% if page.website.kind == 'blog-index' %} data-filter-page data-module-unavailable="{{ ui.archive_module_unavailable | escape }}"{% if page.website.theme_data.archive %} data-paged-archive data-archive-url="{{ page.website.theme_data.archive.url | escape }}" data-archive-current-url="{{ page.website.theme_data.archive.current_url | escape }}" data-observed-label="{{ ui.first_observed | default: 'First observed' | escape }}"{% endif %}{% endif %}>
-      {% if is_docs_page %}
+      {% if is_docs_page and page.website.navigation_layout != 'sidebar' %}
         <aside class="minimal-docs-sidebar">
           <nav class="docs-tree" aria-label="{{ ui.documentation | default: 'Documentation' | escape }}" data-docs-navigation>
             {% include website/docs-tree.html nodes=page.website.theme_data.docs_tree %}
@@ -39,6 +39,7 @@
         {% if page.website.i18n.fallback %}<aside class="translation-fallback" role="status">{{ ui.translation_missing | default: 'This page is not translated yet. The default-language version is shown.' | escape }}</aside>{% endif %}
         <article class="minimal-entry{% if page.website.compact_collection %} minimal-entry--compact-collection{% endif %}{% if page.website.cssclasses %} {{ page.website.cssclasses | join: ' ' }}{% endif %}">
           {% unless page.website.theme_data.archive %}{% unless page.website.has_h1 %}{% include website/page-actions.html %}{% endunless %}{% endunless %}
+          {% include website/content-toolbar.html has_context=has_mobile_context %}
           {% include website/note-header.html %}
           {% include website/note-source.html %}
           {% include website/note-properties.html %}
@@ -93,11 +94,13 @@
     </main>
 
     {% include website/footer.html %}
+    {% unless page.website.navigation_layout == 'sidebar' %}
     <nav class="mobile-toolbar" aria-label="{{ ui.mobile_actions | default: 'Mobile actions' | escape }}">
       <button type="button" data-dialog-open="browse">{{ ui.browse | default: 'Browse' | escape }}</button>
       {% if page.website.features.search %}<button type="button" data-search-open>{{ ui.search | default: 'Search' | escape }}</button>{% endif %}
       {% if has_mobile_context %}<button type="button" data-dialog-open="context">{% if page.website.kind == 'blog-index' %}{{ ui.chronology | default: 'Chronology' | escape }}{% elsif page.website.kind == 'home' and page.website.has_context %}{{ ui.context | default: 'Context' | escape }}{% elsif page.website.kind == 'home' %}{{ ui.topics | default: 'Topics' | escape }}{% elsif page.website.features.outline and page.website.features.relations == false and page.website.local_graph == nil %}{{ ui.on_this_page | default: 'On this page' | escape }}{% else %}{{ ui.context | default: 'Context' | escape }}{% endif %}</button>{% endif %}
     </nav>
+    {% endunless %}
     <div data-page-dialogs>{% include website/dialogs.html theme='minimal' %}</div>
   </body>
 </html>

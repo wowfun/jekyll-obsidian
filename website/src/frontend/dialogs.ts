@@ -53,9 +53,11 @@ function restoreDialogContent(dialog: HTMLDialogElement): void {
 export function openWebsiteDialog(name: WebsiteDialogName): HTMLDialogElement | null {
   const dialog = dialogFor(name);
   if (!dialog) return null;
+  if (name !== "browse" && document.querySelector('.website-dialog--navigation[open]')) closeWebsiteDialog("browse");
   hydrateDialog(dialog);
   moveDialogContent(dialog);
   if (!dialog.open) dialog.showModal();
+  for (const opener of document.querySelectorAll(`[data-dialog-open="${name}"][aria-expanded]`)) opener.setAttribute("aria-expanded", "true");
   const initialFocus = dialog.querySelector<HTMLElement>("[autofocus]") ?? dialog.querySelector<HTMLElement>(
     "input, button:not([disabled]), a[href]"
   );
@@ -67,7 +69,9 @@ export function closeWebsiteDialog(name: WebsiteDialogName): void {
   const dialog = dialogFor(name);
   if (!dialog) return;
   if (dialog.open) dialog.close();
+  // Native close events are queued; restore before a page swap can remove the dialog.
   restoreDialogContent(dialog);
+  for (const opener of document.querySelectorAll(`[data-dialog-open="${name}"][aria-expanded]`)) opener.setAttribute("aria-expanded", "false");
 }
 
 export function initialiseDialogs(): void {
@@ -98,7 +102,12 @@ export function initialiseDialogs(): void {
   )) {
     if (dialog.dataset.websiteDialogInitialised === "true") continue;
     dialog.dataset.websiteDialogInitialised = "true";
-    dialog.addEventListener("close", () => restoreDialogContent(dialog));
+    dialog.addEventListener("close", () => {
+      // An earlier close event can arrive after this dialog has reopened.
+      if (dialog.open) return;
+      restoreDialogContent(dialog);
+      for (const opener of document.querySelectorAll(`[data-dialog-open="${dialog.dataset.dialog}"][aria-expanded]`)) opener.setAttribute("aria-expanded", "false");
+    });
     dialog.addEventListener("click", (event) => {
       if (event.target === dialog) dialog.close();
     });

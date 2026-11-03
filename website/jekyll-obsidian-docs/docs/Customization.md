@@ -129,6 +129,20 @@ A supplied `reading_time` locale message must contain exactly one `{minutes}` pl
 
 Locale messages are loaded only when `website.i18n.enabled` is true. A single-language site can opt in with root-level `lang: en` and `website.i18n: {enabled: true, locales: [en]}`, then set `messages.reading_time` in the root `_locale.yml` (with `name: English`). No translation copies are required. With i18n disabled, `lang` alone does not select or customize this message; the hint uses English.
 
+## Navigation layout
+
+Both Minimal and Docs accept `website.navigation.layout: top | sidebar`. The default is `top`; other values fail configuration validation. This setting changes presentation without changing navigation labels, order, visibility, or destinations.
+
+```yaml
+website:
+  navigation:
+    layout: sidebar
+```
+
+The sidebar is 240px wide above 1080px. It contains the site identity, navigation, language, color scheme and repository controls. Search stays in the topbar on desktop and mobile. Docs includes its document tree; Minimal includes the tree on documentation pages. On narrower screens, the top menu button opens a left drawer. On archive pages the topbar orders its controls as Search, Read in full and Export. Timeline and page context move to a dialog opened from the content controls at 1320px and below.
+
+Custom templates read the selected layout from `page.website.navigation_layout`; `page.website.navigation` remains the ordered array of links. The top layout retains its overflow menu and mobile toolbar.
+
 ## Minimal navigation
 
 Minimal begins with Home, Blog, Docs, and Portfolio, ordered at `0`, `10`, `20`, and `30`. Blog and Docs disappear automatically when the content tree has no public post or documentation page. Portfolio uses the source-relative `portfolio` folder by default and appears when that folder contains at least one visible published project. An empty or unpublished folder adds no tab. Override built-in labels, order, visibility, or the Portfolio path under `website.navigation`:

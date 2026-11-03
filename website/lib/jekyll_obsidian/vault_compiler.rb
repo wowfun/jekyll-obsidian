@@ -56,7 +56,7 @@ module JekyllObsidian
       "path" => "portfolio", "order" => 30, "visible" => true
     }.freeze
     NAVIGATION_OVERRIDE_KEYS = %w[label order visible].freeze
-    NAVIGATION_KEYS = (NAVIGATION_BUILTINS.keys + %w[portfolio]).freeze
+    NAVIGATION_KEYS = (NAVIGATION_BUILTINS.keys + %w[portfolio layout]).freeze
     PORTFOLIO_NAVIGATION_KEYS = (NAVIGATION_OVERRIDE_KEYS + %w[path]).freeze
     MAX_CONTACTS = 12
     GISCUS_LANGUAGES = Set.new(%w[
@@ -661,13 +661,20 @@ module JekyllObsidian
       else
         PORTFOLIO_NAVIGATION_DEFAULTS.dup
       end
+      layout = raw.fetch("layout", "top")
+      unless %w[top sidebar].include?(layout)
+        error("invalid_navigation_config", "website.navigation.layout must be top or sidebar")
+        layout = "top"
+      end
+      normalized["layout"] = layout
       @navigation_config = DeepFreeze.call(normalized)
     end
 
     def default_navigation_config
       DeepFreeze.call(
         NAVIGATION_BUILTINS.transform_values(&:dup).merge(
-          "portfolio" => PORTFOLIO_NAVIGATION_DEFAULTS.dup
+          "portfolio" => PORTFOLIO_NAVIGATION_DEFAULTS.dup,
+          "layout" => "top"
         )
       )
     end

@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { closeWebsiteDialog, openWebsiteDialog } from "../../src/frontend/dialogs";
+import { closeWebsiteDialog, initialiseDialogs, openWebsiteDialog } from "../../src/frontend/dialogs";
 
 describe("mobile context dialogs", () => {
   it("focuses the search input immediately even when the close button comes first", () => {
@@ -50,5 +50,30 @@ describe("mobile context dialogs", () => {
     expect(dialog.querySelectorAll("[data-dialog-movable='context']")).toHaveLength(1);
     closeWebsiteDialog("context");
     expect(document.body.firstElementChild?.matches("[data-dialog-movable='context']")).toBe(true);
+  });
+
+  it("restores synchronously and ignores a queued close after reopening", async () => {
+    document.body.insertAdjacentHTML('afterbegin', '<button data-dialog-open="context" aria-expanded="false">Context</button><aside data-dialog-movable="context">Live outline</aside>');
+    const dialog = document.querySelector<HTMLDialogElement>('dialog')!;
+    const opener = document.querySelector('[data-dialog-open]')!;
+    const content = document.querySelector('[data-dialog-movable]')!;
+    dialog.showModal = vi.fn(() => dialog.setAttribute('open', ''));
+    dialog.close = vi.fn(() => {
+      dialog.removeAttribute('open');
+      queueMicrotask(() => dialog.dispatchEvent(new Event('close')));
+    });
+    initialiseDialogs();
+    openWebsiteDialog('context');
+    closeWebsiteDialog('context');
+    expect(content.parentElement).toBe(document.body);
+    expect(opener.getAttribute('aria-expanded')).toBe('false');
+    openWebsiteDialog('context');
+    await Promise.resolve();
+    expect(dialog.contains(content)).toBe(true);
+    expect(opener.getAttribute('aria-expanded')).toBe('true');
+    dialog.close();
+    await Promise.resolve();
+    expect(content.parentElement).toBe(document.body);
+    expect(opener.getAttribute('aria-expanded')).toBe('false');
   });
 });

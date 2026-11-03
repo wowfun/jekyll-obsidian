@@ -122,6 +122,20 @@ website:
 
 只有 `website.i18n.enabled` 为 true 时才会加载 locale 消息。单语言站点也可启用，例如在配置根层级设置 `lang: zh-CN`，并设置 `website.i18n: {enabled: true, locales: [zh-CN]}`，再在根 `_locale.yml` 中设置 `name: 简体中文` 和 `messages.reading_time`，不需要建立翻译副本。关闭 i18n 时，仅设置 `lang` 不会选择或自定义该文案，阅读时长提示使用英文。
 
+## 导航布局
+
+Minimal 和 Docs 均支持 `website.navigation.layout: top | sidebar`，默认为 `top`，其他值会触发配置错误。布局设置只改变呈现方式，栏目标签、顺序、可见性和链接目标仍由原有设置控制。
+
+```yaml
+website:
+  navigation:
+    layout: sidebar
+```
+
+屏幕宽度超过 1080px 时显示 240px 左侧栏，包含站点标识、栏目导航、语言、配色和仓库入口。搜索按钮在桌面和手机上均显示于顶栏。Docs 将文档树放入左栏；Minimal 仅在文档页面显示文档树。较窄屏幕通过顶部菜单按钮打开左侧抽屉。归档页顶栏依次排列搜索、平铺阅读和导出按钮；宽度不超过 1320px 时，可通过内容工具区打开时间线和页面上下文面板。
+
+自定义模板通过 `page.website.navigation_layout` 读取所选布局，`page.website.navigation` 仍是有序链接数组。顶部布局保留原有的更多菜单和移动端底部工具栏。
+
 ## Minimal 导航
 
 Minimal 默认提供 Home、Blog、Docs 和 Portfolio，顺序分别为 `0`、`10`、`20` 和 `30`。内容树中没有公开文章或文档时，Blog 与 Docs 会自动消失。Portfolio 默认使用相对于内容根目录的 `portfolio` 文件夹；其中存在至少一个可见的已发布项目时才会显示。空文件夹或只有未发布内容的文件夹不会增加标签页。可以在 `website.navigation` 中覆盖内置标签、顺序、可见性或

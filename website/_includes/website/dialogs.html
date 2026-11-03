@@ -23,6 +23,7 @@
   </dialog>
 {% endif %}
 
+{% unless page.website.navigation_layout == 'sidebar' %}
 <template data-dialog-template="browse">
   <nav aria-label="{{ ui.primary_navigation | default: 'Primary navigation' | escape }}">
     <ul class="relation-list">
@@ -37,9 +38,10 @@
   {% endif %}
 </template>
 <dialog class="website-dialog" data-dialog="browse" aria-labelledby="browse-dialog-title"><div class="website-dialog__sheet"><header class="website-dialog__header"><h2 class="website-dialog__title" id="browse-dialog-title">{{ ui.browse | default: 'Browse' | escape }}</h2><button class="website-dialog__close" type="button" data-dialog-close aria-label="{{ ui.close_browse | default: 'Close browse menu' | escape }}">&times;</button></header><div class="website-dialog__body" data-dialog-content></div></div></dialog>
+{% endunless %}
 
 {% assign has_timeline_context = false %}{% if page.website.kind == 'blog-index' and page.website.theme_data.timeline.size > 0 %}{% assign has_timeline_context = true %}{% endif %}
-{% assign has_context_dialog = has_timeline_context %}{% if page.website.kind == 'home' %}{% if page.website.theme_data.topic_summaries.size > 0 or page.website.has_context %}{% assign has_context_dialog = true %}{% endif %}{% elsif page.website.kind == 'note' and page.website.has_context %}{% assign has_context_dialog = true %}{% endif %}
+{% assign has_context_dialog = has_timeline_context %}{% if page.website.theme_data.favorites %}{% assign has_context_dialog = true %}{% endif %}{% if page.website.kind == 'home' %}{% if page.website.theme_data.topic_summaries.size > 0 or page.website.has_context %}{% assign has_context_dialog = true %}{% endif %}{% elsif page.website.kind == 'note' and page.website.has_context %}{% assign has_context_dialog = true %}{% endif %}
 {% if has_context_dialog %}
   <dialog class="website-dialog" data-dialog="context" aria-labelledby="context-dialog-title"><div class="website-dialog__sheet"><header class="website-dialog__header"><h2 class="website-dialog__title" id="context-dialog-title">{% if has_timeline_context %}{{ ui.chronology | default: 'Chronology' | escape }}{% elsif page.website.kind == 'home' and page.website.has_context %}{{ ui.context | default: 'Context' | escape }}{% elsif page.website.kind == 'home' %}{{ ui.topics | default: 'Topics' | escape }}{% elsif page.website.features.outline and page.website.features.relations == false and page.website.local_graph == nil %}{{ ui.on_this_page | default: 'On this page' | escape }}{% else %}{{ ui.context | default: 'Context' | escape }}{% endif %}</h2><button class="website-dialog__close" type="button" data-dialog-close aria-label="{{ ui.close_context | default: 'Close page context' | escape }}">&times;</button></header><div class="website-dialog__body" data-dialog-content></div></div></dialog>
 {% endif %}

@@ -14,7 +14,7 @@ test('header reserves archive actions only on sites with archive pages', async (
 
 async function tab(page: Page, href: string, mobile: boolean) {
   if (mobile) await page.locator('[data-dialog-open="browse"]').click();
-  const navigation = mobile ? page.locator('dialog[data-dialog="browse"]') : page.locator(".site-header");
+  const navigation = mobile ? page.locator('dialog[data-dialog="browse"]') : page.locator("[data-site-chrome]");
   const link = navigation.locator(`[data-navigation-id] a[href="${href}"]`);
   if (!mobile && !await link.isVisible()) await navigation.locator('[data-priority-navigation-more] summary').click();
   await link.click();
@@ -22,19 +22,19 @@ async function tab(page: Page, href: string, mobile: boolean) {
 }
 
 async function headerGeometry(page: Page) {
-  return page.locator('.site-header').evaluate(header =>
+  return page.locator('[data-site-chrome]').evaluate(header =>
     [...header.querySelectorAll<HTMLElement>('.site-mark, [data-navigation-label], [data-search-open], [data-language-switcher], [data-color-scheme-toggle]')]
       .filter(node => node.getBoundingClientRect().width > 0)
       .map(node => { const { x, y, width, height } = node.getBoundingClientRect(); return [x, y, width, height]; }));
 }
 
-for (const locale of ["en", "zh-CN"]) {
-  const root = "/__site__/minimal-archive/" + (locale === "en" ? "" : locale + "/");
-  test(`tab navigation preserves the header in ${locale}`, async ({ page, isMobile }) => {
+for (const layout of ["top", "sidebar"]) for (const locale of ["en", "zh-CN"]) {
+  const root = `/__site__/minimal-${layout === "sidebar" ? "sidebar-" : ""}archive/` + (locale === "en" ? "" : locale + "/");
+  test(`tab navigation preserves ${layout} navigation in ${locale}`, async ({ page, isMobile }) => {
     await page.goto(root);
     await archiveReady(page);
-    await expect(page.locator('[data-priority-navigation]')).toHaveAttribute('data-page-navigation-ready', 'true');
-    await page.locator(".site-header").evaluate(header => header.setAttribute("data-shell-instance", "original"));
+    await expect(page.locator('[data-site-navigation]')).toHaveAttribute('data-page-navigation-ready', 'true');
+    await page.locator("[data-site-chrome]").evaluate(header => header.setAttribute("data-shell-instance", "original"));
     const geometry = await headerGeometry(page);
     const documents: string[] = [];
     page.on('request', request => { if (request.isNavigationRequest()) documents.push(request.url()); });
@@ -47,7 +47,7 @@ for (const locale of ["en", "zh-CN"]) {
       else await expect(page.locator('[data-paged-archive]')).toHaveCount(0);
       await expect(page.locator('[data-favorites-page]')).toHaveCount(destination === 'favorites/' ? 1 : 0);
       if (destination !== 'plain/') await archiveReady(page);
-      await expect(page.locator(".site-header")).toHaveAttribute("data-shell-instance", "original");
+      await expect(page.locator("[data-site-chrome]")).toHaveAttribute("data-shell-instance", "original");
       await expect(page.locator(".site-navigation a[aria-current=page]")).toHaveAttribute("href", root + destination);
       await expect(page.locator('main')).toBeFocused();
       expect(await headerGeometry(page)).toEqual(geometry);
@@ -58,11 +58,21 @@ for (const locale of ["en", "zh-CN"]) {
     await expect(page).toHaveURL(root + 'plain/');
     await expect(page.locator('main .tab-collection')).toBeVisible();
     await page.goForward(); await expect(page).toHaveURL(root); await archiveReady(page);
-    await expect(page.locator('.site-header')).toHaveAttribute('data-shell-instance', 'original');
+    await expect(page.locator('[data-site-chrome]')).toHaveAttribute('data-shell-instance', 'original');
     expect(documents).toEqual([]);
-    await page.locator('.site-header [data-search-open]').click();
+    await page.locator('.site-actions [data-search-open]').click();
     await expect(page.locator('[data-search-input]')).toBeFocused();
     await page.keyboard.press('Escape');
+    if (layout === 'sidebar') {
+      const search = (await page.locator('.site-topbar [data-search-open]').boundingBox())!;
+      const reading = (await page.locator('.site-topbar [data-archive-reading-toggle]').boundingBox())!;
+      const exporting = (await page.locator('.site-topbar [data-archive-export-open]').boundingBox())!;
+      expect(search.x + search.width).toBeLessThanOrEqual(reading.x);
+      expect(reading.x + reading.width).toBeLessThanOrEqual(exporting.x);
+      expect(Math.abs(search.y - reading.y)).toBeLessThan(1);
+      expect(Math.abs(reading.y - exporting.y)).toBeLessThan(1);
+      await expect(page.locator('main [data-archive-reading-toggle], main [data-archive-export-open]')).toHaveCount(0);
+    }
     await page.locator('[data-archive-reading-toggle]').click();
     await expect(page.locator('[data-archive-reading-toggle]')).toHaveAttribute('aria-checked', 'true');
     await expect(page.locator('[data-reading-loaded]').first()).toBeVisible();
@@ -76,7 +86,7 @@ test('archive hydration keeps the initial header geometry', async ({ page }) => 
   const delayed = new Promise<void>(resolve => { release = resolve; });
   await page.route('**/archive-filters-*.js', async route => { await delayed; await route.continue(); });
   await page.goto('/__site__/minimal-archive/');
-  await expect(page.locator('[data-priority-navigation]')).toHaveAttribute('data-page-navigation-ready', 'true');
+  await expect(page.locator('[data-site-navigation]')).toHaveAttribute('data-page-navigation-ready', 'true');
   const geometry = await headerGeometry(page);
   release(); await archiveReady(page);
   expect(await headerGeometry(page)).toEqual(geometry);
@@ -103,7 +113,7 @@ test('a slower tab cannot replace the latest selection', async ({ page, isMobile
   const delayed = new Promise<void>(resolve => { release = resolve; });
   await page.route('**/minimal-archive/news/', async route => { await delayed; await route.continue().catch(() => {}); });
   if (isMobile) await page.locator('[data-dialog-open=browse]').click();
-  const navigation = isMobile ? page.locator('dialog[data-dialog=browse]') : page.locator('.site-header');
+  const navigation = isMobile ? page.locator('dialog[data-dialog=browse]') : page.locator('[data-site-chrome]');
   await navigation.locator(`a[href="${root}news/"]`).click();
   await navigation.locator(`a[href="${root}tools/"]`).click();
   await expect(page).toHaveURL(root + 'tools/'); await archiveReady(page);
@@ -114,20 +124,20 @@ test('a slower tab cannot replace the latest selection', async ({ page, isMobile
 for (const theme of ['minimal', 'docs']) test(`${theme} custom tabs retain header and document navigation`, async ({ page, isMobile }) => {
   const root = `/__site__/${theme}-navigation/`;
   await page.goto(root + 'docs/one/');
-  await expect(page.locator('[data-priority-navigation]')).toHaveAttribute('data-page-navigation-ready', 'true');
-  await page.locator('.site-header').evaluate(node => node.dataset.instance = 'original');
+  await expect(page.locator('[data-site-navigation]')).toHaveAttribute('data-page-navigation-ready', 'true');
+  await page.locator('[data-site-chrome]').evaluate(node => node.dataset.instance = 'original');
   await tab(page, root + 'projects/', isMobile);
   await expect(page.locator('main h1')).toHaveText('Projects');
   await tab(page, root + 'about/', isMobile);
   await expect(page.locator('main h1')).toHaveText('About');
   await page.goBack(); await expect(page.locator('main h1')).toHaveText('Projects');
   await page.goBack(); await expect(page.locator('main h1')).toHaveText('one');
-  await expect(page.locator('.site-header')).toHaveAttribute('data-instance', 'original');
+  await expect(page.locator('[data-site-chrome]')).toHaveAttribute('data-instance', 'original');
   if (isMobile) await page.locator('[data-dialog-open=browse]').click();
   const menu = page.locator(isMobile ? '.docs-tree--dialog' : '.docs-sidebar, .minimal-docs-sidebar');
   await menu.getByRole('link', { name: 'two', exact: true }).click();
   await expect(page.locator('main h1')).toHaveText('two');
-  await expect(page.locator('.site-header')).toHaveAttribute('data-instance', 'original');
+  await expect(page.locator('[data-site-chrome]')).toHaveAttribute('data-instance', 'original');
 });
 
 test('folded tabs keep More and shared controls in place', async ({ page, isMobile }) => {

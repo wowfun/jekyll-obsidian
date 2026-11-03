@@ -1,51 +1,42 @@
-<header class="site-header">
-  {% assign ui = page.website.i18n.messages %}
-  {% assign home_url = page.website.home_url | default: page.website.routes.home %}
-  {% unless home_url %}{% assign home_url = '/' | relative_url %}{% endunless %}
-  <div class="site-header__inner">
-    <a class="site-mark" href="{{ home_url | escape }}" aria-label="{{ site.title | escape }} — {{ ui.home | default: 'Home' | escape }}">
-      <span class="site-mark__glyph" aria-hidden="true">{% if include.theme == 'minimal' %}¶{% else %}⌁{% endif %}</span>
-      <span class="site-mark__name">{{ site.title | escape }}</span>
-    </a>
-
-    <nav class="site-navigation" aria-label="{{ ui.primary_navigation | default: 'Primary navigation' | escape }}" data-priority-navigation>
-      <ul class="site-navigation__list" data-priority-navigation-list>
-        {% for item in page.website.navigation %}
-          <li data-priority-navigation-item data-navigation-id="{{ item.id | escape }}"><a href="{{ item.url | escape }}" data-navigation-label="{{ item.label | escape }}"{% if item.id == page.website.active_navigation_id %} aria-current="page"{% endif %}><span>{{ item.label | escape }}</span></a></li>
-        {% endfor %}
-      </ul>
-      <details class="site-navigation__more" data-priority-navigation-more hidden>
-        <summary data-navigation-label="{{ ui.more | default: 'More' | escape }}"><span>{{ ui.more | default: 'More' | escape }}</span></summary>
-        <ul class="site-navigation__overflow" data-priority-navigation-overflow></ul>
-      </details>
-    </nav>
-
+{% assign ui = page.website.i18n.messages %}
+{% assign home_url = page.website.home_url | default: page.website.routes.home %}
+{% unless home_url %}{% assign home_url = '/' | relative_url %}{% endunless %}
+{% if page.website.navigation_layout == 'sidebar' %}
+  <header class="site-topbar">
+    <button class="site-action" type="button" data-dialog-open="browse" aria-controls="site-browse-dialog" aria-expanded="false" aria-label="{{ ui.browse | default: 'Browse' | escape }}"><svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16" fill="none" stroke="currentColor" stroke-width="1.6"/></svg></button>
+    {% include website/site-mark.html theme=include.theme %}
     <div class="site-actions">
-      {% if include.theme == 'minimal' and page.website.theme_data.has_archive %}<div class="site-page-actions" data-page-header-actions>{% endif %}
-      {% if page.website.theme_data.archive %}
-        <button class="site-action archive-reading-switch" type="button" role="switch" aria-checked="false" aria-controls="archive-ledger" aria-label="{{ ui.flat_reading | default: 'Read in full' | escape }}" title="{{ ui.flat_reading_disabled | escape }}" data-enabled="{{ ui.flat_reading_enabled | escape }}" data-disabled="{{ ui.flat_reading_disabled | escape }}" data-archive-reading-toggle hidden data-loading="{{ ui.reading_loading | default: 'Loading article…' | escape }}" data-unavailable="{{ ui.reading_unavailable | default: 'Article could not be loaded.' | escape }}" data-retry="{{ ui.retry | default: 'Retry' | escape }}">
-          {% include website/action-icon.html name='reading' %}
-        </button>
-        {% unless page.website.theme_data.favorites %}<button class="site-action" type="button" data-archive-export-open aria-label="{{ ui.export | default: 'Export' | escape }}" title="{{ ui.export | default: 'Export' | escape }}" aria-haspopup="dialog" aria-controls="archive-export-dialog" hidden>{% include website/action-icon.html name='export' %}</button>{% endunless %}
-      {% endif %}
-      {% if include.theme == 'minimal' and page.website.theme_data.has_archive %}</div>{% endif %}
-      {% if page.website.features.search %}
-        <button class="site-action" type="button" data-search-open aria-label="{{ ui.search | default: 'Search' | escape }}" title="{{ ui.search | default: 'Search' | escape }} (Ctrl/⌘ K)" aria-keyshortcuts="Control+k Meta+k">
-          {% include website/action-icon.html name='search' %}
-        </button>
-      {% endif %}
-      {% include website/language-switcher.html %}
-      <button class="site-action" type="button" data-color-scheme-toggle data-scheme-use-light="{{ ui.use_light_scheme | default: 'Use light color scheme' | escape }}" data-scheme-use-dark="{{ ui.use_dark_scheme | default: 'Use dark color scheme' | escape }}" data-scheme-light="{{ ui.light_scheme | default: 'Light' | escape }}" data-scheme-dark="{{ ui.dark_scheme | default: 'Dark' | escape }}" aria-label="{{ ui.toggle_scheme | default: 'Toggle color scheme' | escape }}">
-        {% include website/action-icon.html name='moon' class='site-action__moon' %}
-        {% include website/action-icon.html name='sun' class='site-action__sun' %}
-        <span class="visually-hidden" data-color-scheme-label>{{ ui.scheme | default: 'Scheme' | escape }}</span>
-      </button>
-      {% if page.website.repository_url %}
-        {% assign repository_label = ui.open_project_on_github | default: 'Open {title} on GitHub' | replace: '{title}', site.title %}
-        <a class="site-action site-action--github" href="{{ page.website.repository_url | escape }}" aria-label="{{ repository_label | escape }}" title="{{ repository_label | escape }}">
-          {% include website/github-icon.html %}
-        </a>
-      {% endif %}
+      {% include website/search-button.html %}
+      {% if page.website.theme_data.has_archive %}<div class="site-page-actions" data-page-header-actions>{% include website/archive-actions.html %}</div>{% endif %}
     </div>
-  </div>
-</header>
+  </header>
+  <aside class="site-sidebar" data-site-chrome>
+    <div class="site-sidebar__panel" data-dialog-movable="browse">
+      {% include website/site-mark.html theme=include.theme %}
+      <div class="site-sidebar__navigation" data-auto-hide-scrollbar>
+        {% include website/site-navigation.html %}
+        {% include website/sidebar-docs.html show=include.show_docs %}
+      </div>
+      <div class="site-actions">{% include website/site-actions.html %}</div>
+    </div>
+  </aside>
+  <dialog id="site-browse-dialog" class="website-dialog website-dialog--navigation" data-dialog="browse" aria-labelledby="browse-dialog-title">
+    <div class="website-dialog__sheet">
+      <header class="website-dialog__header"><h2 class="website-dialog__title" id="browse-dialog-title">{{ ui.browse | default: 'Browse' | escape }}</h2><button class="website-dialog__close" type="button" data-dialog-close aria-label="{{ ui.close_browse | default: 'Close browse menu' | escape }}">&times;</button></header>
+      <div class="website-dialog__body" data-dialog-content></div>
+    </div>
+  </dialog>
+{% else %}
+  <header class="site-header" data-site-chrome>
+    <div class="site-header__inner">
+      {% include website/site-mark.html theme=include.theme %}
+      {% include website/site-navigation.html %}
+      <div class="site-actions">
+        {% if include.theme == 'minimal' and page.website.theme_data.has_archive %}<div class="site-page-actions" data-page-header-actions>{% endif %}
+        {% include website/archive-actions.html %}
+        {% if include.theme == 'minimal' and page.website.theme_data.has_archive %}</div>{% endif %}
+        {% include website/site-actions.html %}
+      </div>
+    </div>
+  </header>
+{% endif %}
