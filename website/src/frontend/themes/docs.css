@@ -4,7 +4,6 @@
     --teal: #a64f2d;
     --violet-soft: #e8e8e3;
     --teal-soft: #f3e4da;
-    --focus-ring: 0 0 0 3px rgb(35 111 134 / 25%);
     --article-width: 760px;
     --reading-width: 632px;
     --rail-width: 220px;
@@ -15,7 +14,6 @@
     --teal: #e59a73;
     --violet-soft: #1d2a38;
     --teal-soft: #3b2922;
-    --focus-ring: 0 0 0 3px rgb(120 183 255 / 28%);
   }
 
   @media (prefers-color-scheme: dark) {
@@ -24,7 +22,6 @@
       --teal: #e59a73;
       --violet-soft: #1d2a38;
       --teal-soft: #3b2922;
-      --focus-ring: 0 0 0 3px rgb(120 183 255 / 28%);
     }
   }
 }

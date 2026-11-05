@@ -107,7 +107,7 @@ for (const theme of themes) {
     });
   }
 
-  test(`${theme} uses the theme focus ring when returning to main content`, async ({ page }, testInfo) => {
+  test(`${theme} uses one focus outline when returning to main content`, async ({ page }, testInfo) => {
     for (const scheme of ["light", "dark"] as const) for (const method of ["back-to-top", "skip-link"]) {
       await page.emulateMedia({ colorScheme: scheme });
       await page.goto(site(theme, "en", "/docs/long/"));
@@ -127,7 +127,7 @@ for (const theme of themes) {
       await expect(main).toBeFocused();
       await expect(main).toHaveCSS("outline-style", "solid");
       await expect(main).toHaveCSS("outline-width", "2px");
-      await expect(main).not.toHaveCSS("box-shadow", "none");
+      await expect(main).toHaveCSS("box-shadow", "none");
       if (method === "back-to-top") await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(0);
       await page.screenshot({ path: testInfo.outputPath(`${theme}-${scheme}-${method}-focus.png`) });
     }

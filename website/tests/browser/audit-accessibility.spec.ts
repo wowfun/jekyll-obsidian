@@ -2,14 +2,23 @@ import { expect, test, type Locator } from "@playwright/test";
 import { archiveReady } from './archive-helpers';
 
 async function expectFocusIndicator(control: Locator) {
+  const unfocusedBorder = await control.evaluate(element => {
+    const field = element.closest('.search-box');
+    if (!field) return null;
+    (element as HTMLElement).blur();
+    return getComputedStyle(field).borderColor;
+  });
   await control.focus();
-  expect(await control.evaluate(element => {
+  await expect.poll(() => control.evaluate((element, unfocusedBorder) => {
     const visibleOutline = (target: Element) => {
       const style = getComputedStyle(target);
       return style.outlineStyle !== 'none' && parseFloat(style.outlineWidth) >= 2;
     };
-    return visibleOutline(element) || Boolean(element.closest('.search-box') && visibleOutline(element.closest('.search-box')!));
-  })).toBe(true);
+    const field = element.closest('.search-box');
+    const fieldStyle = field && getComputedStyle(field);
+    const fieldFocus = fieldStyle && fieldStyle.borderColor !== unfocusedBorder;
+    return visibleOutline(element) || Boolean(field && (visibleOutline(field) || fieldFocus));
+  }, unfocusedBorder)).toBe(true);
 }
 
 for (const forcedColors of ['none', 'active'] as const) {
@@ -49,6 +58,7 @@ for (const forcedColors of ['none', 'active'] as const) {
     await archiveReady(page);
     await page.keyboard.press('Tab');
     await expectFocusIndicator(page.locator('[data-archive-reading-toggle]'));
+    await expectFocusIndicator(page.locator('[data-favorite-toggle]').first());
     await expectFocusIndicator(page.locator('[data-archive-export-open]'));
     await page.locator('[data-archive-export-open]').press('Enter');
     await expectFocusIndicator(page.locator('dialog[data-dialog=export] [data-dialog-close]'));

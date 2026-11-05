@@ -1774,7 +1774,7 @@ test("search loads on demand and finds CJK content", async ({ page }) => {
   await expect(dialog.getByRole("link", { name: "CJK Showcase" })).toBeVisible();
 });
 
-test("search input uses a visible container focus outline", async ({ page }) => {
+test("search input indicates focus with one border", async ({ page }) => {
   await page.goto(site("docs"));
   await page.keyboard.press("ControlOrMeta+k");
   const box = page.locator(".search-box");
@@ -1782,12 +1782,11 @@ test("search input uses a visible container focus outline", async ({ page }) => 
   await input.evaluate((element) => element.blur());
   const quietBorder = await box.evaluate((element) => getComputedStyle(element).borderTopColor);
   await input.focus();
-  await expect(box).toHaveCSS("border-top-color", quietBorder);
+  await expect(box).not.toHaveCSS("border-top-color", quietBorder);
   await expect(box).toHaveCSS("box-shadow", "none");
   await expect(input).toHaveCSS("outline-style", "none");
   await expect(input).toHaveCSS("box-shadow", "none");
-  await expect(box).toHaveCSS('outline-style', 'solid');
-  await expect(box).toHaveCSS('outline-width', '2px');
+  await expect(box).toHaveCSS('outline-style', 'none');
 });
 
 test("Minimal previews use catalog text without injecting active content", async ({ page }, testInfo) => {
