@@ -30,8 +30,6 @@
   .theme-docs .site-header {
     position: sticky;
     inset-block-start: 0;
-    background: color-mix(in srgb, var(--surface) 94%, transparent);
-    backdrop-filter: blur(12px);
   }
 
   .theme-docs .site-header__inner,

@@ -186,7 +186,7 @@
     position: relative;
     z-index: 10;
     border-block-end: 1px solid var(--line);
-    background: color-mix(in srgb, var(--frost) 92%, transparent);
+    background: var(--frost);
   }
 
   .site-header__inner {
@@ -349,8 +349,11 @@
   }
 
   .site-actions [data-search-open] {
-    border-color: var(--line-strong);
-    background: color-mix(in srgb, var(--surface) 72%, transparent);
+    border: 0;
+  }
+
+  .site-actions [data-search-open]:hover {
+    background: color-mix(in srgb, var(--ink) 10%, transparent);
   }
 
   .site-actions .site-action {

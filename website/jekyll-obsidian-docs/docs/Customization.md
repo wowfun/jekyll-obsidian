@@ -210,7 +210,7 @@ In Minimal, `tab.layout: archive` selects a paged archive instead of the default
 
 ## Color and type
 
-The themes share a narrow set of CSS custom properties. Light mode uses warm paper and surface tones; dark mode uses neutral black and gray. Blue marks links and focus, while terracotta marks relationships and secondary annotations.
+The themes share a narrow set of CSS custom properties. Light mode uses warm paper and surface tones; dark mode uses neutral black and gray. Headers use the page background, and search buttons have no border, with a neutral background on hover. The selected sidebar item uses heavier text and a subtle neutral tint without a left rail. Blue marks links, while terracotta marks relationships and secondary annotations. Keyboard focus uses a single text-colored outline; the search field changes its border color instead, with an outline in forced colors mode.
 
 Articles and controls use the platform sans-serif stack, with installed Noto Sans CJK or Source Han Sans preferred for CJK text. Code uses the platform monospace stack. The site does not download a webfont, so the exact face follows the reader's operating system while the typographic scale and spacing remain consistent.
 

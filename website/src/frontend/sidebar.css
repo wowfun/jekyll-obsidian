@@ -9,7 +9,7 @@
     min-block-size: 3.6rem;
     padding-inline: 0.75rem;
     border-block-end: 1px solid var(--line);
-    background: var(--surface);
+    background: var(--frost);
     gap: 0.65rem;
   }
   .site-topbar > .site-mark { flex: 1; }
@@ -69,9 +69,7 @@
   }
   .site-sidebar__panel .site-navigation [data-navigation-label]::after { content: none; }
   .site-sidebar__panel .site-navigation a[aria-current="page"] {
-    color: var(--violet);
-    background: var(--violet-soft);
-    box-shadow: inset 3px 0 var(--violet);
+    background: color-mix(in srgb, var(--ink) 5%, transparent);
   }
   .site-sidebar__panel [data-sidebar-docs]:has(nav) {
     margin-block-start: 1.25rem;
