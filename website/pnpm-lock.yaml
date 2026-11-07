@@ -15,8 +15,8 @@ importers:
         specifier: 7.9.0
         version: 7.9.0
       mermaid:
-        specifier: 12.2.0
-        version: 12.2.0
+        specifier: 12.3.0
+        version: 12.3.0
       minisearch:
         specifier: 7.2.0
         version: 7.2.0
@@ -45,8 +45,8 @@ importers:
 
 packages:
 
-  '@antfu/install-pkg@1.1.0':
-    resolution: {integrity: sha512-MGQsmw10ZyI+EJo45CdSER4zEb+p31LpDAFp2Z3gkSd1yqVZGi0Ebx++YTEMonJy4oChEMLsxZ64j8FH6sSqtQ==}
+  '@antfu/install-pkg@2.1.0':
+    resolution: {integrity: sha512-sdg9NxU3zR4Mnawfbc/x6GB5Wf17WYud5qOuEuxXjaKpYpMkISSJEjItGebXJ2bQ4DIcly4NYH23mtkGJjvKUw==}
 
   '@axe-core/playwright@4.13.0':
     resolution: {integrity: sha512-6YLx+kxXu5GJceG4ozFg+33a2EMTdjYwWGloJ3sb9Kta5pp+ZNS53uxGVog5JetIY8s++P5UrtX+cri+u0VAVg==}
@@ -230,8 +230,8 @@ packages:
   '@iconify/types@2.0.0':
     resolution: {integrity: sha512-+wluvCrRhXrhyOmRDJ3q8mux9JkKy5SJ/v8ol2tu4FVjyYvtEzkc/3pK15ET6RKg4b4w4BmTk1+gsCUhf21Ykg==}
 
-  '@iconify/utils@3.1.4':
-    resolution: {integrity: sha512-b1S7B1k9ohZ+iNTi2ATxbRYG9fTrJmUT0rc46bvVnNxqNRGW7dyo/vRREwyniI5IRN2RSJHDcm+s3BjWrSAjHw==}
+  '@iconify/utils@3.1.7':
+    resolution: {integrity: sha512-JZHlwdID+dy+lTgbYC8NEC4zeugqeYsc6jewvzb4c58kHauJn+X7rNwQjxz5p2qSjqaEeQoLkCIQ9v/H4PK0/w==}
 
   '@jridgewell/resolve-uri@3.1.2':
     resolution: {integrity: sha512-bRISgCIjP20/tbWSPWMEi54QVPRZExkuD9lJL+UIxUKtwVJA8wW1Trb1jMs1RFXo1CBTNZ/5hpC9QvmKWdopKw==}
@@ -674,8 +674,8 @@ packages:
     peerDependencies:
       cytoscape: ^3.2.0
 
-  cytoscape@3.34.0:
-    resolution: {integrity: sha512-62rNSrioXw93uliKFBwjukeQyeWwH2PqDrTac31r2P6464u3AUvTk0xS4LVvT251g7IgkFunrI48ZEZGjywSOg==}
+  cytoscape@3.34.4:
+    resolution: {integrity: sha512-msY99tMY8iWTg+sIPGfSqDcPNOt4xcj+v/K/7qUFaCUxxlqnMkUYLBjRUzn9W5CU/R2hrmtJa5+UtovrEM2ctg==}
     engines: {node: '>=0.10'}
 
   d3-array@2.12.1:
@@ -701,6 +701,10 @@ packages:
     resolution: {integrity: sha512-zg/chbXyeBtMQ1LbD/WSoW2DpC3I0mpmPdW+ynRTj/x2DAWYrIY7qeZIHidozwV24m4iavr15lNwIwLxRmOxhA==}
     engines: {node: '>=12'}
 
+  d3-color@3.1.1:
+    resolution: {integrity: sha512-lfab8x0Bj0UO7SNsY8dZSbNIA6ipbkE3X0NG9nqjCu6CfCHZseuDnOSJY7hidKrjpP++i1M2qT+FlAdPKYRilA==}
+    engines: {node: '>=12'}
+
   d3-contour@4.0.2:
     resolution: {integrity: sha512-4EzFTRIikzs47RGmdxbeUvLWtGedDUNkTcmzoeyg4sP/dvCexO47AaQL7VKy/gul85TOxw+IBgA8US2xwbToNA==}
     engines: {node: '>=12'}
@@ -711,6 +715,10 @@ packages:
 
   d3-dispatch@3.0.1:
     resolution: {integrity: sha512-rzUyPU/S7rwUflMyLc1ETDeBj0NRuHKKAcvukozwhshr6g6c5d8zh4c2gQjY2bZ0dXeGLWc1PF174P2tVvKhfg==}
+    engines: {node: '>=12'}
+
+  d3-dispatch@3.0.2:
+    resolution: {integrity: sha512-sAzH4Y4nsLo8eSqw5jKiZt+LU2wZmL/qS+OkxQGjhwazB/D7TY34R/QK1eshfGr7cZEKymKZ/Haem7m+lu98Sg==}
     engines: {node: '>=12'}
 
   d3-drag@3.0.0:
@@ -724,6 +732,10 @@ packages:
 
   d3-ease@3.0.1:
     resolution: {integrity: sha512-wR/XK3D3XcLIZwpbvQwQ5fK+8Ykds1ip7A2Txe0yxncXSdq1L9skcG7blcedkOX+ZcgxGAmLX1FrRGbADwzi0w==}
+    engines: {node: '>=12'}
+
+  d3-ease@3.0.2:
+    resolution: {integrity: sha512-B5znKqRmKROAN4oHWQ50W/qisVjA9GXh2WMsVKdFVp4DxWmcrOsweqgUOUVsv5th96kwaZlokU6SlV4J3gak1w==}
     engines: {node: '>=12'}
 
   d3-fetch@3.0.1:
@@ -748,6 +760,10 @@ packages:
 
   d3-interpolate@3.0.1:
     resolution: {integrity: sha512-3bYs1rOD33uo8aqJfKP3JWPAibgw8Zm2+L9vBKEHJ2Rg+viTR7o5Mmv5mZcieN+FRYaAOWX5SJATX6k1PWz72g==}
+    engines: {node: '>=12'}
+
+  d3-interpolate@3.0.2:
+    resolution: {integrity: sha512-IRzGU62DtxhvsnSTWMQIdnoZ6gA+BCWwBon1EJI6SjoN595799b6z/QRBzXfFhE8iupUPp3042yBNo0STPqnzQ==}
     engines: {node: '>=12'}
 
   d3-path@1.0.9:
@@ -784,6 +800,10 @@ packages:
     resolution: {integrity: sha512-fmTRWbNMmsmWq6xJV8D19U/gw/bwrHfNXxrIN+HfZgnzqTHp9jOmKMhsTUjXOJnZOdZY9Q28y4yebKzqDKlxlQ==}
     engines: {node: '>=12'}
 
+  d3-selection@3.0.1:
+    resolution: {integrity: sha512-ODSf35vqCrlCfp7hrm0eZjvOosSXSYLjqvIlhMBV9q9VOx7EBJG6pc+uXBswEZNJgCGJ+qnKYcWutbZDIxe/Xg==}
+    engines: {node: '>=12'}
+
   d3-shape@1.3.7:
     resolution: {integrity: sha512-EUkvKjqPFUAZyOlhY5gzCxCeI0Aep04LwIRpsZ/mLFelJiUfnK56jo5JMDSE7yyP2kLSb6LtF+S5chMk7uqPqw==}
 
@@ -803,8 +823,18 @@ packages:
     resolution: {integrity: sha512-ndfJ/JxxMd3nw31uyKoY2naivF+r29V+Lc0svZxe1JvvIRmi8hUsrMvdOwgS1o6uBHmiz91geQ0ylPP0aj1VUA==}
     engines: {node: '>=12'}
 
+  d3-timer@3.0.2:
+    resolution: {integrity: sha512-1Il1aliroVSErrv5aulRBxAY+7+DnaoLIWGd1C6SsBTWDeobWiP/V69vwb8vT6abR1kKwaNe1196pmaQ1fK90A==}
+    engines: {node: '>=12'}
+
   d3-transition@3.0.1:
     resolution: {integrity: sha512-ApKvfjsSR6tg06xrL434C0WydLr7JewBB3V+/39RMHsaXTOG0zmt/OAXeng5M5LBm0ojmxJrpomQVZ1aPvBL4w==}
+    engines: {node: '>=12'}
+    peerDependencies:
+      d3-selection: 2 - 3
+
+  d3-transition@3.0.2:
+    resolution: {integrity: sha512-RcjCsdFgyFoDB+QXLC5m60ZkTN0k9zH+ovoLlTdJnDS1AbfbcuowiM4pCKSTOclNibS4f4J4cbv2m7O7y8NTOQ==}
     engines: {node: '>=12'}
     peerDependencies:
       d3-selection: 2 - 3
@@ -820,8 +850,8 @@ packages:
   dagre-d3-es@7.0.14:
     resolution: {integrity: sha512-P4rFMVq9ESWqmOgK+dlXvOtLwYg0i7u0HBGJER0LZDJT2VHIPAMZ/riPxqJceWMStH5+E61QxFra9kIS3AqdMg==}
 
-  dayjs@1.11.21:
-    resolution: {integrity: sha512-98IT+HOahAisibz/yjKbzuOBwYcjJ7BCLPzARyHiyEBmRz4fatF+KPJszEHXsGYjUG234aH/cOjW1wwTbKUZlA==}
+  dayjs@1.11.23:
+    resolution: {integrity: sha512-QDTCU0M0MxR3hQfnlDJfwekQiaanm1ubOD231u73WBckQ/fsamwRLiE2GBz6D3a/xF1NgfiDLJjXBa1hYOYTtQ==}
 
   delaunator@5.1.0:
     resolution: {integrity: sha512-AGrQ4QSgssa1NGmWmLPqN5NY2KajF5MqxetNEO+o0n3ZwZZeTmt7bBnvzHWrmkZFxGgr4HdyFgelzgi06otLuQ==}
@@ -833,8 +863,8 @@ packages:
   dompurify@3.4.17:
     resolution: {integrity: sha512-B/pSlYVHQ58kqISD/yDjuJ1yfzI34m1gF4lAod2bwSRhiN4K5Cl3H8Af7hqB2PmTL911tdEudnnXn5FnhRoz0w==}
 
-  elkjs@0.9.3:
-    resolution: {integrity: sha512-f/ZeWvW/BCXbhGEf1Ujp29EASo/lk1FDnETgNKwJrsVvGZhUWCZyg3xLJjAsxfOmt8KjswHmI5EwCQcPMpOYhQ==}
+  elkjs@0.12.1:
+    resolution: {integrity: sha512-IhMYKHE4S2vtx0QrhBP3lYOIKDeIiJXBrdq9MGYkuB8ZHqhrBnHNfSUndjXFewrX1CPK8chwq+2NA0K0hliYuw==}
 
   entities@7.0.1:
     resolution: {integrity: sha512-TWrgLOFUQTH994YUyl1yT4uyavY5nNB5muff+RtWaqNVCAK408b5ZnnbNAUEWLTCpum9w6arT70i1XdQ4UeOPA==}
@@ -843,8 +873,8 @@ packages:
   es-module-lexer@2.3.2:
     resolution: {integrity: sha512-poHGpORABojJJucnV9KbOavETW8lBVnphkW77ER5/BQ5Fz7oXSoCNek7IH3vR5nRjdsEz926ibFYX8KtLQmdyw==}
 
-  es-toolkit@1.50.0:
-    resolution: {integrity: sha512-OyZKhUVvEep9ITEiwHn8GKnMRQIVqoSIX7WnRbkWgJkllCujilqP2rD0u979tkl8wqyc8ICwlc1UBVv/Sl1G6w==}
+  es-toolkit@1.53.1:
+    resolution: {integrity: sha512-VhMc6IXmexu8iYFfL2aaAww6IvJTdHlqBLruLoEUs33YD4IcP5DdZcLOybMsMmmLsiy1c8PsiLsrM0DdIuuRUA==}
 
   esbuild@0.28.2:
     resolution: {integrity: sha512-HKVLS8dvII+xoKW9kmqxbRKrnWEXfJJr/FZhhJmiqIB0e053QNYFqOBouTMO/k5sID4MvCiUCvv8b9M4h32wIA==}
@@ -999,8 +1029,8 @@ packages:
     engines: {node: '>= 20'}
     hasBin: true
 
-  mermaid@12.2.0:
-    resolution: {integrity: sha512-w7nr/SFrLO7BaVTs3dQTvYSV6nYSBj0Yy9DjBhsIJtAcHqRzXSq4Pg32ujHZ/AdWsAMNEvvhbm5dt9E2tOiHzw==}
+  mermaid@12.3.0:
+    resolution: {integrity: sha512-4113TdXeLAsMruJ79OpFL5O8+LTFXhQqZ260rF3tgUmiNAtRm4Uume04I+65PRN6yZ69J4f8rVYWW8zRk65UYw==}
     engines: {node: '>=22.12.0'}
 
   mhchemparser@4.2.1:
@@ -1032,8 +1062,8 @@ packages:
   package-json-from-dist@1.0.1:
     resolution: {integrity: sha512-UEZIS3/by4OC8vL3P2dTXRETpebLI2NiI5vIrjaD/5UtrkFX/tNbwjTSRAGC/+7CAo2pIcBaRgWmcBBHcsaCIw==}
 
-  package-manager-detector@1.8.0:
-    resolution: {integrity: sha512-yQA4H19AmPEoMUeavPMDIe1higySl/gH/yaQrkT/s07Qp+7pp2hYz30N3z2l5BkjVkF9Ow6o0wjJamm2y7Sn0A==}
+  package-manager-detector@1.9.0:
+    resolution: {integrity: sha512-zAMfbta9nPA8AKkA4WdmNAT8R8s6Dk0/xwPsqNnRidMFcLo1YkLuPDTgs2f64XdzS8vbLNnoJ+uUIkgbz7oRHA==}
 
   path-data-parser@0.1.0:
     resolution: {integrity: sha512-NOnmBpt5Y2RWbuv0LMzsayp3lVylAHLPUTut412ZA3l+C4uw4ZVkQbjShYCQ8TCpUMdPapr4YjUqLYD6v68j+w==}
@@ -1128,10 +1158,6 @@ packages:
 
   undici-types@8.3.0:
     resolution: {integrity: sha512-j375ScV60dom+YkPFIfTLcOiPxkN/buHz5GobjLhixFuANaNs3C9l4GmrWqejgXWJ7BbJcFYpTEUkS1Ge8bpZQ==}
-
-  uuid@14.0.1:
-    resolution: {integrity: sha512-6ZxzVpzDXDa3bJWaHilVayA+BH/1zmxCJoVgvmqJnid/gPoKHxUrS/aC/T6LGQtNHT+XHG9fXPJB4d+IrU30Ew==}
-    hasBin: true
 
   vite@8.3.4:
     resolution: {integrity: sha512-IftLE8phJhdNRIGNEV4JCCvfNScoZQVfcXaN8TQropWGJtOHcu+iAB9pHcuGvmEb/kddw0LBe/jS8ztdC6xdiQ==}
@@ -1243,9 +1269,9 @@ packages:
 
 snapshots:
 
-  '@antfu/install-pkg@1.1.0':
+  '@antfu/install-pkg@2.1.0':
     dependencies:
-      package-manager-detector: 1.8.0
+      package-manager-detector: 1.9.0
       tinyexec: 1.3.1
 
   '@axe-core/playwright@4.13.0(playwright-core@1.64.1)':
@@ -1350,9 +1376,9 @@ snapshots:
 
   '@iconify/types@2.0.0': {}
 
-  '@iconify/utils@3.1.4':
+  '@iconify/utils@3.1.7':
     dependencies:
-      '@antfu/install-pkg': 1.1.0
+      '@antfu/install-pkg': 2.1.0
       '@iconify/types': 2.0.0
       import-meta-resolve: 4.2.0
 
@@ -1634,8 +1660,8 @@ snapshots:
 
   '@upsetjs/venn.js@2.0.0':
     optionalDependencies:
-      d3-selection: 3.0.0
-      d3-transition: 3.0.1(d3-selection@3.0.0)
+      d3-selection: 3.0.1
+      d3-transition: 3.0.2(d3-selection@3.0.1)
 
   '@vitest/mocker@5.0.4(vite@8.3.4(@types/node@26.1.2)(esbuild@0.28.2))':
     dependencies:
@@ -1688,17 +1714,17 @@ snapshots:
     dependencies:
       layout-base: 2.0.1
 
-  cytoscape-cose-bilkent@4.1.0(cytoscape@3.34.0):
+  cytoscape-cose-bilkent@4.1.0(cytoscape@3.34.4):
     dependencies:
       cose-base: 1.0.3
-      cytoscape: 3.34.0
+      cytoscape: 3.34.4
 
-  cytoscape-fcose@2.2.0(cytoscape@3.34.0):
+  cytoscape-fcose@2.2.0(cytoscape@3.34.4):
     dependencies:
       cose-base: 2.2.0
-      cytoscape: 3.34.0
+      cytoscape: 3.34.4
 
-  cytoscape@3.34.0: {}
+  cytoscape@3.34.4: {}
 
   d3-array@2.12.1:
     dependencies:
@@ -1724,6 +1750,9 @@ snapshots:
 
   d3-color@3.1.0: {}
 
+  d3-color@3.1.1:
+    optional: true
+
   d3-contour@4.0.2:
     dependencies:
       d3-array: 3.2.4
@@ -1733,6 +1762,9 @@ snapshots:
       delaunator: 5.1.0
 
   d3-dispatch@3.0.1: {}
+
+  d3-dispatch@3.0.2:
+    optional: true
 
   d3-drag@3.0.0:
     dependencies:
@@ -1746,6 +1778,9 @@ snapshots:
       rw: 1.3.3
 
   d3-ease@3.0.1: {}
+
+  d3-ease@3.0.2:
+    optional: true
 
   d3-fetch@3.0.1:
     dependencies:
@@ -1768,6 +1803,11 @@ snapshots:
   d3-interpolate@3.0.1:
     dependencies:
       d3-color: 3.1.0
+
+  d3-interpolate@3.0.2:
+    dependencies:
+      d3-color: 3.1.1
+    optional: true
 
   d3-path@1.0.9: {}
 
@@ -1799,6 +1839,9 @@ snapshots:
 
   d3-selection@3.0.0: {}
 
+  d3-selection@3.0.1:
+    optional: true
+
   d3-shape@1.3.7:
     dependencies:
       d3-path: 1.0.9
@@ -1817,6 +1860,9 @@ snapshots:
 
   d3-timer@3.0.1: {}
 
+  d3-timer@3.0.2:
+    optional: true
+
   d3-transition@3.0.1(d3-selection@3.0.0):
     dependencies:
       d3-color: 3.1.0
@@ -1825,6 +1871,16 @@ snapshots:
       d3-interpolate: 3.0.1
       d3-selection: 3.0.0
       d3-timer: 3.0.1
+
+  d3-transition@3.0.2(d3-selection@3.0.1):
+    dependencies:
+      d3-color: 3.1.1
+      d3-dispatch: 3.0.2
+      d3-ease: 3.0.2
+      d3-interpolate: 3.0.2
+      d3-selection: 3.0.1
+      d3-timer: 3.0.2
+    optional: true
 
   d3-zoom@3.0.0:
     dependencies:
@@ -1872,7 +1928,7 @@ snapshots:
       d3: 7.9.0
       lodash-es: 4.18.1
 
-  dayjs@1.11.21: {}
+  dayjs@1.11.23: {}
 
   delaunator@5.1.0:
     dependencies:
@@ -1884,13 +1940,13 @@ snapshots:
     optionalDependencies:
       '@types/trusted-types': 2.0.7
 
-  elkjs@0.9.3: {}
+  elkjs@0.12.1: {}
 
   entities@7.0.1: {}
 
   es-module-lexer@2.3.2: {}
 
-  es-toolkit@1.50.0: {}
+  es-toolkit@1.53.1: {}
 
   esbuild@0.28.2:
     optionalDependencies:
@@ -2034,31 +2090,30 @@ snapshots:
 
   marked@16.4.2: {}
 
-  mermaid@12.2.0:
+  mermaid@12.3.0:
     dependencies:
       '@braintree/sanitize-url': 7.1.2
-      '@iconify/utils': 3.1.4
+      '@iconify/utils': 3.1.7
       '@mermaid-js/parser': 2.0.1
       '@types/d3': 7.4.3
       '@upsetjs/venn.js': 2.0.0
       chevrotain: 13.2.0
-      cytoscape: 3.34.0
-      cytoscape-cose-bilkent: 4.1.0(cytoscape@3.34.0)
-      cytoscape-fcose: 2.2.0(cytoscape@3.34.0)
+      cytoscape: 3.34.4
+      cytoscape-cose-bilkent: 4.1.0(cytoscape@3.34.4)
+      cytoscape-fcose: 2.2.0(cytoscape@3.34.4)
       d3: 7.9.0
       d3-sankey: 0.12.3
       dagre-d3-es: 7.0.14
-      dayjs: 1.11.21
+      dayjs: 1.11.23
       dompurify: 3.4.17
-      elkjs: 0.9.3
-      es-toolkit: 1.50.0
+      elkjs: 0.12.1
+      es-toolkit: 1.53.1
       katex: 0.18.10
       khroma: 2.1.0
       marked: 16.4.2
       roughjs: 4.6.6
       stylis: 4.4.0
       ts-dedent: 2.3.0
-      uuid: 14.0.1
 
   mhchemparser@4.2.1: {}
 
@@ -2080,7 +2135,7 @@ snapshots:
 
   package-json-from-dist@1.0.1: {}
 
-  package-manager-detector@1.8.0: {}
+  package-manager-detector@1.9.0: {}
 
   path-data-parser@0.1.0: {}
 
@@ -2198,8 +2253,6 @@ snapshots:
       '@typescript/typescript-win32-x64': 7.0.2
 
   undici-types@8.3.0: {}
-
-  uuid@14.0.1: {}
 
   vite@8.3.4(@types/node@26.1.2)(esbuild@0.28.2):
     dependencies:
